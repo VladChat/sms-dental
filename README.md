@@ -22,7 +22,7 @@ Settings → Pages
 Source: Deploy from a branch
 Branch: main
 Folder: /docs
-Custom domain: missedcallsdental.com
+Custom domain: dentalmissedcall.com
 ```
 
 The `docs/` folder contains the marketing website, SMS consent page, Privacy Policy, Terms, and Contact page.
@@ -43,3 +43,4 @@ private passwords or API keys
 ```
 
 Use `.env.local.example` for placeholders only.
+

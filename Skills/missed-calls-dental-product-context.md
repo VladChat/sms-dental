@@ -11,7 +11,7 @@ Product name:
 Dental SMS
 
 Domain:
-missedcallsdental.com
+dentalmissedcall.com
 
 Core problem:
 Dental clinics miss phone calls. Missed calls mean lost patients and lost revenue. Many patients do not call back.
