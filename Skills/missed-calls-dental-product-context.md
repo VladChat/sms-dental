@@ -11,7 +11,7 @@ Product name:
 Dental SMS
 
 Domain:
-dentalmissedcall.com
+missedcallsdental.com
 
 Core problem:
 Dental clinics miss phone calls. Missed calls mean lost patients and lost revenue. Many patients do not call back.
@@ -66,3 +66,4 @@ Compliance:
 
 Business requirement:
 The site must be good enough for Stripe verification, Twilio review, and real clinic customers.
+

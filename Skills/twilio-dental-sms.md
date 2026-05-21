@@ -11,7 +11,7 @@ Project:
 Dental SMS
 
 Domain:
-dentalmissedcall.com
+missedcallsdental.com
 
 Product:
 A B2B SaaS for dental clinics that detects missed calls and automatically sends a professional SMS follow-up to help recover missed patients and book appointments.
@@ -84,3 +84,4 @@ For this project, Twilio work must prioritize:
 3. Clear dental-office communication
 4. Production readiness
 5. Simple maintainable code
+
