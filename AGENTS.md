@@ -40,3 +40,48 @@ Important skills for this project:
   Use for SEO checks and metadata.
 
 Agents must prefer these local project skills over generic advice when working on this project.
+# Project Skills
+
+Project skills are stored as flat markdown files in:
+
+Skills/
+
+Before working on this project, check the available skill files in:
+
+Skills/
+
+Use relevant skills when the task matches them.
+
+Important skill files:
+
+- Skills/missed-calls-dental-product-context.md
+  Use for general Dental SMS product context.
+
+- Skills/twilio-dental-sms.md
+  Use for Twilio, SMS, missed calls, phone numbers, messaging webhooks, A2P compliance, opt-out handling, and dental SMS wording.
+
+- Skills/page-cro-dental-saas.md
+  Use for homepage, landing page, pricing page, CRO, CTA wording, trust sections, Stripe verification readiness, Twilio review readiness, and dental SaaS marketing copy.
+
+- Skills/frontend-design.md
+  Use for website and UI design.
+
+- Skills/web-design-guidelines.md
+  Use for checking design quality, accessibility, layout, and UX.
+
+- Skills/react-best-practices.md
+  Use for React and frontend code quality.
+
+- Skills/stripe-best-practices.md
+  Use for Stripe Checkout, Billing, subscriptions, and webhooks.
+
+- Skills/supabase-postgres-best-practices.md
+  Use for Supabase, Postgres, schema, RLS, indexes, and database design.
+
+- Skills/copywriting.md
+  Use for website copy and product messaging.
+
+- Skills/seo-audit.md
+  Use for SEO checks and metadata.
+
+Agents must prefer these local project skill files over generic advice when working on this project.
