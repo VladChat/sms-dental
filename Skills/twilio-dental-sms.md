@@ -11,7 +11,7 @@ Project:
 Dental SMS
 
 Domain:
-missedcallsdental.com
+dentalmissedcall.com
 
 Product:
 A B2B SaaS for dental clinics that detects missed calls and automatically sends a professional SMS follow-up to help recover missed patients and book appointments.

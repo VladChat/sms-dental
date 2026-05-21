@@ -1,6 +1,6 @@
 # Public Website
 
-This folder is the GitHub Pages publishing source for `missedcallsdental.com`.
+This folder is the GitHub Pages publishing source for `dentalmissedcall.com`.
 
 GitHub Pages settings:
 
@@ -8,7 +8,8 @@ GitHub Pages settings:
 Source: Deploy from a branch
 Branch: main
 Folder: /docs
-Custom domain: missedcallsdental.com
+Custom domain: dentalmissedcall.com
 ```
 
 Do not put secrets in this folder.
+
