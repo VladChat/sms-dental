@@ -11,7 +11,7 @@ Project:
 Dental SMS
 
 Domain:
-dentalmissedcall.com
+missedcallsdental.com
 
 Product:
 A B2B SaaS for dental clinics that detects missed calls and automatically sends a professional SMS follow-up to help recover missed patients and book appointments.
@@ -134,3 +134,4 @@ For this project, page/CRO work must prioritize:
 4. Stripe verification readiness
 5. Twilio review readiness
 6. Dental clinic credibility
+
