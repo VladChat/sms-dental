@@ -11,6 +11,7 @@ Folder: /docs
 Custom domain: missedcallsdental.com
 ```
 
+Live site: https://missedcallsdental.com/
+Support: support@missedcallsdental.com
+
 Do not put secrets in this folder.
-
-

@@ -1,6 +1,6 @@
-# Missed Call SMS for Dental Clinics
+# Missed Calls Dental
 
-Public repository for the Missed Call SMS MVP.
+Public repository for the Missed Calls Dental MVP website and product documentation.
 
 ## Repository map
 
@@ -25,7 +25,8 @@ Folder: /docs
 Custom domain: missedcallsdental.com
 ```
 
-The `docs/` folder contains the marketing website, SMS consent page, Privacy Policy, Terms, and Contact page.
+Website domain: https://missedcallsdental.com/
+Support: support@missedcallsdental.com
 
 ## Security rule
 
@@ -43,5 +44,3 @@ private passwords or API keys
 ```
 
 Use `.env.local.example` for placeholders only.
-
-
