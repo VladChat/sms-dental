@@ -51,3 +51,4 @@ Use existing approved assets as-is. Do not regenerate or compress.
 - Do not draw new SVG logo artwork.
 - Do not alter approved artwork.
 - Keep logo text as real HTML text next to the raster mark.
+- All future work must be committed directly to main. Do not create preview/design branches unless Vlad explicitly requests it.
