@@ -1,5 +1,26 @@
 # Do Not Break
 
+## Website location
+
+GitHub Pages publishes the public site from:
+
+```text
+docs/
+```
+
+Build and edit the marketing website only in `docs/`.
+
+Do not create a second site in:
+
+```text
+src/
+app/
+public/
+website/
+```
+
+Do not move the website out of `docs/`.
+
 This file defines hard boundaries for the website rebuild task.
 
 ## Do not create branches

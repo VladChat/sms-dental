@@ -8,6 +8,18 @@ Repository path on Vlad's machine:
 C:\Users\vladi\Documents\vcoding\projects\sms-dental
 ```
 
+## Website location
+
+GitHub Pages publishes this website from the `docs/` folder on `main`.
+
+Build and edit the public marketing website only inside:
+
+```text
+docs/
+```
+
+Do not create a separate website in `src/`, `app/`, `public/`, `website/`, or another new folder.
+
 ## Your job
 
 Build a new professional marketing website for Missed Calls Dental according to the instruction files in this folder.
@@ -17,9 +29,10 @@ Read these files in order before editing anything:
 1. `.claude/tasks/build-website/DO_NOT_BREAK.md`
 2. `.claude/tasks/build-website/WEBSITE_BRIEF.md`
 3. `.claude/tasks/build-website/PAGE_STRUCTURE.md`
-4. `.claude/tasks/build-website/DESIGN_DIRECTION.md`
-5. `.claude/tasks/build-website/COPY_GUIDE.md`
-6. `.claude/tasks/build-website/ACCEPTANCE_CHECKLIST.md`
+4. `.claude/tasks/build-website/RECOVERY_WORKFLOW_FOR_WEBSITE.md`
+5. `.claude/tasks/build-website/DESIGN_DIRECTION.md`
+6. `.claude/tasks/build-website/COPY_GUIDE.md`
+7. `.claude/tasks/build-website/ACCEPTANCE_CHECKLIST.md`
 
 Also use the existing Claude project skills in:
 

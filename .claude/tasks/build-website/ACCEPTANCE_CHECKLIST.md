@@ -62,14 +62,11 @@ Confirm homepage includes:
 
 ## Code-based visuals
 
-Confirm the homepage does not depend on these old marketing images for core explanation:
-
-- `images/marketing/hero-workflow-visual.webp`
-- `images/marketing/hero-workflow-visual.png`
-- `images/marketing/trust-privacy-visual.webp`
-- `images/marketing/trust-privacy-visual.png`
+Confirm core explanation visuals are built with HTML/CSS/SVG and real text, not raster marketing images.
 
 Confirm all infographic text is real HTML text.
+
+Confirm icons, cards, lines, arrows, and message bubbles are lightweight, consistent, and professional.
 
 ## Copy safety
 

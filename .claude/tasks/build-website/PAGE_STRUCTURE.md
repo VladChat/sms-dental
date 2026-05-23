@@ -1,5 +1,17 @@
 # Page Structure
 
+## Website location
+
+This repository publishes the public marketing website from:
+
+```text
+docs/
+```
+
+Build the website only in `docs/`.
+
+Do not create a separate site in `src/`, `app/`, `public/`, `website/`, or another folder.
+
 Build a complete, professional static marketing website.
 
 The site can remain simple, but it must not look unfinished.
@@ -247,3 +259,24 @@ Keep pages concise.
 This is an MVP marketing website, not a large enterprise site.
 
 Short, clear sections are better than long walls of text.
+
+## Recovery workflow placement
+
+The recovery process must be explained for dental clinic owners, not as backend logic.
+
+Use the short workflow from:
+
+```text
+.claude/tasks/build-website/RECOVERY_WORKFLOW_FOR_WEBSITE.md
+```
+
+Show it in these places:
+
+- homepage hero or workflow section
+- How it works page
+- SMS example section
+
+Keep it short and clear.
+
+Do not overload the page with a technical decision tree.
+
