@@ -1,0 +1,1 @@
+Read .claude/tasks/build-website/START_HERE.md and follow the instructions.
