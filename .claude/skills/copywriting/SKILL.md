@@ -20,7 +20,10 @@ Voice:
 Do:
 - Name the clinic workflow clearly.
 - State outcomes in realistic terms.
-- Use concise CTA text like "Start free trial" or "See how it works".
+- Use concise CTA text like:
+  - "View pricing"
+  - "How it works"
+  - "Start setup by email"
 
 Do not:
 - Promise diagnosis, treatment, or medical outcomes.
