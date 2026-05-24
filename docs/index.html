@@ -22,6 +22,8 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="index.html" aria-label="Missed Calls Dental home">
@@ -31,16 +33,22 @@
           <span class="brand-tag">SMS recovery for missed patient calls</span>
         </span>
       </a>
-      <nav class="site-nav" aria-label="Main navigation">
+
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">
+        <span class="menu-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Menu</span>
+      </button>
+
+      <nav class="site-nav" id="primary-nav" aria-label="Main navigation">
         <a href="#how-it-works">How it works</a>
         <a href="#start-trial">Pricing</a>
-        <a href="#start-trial" class="nav-cta">Start trial</a>
         <a href="sign-in.html">Sign in</a>
+        <a href="#start-trial" class="nav-cta">Start trial</a>
       </nav>
     </div>
   </header>
 
-  <main>
+  <main id="main">
     <section class="section" aria-labelledby="hero-h1">
       <div class="container hero">
         <h1 id="hero-h1">Bring missed callers back to book appointments.</h1>
@@ -52,7 +60,7 @@
                alt="Workflow: a missed call from a patient is detected, the recovery system sends an SMS, the patient replies, and the front desk schedules the appointment."
                width="1100" height="1100"
                fetchpriority="high">
-          <figcaption class="workflow-caption">Missed call &rarr; polite SMS &rarr; patient replies &rarr; front desk follows up.</figcaption>
+          <figcaption class="workflow-caption">Missed call &rarr; polite SMS &rarr; patient replies &rarr; key details collected &rarr; front desk follows up.</figcaption>
         </figure>
       </div>
     </section>
@@ -61,15 +69,13 @@
       <div class="container">
         <div class="section-head">
           <h2 id="how-h2">How it works</h2>
-          <p>Five short moments &mdash; from the missed call to the conversation your front desk picks up with useful context.</p>
+          <p>Three simple steps &mdash; detect the missed call, collect key details, and give the front desk what they need to follow up.</p>
         </div>
 
         <ol class="steps">
-          <li>A call is missed.</li>
-          <li>A polite SMS is sent.</li>
-          <li>The patient replies.</li>
-          <li>Key details are collected for the front desk.</li>
-          <li>Your team follows up.</li>
+          <li>The system detects a missed call.</li>
+          <li>A polite SMS is sent to collect key details.</li>
+          <li>The front desk receives the patient details and follows up.</li>
         </ol>
 
         <div class="recovery-grid">
@@ -91,14 +97,14 @@
           <article class="recovery-card" aria-labelledby="summary-h3">
             <header>
               <p class="recovery-eyebrow">What the front desk receives</p>
-              <h3 id="summary-h3">A clean summary, ready to action</h3>
+              <h3 id="summary-h3">A clean summary for the front desk.</h3>
             </header>
-            <dl class="summary-list">
-              <dt>Name</dt><dd>Daniel Reed</dd>
-              <dt>Request</dt><dd>Schedule cleaning</dd>
-              <dt>Preferred time</dt><dd>Tuesday morning</dd>
-              <dt>Urgent</dt><dd>No</dd>
-              <dt>Next step</dt><dd>Follow up to book appointment</dd>
+            <dl class="summary-rows">
+              <div class="summary-row"><dt>Name</dt><dd>Daniel Reed</dd></div>
+              <div class="summary-row"><dt>Request</dt><dd>Schedule cleaning</dd></div>
+              <div class="summary-row"><dt>Preferred time</dt><dd>Tuesday morning</dd></div>
+              <div class="summary-row"><dt>Urgent</dt><dd>No</dd></div>
+              <div class="summary-row"><dt>Next step</dt><dd>Follow up to book appointment</dd></div>
             </dl>
           </article>
         </div>
@@ -109,12 +115,11 @@
       <div class="container">
         <div class="section-head">
           <h2 id="trial-h2">Simple pricing for missed-call recovery.</h2>
-          <p>Start in minutes. Cancel anytime.</p>
+          <p>Start your 14-day trial with a simple setup request.</p>
         </div>
 
-        <div class="conversion-block">
-          <div class="conversion-pricing">
-            <p class="conversion-eyebrow">Plan</p>
+        <article class="conversion-card">
+          <div class="conversion-row conversion-row--plan">
             <p class="price-amount">$99<span>per month</span></p>
             <ul class="includes">
               <li>Missed-call SMS follow-up</li>
@@ -123,12 +128,13 @@
             </ul>
           </div>
 
-          <div class="conversion-trial">
-            <p class="conversion-eyebrow">Start trial</p>
-            <h3>Try it free for 14 days</h3>
-            <p>No charge during the trial period.</p>
+          <div class="conversion-row conversion-row--form">
+            <div class="conversion-form-head">
+              <h3>Request setup</h3>
+              <p>Send your name and work email. We&rsquo;ll contact you to complete setup.</p>
+            </div>
 
-            <div class="form" role="form" aria-label="Trial request form">
+            <form class="form" id="trial-form" novalidate>
               <div class="field">
                 <label for="full-name">Full name</label>
                 <input id="full-name" name="full_name" type="text" autocomplete="name" placeholder="Your full name" required>
@@ -137,12 +143,12 @@
                 <label for="work-email">Work email</label>
                 <input id="work-email" name="work_email" type="email" autocomplete="email" placeholder="you@youroffice.com" required>
               </div>
-              <button type="button" class="btn btn-primary" onclick="handleTrialRequest()">Start trial</button>
-            </div>
+              <button type="submit" class="btn btn-primary">Send request</button>
+            </form>
 
             <p class="form-foot">Already have an account? <a href="sign-in.html">Sign in</a></p>
           </div>
-        </div>
+        </article>
       </div>
     </section>
   </main>
@@ -162,25 +168,52 @@
   </footer>
 
   <script>
-    function handleTrialRequest() {
-      var name = document.getElementById('full-name').value.trim();
-      var email = document.getElementById('work-email').value.trim();
-
-      if (!name || !email) {
-        alert('Please fill in your name and work email.');
-        return;
+    (function() {
+      var toggle = document.querySelector('.menu-toggle');
+      var nav = document.getElementById('primary-nav');
+      if (toggle && nav) {
+        var close = function() { toggle.setAttribute('aria-expanded', 'false'); };
+        toggle.addEventListener('click', function() {
+          var expanded = toggle.getAttribute('aria-expanded') === 'true';
+          toggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        });
+        nav.querySelectorAll('a').forEach(function(a) {
+          a.addEventListener('click', close);
+        });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+            close();
+            toggle.focus();
+          }
+        });
+        document.addEventListener('click', function(e) {
+          if (toggle.getAttribute('aria-expanded') !== 'true') return;
+          if (toggle.contains(e.target) || nav.contains(e.target)) return;
+          close();
+        });
       }
 
-      var subject = encodeURIComponent('Trial request — ' + name);
-      var body = encodeURIComponent(
-        'Hi,\n\nI would like to start the 14-day free trial of Missed Calls Dental.\n\n' +
-        'Name: ' + name + '\n' +
-        'Work email: ' + email + '\n\n' +
-        'Please contact me to complete setup.\n\nThank you.'
-      );
-
-      window.location.href = 'mailto:support@missedcallsdental.com?subject=' + subject + '&body=' + body;
-    }
+      var form = document.getElementById('trial-form');
+      if (form) {
+        form.addEventListener('submit', function(event) {
+          event.preventDefault();
+          var name = document.getElementById('full-name').value.trim();
+          var email = document.getElementById('work-email').value.trim();
+          if (!name || !email) {
+            alert('Please fill in your name and work email.');
+            return;
+          }
+          var subject = encodeURIComponent('Setup request — ' + name);
+          var body = encodeURIComponent(
+            'Hi,\n\nI would like to request setup for Missed Calls Dental.\n\n' +
+            'Name: ' + name + '\n' +
+            'Work email: ' + email + '\n\n' +
+            'Please contact me to complete setup.\n\nThank you.'
+          );
+          window.location.href = 'mailto:support@missedcallsdental.com?subject=' + subject + '&body=' + body;
+        });
+      }
+    })();
   </script>
 </body>
 </html>
