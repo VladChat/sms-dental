@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign In | Missed Calls Dental</title>
-  <meta name="description" content="Account access for Missed Calls Dental. Early office access is currently handled by support while the account portal is being finished.">
+  <title>Start your trial &mdash; Missed Calls Dental</title>
+  <meta name="description" content="Request a 14-day free trial for your dental office. No charge during the trial period.">
   <link rel="canonical" href="https://missedcallsdental.com/sign-in.html">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Sign In | Missed Calls Dental">
-  <meta property="og:description" content="Recover missed patient calls with automatic SMS follow-up.">
+  <meta property="og:title" content="Start your trial &mdash; Missed Calls Dental">
+  <meta property="og:description" content="Request a 14-day free trial of Missed Calls Dental for your dental office.">
   <meta property="og:image" content="https://missedcallsdental.com/images/marketing/og-image.png">
   <meta property="og:url" content="https://missedcallsdental.com/sign-in.html">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Sign In | Missed Calls Dental">
-  <meta name="twitter:description" content="Recover missed patient calls with automatic SMS follow-up.">
+  <meta name="twitter:title" content="Start your trial &mdash; Missed Calls Dental">
+  <meta name="twitter:description" content="Request a 14-day free trial of Missed Calls Dental for your dental office.">
   <meta name="twitter:image" content="https://missedcallsdental.com/images/marketing/og-image.png">
   <meta name="theme-color" content="#071527">
   <link rel="icon" href="favicon.ico" sizes="any">
@@ -23,51 +23,102 @@
 </head>
 <body>
   <header class="site-header">
-    <div class="container header-inner">
+    <div class="container-wide header-inner">
       <a class="brand" href="index.html" aria-label="Missed Calls Dental home">
-        <img src="brand/logo-mark.webp" width="44" height="44" alt="Missed Calls Dental logo mark">
-        <span class="brand-copy">
-          <strong>Missed Calls Dental<sup>&trade;</sup></strong>
-          <small>SMS follow-up for missed patient calls.</small>
-        </span>
+        <img src="brand/logo-mark.webp" alt="">
+        <span>Missed Calls Dental</span>
       </a>
       <nav class="site-nav" aria-label="Main navigation">
         <a href="how-it-works.html">How it works</a>
         <a href="pricing.html">Pricing</a>
-        <a class="nav-action" href="sign-in.html" aria-current="page">Sign In</a>
+        <a href="sign-in.html" aria-current="page">Sign in</a>
       </nav>
     </div>
   </header>
 
-  <main class="page-main">
-    <section class="page-section">
-      <div class="container narrow page-copy">
-        <p class="eyebrow">Sign In</p>
-        <h1>Account access is being prepared.</h1>
-        <p class="lead">Early office access is handled by support while the account portal is being finished. Email us and we&rsquo;ll help you get the missed-call SMS workflow set up.</p>
-        <div class="hero-actions">
-          <a class="button button-primary" href="mailto:support@missedcallsdental.com">Email support</a>
-          <a class="button button-secondary" href="how-it-works.html">How it works</a>
+  <main>
+    <div class="container page-left">
+      <section class="auth" aria-labelledby="signin-h1">
+        <header class="auth-head">
+          <h1 id="signin-h1">Start your 14-day free trial</h1>
+          <p>Create an account for your dental office. No charge during the trial period.</p>
+        </header>
+
+        <div class="form" role="form" aria-label="Trial request form">
+          <div class="field">
+            <label for="full-name">Full name</label>
+            <input id="full-name" name="full_name" type="text" autocomplete="name" placeholder="Your full name" required>
+          </div>
+
+          <div class="field">
+            <label for="work-email">Work email</label>
+            <input id="work-email" name="work_email" type="email" autocomplete="email" placeholder="you@youroffice.com" required>
+          </div>
+
+          <div class="field">
+            <label for="office-name">Dental office name</label>
+            <input id="office-name" name="office_name" type="text" autocomplete="organization" placeholder="Your dental office name" required>
+          </div>
+
+          <div class="field">
+            <label for="office-contact">Office website or phone</label>
+            <input id="office-contact" name="office_contact" type="text" placeholder="youroffice.com or (555) 000-0000">
+          </div>
+
+          <button type="button" class="btn btn-primary" onclick="handleTrialRequest()" aria-describedby="trial-note">
+            Request trial setup
+          </button>
         </div>
-      </div>
-    </section>
+
+        <p id="trial-note" class="auth-note">
+          This form sends your setup request to <a href="mailto:support@missedcallsdental.com">support@missedcallsdental.com</a>. We&rsquo;ll reply within one business day to complete setup.
+        </p>
+
+        <p class="auth-switch">
+          Already have an account? <a href="mailto:support@missedcallsdental.com">Sign in via support</a>
+        </p>
+      </section>
+    </div>
   </main>
 
   <footer class="site-footer">
-    <div class="container footer-inner">
-      <div class="footer-brand">
-        <p class="footer-name">Missed Calls Dental</p>
-        <p class="footer-tag">Automatic SMS follow-up for missed patient calls.</p>
-        <p class="footer-legal">&copy; 2026 AllyExporter LLC</p>
-      </div>
-      <nav class="footer-nav" aria-label="Footer navigation">
+    <div class="container-wide footer-inner">
+      <span>&copy; 2026 AllyExporter LLC</span>
+      <nav aria-label="Footer navigation">
+        <a href="how-it-works.html">How it works</a>
+        <a href="pricing.html">Pricing</a>
         <a href="contact.html">Contact</a>
         <a href="privacy.html">Privacy</a>
         <a href="terms.html">Terms</a>
         <a href="sms-consent.html">SMS Consent</a>
       </nav>
-      <a class="footer-email" href="mailto:support@missedcallsdental.com">support@missedcallsdental.com</a>
     </div>
   </footer>
+
+  <script>
+    function handleTrialRequest() {
+      var name = document.getElementById('full-name').value.trim();
+      var email = document.getElementById('work-email').value.trim();
+      var office = document.getElementById('office-name').value.trim();
+      var contact = document.getElementById('office-contact').value.trim();
+
+      if (!name || !email || !office) {
+        alert('Please fill in your name, work email, and dental office name.');
+        return;
+      }
+
+      var subject = encodeURIComponent('Trial Setup Request — ' + office);
+      var body = encodeURIComponent(
+        'Hi,\n\nI would like to request a trial setup for Missed Calls Dental.\n\n' +
+        'Name: ' + name + '\n' +
+        'Work email: ' + email + '\n' +
+        'Office: ' + office + '\n' +
+        (contact ? 'Website/phone: ' + contact + '\n' : '') +
+        '\nPlease contact me to complete setup.\n\nThank you.'
+      );
+
+      window.location.href = 'mailto:support@missedcallsdental.com?subject=' + subject + '&body=' + body;
+    }
+  </script>
 </body>
 </html>
