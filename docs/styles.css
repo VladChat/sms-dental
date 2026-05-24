@@ -12,6 +12,9 @@
   --line-strong: rgba(255,255,255,.16);
   --teal: #20D3C2;
   --teal-bright: #75EFE4;
+  --amber: #F6C76A;
+  --amber-soft: rgba(246, 199, 106, .14);
+  --amber-line: rgba(246, 199, 106, .38);
   --focus: #8ff5eb;
   --header-h: 72px;
   --container: 1100px;
@@ -279,49 +282,50 @@ main { display: block; }
   line-height: 1.55;
 }
 
-/* Steps — premium card rows */
+/* Steps — one unified process card with compact rows */
 .steps {
   margin: clamp(2rem, 4vw, 2.6rem) auto 0;
   padding: 0;
   list-style: none;
-  display: grid;
-  gap: .85rem;
+  display: block;
   max-width: var(--text-width);
   counter-reset: step;
-}
-.steps li {
-  display: grid;
-  grid-template-columns: 2.6rem 1fr;
-  gap: 1.1rem;
-  align-items: center;
-  padding: 1.05rem 1.25rem;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.05)),
     var(--surface-1);
-  box-shadow: 0 12px 26px rgba(0,0,0,.28);
+  box-shadow: 0 18px 40px rgba(0,0,0,.32);
+  overflow: hidden;
+}
+.steps li {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 1.25rem;
   color: var(--text);
-  font-size: 1.04rem;
+  font-size: 1rem;
   line-height: 1.5;
 }
+.steps li + li { border-top: 1px solid var(--line); }
 .steps li::before {
   counter-increment: step;
   content: counter(step);
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 2.2rem;
+  height: 2.2rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
+  border-radius: 12px;
   background:
     linear-gradient(180deg, rgba(117,239,228,.22), rgba(32,211,194,.14)),
     rgba(7,21,39,.7);
   border: 1px solid rgba(32,211,194,.42);
   color: var(--teal-bright);
   font-weight: 800;
-  font-size: 1rem;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 6px 12px rgba(0,0,0,.22);
+  font-size: .92rem;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 4px 10px rgba(0,0,0,.2);
 }
 
 /* Recovery section — single column */
@@ -333,7 +337,7 @@ main { display: block; }
 }
 .recovery-card {
   display: grid;
-  gap: 1.1rem;
+  gap: 1.3rem;
   padding: 1.75rem 1.6rem 1.85rem;
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -342,20 +346,35 @@ main { display: block; }
     var(--surface-1);
   box-shadow: 0 22px 50px rgba(0,0,0,.36);
 }
-.recovery-card > header { display: grid; gap: .4rem; }
+.recovery-card > header { display: grid; gap: .55rem; }
 .recovery-eyebrow {
   font-size: .72rem;
   font-weight: 760;
-  letter-spacing: .15em;
+  letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--teal-bright);
 }
 .recovery-card h3 {
-  font-size: 1.2rem;
+  font-size: 1.22rem;
   font-weight: 680;
   letter-spacing: -.02em;
+  line-height: 1.25;
 }
-.recovery-intro { color: var(--muted-2); font-size: .98rem; line-height: 1.55; }
+.recovery-intro {
+  color: var(--muted-2);
+  font-size: .96rem;
+  line-height: 1.6;
+  padding: .85rem 1rem;
+  background: rgba(255,255,255,.025);
+  border-left: 2px solid rgba(32,211,194,.42);
+  border-radius: 0 10px 10px 0;
+}
+
+/* Summary card variant uses amber accent to differentiate from Conversation */
+.recovery-card--summary .recovery-eyebrow { color: var(--amber); }
+.recovery-card--summary .recovery-intro {
+  border-left-color: var(--amber-line);
+}
 
 /* Conversation thread */
 .thread {
@@ -396,30 +415,31 @@ main { display: block; }
 }
 .bubble.patient small { color: #07505a; }
 
-/* Front desk summary rows */
+/* Front desk summary — one grouped table-like panel */
 .summary-rows {
   margin: 0;
-  display: grid;
-  gap: .65rem;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(0,0,0,.18);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
 }
 .summary-row {
   display: grid;
   grid-template-columns: minmax(7rem, .42fr) 1fr;
   align-items: center;
   gap: 1rem;
-  padding: .9rem 1.1rem;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.03)),
-    var(--surface-2);
-  box-shadow: 0 6px 14px rgba(0,0,0,.18);
+  padding: .85rem 1.05rem;
+  border-bottom: 1px solid var(--line);
 }
+.summary-row:last-child { border-bottom: none; }
+.summary-row:nth-child(even) { background: rgba(255,255,255,.025); }
 .summary-row dt {
   color: var(--muted);
-  font-size: .76rem;
+  font-size: .74rem;
   font-weight: 700;
-  letter-spacing: .12em;
+  letter-spacing: .14em;
   text-transform: uppercase;
 }
 .summary-row dd {
@@ -429,10 +449,32 @@ main { display: block; }
   font-weight: 660;
 }
 
-/* Pricing + trial card (single column) */
+/* Amber pill for restrained value accents (e.g., Priority) */
+.priority-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: .22rem .65rem;
+  border-radius: 999px;
+  background: var(--amber-soft);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+  font-size: .82rem;
+  font-weight: 720;
+  letter-spacing: .02em;
+}
+
+/* Start-trial section — keep heading + card tight in the viewport after anchor jump */
+#start-trial.section {
+  padding-top: clamp(2.4rem, 4vw, 3.2rem);
+  padding-bottom: clamp(2.8rem, 5vw, 3.6rem);
+  scroll-margin-top: calc(var(--header-h) + .75rem);
+}
+#start-trial .section-head { gap: .55rem; margin-bottom: .25rem; }
+
+/* Pricing + setup card (single column, compact) */
 .conversion-card {
-  margin: clamp(2rem, 4vw, 2.6rem) auto 0;
-  max-width: 720px;
+  margin: clamp(1.4rem, 3vw, 1.8rem) auto 0;
+  max-width: 640px;
   border: 1px solid var(--line-strong);
   border-radius: 22px;
   background:
@@ -443,24 +485,24 @@ main { display: block; }
 }
 .conversion-row {
   display: grid;
-  gap: 1.1rem;
-  padding: 1.95rem 1.85rem;
+  gap: .9rem;
+  padding: 1.4rem 1.5rem;
 }
 .conversion-row--plan {
-  background: rgba(0,0,0,.14);
+  background: rgba(0,0,0,.18);
   border-bottom: 1px solid var(--line);
 }
 .price-amount {
-  font-size: clamp(2.4rem, 5vw, 3.05rem);
+  font-size: clamp(2.2rem, 4.4vw, 2.7rem);
   font-weight: 740;
-  letter-spacing: -.045em;
+  letter-spacing: -.04em;
   line-height: 1;
 }
 .price-amount span {
   display: block;
-  margin-top: .4rem;
+  margin-top: .35rem;
   color: var(--muted-2);
-  font-size: .98rem;
+  font-size: .94rem;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -488,9 +530,9 @@ main { display: block; }
   background: var(--teal);
   box-shadow: 0 0 0 3px rgba(32, 211, 194, .18);
 }
-.conversion-form-head { display: grid; gap: .45rem; }
-.conversion-form-head h3 { font-size: 1.2rem; letter-spacing: -.02em; }
-.conversion-form-head p { color: var(--muted-2); font-size: .96rem; line-height: 1.55; }
+.conversion-form-head { display: grid; gap: .35rem; }
+.conversion-form-head h3 { font-size: 1.15rem; letter-spacing: -.018em; }
+.conversion-form-head p { color: var(--muted-2); font-size: .94rem; line-height: 1.5; }
 
 /* Forms */
 .form { display: grid; gap: 1rem; }
@@ -648,10 +690,10 @@ main { display: block; }
   }
 
   .workflow-image { border-radius: 18px; }
-  .conversion-row { padding: 1.5rem 1.3rem; }
+  .conversion-row { padding: 1.15rem 1.2rem; gap: .8rem; }
   .recovery-card { padding: 1.4rem 1.25rem; }
-  .steps li { padding: .9rem 1.05rem; grid-template-columns: 2.35rem 1fr; gap: .85rem; }
-  .steps li::before { width: 2.35rem; height: 2.35rem; }
+  .steps li { padding: .85rem 1.05rem; grid-template-columns: 2rem 1fr; gap: .8rem; }
+  .steps li::before { width: 2rem; height: 2rem; font-size: .88rem; }
   .footer-inner { flex-direction: column; align-items: flex-start; }
 }
 @media (max-width: 480px) {
