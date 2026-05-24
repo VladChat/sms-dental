@@ -22,6 +22,8 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="index.html" aria-label="Missed Calls Dental home">
@@ -31,16 +33,22 @@
           <span class="brand-tag">SMS recovery for missed patient calls</span>
         </span>
       </a>
-      <nav class="site-nav" aria-label="Main navigation">
+
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">
+        <span class="menu-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Menu</span>
+      </button>
+
+      <nav class="site-nav" id="primary-nav" aria-label="Main navigation">
         <a href="index.html#how-it-works">How it works</a>
         <a href="index.html#start-trial">Pricing</a>
-        <a href="index.html#start-trial" class="nav-cta">Start trial</a>
         <a href="sign-in.html" aria-current="page">Sign in</a>
+        <a href="index.html#start-trial" class="nav-cta">Start trial</a>
       </nav>
     </div>
   </header>
 
-  <main>
+  <main id="main">
     <section class="section" aria-labelledby="signin-h1">
       <div class="container">
         <div class="section-head">
@@ -79,5 +87,32 @@
       </nav>
     </div>
   </footer>
+
+  <script>
+    (function() {
+      var toggle = document.querySelector('.menu-toggle');
+      var nav = document.getElementById('primary-nav');
+      if (!toggle || !nav) return;
+      var close = function() { toggle.setAttribute('aria-expanded', 'false'); };
+      toggle.addEventListener('click', function() {
+        var expanded = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+      });
+      nav.querySelectorAll('a').forEach(function(a) {
+        a.addEventListener('click', close);
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+          close();
+          toggle.focus();
+        }
+      });
+      document.addEventListener('click', function(e) {
+        if (toggle.getAttribute('aria-expanded') !== 'true') return;
+        if (toggle.contains(e.target) || nav.contains(e.target)) return;
+        close();
+      });
+    })();
+  </script>
 </body>
 </html>
