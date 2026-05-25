@@ -8,8 +8,8 @@ Public repository for the Missed Calls Dental MVP website and product documentat
 sms-dental/
   docs/            Public website published by GitHub Pages
   MVP_BUILD_DOCS/  Product, architecture, compliance and build specs
+  MVP_BUILD_DOCS/mcp/  MCP configuration example templates
   config/          Local/runtime config examples
-  mcp/             MCP configuration examples
   app/             Future SaaS app placeholder
 ```
 

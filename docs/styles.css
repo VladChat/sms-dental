@@ -728,6 +728,10 @@ main { display: block; }
 [data-theme="light"] .field input::placeholder { color: rgba(93, 110, 132, .65); }
 .field input:focus {
   outline: none;
+}
+.field input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(32, 211, 194, .25);
 }
@@ -891,6 +895,9 @@ main { display: block; }
   gap: .65rem;
   margin-top: .55rem;
 }
+.actions-center { justify-content: center; }
+.thread--top-spaced { margin-top: 2rem; }
+.actions--top-spaced { margin-top: 2rem; }
 
 /* ==========================================================================
    Responsive

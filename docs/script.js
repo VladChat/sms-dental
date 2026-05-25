@@ -117,16 +117,35 @@
   /* ---------- Trial / setup form (used on index) ---------- */
   var form = document.getElementById('trial-form');
   if (form) {
+    var trialError = document.getElementById('trial-error');
+    function setTrialError(message) {
+      if (!trialError) return;
+      trialError.textContent = message || '';
+      trialError.hidden = !message;
+    }
+
+    var nameInput = document.getElementById('full-name');
+    var emailInput = document.getElementById('work-email');
+    if (nameInput) {
+      nameInput.addEventListener('input', function () {
+        setTrialError('');
+      });
+    }
+    if (emailInput) {
+      emailInput.addEventListener('input', function () {
+        setTrialError('');
+      });
+    }
+
     form.addEventListener('submit', function (event) {
       event.preventDefault();
-      var nameInput = document.getElementById('full-name');
-      var emailInput = document.getElementById('work-email');
       var name = nameInput ? nameInput.value.trim() : '';
       var email = emailInput ? emailInput.value.trim() : '';
       if (!name || !email) {
-        alert('Please enter your full name and work email.');
+        setTrialError('Please enter your full name and work email.');
         return;
       }
+      setTrialError('');
       var subject = encodeURIComponent('Setup link request');
       var body = encodeURIComponent(
         'Hi,\n\nPlease send a setup link for Missed Calls Dental.\n\n' +

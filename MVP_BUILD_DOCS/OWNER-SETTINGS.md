@@ -4,21 +4,21 @@ Do not paste API secret keys, auth tokens, passwords, or real patient data here.
 
 ## Product
 
-Product name: Dental Call Recovery
-Admin email: allyexporter@gmail.com
-Support email: allyexporter@gmail.com
+Product name: Missed Calls Dental
+Admin email: internal-admin@missedcallsdental.local
+Support email: support@missedcallsdental.com
 Default timezone: America/Chicago
 
 ## Domain
 
-Primary domain: TO_FILL_LATER
-Production app URL: https://sms-dental.vercel.app
+Primary domain: https://missedcallsdental.com/
+Production app URL: https://missedcallsdental.com/
 Staging app URL: TO_FILL_AFTER_VERCEL_PROJECT_CREATED
 
 ## Pricing
 
-Monthly price: $149/month
-Trial length: 14 days after live activation
+Monthly price: $99/month
+Trial wording: 14-day trial starts after setup is ready · then $99/month
 
 ## First test clinic
 

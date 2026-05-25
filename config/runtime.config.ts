@@ -3,12 +3,13 @@
 
 export const runtimeConfig = {
   app: {
-    name: "Dental Call Recovery",
-    url: "http://localhost:3000",
+    name: "Missed Calls Dental",
+    url: "https://missedcallsdental.com/",
     environment: "local",
     defaultTimezone: "America/Chicago",
-    supportEmail: "allyexporter@gmail.com",
-    adminEmail: "allyexporter@gmail.com",
+    supportEmail: "support@missedcallsdental.com",
+    // Internal-only contact. Do not surface this in public website copy.
+    adminEmail: "internal-admin@missedcallsdental.local",
   },
 
   supabase: {
@@ -23,11 +24,11 @@ export const runtimeConfig = {
 
   stripe: {
     monthlyPriceId: "TO_FILL_AFTER_STRIPE_PRICE_CREATED",
-    annualPriceId: "TO_FILL_LATER_IF_USED",
+    annualPriceId: "TO_FILL_AFTER_STRIPE_ANNUAL_PRICE_CREATED_IF_USED",
   },
 
   billing: {
-    monthlyPriceUsd: 149,
+    monthlyPriceUsd: 99,
     trialDaysAfterActivation: 14,
   },
 

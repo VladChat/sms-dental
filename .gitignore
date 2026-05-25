@@ -10,12 +10,16 @@ build/
 .env.*
 !.env.example
 !.env.local.example
+!.env.*.example
+.claude/settings.local.json
+.claude/settings*.local.json
 
 # Local/editor files
 .DS_Store
 .vscode/
 .idea/
 *.log
+*.zip
 
 # OS/temp
 Thumbs.db

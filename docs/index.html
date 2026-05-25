@@ -28,7 +28,7 @@
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="index.html" aria-label="Missed Calls Dental home">
-        <img src="brand/logo-mark.webp" alt="">
+        <img src="brand/logo-mark.webp" alt="" width="1254" height="1254">
         <span class="brand-text">
           <span class="brand-name">Missed Calls Dental</span>
           <span class="brand-tag">SMS recovery for missed patient calls</span>
@@ -139,7 +139,7 @@
 
         <article class="conversion-card">
           <div class="conversion-row conversion-row--plan">
-            <p class="price-headline">14 days free<span class="price-sep" aria-hidden="true">&middot;</span>then $99/month</p>
+            <p class="price-headline">14-day trial starts after setup is ready<span class="price-sep" aria-hidden="true">&middot;</span>then $99/month</p>
             <p class="includes-label">Includes</p>
             <ul class="includes">
               <li>Missed-call recovery system</li>
@@ -161,8 +161,9 @@
               </div>
               <div class="field">
                 <label for="work-email">Work email</label>
-                <input id="work-email" name="work_email" type="email" autocomplete="email" placeholder="you@youroffice.com" required>
+                <input id="work-email" name="work_email" type="email" autocomplete="email" placeholder="you@youroffice.com" spellcheck="false" required>
               </div>
+              <div class="form-error" id="trial-error" role="alert" aria-live="polite" hidden></div>
               <button type="submit" class="btn btn-primary">Send setup link</button>
             </form>
 
