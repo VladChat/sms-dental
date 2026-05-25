@@ -654,20 +654,18 @@ main { display: block; }
 [data-theme="light"] .conversion-row--plan { background: var(--surface-2); }
 
 .price-headline {
-  display: grid;
-  gap: .35rem;
   margin: 0;
-}
-.price-free {
-  font-size: clamp(1.7rem, 3.4vw, 2.05rem);
-  font-weight: 740;
-  letter-spacing: -.025em;
-  line-height: 1.1;
+  font-size: clamp(1.1rem, 2.8vw, 1.75rem);
+  font-weight: 720;
+  letter-spacing: -.022em;
+  line-height: 1.2;
   color: var(--text);
+  white-space: nowrap;
 }
-.price-then {
+.price-sep {
+  display: inline-block;
+  margin: 0 .35rem;
   color: var(--muted-2);
-  font-size: .98rem;
   font-weight: 600;
 }
 .includes-label {
@@ -734,6 +732,21 @@ main { display: block; }
   box-shadow: 0 0 0 3px rgba(32, 211, 194, .25);
 }
 .form .btn { width: 100%; }
+.form-error {
+  padding: .7rem .9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 100, 100, .42);
+  background: rgba(239, 100, 100, .08);
+  color: #FFB7B7;
+  font-size: .92rem;
+  font-weight: 660;
+  line-height: 1.4;
+}
+[data-theme="light"] .form-error {
+  background: rgba(184, 28, 28, .08);
+  border-color: rgba(184, 28, 28, .25);
+  color: #9A1F1F;
+}
 .form-foot { color: var(--muted-2); font-size: .92rem; text-align: center; }
 .form-foot a { color: var(--teal-bright); text-decoration: none; font-weight: 660; }
 [data-theme="light"] .form-foot a { color: #117565; }
