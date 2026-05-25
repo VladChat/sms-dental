@@ -2,6 +2,14 @@
 
 Files in this package:
 
+Current reading priority:
+
+1. `PROJECT-CONTEXT.md`
+2. `START-HERE.md`
+3. `AGENT-RULES.md`
+4. task-specific numbered docs
+
+
 - `00-product-brief.md`
 - `01-user-flows.md`
 - `02-technical-architecture.md`
