@@ -7,6 +7,24 @@ Primary audience: AI coding agent / technical founder / project manager
 
 ---
 
+## Current status note — May 2026
+
+This file is a roadmap, not a command to build the entire MVP in one pass.
+
+The current active step is **Backend Foundation v1** only:
+
+- create the local Next.js/Vercel foundation using the existing `app/` direction;
+- keep `docs/` untouched;
+- prepare health routes, env handling, database helpers, migration SQL, Twilio webhook validation, Stripe webhook placeholder, logging, and documentation;
+- do not deploy;
+- do not send SMS;
+- do not apply Supabase migrations;
+- do not create Vercel, Stripe, Twilio, or Supabase cloud resources.
+
+Use `PROJECT-CONTEXT.md` and `backend-foundation-handoff.md` as the current source of truth before using the milestone details below.
+
+---
+
 ## 1. Purpose of this file
 
 This file turns the MVP specification into an implementation plan.
@@ -31,7 +49,7 @@ The MVP must not expand into AI receptionist, dental CRM, PMS integration, numbe
 Build in this order:
 
 ```txt
-1. App foundation
+1. Backend Foundation v1 / App foundation
 2. Database and RLS
 3. Auth and clinic setup
 4. Twilio voice webhook

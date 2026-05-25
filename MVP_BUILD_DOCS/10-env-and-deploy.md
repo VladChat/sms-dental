@@ -6,6 +6,22 @@ Primary audience: founder, AI coding agent, technical operator
 
 ---
 
+## Current project override — May 2026
+
+Use this file as deployment reference, but apply the current repository decisions below:
+
+- The existing public marketing website remains in `docs/` and is hosted by GitHub Pages at `https://missedcallsdental.com`.
+- The future Next.js SaaS app/backend should use the existing `app/` direction and deploy to Vercel later.
+- The likely future app/backend domain is `https://app.missedcallsdental.com`.
+- There is currently no Vercel project for this repository.
+- Do not create a Vercel project, deploy, change DNS, or configure production webhooks without explicit user approval.
+- The current committed root env template is `.env.local.example`.
+- The real local secrets file is `.env.local`; never commit or print it.
+
+If this file conflicts with `PROJECT-CONTEXT.md`, use `PROJECT-CONTEXT.md` for the current state.
+
+---
+
 ## 1. Purpose
 
 This file defines environments, configuration/secrets split, deployment model, URLs, webhooks, jobs, and production launch expectations.
@@ -91,9 +107,9 @@ monitoring and launch checklist
 Recommended:
 
 ```txt
-Marketing site, optional: https://www.<domain>.com
-Production app:          https://app.<domain>.com
-Staging app, optional:   https://staging.<domain>.com
+Marketing site:          https://missedcallsdental.com
+Production app planned:  https://app.missedcallsdental.com
+Staging app, optional:   https://staging.missedcallsdental.com
 ```
 
 Temporary staging can use a Vercel preview URL.
@@ -101,11 +117,11 @@ Temporary staging can use a Vercel preview URL.
 Production webhooks should use stable production app URL:
 
 ```txt
-https://app.<domain>.com/api/webhooks/twilio/voice/incoming
-https://app.<domain>.com/api/webhooks/twilio/voice/call-status
-https://app.<domain>.com/api/webhooks/twilio/messaging/incoming
-https://app.<domain>.com/api/webhooks/twilio/messaging/status
-https://app.<domain>.com/api/webhooks/stripe
+https://app.missedcallsdental.com/api/webhooks/twilio/voice/incoming
+https://app.missedcallsdental.com/api/webhooks/twilio/voice/call-status
+https://app.missedcallsdental.com/api/webhooks/twilio/messaging/incoming
+https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status
+https://app.missedcallsdental.com/api/webhooks/stripe
 ```
 
 Do not point production Twilio/Stripe webhooks at temporary preview URLs.
@@ -114,9 +130,9 @@ Do not point production Twilio/Stripe webhooks at temporary preview URLs.
 
 ## 4. Config and secrets split
 
-Do not use one mixed `env/.env.secrets.example` and `config/runtime.config.example.ts`.
+For the older MVP package, these examples exist under `MVP_BUILD_DOCS/`. For the current repository, use the root `.env.local.example` as the active committed env-name template.
 
-Use:
+Reference examples:
 
 ```txt
 config/runtime.config.example.ts

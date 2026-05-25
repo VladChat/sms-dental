@@ -5,6 +5,22 @@ Audience: AI coding agent operating in VS Code or another coding IDE
 
 ---
 
+## 0. Current source of truth and active milestone
+
+Before implementing anything, read `PROJECT-CONTEXT.md` first.
+
+Current active milestone:
+
+- Backend Foundation v1.
+- Build a safe local Next.js/Vercel foundation in the existing `app/` direction.
+- Keep the existing `docs/` GitHub Pages website untouched unless the user explicitly requests website changes.
+- Do not create a separate `backend/` folder unless the user explicitly changes the architecture.
+- Do not deploy, send SMS, apply migrations, or create cloud resources without explicit approval.
+
+If this file conflicts with `PROJECT-CONTEXT.md`, `backend-foundation-handoff.md`, or `.env.local.example`, use the newer source for the current implementation step.
+
+---
+
 ## 1. Prime directive
 
 Build the MVP described in the docs. Do not expand scope.
@@ -48,8 +64,9 @@ Never write real secrets into source-controlled files.
 Allowed in repo:
 
 ```txt
-env/.env.secrets.example
-config/runtime.config.example.ts
+.env.local.example
+MVP_BUILD_DOCS/env/.env.secrets.example
+MVP_BUILD_DOCS/config/runtime.config.example.ts
 ```
 
 Forbidden in repo:
@@ -59,6 +76,7 @@ Forbidden in repo:
 .env.local
 .env.production
 .env.staging
+.local-agent/
 real API keys
 real Twilio auth tokens
 real Stripe secret keys

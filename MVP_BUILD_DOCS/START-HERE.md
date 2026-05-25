@@ -6,6 +6,22 @@ Ignore all previous stage ZIP files, patch ZIP files, and older versions.
 
 ---
 
+## Current Source of Truth — May 2026
+
+Start with `PROJECT-CONTEXT.md`. It is the master context file for the current repository state, product goal, hosting plan, safety boundaries, and immediate Backend Foundation v1 step.
+
+The numbered files in this folder are still useful reference documents, but they are roadmap/spec material. If any older document conflicts with `PROJECT-CONTEXT.md`, `AGENTS.md`, `.env.local.example`, or `backend-foundation-handoff.md`, use the newer files.
+
+Current implementation direction:
+
+- `docs/` remains the existing GitHub Pages marketing website and must not be changed unless explicitly requested.
+- `app/` is the future Next.js SaaS app/backend direction.
+- Do not create `backend/` unless the user explicitly changes the architecture.
+- Future app/backend hosting is Vercel, likely at `https://app.missedcallsdental.com`.
+- Do not deploy or create cloud resources during Backend Foundation v1.
+
+---
+
 ## 1. Who this package is for
 
 Primary implementer:
@@ -79,13 +95,15 @@ Do **not** paste real API secrets, passwords, service-role keys, Stripe secret k
 Give the AI coding agent this instruction:
 
 ```txt
-Read START-HERE.md first. Then read the numbered files in order. Follow AGENT-RULES.md before editing code or using MCP tools.
+Read PROJECT-CONTEXT.md first. Then read START-HERE.md and AGENT-RULES.md. Use the numbered files as supporting reference material for the current task.
 ```
 
 Reading order:
 
 ```txt
+PROJECT-CONTEXT.md
 AGENT-RULES.md
+backend-foundation-handoff.md
 MVP-Build-Spec-v1.md
 00-product-brief.md
 01-user-flows.md
@@ -104,6 +122,7 @@ MVP-Build-Spec-v1.md
 14-ai-codex-vscode-workflow.md
 15-mcp-setup.md
 OWNER-FILL-THIS-OUT.md
+OWNER-SETTINGS.md
 REVIEW-NOTES.md
 QA-AUDIT-SUMMARY.md
 ```

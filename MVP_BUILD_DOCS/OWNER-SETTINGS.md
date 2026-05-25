@@ -2,6 +2,14 @@
 
 Do not paste API secret keys, auth tokens, passwords, or real patient data here.
 
+Current note:
+
+- Use `PROJECT-CONTEXT.md` as the master source of truth for current architecture.
+- `https://missedcallsdental.com/` is the current public marketing site on GitHub Pages.
+- The future SaaS app/backend is planned for Vercel, likely at `https://app.missedcallsdental.com/`.
+- Do not paste secrets here.
+
+
 ## Product
 
 Product name: Missed Calls Dental
@@ -12,7 +20,7 @@ Default timezone: America/Chicago
 ## Domain
 
 Primary domain: https://missedcallsdental.com/
-Production app URL: https://missedcallsdental.com/
+Production app URL: https://app.missedcallsdental.com/ (planned; Vercel project not created yet)
 Staging app URL: TO_FILL_AFTER_VERCEL_PROJECT_CREATED
 
 ## Pricing
@@ -35,5 +43,7 @@ Average recovered appointment value: $300
 ## MCP values
 
 Supabase staging project_ref: qfjpvbvfvhbtebwivcdc
-Vercel team slug: TO_FILL_AFTER_VERCEL_PROJECT_CREATED
-Vercel project slug: sms-dental
+Vercel team slug: vladchat-1500s-projects
+Vercel project slug: TO_FILL_AFTER_VERCEL_PROJECT_CREATED
+
+Vercel team ID: team_1F2PWbZbJldYTbtZ8HlEVMCm
