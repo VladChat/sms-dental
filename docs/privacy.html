@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Privacy &mdash; Missed Calls Dental</title>
-  <meta name="description" content="How Missed Calls Dental handles information used to operate missed-call SMS follow-up.">
+  <meta name="description" content="How Missed Calls Dental handles information used to operate missed-call SMS recovery for participating dental offices.">
   <link rel="canonical" href="https://missedcallsdental.com/privacy.html">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Privacy &mdash; Missed Calls Dental">
@@ -19,9 +19,12 @@
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="site.webmanifest">
+  <script>(function(){try{var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="index.html" aria-label="Missed Calls Dental home">
@@ -31,50 +34,102 @@
           <span class="brand-tag">SMS recovery for missed patient calls</span>
         </span>
       </a>
-      <nav class="site-nav" aria-label="Main navigation">
-        <a href="index.html#how-it-works">How it works</a>
-        <a href="index.html#start-trial">Pricing</a>
-        <a href="index.html#start-trial" class="nav-cta">Start trial</a>
-        <a href="sign-in.html">Sign in</a>
-      </nav>
+
+      <div class="header-end">
+        <button class="theme-toggle" type="button" aria-label="Switch theme" title="Switch theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z"></path></svg>
+        </button>
+
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Open menu">
+          <span class="menu-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span>Menu</span>
+        </button>
+
+        <nav class="site-nav" id="primary-nav" aria-label="Main navigation">
+          <a class="nav-link" href="index.html#how-it-works">How it works</a>
+          <a class="nav-link" href="index.html#start-trial">Pricing</a>
+          <div class="auth-group">
+            <a class="auth-link" href="sign-in.html">Sign in</a>
+            <a class="auth-link auth-link--primary" href="index.html#start-trial">Start trial</a>
+          </div>
+        </nav>
+      </div>
     </div>
   </header>
 
-  <main>
+  <main id="main">
     <section class="section">
       <div class="container">
         <div class="intro">
           <h1>Privacy</h1>
-          <p>Missed Calls Dental is operated by AllyExporter LLC. This page describes the information used to operate missed-call SMS follow-up for dental offices.</p>
+          <p>Last updated: May 24, 2026</p>
+          <p>This page explains how Missed Calls Dental processes information to provide missed-call SMS recovery for participating dental offices.</p>
         </div>
 
         <div class="legal">
-        <section>
-          <h2>Information we may process</h2>
-          <ul>
-            <li>Business contact details for the clinic and its staff.</li>
-            <li>Clinic account and office configuration details.</li>
-            <li>Call metadata related to missed, busy, or unanswered calls.</li>
-            <li>SMS metadata and message content.</li>
-            <li>Opt-out records.</li>
-            <li>Support messages.</li>
-          </ul>
-        </section>
+          <section>
+            <h2>Who we serve</h2>
+            <p>Missed Calls Dental provides a communication workflow for dental offices. When a caller does not reach a participating office, the service can send an operational SMS follow-up, collect basic reply details, and make those details available to the office for review.</p>
+          </section>
 
-        <section>
-          <h2>How we use it</h2>
-          <p>To send missed-call SMS follow-up, route patient replies to the office, support clinics, maintain opt-out records, and improve reliability.</p>
-        </section>
+          <section>
+            <h2>Information we may process</h2>
+            <ul>
+              <li>Dental office account information, office configuration, and staff business contact details.</li>
+              <li>Virtual phone number, call routing, missed-call, busy-call, and unanswered-call metadata.</li>
+              <li>SMS metadata, message content, reply content, timestamps, delivery status, and opt-out records.</li>
+              <li>Setup requests, support messages, and related email communications.</li>
+              <li>Billing and subscription records. Payment card details are handled by our payment processor and are not stored by us in full.</li>
+              <li>Technical logs used for security, abuse prevention, troubleshooting, and service reliability.</li>
+            </ul>
+          </section>
 
-        <section>
-          <h2>Clinic responsibility</h2>
-          <p>Clinics are responsible for their patient communications and for reviewing how the service fits their own privacy and compliance obligations.</p>
-        </section>
+          <section>
+            <h2>How we use information</h2>
+            <ul>
+              <li>To operate missed-call SMS follow-up and route caller replies to the appropriate dental office.</li>
+              <li>To manage clinic accounts, virtual phone number configuration, setup, support, billing, and service notices.</li>
+              <li>To maintain opt-out records and honor STOP/HELP messaging requirements.</li>
+              <li>To monitor delivery, troubleshoot errors, prevent abuse, and improve reliability.</li>
+              <li>To comply with carrier, telecom, legal, tax, accounting, and security obligations.</li>
+            </ul>
+          </section>
 
-        <section>
-          <h2>Contact</h2>
-          <p>For privacy questions, email <a href="mailto:support@missedcallsdental.com">support@missedcallsdental.com</a>.</p>
-        </section>
+          <section>
+            <h2>How we share information</h2>
+            <p>We share information only as needed to provide and support the service. This may include sharing data with the participating dental office, telecom and messaging providers, hosting providers, payment processors, security tools, and professional advisors. We do not sell personal information.</p>
+          </section>
+
+          <section>
+            <h2>Patient communications and clinic role</h2>
+            <p>Dental offices control their relationship with their patients and callers. Missed Calls Dental provides the missed-call SMS workflow and processes information needed to operate that workflow. Each dental office remains responsible for its own patient communications, scheduling decisions, clinical decisions, required notices, consent practices, and compliance review.</p>
+          </section>
+
+          <section>
+            <h2>Healthcare privacy</h2>
+            <p>The service may process patient communication data on behalf of participating dental offices. Dental offices are responsible for determining whether their use of the service requires a business associate agreement, patient notice, or other healthcare privacy documentation. Missed Calls Dental does not provide medical advice, diagnosis, treatment recommendations, or emergency guidance.</p>
+          </section>
+
+          <section>
+            <h2>Retention</h2>
+            <p>We keep information for as long as needed to provide the service, maintain business records, support opt-out records, comply with legal or carrier requirements, resolve disputes, and improve security and reliability. Retention periods may vary based on the type of information and the clinic account configuration.</p>
+          </section>
+
+          <section>
+            <h2>Security</h2>
+            <p>We use reasonable administrative, technical, and organizational safeguards designed to protect information. No internet or telecom system can be guaranteed to be completely secure, and SMS delivery depends on third-party carrier networks and recipient device settings.</p>
+          </section>
+
+          <section>
+            <h2>Your choices</h2>
+            <p>Message recipients can reply <strong>STOP</strong> to opt out of future automated messages from the relevant sender, or <strong>HELP</strong> for support information. Dental offices and account users can contact us to request support with account information, setup, or privacy questions.</p>
+          </section>
+
+          <section>
+            <h2>Contact</h2>
+            <p>For privacy questions, email <a href="mailto:support@missedcallsdental.com">support@missedcallsdental.com</a>.</p>
+          </section>
         </div>
       </div>
     </section>
@@ -82,16 +137,15 @@
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <span>&copy; 2026 AllyExporter LLC</span>
-      <nav aria-label="Footer navigation">
-        <a href="index.html#how-it-works">How it works</a>
-        <a href="index.html#start-trial">Pricing</a>
-        <a href="contact.html">Contact</a>
-        <a href="privacy.html">Privacy</a>
-        <a href="terms.html">Terms</a>
-        <a href="sms-consent.html">SMS Consent</a>
+      <span class="footer-copy">&copy; <span data-current-year>2026</span> Missed Calls Dental</span>
+      <nav class="footer-nav" aria-label="Legal navigation">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="terms.html">Terms of Service</a>
+        <a href="sms-consent.html">SMS Terms</a>
       </nav>
     </div>
   </footer>
+
+  <script src="script.js" defer></script>
 </body>
 </html>
