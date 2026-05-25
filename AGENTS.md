@@ -27,6 +27,7 @@ When project values conflict, use this priority:
 
 ## Required Reading Before Coding
 
+- `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`
 - `MVP_BUILD_DOCS/START-HERE.md`
 - `MVP_BUILD_DOCS/AGENT-RULES.md`
 - `Skills/missed-calls-dental-product-context.md`

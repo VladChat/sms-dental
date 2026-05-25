@@ -18,6 +18,7 @@ Files in this package:
 - `13-hosting-decision-no-fly.md`
 - `14-ai-codex-vscode-workflow.md`
 - `15-mcp-setup.md`
+- `PROJECT-CONTEXT.md`
 - `AGENT-RULES.md`
 - `MVP-Build-Spec-v1.md`
 - `OWNER-FILL-THIS-OUT.md`
