@@ -19,6 +19,7 @@
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="site.webmanifest">
+  <script>(function(){try{var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -34,17 +35,26 @@
         </span>
       </a>
 
-      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">
-        <span class="menu-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
-        <span>Menu</span>
-      </button>
+      <div class="header-end">
+        <button class="theme-toggle" type="button" aria-label="Switch theme" title="Switch theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z"></path></svg>
+        </button>
 
-      <nav class="site-nav" id="primary-nav" aria-label="Main navigation">
-        <a href="index.html#how-it-works">How it works</a>
-        <a href="index.html#start-trial">Pricing</a>
-        <a href="sign-in.html" aria-current="page">Sign in</a>
-        <a href="index.html#start-trial" class="nav-cta">Start trial</a>
-      </nav>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Open menu">
+          <span class="menu-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span>Menu</span>
+        </button>
+
+        <nav class="site-nav" id="primary-nav" aria-label="Main navigation">
+          <a class="nav-link" href="index.html#how-it-works">How it works</a>
+          <a class="nav-link" href="index.html#start-trial">Pricing</a>
+          <div class="auth-group">
+            <a class="auth-link" href="sign-in.html" aria-current="page">Sign in</a>
+            <a class="auth-link auth-link--primary" href="index.html#start-trial">Start trial</a>
+          </div>
+        </nav>
+      </div>
     </div>
   </header>
 
@@ -76,43 +86,15 @@
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <span>&copy; 2026 AllyExporter LLC</span>
-      <nav aria-label="Footer navigation">
-        <a href="index.html#how-it-works">How it works</a>
-        <a href="index.html#start-trial">Pricing</a>
-        <a href="contact.html">Contact</a>
-        <a href="privacy.html">Privacy</a>
-        <a href="terms.html">Terms</a>
-        <a href="sms-consent.html">SMS Consent</a>
+      <span class="footer-copy">&copy; <span data-current-year>2026</span> Missed Calls Dental</span>
+      <nav class="footer-nav" aria-label="Legal navigation">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="terms.html">Terms of Service</a>
+        <a href="sms-consent.html">SMS Terms</a>
       </nav>
     </div>
   </footer>
 
-  <script>
-    (function() {
-      var toggle = document.querySelector('.menu-toggle');
-      var nav = document.getElementById('primary-nav');
-      if (!toggle || !nav) return;
-      var close = function() { toggle.setAttribute('aria-expanded', 'false'); };
-      toggle.addEventListener('click', function() {
-        var expanded = toggle.getAttribute('aria-expanded') === 'true';
-        toggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-      });
-      nav.querySelectorAll('a').forEach(function(a) {
-        a.addEventListener('click', close);
-      });
-      document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
-          close();
-          toggle.focus();
-        }
-      });
-      document.addEventListener('click', function(e) {
-        if (toggle.getAttribute('aria-expanded') !== 'true') return;
-        if (toggle.contains(e.target) || nav.contains(e.target)) return;
-        close();
-      });
-    })();
-  </script>
+  <script src="script.js" defer></script>
 </body>
 </html>
