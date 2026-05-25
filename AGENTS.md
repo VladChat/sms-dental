@@ -1,87 +1,80 @@
-# Project Skills
+# Agent Instructions
 
-Before working on this project, check the available skills in:
+This repository intentionally has two valid instruction layers:
 
-.agents/skills/
-.github/skills/
+1. `.claude/skills/` — Claude-specific skills for Claude Code.
+2. `Skills/*.md` — universal project/reference instructions for all agents.
 
-Use relevant skills when the task matches them.
+Keep both layers.
 
-Important skills for this project:
+Do not use obsolete instruction systems:
 
-- missed-calls-dental-product-context
-  Use for general Dental SMS product context.
+- `.agents/`
+- `.agents/Skills/`
+- `.github/skills/`
 
-- twilio-dental-sms
-  Use for Twilio, SMS, missed calls, phone numbers, messaging webhooks, A2P compliance, opt-out handling, and dental SMS wording.
+Do not delete `.claude/skills/`.
+Do not create or install new instruction systems during cleanup unless Vlad explicitly asks.
 
-- page-cro-dental-saas
-  Use for homepage, landing page, pricing page, CRO, CTA wording, trust sections, Stripe verification readiness, Twilio review readiness, and dental SaaS marketing copy.
+## Source Priority for Project Facts
 
-- frontend-design
-  Use for website and UI design.
+When project values conflict, use this priority:
 
-- web-design-guidelines
-  Use for checking design quality, accessibility, layout, and UX.
+1. `MVP_BUILD_DOCS/OWNER-SETTINGS.md`
+2. `config/runtime.config.ts`
+3. `Skills/missed-calls-dental-product-context.md`
+4. relevant `.claude/skills/*/SKILL.md`
 
-- react-best-practices
-  Use for React and frontend code quality.
+## Required Reading Before Coding
 
-- stripe-best-practices
-  Use for Stripe Checkout, Billing, subscriptions, and webhooks.
+- `MVP_BUILD_DOCS/START-HERE.md`
+- `MVP_BUILD_DOCS/AGENT-RULES.md`
+- `Skills/missed-calls-dental-product-context.md`
 
-- supabase-postgres-best-practices
-  Use for Supabase, Postgres, schema, RLS, indexes, and database design.
+For Twilio/SMS work, read:
 
-- copywriting
-  Use for website copy and product messaging.
+- `Skills/twilio-dental-sms.md`
+- `.claude/skills/twilio-sms-compliance/SKILL.md` (if present)
 
-- seo-audit
-  Use for SEO checks and metadata.
+For Stripe work, read:
 
-Agents must prefer these local project skills over generic advice when working on this project.
-# Project Skills
+- `Skills/stripe-best-practices.md`
+- `.claude/skills/stripe-billing/SKILL.md` (if present)
 
-Project skills are stored as flat markdown files in:
+For Supabase/Postgres work, read:
 
-Skills/
+- `Skills/supabase-postgres-best-practices.md`
+- `.claude/skills/supabase-postgres/SKILL.md` (if present)
 
-Before working on this project, check the available skill files in:
+For public website, CRO, copy, or design work, read:
 
-Skills/
+- `Skills/page-cro-dental-saas.md`
+- `Skills/copywriting.md`
+- `Skills/frontend-design.md`
+- `.claude/skills/landing-page-cro/SKILL.md` (if present)
+- `.claude/skills/copywriting/SKILL.md` (if present)
+- `.claude/skills/frontend-design/SKILL.md` (if present)
 
-Use relevant skills when the task matches them.
+## Canonical Project Values
 
-Important skill files:
+- Public brand: `Missed Calls Dental`
+- Domain: `https://missedcallsdental.com/`
+- Public support email: `support@missedcallsdental.com`
+- Public price: `$99/month`
+- Trial wording: `14-day trial starts after setup is ready · then $99/month`
 
-- Skills/missed-calls-dental-product-context.md
-  Use for general Dental SMS product context.
+## Security Rules
 
-- Skills/twilio-dental-sms.md
-  Use for Twilio, SMS, missed calls, phone numbers, messaging webhooks, A2P compliance, opt-out handling, and dental SMS wording.
+- Do not commit secrets.
+- Do not commit `.env.local`.
+- Do not commit `.env`.
+- Do not commit `.claude/settings.local.json`.
+- Keep secrets only in local ignored files.
+- Public website copy must not expose private/admin email addresses.
 
-- Skills/page-cro-dental-saas.md
-  Use for homepage, landing page, pricing page, CRO, CTA wording, trust sections, Stripe verification readiness, Twilio review readiness, and dental SaaS marketing copy.
+## Project Structure Rules
 
-- Skills/frontend-design.md
-  Use for website and UI design.
-
-- Skills/web-design-guidelines.md
-  Use for checking design quality, accessibility, layout, and UX.
-
-- Skills/react-best-practices.md
-  Use for React and frontend code quality.
-
-- Skills/stripe-best-practices.md
-  Use for Stripe Checkout, Billing, subscriptions, and webhooks.
-
-- Skills/supabase-postgres-best-practices.md
-  Use for Supabase, Postgres, schema, RLS, indexes, and database design.
-
-- Skills/copywriting.md
-  Use for website copy and product messaging.
-
-- Skills/seo-audit.md
-  Use for SEO checks and metadata.
-
-Agents must prefer these local project skill files over generic advice when working on this project.
+- Keep the public website in `docs/`.
+- Keep `docs/CNAME`.
+- Do not restore root `CNAME`.
+- Do not start backend implementation until this cleanup is committed and the working tree is clean.

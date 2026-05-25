@@ -17,15 +17,15 @@ export function Logo({
   ...rest
 }: LogoProps) {
   return (
-    <a href={href} className={className} aria-label="Dental Missed Call Recovery home" {...rest}>
+    <a href={href} className={className} aria-label="Missed Calls Dental home" {...rest}>
       <img
         src={imageSrc}
         width={44}
         height={44}
-        alt="Dental Missed Call Recovery logo mark"
+        alt="Missed Calls Dental logo mark"
         className={imageClassName}
       />
-      <span className={textClassName}>Dental Missed Call Recovery</span>
+      <span className={textClassName}>Missed Calls Dental</span>
     </a>
   );
 }

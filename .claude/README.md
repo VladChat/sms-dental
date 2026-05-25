@@ -1,42 +1,22 @@
-# Claude Code setup for Missed Calls Dental
+# Claude Repository Notes
 
-Project skills live in:
-.claude/skills/
+This repository has two instruction layers:
 
-Use installed project skills before editing related files.
+- `.claude/skills/` is the Claude-specific skill layer.
+- `Skills/*.md` is the universal project/reference layer.
 
-Do not download or install new external skills unless Vlad explicitly asks.
+Keep both layers.
 
-Do not create new branches unless Vlad explicitly asks.
-Work on main only.
+If project facts conflict, use:
 
-Before committing, run:
-git status
+1. `MVP_BUILD_DOCS/OWNER-SETTINGS.md`
+2. `config/runtime.config.ts`
+3. `Skills/missed-calls-dental-product-context.md`
 
-Commit only the files changed for the requested task.
+Do not add new skill packs or new instruction systems during cleanup unless Vlad explicitly asks.
 
-## SaaS Studio Skills
+Workflow reminders:
 
-These skills are additions to existing project skills.
-
-Installed/additional SaaS Studio skill set:
-- project-context
-- frontend-design
-- ui-ux-review
-- landing-page-cro
-- copywriting
-- technical-seo
-- accessibility-wcag
-- performance-core-web-vitals
-- security-owasp
-- stripe-billing
-- twilio-sms-compliance
-- supabase-postgres
-- qa-release-checklist
-- git-workflow
-- asset-policy
-
-Rules:
-- Do not download external skills unless Vlad explicitly asks.
-- Do not create branches unless Vlad explicitly asks.
+- Work on `main` unless instructed otherwise.
 - Stage only files related to the current task.
+- Do not commit secrets or local settings.
