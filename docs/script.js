@@ -79,10 +79,40 @@
     });
   });
 
+  // Correct scroll offset when the page is opened with a hash already in the
+  // URL (e.g. arriving from sign-in.html → index.html#start-trial) and when
+  // the hash changes for any other reason.
+  function correctHashScroll() {
+    var hash = window.location.hash;
+    if (!hash || hash.length < 2) return;
+    // Run after layout so sticky-header height is measurable.
+    window.setTimeout(function () { scrollToAnchor(hash); }, 60);
+  }
+  if (window.location.hash && window.location.hash.length > 1) {
+    if (document.readyState === 'complete') {
+      correctHashScroll();
+    } else {
+      window.addEventListener('load', correctHashScroll, { once: true });
+    }
+  }
+  window.addEventListener('hashchange', correctHashScroll);
+
   /* ---------- Footer dynamic year ---------- */
   document.querySelectorAll('[data-current-year]').forEach(function (el) {
     el.textContent = new Date().getFullYear();
   });
+
+  /* ---------- Sign-in form (front-end demo: always show inline error) ---------- */
+  var signinForm = document.getElementById('signin-form');
+  if (signinForm) {
+    var signinError = document.getElementById('signin-error');
+    signinForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (signinError) {
+        signinError.hidden = false;
+      }
+    });
+  }
 
   /* ---------- Trial / setup form (used on index) ---------- */
   var form = document.getElementById('trial-form');
