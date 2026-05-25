@@ -16,6 +16,7 @@ build/
 
 # Local/editor files
 .DS_Store
+.local-agent/
 .vscode/
 .idea/
 *.log
