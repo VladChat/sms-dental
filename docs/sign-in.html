@@ -67,7 +67,7 @@
         </div>
 
         <div class="form-shell">
-          <form class="form" id="signin-form" method="post" action="" aria-label="Sign in" novalidate>
+          <form class="form" id="signin-form" aria-label="Sign in" novalidate>
             <div class="field">
               <label for="email">Email</label>
               <input id="email" name="email" type="email" autocomplete="email" placeholder="you@youroffice.com" required>
@@ -98,6 +98,20 @@
     </div>
   </footer>
 
+  <script>
+    (function () {
+      var signinForm = document.getElementById('signin-form');
+      if (!signinForm) return;
+      var signinError = document.getElementById('signin-error');
+
+      signinForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        if (signinError) {
+          signinError.hidden = false;
+        }
+      });
+    })();
+  </script>
   <script src="script.js" defer></script>
 </body>
 </html>
