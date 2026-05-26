@@ -26,3 +26,5 @@ out/
 
 # OS/temp
 Thumbs.db
+
+.vercel
