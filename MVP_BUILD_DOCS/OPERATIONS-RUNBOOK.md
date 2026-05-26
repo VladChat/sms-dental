@@ -425,9 +425,9 @@ The `messaging/incoming` webhook now fully processes inbound SMS replies:
 
 | Keyword | Trigger words | DB action | TwiML reply |
 |---|---|---|---|
-| `stop` | STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT | `upsertOptOut(clinic, caller)` | Unsubscribed confirmation |
-| `start` | START, UNSTOP, YES | `clearOptOut(clinic, caller)` | Re-subscribed confirmation |
-| `help` | HELP, INFO | none | Clinic name + STOP hint |
+| `stop` | STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT | `upsertOptOut(clinic, caller)` | empty `<Response/>` |
+| `start` | START, UNSTOP, YES | `clearOptOut(clinic, caller)` | empty `<Response/>` |
+| `help` | HELP, INFO | none | empty `<Response/>` |
 | *(ordinary)* | anything else | none | empty `<Response/>` |
 
 All inbound messages (including ordinary replies) are stored in the `messages` table with `direction='inbound'` and `detected_keyword` set when applicable.
@@ -441,15 +441,9 @@ Table: `public.opt_outs`
 
 `sendRecoverySms` already checks `opted_back_in_at IS NULL` to determine opt-out status. No change to that guard was needed — it was already wired to the `opt_outs` table.
 
-### Reply messages (TwiML `<Message>`)
+### Compliance replies
 
-STOP: `"You've been unsubscribed from {{clinic_name}}. No further messages will be sent. Reply START to re-subscribe."`
-
-START: `"You've been re-subscribed to {{clinic_name}}. Reply STOP to unsubscribe at any time."`
-
-HELP: `"{{clinic_name}}: Reply STOP to stop messages. For appointment questions, contact us directly."`
-
-If Twilio's Messaging Service has Advanced Opt-Out enabled, the carrier may also send its own STOP/START acknowledgement. Both responses together are compliant; no action needed.
+Twilio's Messaging Service sends STOP/START/HELP compliance replies at the platform level before the webhook reaches our code. Our webhook always returns an empty `<Response/>` to avoid duplicate replies. All DB state changes (opt-out writes, inbound message recording) happen regardless.
 
 ### Ordinary replies
 
