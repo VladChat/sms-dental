@@ -416,6 +416,62 @@ feat: add owner-only missed call SMS flow
 
 ---
 
+## 2026-05-26 — Owner-only SMS recovery end-to-end test
+
+### Environment changes
+
+- Set `SMS_RECOVERY_MODE=owner_test` in Vercel Production env.
+- Set `SMS_TEST_ALLOWED_TO=<owner phone, not recorded>` in Vercel Production env (encrypted).
+- Redeployed Production: `dpl_6xG4L9qtRDgVAnds2vLuBtAyLoWE`.
+- Deployed commit: `4033903`.
+- No source files modified.
+- No Twilio settings changed.
+- No secrets printed.
+
+### First call test — result: PASS
+
+- Inbound call from allowlisted owner phone (+122•••••36) to Twilio number (+184•••••44).
+- Twilio call SID: `CAf819a9…` — `completed`, 6 seconds.
+- Voice webhook hit: `POST /api/webhooks/twilio/voice/incoming` → HTTP 200.
+- Caller heard polite greeting; call ended cleanly.
+- `call_events` row created: `is_missed=true`, clinic mapped to Owner Test Dental Office.
+- `patient_conversations` row created: `status=open`, `last_message_at` updated.
+- Outbound SMS sent via Twilio Messaging Service to owner phone (+122•••••36).
+- SMS `status=accepted` → `queued` → `sent` → **`delivered`** (all confirmed in `webhook_events`).
+- SMS body: "Hi, this is Owner Test Dental Office. We missed your call. Would you like us to help schedule an appointment?"
+- SMS sent only to the allowlisted owner number: confirmed.
+- Owner replied "Yes, please" — recorded in `webhook_events` as `sms.inbound`. No auto-reply sent (not yet implemented — expected behavior).
+- Broad/live SMS: disabled.
+
+### Second call test — duplicate suppression: PASS
+
+- Second inbound call from same allowlisted phone within 24 hours.
+- Twilio call SID: `CAe29530b…` — `completed`, 6 seconds.
+- Voice webhook hit: `POST /api/webhooks/twilio/voice/incoming` → HTTP 200.
+- `call_events` row created for second call: `is_missed=true`.
+- `messages` table: still only 1 outbound row (no second SMS created).
+- `webhook_events`: only `voice.ringing` for second call — no `sms.status.*` events confirming zero SMS fired.
+- 24-hour duplicate suppression guard worked correctly.
+- Broad/live SMS: disabled.
+
+Result:
+
+- Vercel env vars set: yes.
+- SMS sent to owner: yes, delivered.
+- SMS sent only to allowlisted number: yes.
+- Duplicate suppression: pass.
+- Twilio settings changed: no.
+- Secrets printed: no.
+- `docs/` touched: no.
+
+Commit (docs only):
+
+```txt
+docs: record owner-only SMS recovery test
+```
+
+---
+
 ## Current state summary
 
 Current live backend:
@@ -432,11 +488,14 @@ Current safe health state:
 - Inbound SMS webhook: verified.
 - Inbound voice webhook: verified end-to-end. Callers hear a polite acknowledgement and the call ends cleanly.
 - Clinic mapping: `Owner Test Dental Office` mapped to `+18447234944` in DB.
-- Outbound SMS: implemented, gated behind `SMS_RECOVERY_MODE=owner_test`. Currently disabled until env vars set in Vercel.
+- Outbound SMS: owner-test mode active. End-to-end delivery confirmed. Duplicate suppression confirmed.
+- Inbound SMS reply handling: recorded in `webhook_events` only; full reply flow is a future milestone.
+- Broad/live SMS: disabled.
 
 Current next action:
 
 ```txt
-Set SMS_RECOVERY_MODE=owner_test and SMS_TEST_ALLOWED_TO=<owner phone> in Vercel env,
-redeploy, and make a test call to trigger end-to-end SMS recovery.
+Wire inbound SMS STOP/START opt-out enforcement into the messaging/incoming webhook.
+Then plan real clinic onboarding: conditional forwarding or tracking number mode.
+Do not enable live SMS mode until opt-out enforcement and clinic onboarding are complete.
 ```

@@ -387,17 +387,17 @@ Current test mapping:
 
 ## 10. Current Next Step
 
+Owner-only SMS recovery test: **complete and verified (2026-05-26).**
+
+- First call: SMS delivered to owner phone. `call_events`, `patient_conversations`, `messages` all created. ✓
+- Duplicate suppression: second call within 24h produced no second SMS. ✓
+- `SMS_RECOVERY_MODE=owner_test` and `SMS_TEST_ALLOWED_TO` are set in Vercel Production.
+
 Current next step:
 
 ```txt
-Set SMS_RECOVERY_MODE=owner_test and SMS_TEST_ALLOWED_TO=<owner phone> in Vercel env,
-redeploy, and make a test call to verify end-to-end SMS recovery.
+Wire inbound SMS STOP/START opt-out enforcement into the messaging/incoming webhook.
+Then plan real clinic onboarding: conditional forwarding or tracking number mode.
 ```
 
-After owner test succeeds:
-
-```txt
-Wire inbound SMS STOP/START opt-out enforcement and then plan real clinic onboarding.
-```
-
-Do not enable `live` mode until clinic onboarding, opt-out enforcement, and explicit owner approval are complete.
+Do not enable `live` SMS mode until opt-out enforcement, clinic onboarding, and explicit owner approval are complete.
