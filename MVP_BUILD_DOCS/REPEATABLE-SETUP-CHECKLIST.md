@@ -239,41 +239,48 @@ https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status
 - [x] Send one inbound SMS from owner phone to Twilio number.
 - [x] Query recent `webhook_events`.
 - [x] Confirm inbound SMS event recorded.
-- [ ] Confirm voice event recorded.
-- [x] Confirm no outbound SMS was sent.
+- [x] Confirm voice event recorded.
+- [x] Confirm no outbound SMS was sent (foundation phase).
 - [x] Document results in `SETUP-LOG.md`.
+- [x] Upgrade Twilio account to paid (completed 2026-05-26).
+- [x] Make one inbound voice call to Twilio number.
+- [x] Confirm Vercel received `/api/webhooks/twilio/voice/incoming`.
+- [x] Confirm Supabase recorded `voice.%` webhook event.
 
-Current project status:
-
-- Inbound SMS verified.
-- Inbound voice pending because Twilio Trial account blocks realistic inbound voice webhook testing from unverified caller IDs.
-
-Before continuing:
-
-- [ ] Upgrade Twilio account to paid, or test from a verified caller ID.
-- [ ] Make one inbound voice call to Twilio number.
-- [ ] Confirm Vercel received `/api/webhooks/twilio/voice/incoming`.
-- [ ] Confirm Supabase recorded `voice.%` webhook event.
+Current project status: complete.
 
 ---
 
 ## Phase 8 — Outbound messaging milestone
 
-Do not start until owner approves.
+- [x] Create/confirm clinic row (`Owner Test Dental Office`, slug `owner-test`).
+- [x] Create/confirm clinic phone number mapping (`+18447234944` → `owner-test`).
+- [x] Implement clinic lookup by Twilio `To` number.
+- [x] Implement opt-out check (`opt_outs` table).
+- [x] Implement 24-hour duplicate suppression.
+- [x] Implement safe outbound SMS helper with mode/allowlist guards.
+- [x] Default mode is `disabled` — no SMS without explicit env config.
+- [x] Test with controlled owner-owned number only (`owner_test` mode).
+- [x] Confirmed SMS delivered to owner phone.
+- [x] Confirmed duplicate suppression (second call within 24h → no second SMS).
+- [x] Document exact SMS copy.
+- [ ] Confirm Twilio/TCR/toll-free compliance status before enabling live mode.
 
-Before outbound SMS:
+SMS copy:
 
-- [ ] Create/confirm clinic row.
-- [ ] Create/confirm clinic phone number mapping.
-- [ ] Implement clinic lookup by Twilio `To` number.
-- [ ] Implement opt-out enforcement.
-- [ ] Implement duplicate suppression.
-- [ ] Implement safe outbound SMS helper.
-- [ ] Test with controlled owner-owned number only.
-- [ ] Document exact SMS copy.
-- [ ] Confirm Twilio/TCR/toll-free compliance status if needed.
+```txt
+Hi, this is {{clinic_name}}. We missed your call. Would you like us to help schedule an appointment?
+```
 
-Current project status: not started.
+Current project status: owner-test mode complete and verified (2026-05-26).
+
+Known commits:
+
+```txt
+4033903 feat: add owner-only missed call SMS flow
+```
+
+Next: wire inbound SMS STOP/START opt-out enforcement, then plan real clinic onboarding.
 
 ---
 
