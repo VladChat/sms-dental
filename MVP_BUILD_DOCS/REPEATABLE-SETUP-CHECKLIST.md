@@ -396,10 +396,12 @@ Current project status: not started.
 ## Phase 8E — A2P/10DLC compliance readiness
 
 See `A2P-10DLC-COMPLIANCE-READINESS.md` for full detail, wording, and checklists.
+Use `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md` as the copy-ready submission packet before opening Twilio Console.
 
 - [ ] Add Terms of Service page to `missedcallsdental.com`.
 - [ ] Add Privacy Policy page to `missedcallsdental.com`.
 - [ ] Add SMS opt-out disclosure to website.
+- [ ] Prepare and review all Twilio form wording from `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
 - [ ] Submit Toll-Free Verification in Twilio Console for `+1 844 723 4944`.
 - [ ] Wait for Twilio approval (typically 3–7 business days).
 - [ ] Confirm approved status before proceeding to Phase 8D SMS enablement.

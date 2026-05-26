@@ -10,6 +10,7 @@ This document covers what must be done before sending live SMS to real patients 
 - `FIRST-CLINIC-ONBOARDING.md` — Step 7 requires A2P status confirmed before enabling live SMS.
 - `OPERATIONS-RUNBOOK.md` Section 11 — Step 5 (enable SMS) is blocked until A2P is resolved.
 - `08-compliance-and-onboarding.md` — full compliance and consent design.
+- `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md` — copy-ready Toll-Free Verification submission packet.
 
 ---
 
@@ -245,7 +246,9 @@ Registration covers the current single toll-free number. If additional Twilio nu
 Priority order:
 
 1. **Add Terms of Service and Privacy Policy to `missedcallsdental.com`** — required for registration.
-2. **Submit Toll-Free Verification** in Twilio Console for `+1 844 723 4944`.
-3. Wait for Twilio approval (typically 3–7 business days).
-4. Once approved: proceed with first clinic onboarding using `FIRST-CLINIC-ONBOARDING.md`.
-5. Set `SMS_RECOVERY_MODE=live` only after verification is confirmed and per-clinic checklist (Section 6) is complete.
+2. **Prepare submission fields from packet** in `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
+3. **Submit Toll-Free Verification** in Twilio Console for `+1 844 723 4944`.
+4. Track request/case ID and status in the packet's after-submission table.
+5. Wait for Twilio approval (typically 3–7 business days).
+6. Once approved: proceed with first clinic onboarding using `FIRST-CLINIC-ONBOARDING.md`.
+7. Set `SMS_RECOVERY_MODE=live` only after verification is confirmed and per-clinic checklist (Section 6) is complete.
