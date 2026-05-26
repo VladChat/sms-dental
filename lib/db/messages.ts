@@ -1,5 +1,49 @@
 import { getDb } from "./client";
 
+export type RecordInboundMessageInput = {
+  clinicId: string;
+  conversationId: string | null;
+  twilioMessageSid: string;
+  fromNumber: string;
+  toNumber: string;
+  body: string;
+  status: string;
+  detectedKeyword: "stop" | "start" | "help" | null;
+  rawPayload: unknown;
+};
+
+// Idempotent insert for an inbound SMS. Returns duplicate:true when the
+// MessageSid is already recorded (e.g. a Twilio retry) — callers can skip
+// further processing in that case.
+export async function recordInboundMessage(
+  input: RecordInboundMessageInput,
+): Promise<{ id: string; duplicate: boolean }> {
+  const sql = getDb();
+  const rawJson = JSON.stringify(input.rawPayload ?? null);
+  const rows = await sql<{ id: string }[]>`
+    insert into public.messages
+      (clinic_id, conversation_id, direction, twilio_message_sid,
+       from_number, to_number, body, status, detected_keyword, raw_payload, sent_at)
+    values (
+      ${input.clinicId},
+      ${input.conversationId},
+      'inbound',
+      ${input.twilioMessageSid},
+      ${input.fromNumber},
+      ${input.toNumber},
+      ${input.body},
+      ${input.status},
+      ${input.detectedKeyword},
+      ${rawJson}::jsonb,
+      now()
+    )
+    on conflict (twilio_message_sid) do nothing
+    returning id
+  `;
+  if (!rows[0]) return { id: "", duplicate: true };
+  return { id: rows[0].id, duplicate: false };
+}
+
 export type RecordOutboundMessageInput = {
   clinicId: string;
   conversationId: string | null;

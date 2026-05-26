@@ -551,6 +551,52 @@ Deployment: `dpl_3VXzmCsx9AHLuyNv6Buaoym5Xaqs` (READY).
 
 ---
 
+## 2026-05-26 — Inbound SMS opt-out enforcement
+
+Goal: handle STOP/START/HELP inbound SMS and enforce opt-out in future recovery sends.
+
+### Findings before coding
+
+- `opt_outs` table: already existed with `(clinic_id, phone_number)` unique key, `opted_out_at`, `opted_back_in_at`.
+- `messages` table: already had `direction='inbound'` check and `detected_keyword` column.
+- `sendRecoverySms`: already checked `opt_outs` via `isPhoneOptedOut()`. No change needed to the outbound guard.
+- No migration needed.
+
+### New source files
+
+- `lib/db/opt-outs.ts` — `upsertOptOut` (STOP), `clearOptOut` (START)
+
+### Modified files
+
+- `lib/db/messages.ts` — added `recordInboundMessage` (idempotent inbound message storage)
+- `app/api/webhooks/twilio/messaging/incoming/route.ts` — full rewrite with:
+  - clinic lookup by `To` number
+  - `getOrCreateConversation` + `recordInboundMessage` for all inbound messages
+  - STOP → `upsertOptOut` + TwiML reply
+  - START → `clearOptOut` + TwiML reply
+  - HELP → TwiML reply with clinic name + STOP hint
+  - ordinary replies → stored, no auto-reply
+
+### Behavior
+
+| Keyword | DB write | Reply |
+|---|---|---|
+| STOP | `opt_outs` upsert (opted_back_in_at cleared) | Unsubscribed confirmation |
+| START | `opt_outs` update (opted_back_in_at set to now()) | Re-subscribed confirmation |
+| HELP | none | Clinic name + STOP hint |
+| *(other)* | none | empty `<Response/>` |
+
+All inbound messages stored in `messages` table regardless of keyword.
+
+### Verification
+
+- `npm run typecheck`: pass.
+- `npm run build`: pass.
+
+Commit: see below.
+
+---
+
 ## Current state summary
 
 Current live backend:
