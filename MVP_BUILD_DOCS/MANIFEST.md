@@ -17,6 +17,8 @@ Operational documentation:
 - `OPERATIONS-RUNBOOK.md` — how to operate, verify, and troubleshoot the project.
 - `SETUP-LOG.md` — chronological record of completed infrastructure/backend setup.
 - `REPEATABLE-SETUP-CHECKLIST.md` — reusable checklist for repeating this setup pattern.
+- `FIRST-CLINIC-ONBOARDING.md` — step-by-step procedure for safely onboarding the first real clinic.
+- `A2P-10DLC-COMPLIANCE-READINESS.md` — A2P/toll-free compliance requirements before live patient SMS.
 
 Core package files:
 
