@@ -694,3 +694,31 @@ Action required before first real clinic SMS:
 3. Wait for approval (3–7 business days).
 
 No source files changed. No live SMS sent. No Twilio settings changed. No secrets printed.
+
+---
+
+## 2026-05-26 — Toll-free verification submission packet prepared
+
+- Created `MVP_BUILD_DOCS/TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
+- Added copy-ready Twilio Toll-Free Verification form wording:
+  - business/product description
+  - transactional/customer-care use-case category
+  - campaign/use-case description
+  - opt-in and message-flow explanation
+  - sample messages
+  - website evidence checklist
+  - owner submission checklist
+  - after-submission tracking table template
+- Updated cross-references in:
+  - `MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md`
+  - `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+  - `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md`
+  - `MVP_BUILD_DOCS/MANIFEST.md`
+
+Result:
+
+- New submission packet prepared: yes.
+- Live SMS enabled: no.
+- Twilio settings changed: no.
+- Source/backend code changed: no.
+- Public site files changed: no.

@@ -582,9 +582,11 @@ Owner-only SMS recovery: **complete and verified (2026-05-26).**
 Current next step:
 
 ```txt
-1. Complete A2P/toll-free registration before enabling live SMS.
+1. Submit Twilio Toll-Free Verification using
+   MVP_BUILD_DOCS/TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md.
+2. Complete A2P/toll-free registration approval before enabling live SMS.
    See MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md for required steps.
-2. Once registration is approved, onboard first real clinic using Section 11 procedure.
+3. Once registration is approved, onboard first real clinic using Section 11 procedure.
    SMS_RECOVERY_MODE must be changed to live and sms_recovery_enabled set true
    per clinic before any real patient SMS fires.
    Do not enable live SMS mode until clinic phone strategy is tested,
