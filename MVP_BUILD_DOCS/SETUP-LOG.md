@@ -546,7 +546,8 @@ Verification:
 - Deployed to Production.
 - `/api/health`: pass.
 
-Commit: see below.
+Commit: `a947323 feat: send missed-call SMS after voice completion`
+Deployment: `dpl_3VXzmCsx9AHLuyNv6Buaoym5Xaqs` (READY).
 
 ---
 
