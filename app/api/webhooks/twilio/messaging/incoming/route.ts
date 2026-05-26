@@ -18,34 +18,6 @@ import { logger } from "@/lib/logging/logger";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-// TwiML <Message> reply for compliance keywords. The clinic name is embedded
-// so the caller knows which service is responding.
-function buildKeywordReply(
-  clinicName: string | null,
-  keyword: "stop" | "start" | "help",
-): string {
-  const name = clinicName ? escapeXml(clinicName) : "this service";
-  let text: string;
-  if (keyword === "stop") {
-    text = `You've been unsubscribed from ${name}. No further messages will be sent. Reply START to re-subscribe.`;
-  } else if (keyword === "start") {
-    text = `You've been re-subscribed to ${name}. Reply STOP to unsubscribe at any time.`;
-  } else {
-    // help
-    text = `${name}: Reply STOP to stop messages. For appointment questions, contact us directly.`;
-  }
-  return `<Response><Message>${text}</Message></Response>`;
-}
-
 // Twilio incoming SMS webhook.
 //   1. Validate Twilio signature.
 //   2. Detect STOP / START / HELP keyword.
@@ -55,9 +27,10 @@ function buildKeywordReply(
 //   6. Record inbound message in messages table.
 //   7. For STOP: write opt-out row — future recovery SMS will be blocked.
 //   8. For START: clear opt-out — future recovery SMS is permitted again.
-//   9. For HELP: no DB change; reply with clinic contact hint.
+//   9. For HELP: no DB change.
 //  10. For ordinary replies: record only; no auto-reply (future milestone).
-//  11. Return TwiML: keyword reply for STOP/START/HELP, empty for everything else.
+//  11. Return empty <Response/> for all cases — Twilio platform already sends
+//      STOP/START/HELP compliance replies; returning our own <Message> caused duplicates.
 export async function POST(request: NextRequest) {
   const url = reconstructTwilioWebhookUrl(request);
   const params = await readTwilioFormPayload(request);
@@ -105,8 +78,6 @@ export async function POST(request: NextRequest) {
 
   // Steps 4–9: clinic lookup, message recording, opt-out actions.
   // Skipped on duplicate (already processed) or when DB / params are missing.
-  let clinicName: string | null = null;
-
   if (!isDuplicate && isDatabaseConfigured() && messageSid && from && to) {
     try {
       const clinic = await lookupClinicByPhone(to);
@@ -114,8 +85,6 @@ export async function POST(request: NextRequest) {
       if (!clinic) {
         logger.info("twilio.sms.no_clinic_mapping", { to });
       } else {
-        clinicName = clinic.name;
-
         // Get or create conversation thread for this (clinic, patient) pair.
         const { id: conversationId } = await getOrCreateConversation(
           clinic.id,
@@ -164,11 +133,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Step 11: return TwiML.
-  // STOP / START / HELP always get a reply (even on duplicate, in case Twilio
-  // is retrying after a lost response).
-  if (keyword === "stop" || keyword === "start" || keyword === "help") {
-    return twimlResponse(buildKeywordReply(clinicName, keyword));
-  }
+  // Step 11: return empty TwiML for all cases.
+  // Twilio's Messaging Service sends STOP/START/HELP compliance replies itself.
+  // Returning a <Message> here caused callers to receive duplicate replies.
   return twimlResponse();
 }
