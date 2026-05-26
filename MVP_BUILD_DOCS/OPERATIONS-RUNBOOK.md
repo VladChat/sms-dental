@@ -331,12 +331,73 @@ git diff --cached --name-only
 
 ---
 
-## 9. Current Next Step
+## 9. Outbound SMS Recovery — Owner Test Mode
+
+### Safety model
+
+Outbound SMS is controlled by two env variables:
+
+| Variable | Values | Default |
+|---|---|---|
+| `SMS_RECOVERY_MODE` | `disabled` \| `owner_test` \| `live` | `disabled` |
+| `SMS_TEST_ALLOWED_TO` | Comma-separated E.164 numbers | (empty) |
+
+Default behavior (`SMS_RECOVERY_MODE` unset or `disabled`): **no SMS is ever sent.**
+
+`owner_test` mode: SMS is sent only when ALL of the following are true:
+- `SMS_RECOVERY_MODE=owner_test`
+- Caller `From` number is in `SMS_TEST_ALLOWED_TO`
+- Clinic mapping exists for the dialed `To` number
+- Caller is not opted out (`opt_outs` table)
+- No outbound SMS was sent to this (clinic, caller) pair in the past 24 hours
+
+`live` mode: not yet implemented.
+
+### SMS message template
+
+```
+Hi, this is {{clinic_name}}. We missed your call. Would you like us to help schedule an appointment?
+```
+
+No AI mention. No urgency. No medical advice. No appointment promise.
+
+### Owner test setup
+
+1. Set `SMS_RECOVERY_MODE=owner_test` in Vercel env.
+2. Set `SMS_TEST_ALLOWED_TO=<your E.164 number>` in Vercel env (not committed to source).
+3. Redeploy after env changes.
+4. Call the Twilio number from the allowlisted number.
+5. Verify SMS received.
+6. Verify `messages` table has a new outbound row.
+7. Call again within 24h — verify second SMS is suppressed (duplicate check).
+
+Never set `SMS_TEST_ALLOWED_TO` to a number belonging to a real patient.
+
+### Clinic mapping requirement
+
+Outbound SMS requires a clinic row in `clinics` and a matching row in `clinic_phone_numbers` for the Twilio `To` number. Without a clinic mapping, no SMS is attempted.
+
+Current test mapping:
+
+- Clinic: `Owner Test Dental Office` (slug: `owner-test`)
+- Twilio number: `+1 844 723 4944`
+- Applied via: `supabase/migrations/20260526000100_owner_test_clinic.sql`
+
+---
+
+## 10. Current Next Step
 
 Current next step:
 
 ```txt
-Test a real MVP phone path: conditional forwarding from a clinic-like phone system, or direct tracking number call to the Twilio number.
+Set SMS_RECOVERY_MODE=owner_test and SMS_TEST_ALLOWED_TO=<owner phone> in Vercel env,
+redeploy, and make a test call to verify end-to-end SMS recovery.
 ```
 
-Do not enable outbound SMS until clinic mapping, opt-out enforcement, and explicit owner approval are complete.
+After owner test succeeds:
+
+```txt
+Wire inbound SMS STOP/START opt-out enforcement and then plan real clinic onboarding.
+```
+
+Do not enable `live` mode until clinic onboarding, opt-out enforcement, and explicit owner approval are complete.
