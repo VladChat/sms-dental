@@ -80,6 +80,26 @@ export function getJobRunnerEnv() {
   return JobRunnerSchema.parse(process.env);
 }
 
+// SMS recovery mode. Never throws — defaults to "disabled" if unset or unknown.
+export type SmsRecoveryMode = "disabled" | "owner_test" | "live";
+
+export function getSmsRecoveryConfig(): {
+  mode: SmsRecoveryMode;
+  allowedNumbers: string[];
+} {
+  const raw = process.env.SMS_RECOVERY_MODE ?? "";
+  const mode: SmsRecoveryMode =
+    raw === "owner_test" ? "owner_test"
+    : raw === "live" ? "live"
+    : "disabled";
+  const allowedRaw = process.env.SMS_TEST_ALLOWED_TO ?? "";
+  const allowedNumbers = allowedRaw
+    .split(",")
+    .map((n) => n.trim())
+    .filter((n) => n.length > 0);
+  return { mode, allowedNumbers };
+}
+
 export function getPublicWebhookBaseUrl(): string | undefined {
   const raw = process.env.PUBLIC_WEBHOOK_BASE_URL;
   if (!raw) return undefined;
@@ -105,6 +125,8 @@ export type EnvPresenceReport = {
   jobRunnerSecret: boolean;
   internalAdminSecret: boolean;
   publicWebhookBaseUrl: boolean;
+  smsRecoveryMode: boolean;
+  smsTestAllowedTo: boolean;
 };
 
 function present(name: string): boolean {
@@ -127,5 +149,7 @@ export function getEnvPresenceReport(): EnvPresenceReport {
     jobRunnerSecret: present("JOB_RUNNER_SECRET"),
     internalAdminSecret: present("INTERNAL_ADMIN_SECRET"),
     publicWebhookBaseUrl: present("PUBLIC_WEBHOOK_BASE_URL"),
+    smsRecoveryMode: present("SMS_RECOVERY_MODE"),
+    smsTestAllowedTo: present("SMS_TEST_ALLOWED_TO"),
   };
 }

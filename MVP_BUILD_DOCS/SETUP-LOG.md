@@ -355,6 +355,67 @@ fix: return polite Twilio voice response
 
 ---
 
+## 2026-05-26 — Clinic/phone mapping + owner-only SMS recovery milestone
+
+Goal: map the Twilio number to a clinic and send a polite recovery SMS — owner-test mode only.
+
+### New source files
+
+- `lib/phone/normalize.ts` — E.164 normalization helper
+- `lib/db/clinics.ts` — `lookupClinicByPhone` by Twilio `To` number
+- `lib/db/call-events.ts` — idempotent `upsertCallEvent` keyed by CallSid
+- `lib/db/conversations.ts` — `getOrCreateConversation` + `touchConversation`
+- `lib/db/messages.ts` — `recordOutboundMessage` + `hasSentRecoverySmsSince` duplicate check
+- `lib/twilio/client.ts` — lazy Twilio REST client singleton
+- `lib/twilio/outbound-sms.ts` — `sendRecoverySms` with all safety guards
+- `lib/env.ts` — added `getSmsRecoveryConfig()` and `SmsRecoveryMode` type
+
+### Updated files
+
+- `app/api/webhooks/twilio/voice/incoming/route.ts` — wired all new helpers
+- `.env.local.example` — added `SMS_RECOVERY_MODE` and `SMS_TEST_ALLOWED_TO` placeholder entries
+
+### New migration
+
+`supabase/migrations/20260526000100_owner_test_clinic.sql` — seeds owner-test clinic and `+18447234944` phone mapping.
+
+Migration applied 2026-05-26:
+
+- Clinic: `Owner Test Dental Office` (slug: `owner-test`, id: `e9f21de4-3a35-4216-bb16-66ea3aeb2e47`)
+- Phone mapping: `+18447234944` → `owner-test` clinic (role: `recovery`)
+
+### Safety model
+
+- `SMS_RECOVERY_MODE` defaults to `disabled` — no SMS sent unless explicitly configured.
+- `owner_test` mode sends SMS only to numbers listed in `SMS_TEST_ALLOWED_TO`.
+- Opt-out check: consults `opt_outs` table before every send.
+- Duplicate suppression: no repeat SMS to the same (clinic, caller) pair within 24 hours.
+- `live` mode not implemented.
+- Broad/live SMS remains disabled.
+
+### Verification
+
+- `npm run typecheck`: pass.
+- `npm run build`: pass.
+- DB migration applied and verified: clinic + phone mapping rows present and joined correctly.
+- SMS send: not triggered in this step (env vars not yet set in Vercel). Requires `SMS_RECOVERY_MODE=owner_test` + `SMS_TEST_ALLOWED_TO` set in Vercel and a redeployment before owner test.
+
+Result:
+
+- Schema changed: no (existing tables used).
+- Migration added/applied: yes (seed data).
+- Outbound SMS sent: no.
+- Twilio settings changed: no.
+- `docs/` touched: no.
+
+Commit:
+
+```txt
+feat: add owner-only missed call SMS flow
+```
+
+---
+
 ## Current state summary
 
 Current live backend:
@@ -370,11 +431,12 @@ Current safe health state:
 - `db.ok`: true.
 - Inbound SMS webhook: verified.
 - Inbound voice webhook: verified end-to-end. Callers hear a polite acknowledgement and the call ends cleanly.
+- Clinic mapping: `Owner Test Dental Office` mapped to `+18447234944` in DB.
+- Outbound SMS: implemented, gated behind `SMS_RECOVERY_MODE=owner_test`. Currently disabled until env vars set in Vercel.
 
 Current next action:
 
 ```txt
-Test a real MVP phone path: conditional forwarding from a clinic-like phone system or direct tracking number call.
+Set SMS_RECOVERY_MODE=owner_test and SMS_TEST_ALLOWED_TO=<owner phone> in Vercel env,
+redeploy, and make a test call to trigger end-to-end SMS recovery.
 ```
-
-Do not enable outbound SMS until clinic mapping, opt-out enforcement, and explicit owner approval are complete.
