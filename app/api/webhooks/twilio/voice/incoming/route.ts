@@ -15,13 +15,13 @@ import { logger } from "@/lib/logging/logger";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Twilio incoming voice webhook. Foundation behavior:
+const VOICE_TWIML = `<Response><Say voice="alice">Thanks for calling. We missed your call and will be in touch shortly. Goodbye.</Say><Hangup/></Response>`;
+
+// Twilio incoming voice webhook.
 //   - validate signature
 //   - parse form payload
 //   - log/record a webhook_event idempotently (when DB is configured)
-//   - return an empty TwiML response (no forwarding, no SMS, no call control)
-//
-// Call recovery logic will be added in a later milestone.
+//   - return polite TwiML: Say + Hangup (no outbound SMS, no call forwarding)
 export async function POST(request: NextRequest) {
   const url = reconstructTwilioWebhookUrl(request);
   const params = await readTwilioFormPayload(request);
@@ -68,5 +68,5 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return twimlResponse();
+  return twimlResponse(VOICE_TWIML);
 }

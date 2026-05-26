@@ -314,6 +314,47 @@ Why it matters:
 
 ---
 
+## 2026-05-26 — Twilio account upgraded and voice webhook verified
+
+Trigger: Twilio account was upgraded from Trial to Active (Full).
+
+Verification steps run:
+
+- Queried Twilio account via API. Status: `active`. Type: `Full`.
+- Queried inbound call logs for `+1 844 723 4944`. 16 inbound calls logged, all from same caller, all timestamped around 14:33–14:34 UTC.
+- Confirmed Twilio call events for most recent call show POST fired to `https://app.missedcallsdental.com/api/webhooks/twilio/voice/incoming`.
+- Confirmed Vercel production logs: 16 POST requests to `/api/webhooks/twilio/voice/incoming` all returned HTTP 200.
+- Confirmed Supabase `webhook_events`: 16 rows with `event_type = voice.ringing`, `provider = twilio`, keyed as `voice:<CallSid>`.
+- Twilio Monitor API returned zero errors or alerts.
+
+Diagnosis: calls returned `busy` / `duration: 0` because the foundation handler returned empty TwiML `<Response/>`. Twilio treated the empty response as a failed handler and ended the call as busy. The webhook pipeline itself was fully functional.
+
+Fix applied:
+
+- Updated `app/api/webhooks/twilio/voice/incoming/route.ts`.
+- Changed final `twimlResponse()` call to pass polite `<Say voice="alice">` + `<Hangup/>` TwiML.
+- TwiML message: "Thanks for calling. We missed your call and will be in touch shortly. Goodbye."
+- Signature validation, idempotent `webhook_events` recording, no outbound SMS — all preserved.
+- `npm run typecheck`: pass.
+- `npm run build`: pass.
+
+Result:
+
+- Twilio account: Active / Full (no longer Trial).
+- Voice webhook end-to-end pipeline: verified.
+- Voice call behavior: polite announcement + clean hangup (no busy/failed).
+- Outbound SMS sent: no.
+- Twilio settings changed: no.
+- Secrets printed: no.
+
+Commit:
+
+```txt
+fix: return polite Twilio voice response
+```
+
+---
+
 ## Current state summary
 
 Current live backend:
@@ -328,18 +369,12 @@ Current safe health state:
 - `/api/internal/health`: pass.
 - `db.ok`: true.
 - Inbound SMS webhook: verified.
-- Inbound voice webhook: configured but blocked by Twilio Trial testing limits from unverified callers.
+- Inbound voice webhook: verified end-to-end. Callers hear a polite acknowledgement and the call ends cleanly.
 
 Current next action:
 
 ```txt
-Upgrade Twilio account or test from a verified caller ID, then verify inbound voice webhook.
+Test a real MVP phone path: conditional forwarding from a clinic-like phone system or direct tracking number call.
 ```
 
-After voice verification, test a real MVP phone path:
-
-```txt
-conditional forwarding mode or tracking number mode
-```
-
-Do not enable outbound SMS yet.
+Do not enable outbound SMS until clinic mapping, opt-out enforcement, and explicit owner approval are complete.
