@@ -20,10 +20,14 @@ Do not create or install new instruction systems during cleanup unless Vlad expl
 
 When project values conflict, use this priority:
 
-1. `MVP_BUILD_DOCS/OWNER-SETTINGS.md`
-2. `config/runtime.config.ts`
-3. `Skills/missed-calls-dental-product-context.md`
-4. relevant `.claude/skills/*/SKILL.md`
+1. `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`
+2. `MVP_BUILD_DOCS/OWNER-SETTINGS.md`
+3. `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+4. `MVP_BUILD_DOCS/SETUP-LOG.md`
+5. `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md`
+6. `config/runtime.config.ts`
+7. `Skills/missed-calls-dental-product-context.md`
+8. relevant `.claude/skills/*/SKILL.md`
 
 ## Required Reading Before Coding
 
@@ -31,6 +35,12 @@ When project values conflict, use this priority:
 - `MVP_BUILD_DOCS/START-HERE.md`
 - `MVP_BUILD_DOCS/AGENT-RULES.md`
 - `Skills/missed-calls-dental-product-context.md`
+
+For infrastructure, deployment, DNS, Supabase, Vercel, Twilio, Stripe, or production-like work, also read:
+
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+- `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md`
 
 For Twilio/SMS work, read:
 
@@ -56,6 +66,28 @@ For public website, CRO, copy, or design work, read:
 - `.claude/skills/copywriting/SKILL.md` (if present)
 - `.claude/skills/frontend-design/SKILL.md` (if present)
 
+## Operational Documentation Update Rule
+
+At the end of every backend, infrastructure, deployment, DNS, Supabase, Vercel, Twilio, Stripe, or production-like task, the agent must decide whether the task created durable operational knowledge.
+
+Durable operational knowledge means information that will still matter later for operating this project, debugging it, auditing it, or repeating this setup in another similar project.
+
+If yes, update the correct file before final report:
+
+- `MVP_BUILD_DOCS/SETUP-LOG.md` — chronological facts: what changed, date, result, commit hash, deploy ID, provider resource name, verification result.
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` — how to operate, verify, troubleshoot, or safely repeat an operational procedure for this project.
+- `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md` — reusable best practices or steps that should carry into future similar projects.
+
+If no operations documentation update is needed, explicitly say in the final report:
+
+```txt
+Operations docs update needed: no
+```
+
+Do not add noise. Do not record temporary failed commands, long logs, speculation, duplicate facts, or one-off debugging attempts unless they produced a confirmed reusable fix.
+
+Never write secrets, passwords, full database URLs with passwords, API keys, tokens, service role key values, private patient data, or raw customer data into any documentation file.
+
 ## Canonical Project Values
 
 - Public brand: `Missed Calls Dental`
@@ -70,12 +102,15 @@ For public website, CRO, copy, or design work, read:
 - Do not commit `.env.local`.
 - Do not commit `.env`.
 - Do not commit `.claude/settings.local.json`.
+- Do not commit `.local-agent/`.
 - Keep secrets only in local ignored files.
 - Public website copy must not expose private/admin email addresses.
+- Do not paste or print full secret values in reports or documentation.
 
 ## Project Structure Rules
 
 - Keep the public website in `docs/`.
 - Keep `docs/CNAME`.
 - Do not restore root `CNAME`.
-- Do not start backend implementation until this cleanup is committed and the working tree is clean.
+- Keep the SaaS app/backend in the existing `app/` direction unless Vlad explicitly changes the architecture.
+- Do not create a separate `backend/` folder unless Vlad explicitly approves the architecture change.

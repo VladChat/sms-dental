@@ -7,8 +7,18 @@ Current reading priority:
 1. `PROJECT-CONTEXT.md`
 2. `START-HERE.md`
 3. `AGENT-RULES.md`
-4. task-specific numbered docs
+4. `OPERATIONS-RUNBOOK.md`
+5. `SETUP-LOG.md`
+6. `REPEATABLE-SETUP-CHECKLIST.md`
+7. task-specific numbered docs
 
+Operational documentation:
+
+- `OPERATIONS-RUNBOOK.md` — how to operate, verify, and troubleshoot the project.
+- `SETUP-LOG.md` — chronological record of completed infrastructure/backend setup.
+- `REPEATABLE-SETUP-CHECKLIST.md` — reusable checklist for repeating this setup pattern.
+
+Core package files:
 
 - `00-product-brief.md`
 - `01-user-flows.md`
@@ -30,10 +40,13 @@ Current reading priority:
 - `AGENT-RULES.md`
 - `MVP-Build-Spec-v1.md`
 - `OWNER-FILL-THIS-OUT.md`
+- `OWNER-SETTINGS.md`
 - `QA-AUDIT-SUMMARY.md`
 - `README-build-docs-roadmap.md`
 - `REVIEW-NOTES.md`
 - `START-HERE.md`
+- `backend-foundation-handoff.md`
+- `backend-foundation-v1.md`
 - `config/runtime.config.example.ts`
 - `env/.env.secrets.example`
 - `mcp/mcp.config.example.json`
