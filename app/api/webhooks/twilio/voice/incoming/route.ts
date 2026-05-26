@@ -8,7 +8,7 @@ import { verifyTwilioSignature } from "@/lib/twilio/signature";
 import { recordWebhookEvent } from "@/lib/db/webhook-events";
 import { isDatabaseConfigured, getDb } from "@/lib/db/client";
 import { normalizePhone } from "@/lib/phone/normalize";
-import { lookupClinicByPhone } from "@/lib/db/clinics";
+import { lookupClinicByPhone, type ClinicRow } from "@/lib/db/clinics";
 import { upsertCallEvent } from "@/lib/db/call-events";
 import { hasSentRecoverySmsSince } from "@/lib/db/messages";
 import { getSmsRecoveryConfig } from "@/lib/env";
@@ -33,18 +33,24 @@ type GreetingPrediction = "will_send" | "duplicate" | "none";
 
 async function predictGreeting(
   from: string,
-  clinicId: string,
+  clinic: ClinicRow,
 ): Promise<GreetingPrediction> {
   const config = getSmsRecoveryConfig();
-  if (config.mode !== "owner_test" || !config.allowedNumbers.includes(from)) {
-    return "none";
+
+  // Mirror the guard sequence in sendRecoverySms (read-only).
+  if (config.mode === "owner_test") {
+    if (!config.allowedNumbers.includes(from)) return "none";
+  } else if (config.mode === "live") {
+    if (!clinic.sms_recovery_enabled) return "none";
+  } else {
+    return "none"; // disabled
   }
 
   // Opt-out check (read-only).
   const sql = getDb();
   const optRows = await sql<{ opted_back_in_at: string | null }[]>`
     select opted_back_in_at from public.opt_outs
-    where clinic_id   = ${clinicId}
+    where clinic_id   = ${clinic.id}
       and phone_number = ${from}
     limit 1
   `;
@@ -52,7 +58,7 @@ async function predictGreeting(
 
   // Duplicate suppression window check (read-only).
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const alreadySent = await hasSentRecoverySmsSince(clinicId, from, oneDayAgo);
+  const alreadySent = await hasSentRecoverySmsSince(clinic.id, from, oneDayAgo);
   return alreadySent ? "duplicate" : "will_send";
 }
 
@@ -149,7 +155,7 @@ export async function POST(request: NextRequest) {
         // Predict greeting based on read-only state. Non-fatal — fall back to
         // "none" if prediction fails so TwiML is always returned.
         try {
-          prediction = await predictGreeting(from, clinic.id);
+          prediction = await predictGreeting(from, clinic);
         } catch (err) {
           logger.warn("twilio.voice.prediction_failed", {
             callSid,

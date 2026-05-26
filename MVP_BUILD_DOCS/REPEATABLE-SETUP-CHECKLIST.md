@@ -353,6 +353,45 @@ Known commit: see checklist Phase 9+.
 
 ---
 
+## Phase 8C — Clinic onboarding safety gate
+
+- [x] Add `sms_recovery_enabled boolean not null default false` to `clinics` table.
+- [x] Update `lookupClinicByPhone` to select and return `sms_recovery_enabled`.
+- [x] Update `sendRecoverySms` guards: allow `live` mode; add Guard 2 (live only) checking `clinic.sms_recovery_enabled`; make allowlist guard `owner_test`-only.
+- [x] Update `predictGreeting` in `voice/incoming` to pass full `ClinicRow` and respect `sms_recovery_enabled` for `live` mode.
+- [x] Apply migration — set `sms_recovery_enabled = true` for Owner Test Dental Office only.
+- [x] Verify all existing owner-test behavior unchanged.
+- [x] Run typecheck: pass.
+- [x] Run build: pass.
+- [x] Deploy and verify health.
+
+Known commit: see Phase 8C entry in SETUP-LOG.md.
+
+Current project status: complete (2026-05-26).
+
+---
+
+## Phase 8D — First real clinic onboarding
+
+Use OPERATIONS-RUNBOOK.md Section 11 for the step-by-step procedure.
+
+- [ ] Choose phone event strategy (conditional forwarding or tracking number).
+- [ ] Insert clinic row (`sms_recovery_enabled = false` by default).
+- [ ] Map Twilio number.
+- [ ] Verify inbound call recording works with SMS off.
+- [ ] Test STOP/START opt-out flow.
+- [ ] Get owner approval to enable SMS for clinic.
+- [ ] Set `sms_recovery_enabled = true` for clinic.
+- [ ] Change `SMS_RECOVERY_MODE` to `live` in Vercel env vars.
+- [ ] Redeploy.
+- [ ] Verify recovery SMS fires after first missed call.
+- [ ] Verify duplicate suppression.
+- [ ] Document clinic slug and phone mapping.
+
+Current project status: not started.
+
+---
+
 ## Phase 9 — Billing milestone
 
 Do not start until owner approves.

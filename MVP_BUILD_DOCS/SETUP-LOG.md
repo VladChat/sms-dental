@@ -597,6 +597,43 @@ Commit: see below.
 
 ---
 
+## 2026-05-26 — Clinic onboarding safety gate + double-reply fix
+
+### Double-reply fix (commit a8d1451)
+
+Twilio Messaging Service sends STOP/START/HELP compliance replies at the platform level.
+Our webhook was also returning a `<Message>` TwiML reply, causing callers to receive two messages.
+
+Fix: `messaging/incoming` now always returns empty `<Response/>`.
+All DB writes (opt-out, inbound message, webhook_event) are unchanged.
+
+Live verified: STOP and START each produced exactly one reply.
+
+### Clinic onboarding safety gate
+
+Goal: ensure new real clinics cannot accidentally trigger recovery SMS before explicit approval.
+
+**Gap found**: no per-clinic SMS enable flag. In `live` mode, all active clinics with `is_active=true`
+would send SMS — no per-clinic gate existed.
+
+**Fix:**
+- Added `sms_recovery_enabled boolean not null default false` to `clinics` table.
+- `sendRecoverySms`: updated guards to allow `live` mode; added clinic-level guard (live mode only);
+  allowlist guard is now `owner_test`-only.
+- `predictGreeting` in `voice/incoming`: updated to pass full `ClinicRow`; respects
+  `sms_recovery_enabled` for `live` mode; mirrors `sendRecoverySms` guard sequence.
+
+**Migration applied** (`supabase/migrations/20260526000200_clinic_sms_gate.sql`):
+- Column added with `default false`.
+- Owner Test Dental Office: `sms_recovery_enabled` set to `true` (existing behavior preserved).
+
+### Verification
+
+- `npm run typecheck`: pass.
+- `npm run build`: pass.
+
+---
+
 ## Current state summary
 
 Current live backend:
@@ -619,13 +656,15 @@ Current safe health state:
 - Clinic mapping: `Owner Test Dental Office` mapped to `+18447234944` in DB.
 - Outbound SMS: owner-test mode active. SMS now sent after call completion, not during incoming webhook.
 - Duplicate suppression: confirmed working.
+- Opt-out enforcement: STOP/START verified live (2026-05-26).
+- Clinic onboarding safety gate: `sms_recovery_enabled` field in DB, default false for new clinics.
 - Broad/live SMS: disabled.
 - Twilio `statusCallback`: `/api/webhooks/twilio/voice/status` (updated 2026-05-26).
 
 Current next action:
 
 ```txt
-Wire inbound SMS STOP/START opt-out enforcement into the messaging/incoming webhook.
-Then plan real clinic onboarding: conditional forwarding or tracking number mode.
-Do not enable live SMS mode until opt-out enforcement and clinic onboarding are complete.
+Onboard first real clinic using OPERATIONS-RUNBOOK.md Section 11.
+Insert clinic row, map Twilio number, verify call recording with SMS off.
+Get owner approval before enabling live SMS mode.
 ```
