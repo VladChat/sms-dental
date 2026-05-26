@@ -12,15 +12,7 @@ This log records what was done, in order, without storing secrets.
 
 Update this file after every durable backend, infrastructure, deployment, DNS, Supabase, Vercel, Twilio, Stripe, or production-like change.
 
-Each new entry should include:
-
-- date
-- what changed
-- why it mattered
-- result
-- commit hash or deployment ID if relevant
-- verification result
-- what was intentionally not done
+Each new entry should include date, what changed, why it mattered, result, commit/deploy ID if relevant, verification result, and what was intentionally not done.
 
 Do not record secrets, raw long logs, temporary failed commands, or duplicate facts.
 
@@ -42,28 +34,17 @@ Do not record secrets, raw long logs, temporary failed commands, or duplicate fa
 
 ## 2026-05-25 — Vercel tooling prepared
 
-Actions completed:
-
 - Installed Vercel Plugin for Claude Code.
 - Installed official Vercel MCP.
 - Authorized Vercel MCP.
-- Verified visible Vercel team:
-  - Team name: `vladchat-1500's projects`
-  - Team slug: `vladchat-1500s-projects`
-  - Team ID: `team_1F2PWbZbJldYTbtZ8HlEVMCm`
+- Verified Vercel team `vladchat-1500s-projects`, ID `team_1F2PWbZbJldYTbtZ8HlEVMCm`.
 - Verified no existing Vercel project for `sms-dental` before backend deployment work.
 
-Result:
-
-- Vercel MCP connected.
-- No files changed.
-- No Vercel project created at this stage.
+Result: Vercel MCP connected. No files changed. No Vercel project created at this stage.
 
 ---
 
 ## 2026-05-25 — Repository preparation before backend
-
-Actions completed:
 
 - Added `.local-agent/` to `.gitignore`.
 - Updated `.env.local.example` to match local env variable names without secret values.
@@ -77,13 +58,9 @@ Commit:
 36b5aab chore: prepare backend foundation handoff
 ```
 
-Pushed to `origin/main`.
-
 ---
 
 ## 2026-05-25 — Master project context added
-
-Actions completed:
 
 - Created `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`.
 - Updated `AGENTS.md` to read project context first.
@@ -95,15 +72,9 @@ Commit:
 464dcf6 docs: add master project context
 ```
 
-Notes:
-
-- Initial Markdown formatting was later corrected.
-
 ---
 
 ## 2026-05-25 — MVP build docs refreshed
-
-Actions completed:
 
 - Refreshed key MVP docs to clarify current source of truth and active milestone.
 - Marked `PROJECT-CONTEXT.md` as master context.
@@ -120,8 +91,6 @@ Commit:
 ---
 
 ## 2026-05-25 — Backend Foundation v1 created
-
-Actions completed by Claude:
 
 - Created root Next.js project foundation.
 - Created App Router routes under `app/api/`.
@@ -148,20 +117,13 @@ Commit:
 
 ## 2026-05-25 — Supabase migration applied
 
-Pre-check completed:
-
 - Database connection: pass.
 - Database user: `postgres`.
 - Can create in public schema: yes.
 - Can create in database: yes.
 - Foundation tables absent before migration.
 - Safe to apply migration: yes.
-
-Migration applied:
-
-```txt
-supabase/migrations/20260525000100_backend_foundation.sql
-```
+- Applied `supabase/migrations/20260525000100_backend_foundation.sql`.
 
 Result:
 
@@ -174,21 +136,11 @@ Result:
 - Files modified: no.
 - Secrets printed: no.
 
-Tables created:
-
-- `clinics`
-- `clinic_phone_numbers`
-- `webhook_events`
-- `call_events`
-- `patient_conversations`
-- `messages`
-- `opt_outs`
+Tables created: `clinics`, `clinic_phone_numbers`, `webhook_events`, `call_events`, `patient_conversations`, `messages`, `opt_outs`.
 
 ---
 
 ## 2026-05-25 — Vercel project created and first deployment tested
-
-Actions completed:
 
 - Created/linked Vercel project: `sms-dental`.
 - Team: `vladchat-1500s-projects`.
@@ -210,18 +162,9 @@ Result:
 
 ## 2026-05-25 — Supabase pooler fix
 
-Root cause found:
-
-- Direct Supabase DB connection was not suitable for Vercel serverless runtime.
-- Runtime needed Supabase transaction pooler on port `6543`.
-
-Actions completed:
-
 - Added `SUPABASE_DB_DIRECT_URL` locally to preserve the old direct/admin DB connection.
 - Updated `SUPABASE_DB_URL` locally to transaction pooler URL.
-- Confirmed pooler URL format:
-  - host contains `pooler.supabase.com`
-  - port `6543`
+- Confirmed pooler URL format: host contains `pooler.supabase.com`, port `6543`.
 - Fixed `.env.local` UTF-8 BOM issue that prevented Node env parsing.
 - Updated DB client to use `prepare: false` for Supabase transaction pooler.
 
@@ -231,45 +174,25 @@ Commit:
 aa4eeb9 fix: support Supabase transaction pooler
 ```
 
-Validation:
-
-- Local pooler DB connection: pass.
-- Foundation tables visible: yes.
-- Typecheck: pass.
-- Build: pass.
-- Secrets printed: no.
+Validation: local pooler DB connection pass, foundation tables visible, typecheck pass, build pass, secrets printed no.
 
 ---
 
 ## 2026-05-25 — Vercel env updated and deployed DB health verified
-
-Actions completed:
 
 - Updated Vercel `SUPABASE_DB_URL` to working transaction pooler URL.
 - Redeployed Vercel project.
 - Verified `https://sms-dental.vercel.app/api/health`.
 - Verified internal health with `x-internal-admin-secret`.
 
-Result:
-
-- `/api/health`: pass.
-- `/api/internal/health`: pass.
-- Deployed `db.ok`: true.
-- DB latency observed: about 617ms.
-- Secrets printed: no.
+Result: `/api/health` pass, `/api/internal/health` pass, deployed `db.ok: true`, secrets printed no.
 
 ---
 
 ## 2026-05-25 — Custom app domain added
 
-Actions completed:
-
 - Added custom Vercel domain: `app.missedcallsdental.com`.
-- Vercel provided DNS record:
-  - Type: `A`
-  - Host: `app`
-  - Value: `76.76.21.21`
-  - TTL: Automatic or 300
+- Vercel provided DNS record: `A app 76.76.21.21`.
 - Added DNS record at Namecheap.
 - Domain verified.
 - SSL certificate issued.
@@ -282,20 +205,11 @@ Known redeploy ID:
 dpl_89HfxNTrc4KtgzTJJM1Pyk2W8kp2
 ```
 
-Validation:
-
-- `https://app.missedcallsdental.com/api/health`: pass.
-- `https://app.missedcallsdental.com/api/internal/health`: pass.
-- `db.ok`: true.
-- Secrets printed: no.
-- Twilio changed: no.
-- SMS sent: no.
+Validation: custom domain health pass, internal health pass, `db.ok: true`, Twilio changed no, SMS sent no.
 
 ---
 
 ## 2026-05-25 — Twilio webhook plan prepared
-
-Actions completed:
 
 - Confirmed Twilio env variable names exist locally.
 - Confirmed live webhook endpoints exist.
@@ -308,11 +222,95 @@ Live webhook URLs:
 - Inbound SMS: `https://app.missedcallsdental.com/api/webhooks/twilio/messaging/incoming`
 - SMS status: `https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status`
 
-Current status:
+---
 
-- Twilio has not been changed yet.
-- SMS has not been sent yet.
-- Next step is to configure Twilio webhooks through API after owner approval.
+## 2026-05-25 — Twilio webhooks configured by API
+
+- Read current Twilio IncomingPhoneNumber and Messaging Service settings.
+- Previous settings were Twilio demo URLs for voice and SMS.
+- Updated IncomingPhoneNumber webhook fields: `voiceUrl`, `voiceMethod`, `smsUrl`, `smsMethod`, `statusCallback`, `statusCallbackMethod`.
+- Updated Messaging Service webhook fields: `inboundRequestUrl`, `inboundMethod`, `statusCallback`.
+- Verified all webhook URLs and methods by API read-back.
+
+Result:
+
+- Twilio settings changed: yes.
+- SMS sent: no.
+- Calls made by agent: no.
+- Secrets printed: no.
+- Source files modified: no.
+
+---
+
+## 2026-05-25 — Inbound SMS webhook verified
+
+Test:
+
+- Owner sent one inbound SMS to the Twilio number `+1 844 723 4944`.
+
+Result:
+
+- Inbound SMS recorded: yes.
+- `webhook_events` row created with provider `twilio` and event type `sms.inbound`.
+- Outbound SMS sent: no.
+- Twilio settings changed after setup: no.
+- Secrets printed: no.
+
+Notes:
+
+- The foundation handler currently records inbound SMS in `webhook_events`.
+- The `messages` table will be populated in a later messaging milestone when clinic-specific message handling is implemented.
+
+---
+
+## 2026-05-25 — Inbound voice diagnosis: Twilio Trial limitation
+
+Test:
+
+- Owner made multiple inbound calls to the Twilio number.
+- At least one test call was longer than 30 seconds.
+- Voice configuration in Console showed webhook URL and POST method correctly.
+
+Findings:
+
+- Calls reached Twilio.
+- Twilio did not attempt the voice webhook URL.
+- Vercel logs showed only call status callback requests.
+- Supabase had no `voice.%` webhook events.
+- Twilio Debugger showed no relevant external voice webhook error.
+- Account type was Trial.
+- Trial account voice restrictions prevented normal inbound voice webhook testing from unverified caller IDs.
+
+Result:
+
+- Voice route code and Twilio URL configuration appear correct.
+- Real inbound voice webhook testing requires a paid Twilio account or a verified caller ID.
+- Outbound SMS sent: no.
+- Twilio settings changed during diagnosis: no.
+
+---
+
+## 2026-05-25 — MVP phone event strategy clarified
+
+Product decision:
+
+Missed Calls Dental cannot automatically detect calls to an unrelated clinic phone number. A call event must reach the system through one of the MVP connection modes.
+
+MVP connection modes:
+
+1. Conditional forwarding mode — clinic keeps existing number and forwards no-answer/busy/unavailable/after-hours calls to assigned Twilio number.
+2. Tracking number mode — clinic uses assigned Twilio number as a dedicated number for website, ads, landing pages, print, or campaigns.
+3. Hybrid mode — clinic uses forwarding for main number and tracking number usage for selected channels.
+
+Future direction:
+
+- Direct integrations with phone providers or dental communication platforms may be added later.
+- Not required for first MVP.
+
+Why it matters:
+
+- Agents and future developers must not assume the backend can see calls to any clinic number automatically.
+- The onboarding flow must ask which connection mode the clinic wants and verify caller ID preservation.
 
 ---
 
@@ -329,11 +327,19 @@ Current safe health state:
 - `/api/health`: pass.
 - `/api/internal/health`: pass.
 - `db.ok`: true.
+- Inbound SMS webhook: verified.
+- Inbound voice webhook: configured but blocked by Twilio Trial testing limits from unverified callers.
 
 Current next action:
 
 ```txt
-Configure Twilio webhooks by API, then run one inbound SMS test and one inbound call test.
+Upgrade Twilio account or test from a verified caller ID, then verify inbound voice webhook.
+```
+
+After voice verification, test a real MVP phone path:
+
+```txt
+conditional forwarding mode or tracking number mode
 ```
 
 Do not enable outbound SMS yet.

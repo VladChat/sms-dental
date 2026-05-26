@@ -1,170 +1,211 @@
 # Backend Foundation v1
 
 First buildable Next.js / Vercel foundation for the Missed Calls Dental SaaS.
-This milestone establishes structure, webhook scaffolding, env handling,
-database access, and idempotent event ingress. It does **not** send SMS,
-create cloud resources, apply migrations, or deploy.
+This milestone establishes structure, webhook scaffolding, env handling, database access, and idempotent event ingress.
 
 The existing `docs/` GitHub Pages marketing site is unchanged.
 
+---
+
+## Current deployed status
+
+Backend Foundation v1 is now deployed and verified at:
+
+```txt
+https://app.missedcallsdental.com
+```
+
+Verified:
+
+- `/api/health` passes.
+- `/api/internal/health` passes with `db.ok: true`.
+- Supabase foundation migration has been applied.
+- Twilio webhooks have been configured through Twilio API.
+- Inbound SMS webhook has been verified and recorded in `webhook_events`.
+- Inbound voice webhook route is configured, but real voice testing from unverified caller IDs is blocked while the Twilio account remains Trial.
+
+---
+
+## Product phone event strategy
+
+The backend does not automatically know about calls to an unrelated clinic phone number.
+
+For MVP, call events reach the backend through one of these modes:
+
+1. Conditional forwarding mode
+   - Clinic keeps its main number.
+   - No-answer, busy, unavailable, or after-hours calls forward to the assigned Twilio recovery number.
+
+2. Tracking number mode
+   - Clinic uses the assigned Twilio number as a dedicated number on website, ads, landing pages, print, or campaigns.
+
+3. Hybrid mode
+   - Clinic uses forwarding for missed/no-answer main-number calls and tracking numbers for selected channels.
+
+Future versions may add direct provider integrations.
+
+---
+
 ## What was added
 
-### Root Next.js project
+Root Next.js project:
 
-| File              | Purpose                                                       |
-| ----------------- | ------------------------------------------------------------- |
-| `package.json`    | Next.js 15 + React 19 + TypeScript 5.7. Scripts below.        |
-| `tsconfig.json`   | Strict TS, App Router, `@/*` path alias. Excludes `docs/`.    |
-| `next.config.mjs` | Strict mode on. `poweredByHeader` off.                        |
-| `next-env.d.ts`   | Standard Next.js type ambient declarations.                   |
+- `package.json`
+- `package-lock.json`
+- `tsconfig.json`
+- `next.config.mjs`
+- `next-env.d.ts`
 
-Scripts:
+App Router files:
 
-- `npm run dev` — local dev server on `http://localhost:3000`
-- `npm run build` — production build (does not require runtime secrets)
-- `npm run start` — production server on `http://localhost:3000`
-- `npm run typecheck` — `tsc --noEmit`
+- `app/layout.tsx`
+- `app/page.tsx`
+- `app/README.md`
 
-The existing static marketing site continues to run independently at
-`http://localhost:8080`.
+API routes:
 
-### App Router pages
+- `GET /api/health`
+- `GET /api/internal/health`
+- `POST /api/webhooks/twilio/voice/incoming`
+- `POST /api/webhooks/twilio/messaging/incoming`
+- `POST /api/webhooks/twilio/messaging/status`
+- `POST /api/webhooks/stripe`
 
-| Path                           | Purpose                                          |
-| ------------------------------ | ------------------------------------------------ |
-| `app/layout.tsx`               | Minimal root layout. `noindex, nofollow`.        |
-| `app/page.tsx`                 | Plain placeholder for the future clinic app.     |
-| `app/README.md`                | Preserved from the prior repo state.             |
+Library modules:
 
-### API routes
+- `lib/env.ts`
+- `lib/logging/logger.ts`
+- `lib/http/responses.ts`
+- `lib/db/client.ts`
+- `lib/db/health.ts`
+- `lib/db/webhook-events.ts`
+- `lib/twilio/signature.ts`
+- `lib/twilio/request.ts`
+- `lib/twilio/keywords.ts`
+- `lib/stripe/webhook.ts`
 
-| Method | Path                                                          | Purpose                                                                                  |
-| ------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| GET    | `/api/health`                                                 | Public liveness probe. Static safe JSON.                                                 |
-| GET    | `/api/internal/health`                                        | Protected. Requires `x-internal-admin-secret`. Reports env presence + DB `SELECT 1`.     |
-| POST   | `/api/webhooks/twilio/voice/incoming`                         | Twilio voice webhook. Validates signature, records `webhook_event`, returns empty TwiML. |
-| POST   | `/api/webhooks/twilio/messaging/incoming`                     | Twilio inbound SMS. Validates signature, detects STOP/START/HELP, records event.         |
-| POST   | `/api/webhooks/twilio/messaging/status`                       | Twilio message status callback. Validates signature, records status transition.          |
-| POST   | `/api/webhooks/stripe`                                        | Stripe webhook placeholder. Validates signature, records event. No billing logic yet.    |
+---
 
-All routes use Node.js runtime (`export const runtime = "nodejs"`) and
-`dynamic = "force-dynamic"` to avoid static rendering of dynamic state.
-
-### Library modules
-
-| File                          | Purpose                                                        |
-| ----------------------------- | -------------------------------------------------------------- |
-| `lib/env.ts`                  | Lazy zod env validators (per feature) + presence reporter.     |
-| `lib/logging/logger.ts`       | JSON-line logger with naive secret-name redaction.             |
-| `lib/http/responses.ts`       | `jsonOk` / `jsonError` / `twimlResponse` helpers.              |
-| `lib/db/client.ts`            | Lazy `postgres.js` client over `SUPABASE_DB_URL`.              |
-| `lib/db/health.ts`            | Safe `SELECT 1` roundtrip check.                               |
-| `lib/db/webhook-events.ts`    | Idempotent insert into `webhook_events`.                       |
-| `lib/twilio/signature.ts`     | `validateRequest` wrapper. Never throws.                       |
-| `lib/twilio/request.ts`       | Form payload parser + signed URL reconstruction.               |
-| `lib/twilio/keywords.ts`      | STOP / START / HELP detector (case + punctuation tolerant).    |
-| `lib/stripe/webhook.ts`       | `constructEvent` wrapper. Never throws.                        |
-
-### Database migration (NOT applied)
+## Database migration
 
 `supabase/migrations/20260525000100_backend_foundation.sql` creates:
 
 - `clinics`
 - `clinic_phone_numbers`
-- `webhook_events` — unique on `(provider, external_id)`
-- `call_events` — unique on `twilio_call_sid`
-- `patient_conversations` — unique on `(clinic_id, patient_phone)`
-- `messages` — unique on `twilio_message_sid`
-- `opt_outs` — unique on `(clinic_id, phone_number)`
-- `set_updated_at()` trigger function + per-table triggers
-- `pgcrypto` extension (for `gen_random_uuid()`)
-- RLS enabled on every multi-tenant table
+- `webhook_events`
+- `call_events`
+- `patient_conversations`
+- `messages`
+- `opt_outs`
 
-**RLS policies are intentionally not defined in this migration.** Until policies
-land, only the service role (via `SUPABASE_DB_URL`) can access these tables —
-which is also the only access path the foundation uses. Policies will be
-added in the messaging milestone when we also wire app auth roles.
+The migration has been applied to the configured Supabase project.
 
-### Environment example
+RLS policies are intentionally not defined in this migration. Policies will be added in a future milestone when app auth roles are wired.
 
-Added one new placeholder to `.env.local.example`:
+---
 
-- `PUBLIC_WEBHOOK_BASE_URL` — optional. Used so Twilio signature verification
-  reconstructs the exact URL Twilio called even when behind a proxy. Leave
-  blank in local dev. Set to `https://app.missedcallsdental.com` (or the
-  eventual production host) in deployed environments.
+## Environment notes
 
-No values were copied from `.env.local`. The file `.env.local` was not
-modified.
+`PUBLIC_WEBHOOK_BASE_URL` is used so Twilio signature verification reconstructs the exact URL Twilio called even when behind a proxy.
+
+Current production value:
+
+```txt
+https://app.missedcallsdental.com
+```
+
+`SUPABASE_DB_URL` should use the Supabase transaction pooler for Vercel/serverless runtime.
+
+`SUPABASE_DB_DIRECT_URL` preserves the direct DB URL for local/admin/migration work.
+
+Never print full DB URLs because they contain passwords.
+
+---
 
 ## Required environment variables
 
-The handlers require these names. Real values live in `.env.local` (untracked).
 Names only:
 
-- `SUPABASE_DB_URL` — Postgres connection string. Needed for any DB work.
-- `SUPABASE_SERVICE_ROLE_KEY` — Reserved for future Supabase JS use.
-- `TWILIO_ACCOUNT_SID` — Identification only.
-- `TWILIO_AUTH_TOKEN` — Used by `verifyTwilioSignature`.
-- `TWILIO_PHONE_NUMBER` — Default recovery number (future).
-- `TWILIO_PHONE_NUMBER_SID` — Optional. Future provisioning.
-- `TWILIO_MESSAGING_SERVICE_SID` — Future outbound sender.
-- `STRIPE_SECRET_KEY` — Future billing.
-- `STRIPE_WEBHOOK_SECRET` — Used by `verifyStripeWebhook`.
-- `STRIPE_ACCOUNT_ID` — Optional. Used by Connect (not in MVP).
-- `JOB_RUNNER_SECRET` — Reserved for future cron-triggered jobs.
-- `INTERNAL_ADMIN_SECRET` — Required by `/api/internal/health`.
-- `PUBLIC_WEBHOOK_BASE_URL` — Optional. See above.
+- `SUPABASE_DB_URL`
+- `SUPABASE_DB_DIRECT_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_PHONE_NUMBER`
+- `TWILIO_PHONE_NUMBER_SID`
+- `TWILIO_MESSAGING_SERVICE_SID`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_ACCOUNT_ID`
+- `JOB_RUNNER_SECRET`
+- `INTERNAL_ADMIN_SECRET`
+- `PUBLIC_WEBHOOK_BASE_URL`
 
-`npm run build` does **not** require any of these values to be set. The
-zod schemas in `lib/env.ts` run only when a route handler executes.
+---
 
-## Future webhook URLs (NOT yet configured)
+## Live webhook URLs
 
-Do not set these in the Twilio or Stripe consoles until the backend is
-deployed and explicitly approved by the owner.
+Twilio voice incoming:
 
-- Twilio voice incoming: `https://app.missedcallsdental.com/api/webhooks/twilio/voice/incoming`
-- Twilio SMS incoming:   `https://app.missedcallsdental.com/api/webhooks/twilio/messaging/incoming`
-- Twilio SMS status:     `https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status`
-- Stripe:                `https://app.missedcallsdental.com/api/webhooks/stripe`
+```txt
+https://app.missedcallsdental.com/api/webhooks/twilio/voice/incoming
+```
+
+Twilio SMS incoming:
+
+```txt
+https://app.missedcallsdental.com/api/webhooks/twilio/messaging/incoming
+```
+
+Twilio SMS/status callback:
+
+```txt
+https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status
+```
+
+Stripe placeholder:
+
+```txt
+https://app.missedcallsdental.com/api/webhooks/stripe
+```
+
+Twilio IncomingPhoneNumber and Messaging Service webhook fields have been configured through the Twilio API.
+
+Inbound SMS has been verified.
+
+Inbound voice is pending full verification because Twilio Trial account restrictions block normal inbound voice webhook testing from unverified caller IDs.
+
+---
 
 ## How idempotency works
 
-- Twilio voice: row keyed by `voice:<CallSid>` in `webhook_events`. Replays
-  return `duplicate: true` and are not double-processed downstream.
+- Twilio voice: row keyed by `voice:<CallSid>` in `webhook_events`.
 - Twilio SMS inbound: row keyed by `sms:<MessageSid>`.
-- Twilio SMS status: row keyed by `sms_status:<MessageSid>:<status>` so each
-  distinct transition is captured exactly once.
-- Stripe: row keyed by `event.id` (`evt_...`).
+- Twilio SMS status: row keyed by `sms_status:<MessageSid>:<status>`.
+- Stripe: row keyed by `event.id`.
 
-In every case the unique index `webhook_events (provider, external_id)`
-guarantees a single canonical row, and `ON CONFLICT DO NOTHING` makes the
-insert safe under concurrent retries.
+In every case the unique index `webhook_events (provider, external_id)` guarantees a single canonical row, and `ON CONFLICT DO NOTHING` makes the insert safe under concurrent retries.
 
-## What was intentionally NOT done
+---
 
-- No deploy.
-- No Vercel project created.
-- No Twilio Console webhook URLs changed.
-- No Twilio numbers purchased.
-- No SMS sent.
-- No Stripe products / prices / customers / subscriptions / endpoints created.
-- No Supabase migration applied. SQL exists in the repo only.
-- No GitHub Pages settings changed.
+## What was intentionally NOT done in Backend Foundation v1
+
+- No outbound SMS sending.
+- No Stripe products / prices / customers / subscriptions created.
+- No full clinic onboarding flow.
+- No dashboard.
+- No AI receptionist.
+- No PMS integration.
+- No phone provider integrations.
 - `docs/` was not modified.
-- `.env.local` was not modified or read for values.
-- No git commit, no git push, no staged unrelated files.
+- `.env.local` was not committed.
 
-## Suggested next steps (separate, future milestones)
+---
 
-1. **Owner approval to apply the migration** to the Supabase project
-   (`qfjpvbvfvhbtebwivcdc`) in a staging-equivalent context.
-2. **Create the Vercel project** under team `vladchat-1500s-projects` and link
-   to this repository (root directory = repo root). Configure env vars in
-   Vercel Project Settings only.
-3. **Wire the messaging milestone**: clinic + phone number lookup, opt-out
-   enforcement on outbound, RLS policies, outbound SMS via the Twilio
-   Messaging Service.
-4. **Wire the billing milestone**: Stripe Checkout + subscription, customer ↔
-   clinic mapping, gated SMS sending.
+## Suggested next steps
+
+1. Upgrade Twilio account or test from verified caller ID to complete inbound voice webhook verification.
+2. Define clinic connection mode for first real test customer: conditional forwarding, tracking number, or hybrid.
+3. Create clinic/phone mapping milestone.
+4. Wire messaging milestone: opt-out enforcement, duplicate suppression, safe outbound SMS helper, controlled test to owner-owned phone only.
+5. Wire billing milestone later.

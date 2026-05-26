@@ -1,63 +1,66 @@
 # START HERE — AI Coding Agent Version
 
-Use this folder as the single final developer handoff package for building the MVP with an AI coding agent in VS Code / Codex / CodeGPT / Cursor-style tools.
+Use this folder as the current developer handoff package for building the MVP with an AI coding agent.
 
-Ignore all previous stage ZIP files, patch ZIP files, and older versions.
+Ignore previous stage ZIP files, patch ZIP files, and older versions.
 
 ---
 
 ## Current Source of Truth — May 2026
 
-Start with `PROJECT-CONTEXT.md`. It is the master context file for the current repository state, product goal, hosting plan, safety boundaries, and immediate Backend Foundation v1 step.
+Start with `PROJECT-CONTEXT.md`. It is the master context file for the current repository state, product goal, hosting plan, safety boundaries, phone event strategy, and current implementation step.
 
-The numbered files in this folder are still useful reference documents, but they are roadmap/spec material. If any older document conflicts with `PROJECT-CONTEXT.md`, `AGENTS.md`, `.env.local.example`, or `backend-foundation-handoff.md`, use the newer files.
+The numbered files in this folder are useful reference documents, but they are roadmap/spec material. If any older document conflicts with `PROJECT-CONTEXT.md`, `AGENTS.md`, `.env.local.example`, `OPERATIONS-RUNBOOK.md`, `SETUP-LOG.md`, or `backend-foundation-v1.md`, use the newer files.
 
-Current implementation direction:
+Current implementation state:
 
 - `docs/` remains the existing GitHub Pages marketing website and must not be changed unless explicitly requested.
-- `app/` is the future Next.js SaaS app/backend direction.
-- Do not create `backend/` unless the user explicitly changes the architecture.
-- Future app/backend hosting is Vercel, likely at `https://app.missedcallsdental.com`.
-- Do not deploy or create cloud resources during Backend Foundation v1.
+- `app/` is the Next.js SaaS app/backend direction.
+- App/backend hosting is Vercel at `https://app.missedcallsdental.com`.
+- Backend Foundation v1 is deployed and can reach Supabase.
+- Twilio webhooks are configured by API.
+- Inbound SMS webhook has been verified.
+- Inbound voice verification is pending because Twilio Trial account restrictions block realistic inbound voice testing from unverified callers.
 
 ---
 
-## 1. Who this package is for
-
-Primary implementer:
-
-```txt
-AI coding agent working inside the founder's local development environment
-```
-
-Examples:
-
-```txt
-VS Code + Codex
-VS Code + CodeGPT
-Cursor
-Claude Code
-Windsurf
-other MCP-capable coding agents
-```
-
-This package is **not written primarily for an outside human contractor**. If a human developer is later hired, create a separate human-access plan.
-
----
-
-## 2. Product scope
+## Product scope
 
 Build a narrow missed-call recovery SaaS for small dental clinics.
+
+The app does not automatically detect calls to an unrelated clinic phone number. For MVP, call events reach the system through:
+
+```txt
+conditional forwarding mode
+tracking number mode
+hybrid mode
+```
+
+Conditional forwarding mode:
+
+```txt
+clinic main number -> no-answer/busy/after-hours forwarding -> assigned Twilio recovery number -> backend webhook
+```
+
+Tracking number mode:
+
+```txt
+clinic publishes assigned Twilio number on website/ads/campaign -> backend webhook
+```
+
+Hybrid mode uses both.
+
+Future versions may add direct provider integrations.
 
 The product does:
 
 ```txt
-missed call detection through Twilio recovery number
-automatic SMS recovery flow
-basic dental intent and urgency classification
-recovery inbox for front desk
-manual booked/lost outcome tracking
-Stripe billing
+call event ingestion through supported phone event paths
+automatic SMS recovery flow after approval/configuration
+inbound SMS handling
+recovery inbox later
+manual booked/lost outcome tracking later
+Stripe billing later
 Supabase database/auth
 Vercel deployment
 ```
@@ -71,65 +74,35 @@ PMS integration
 phone system replacement
 call recording/transcription
 number porting
+direct integrations with every phone provider
 Fly.io deployment
 ```
 
 ---
 
-## 3. Owner first step
-
-The owner/founder should open and fill:
-
-```txt
-OWNER-FILL-THIS-OUT.md
-```
-
-Fill only non-secret business/config information there.
-
-Do **not** paste real API secrets, passwords, service-role keys, Stripe secret keys, Twilio auth tokens, or production credentials into markdown files.
-
----
-
-## 4. Recommended reading order for the AI agent
-
-Give the AI coding agent this instruction:
-
-```txt
-Read PROJECT-CONTEXT.md first. Then read START-HERE.md and AGENT-RULES.md. Use the numbered files as supporting reference material for the current task.
-```
-
-Reading order:
+## Recommended reading order for the AI agent
 
 ```txt
 PROJECT-CONTEXT.md
 AGENT-RULES.md
+OPERATIONS-RUNBOOK.md
+SETUP-LOG.md
+REPEATABLE-SETUP-CHECKLIST.md
+backend-foundation-v1.md
 backend-foundation-handoff.md
-MVP-Build-Spec-v1.md
-00-product-brief.md
-01-user-flows.md
-02-technical-architecture.md
-03-database-schema.md
-04-api-and-webhooks.md
-05-sms-rules-and-templates.md
-06-ui-screens.md
-07-build-plan-and-tasks.md
-08-compliance-and-onboarding.md
-09-test-plan.md
-10-env-and-deploy.md
-11-access-and-secrets-handoff.md
-12-production-launch-checklist.md
-13-hosting-decision-no-fly.md
-14-ai-codex-vscode-workflow.md
-15-mcp-setup.md
-OWNER-FILL-THIS-OUT.md
-OWNER-SETTINGS.md
-REVIEW-NOTES.md
-QA-AUDIT-SUMMARY.md
+task-specific numbered docs
+```
+
+For Twilio/SMS work, also read:
+
+```txt
+Skills/twilio-dental-sms.md
+Skills/missed-calls-dental-product-context.md
 ```
 
 ---
 
-## 5. Default stack
+## Default stack
 
 ```txt
 Frontend/backend: Next.js
@@ -138,46 +111,12 @@ Database/Auth: Supabase
 Voice/SMS: Twilio
 Billing: Stripe
 Jobs: Vercel Cron or Supabase scheduled jobs
-Config: config/runtime.config.example.ts
-Secrets: env/.env.secrets.example -> local .env.local / Vercel Environment Variables
+Secrets: local .env.local / Vercel Environment Variables
 ```
 
 ---
 
-## 6. AI-agent access model
-
-The AI agent does **not** need personal passwords and does **not** need to be invited as a human user.
-
-Instead:
-
-```txt
-GitHub/repo access: through the local VS Code/Codex workspace or GitHub connector
-Supabase: use staging/dev Supabase project; optionally connect Supabase MCP
-Vercel: use Vercel project; optionally connect Vercel MCP
-Stripe: use Stripe sandbox/test; optionally connect Stripe MCP
-Twilio: use Twilio MCP for docs/API schemas only; real Twilio account setup remains owner-controlled
-Secrets: local .env.local for dev/test only; Vercel Environment Variables for staging/production
-```
-
-Production actions require owner approval.
-
----
-
-## 7. Secrets rule
-
-Use this split:
-
-```txt
-config/runtime.config.example.ts
-```
-
-For normal non-secret runtime configuration and provider IDs.
-
-```txt
-env/.env.secrets.example
-```
-
-For real private secrets only.
+## Safety rules
 
 Never commit:
 
@@ -186,20 +125,9 @@ Never commit:
 .env.local
 .env.production
 .env.staging
-```
-
----
-
-## 8. MCP safety rule
-
-MCP can make the AI agent more hands-off, but it also increases risk.
-
-Default rule:
-
-```txt
-Use MCP freely for docs/search/read-only operations.
-Use MCP write operations only in staging/dev.
-Never use MCP against production without explicit owner approval.
+.local-agent/
+real provider secrets
+full database URLs with passwords
 ```
 
 Dangerous actions requiring owner approval:
@@ -209,37 +137,17 @@ Supabase apply_migration / execute destructive SQL
 Vercel production deployment or production env changes
 Stripe live-mode products/prices/subscriptions
 Twilio production webhook changes, number purchase, A2P/campaign actions
+Twilio account upgrade or paid billing changes
 DNS changes
 Sending real patient SMS
 ```
 
 ---
 
-## 9. First prompt to give Codex / CodeGPT
-
-```txt
-You are building this app locally in VS Code using the attached build docs.
-
-Read START-HERE.md and AGENT-RULES.md first.
-
-Important:
-- There is no outside human developer.
-- Do not request collaborator invites.
-- Do not request production secrets.
-- Use placeholders until test/staging provider credentials are available.
-- Store non-secret runtime settings in config/runtime.config.example.ts.
-- Store only real private secrets in env/.env.secrets.example / local .env.local / Vercel Environment Variables.
-- Use MCP tools only if configured, preferably against staging/dev resources.
-- Ask for owner approval before migrations, production deploys, billing changes, Twilio live settings, DNS changes, or sending real SMS.
-- Implement the milestones in 07-build-plan-and-tasks.md in order.
-```
-
----
-
-## 10. One-file summary
+## One-file summary
 
 If the AI agent gets confused, reset it with this:
 
 ```txt
-Build the MVP exactly as scoped: missed call -> SMS -> intent/urgency -> inbox -> manual booked/lost -> dashboard -> billing. No AI receptionist, no PMS sync, no phone-system replacement, no Fly.io. Use Vercel, Supabase, Twilio, Stripe. Work locally/staging first. Production requires owner approval.
+Build the MVP exactly as scoped: a call event reaches the system through conditional forwarding, a dedicated tracking number, or later provider integrations. The backend validates the event, records it, sends safe SMS recovery only after approval/configuration, handles replies, shows a recovery inbox, and later supports billing. No AI receptionist, no PMS sync, no phone-system replacement, no Fly.io. Use Vercel, Supabase, Twilio, Stripe. Work locally/staging first. Production actions require owner approval.
 ```
