@@ -92,12 +92,13 @@ Operational test requirement:
 
 ### Twilio
 
-- Twilio number used for current testing: `+1 844 723 4944`
+- Twilio account: Active / Full (upgraded from Trial on 2026-05-26).
+- Twilio number: `+1 844 723 4944`
 - Twilio webhooks have been configured through API.
-- Inbound SMS webhook has been verified and recorded in Supabase.
+- Inbound SMS webhook: verified and recorded in Supabase.
+- Inbound voice webhook: verified end-to-end (Twilio → Vercel → Supabase).
+- Voice call behavior: callers hear a polite announcement ("Thanks for calling. We missed your call and will be in touch shortly.") then the call ends cleanly.
 - Outbound SMS has not been enabled.
-- Inbound voice route is configured, but real inbound voice testing from unverified callers is blocked while the Twilio account remains Trial.
-- To fully test inbound voice from ordinary caller IDs, upgrade the Twilio account to paid or test from a verified caller ID.
 
 ---
 
@@ -245,8 +246,9 @@ SMS status:     https://app.missedcallsdental.com/api/webhooks/twilio/messaging/
 Current behavior:
 
 - Unsigned manual POST returns `403`, which is correct.
-- Twilio-signed requests should pass validation.
-- Inbound SMS has been verified.
+- Twilio-signed requests pass validation.
+- Inbound SMS: verified.
+- Inbound voice: verified. Returns polite `<Say>` + `<Hangup/>` TwiML. Callers hear an acknowledgement then the call ends cleanly.
 - Handlers record idempotent `webhook_events` rows.
 - Handlers do not send outbound SMS.
 
@@ -264,26 +266,20 @@ Configured fields:
 - Messaging Service `inboundMethod`
 - Messaging Service `statusCallback`
 
-### Twilio Trial voice limitation
+### Voice webhook verification (completed 2026-05-26)
 
-Observed behavior:
+Verified end-to-end after Twilio account upgrade from Trial to Active:
 
-- Inbound SMS from owner test reached the backend and was recorded.
-- Inbound voice calls from an unverified caller did not invoke the voice webhook.
-- Twilio only fired the status callback for the call.
-- Twilio Trial accounts restrict voice calls to/from verified phone numbers.
-- This blocks realistic inbound voice webhook testing from ordinary caller IDs.
+1. Inbound call hits `+1 844 723 4944` → Twilio fires POST to voice webhook URL.
+2. Vercel processes request: validates Twilio signature, records `voice.ringing` in `webhook_events`, returns TwiML.
+3. Supabase `webhook_events` receives a row keyed as `voice:<CallSid>`.
+4. Caller hears: "Thanks for calling. We missed your call and will be in touch shortly. Goodbye." then call ends.
 
-Fix:
+To re-verify after any change:
 
-- Upgrade Twilio account to paid, or
-- Test from a verified caller ID.
-
-After upgrade/verified-caller test:
-
-1. Make one inbound call to `+1 844 723 4944`.
-2. Check Vercel logs for `/api/webhooks/twilio/voice/incoming`.
-3. Query `webhook_events` for `event_type like 'voice.%'`.
+1. Make one inbound call to the Twilio number.
+2. Check Vercel logs for `POST /api/webhooks/twilio/voice/incoming` → expect HTTP 200.
+3. Query `webhook_events` where `provider = 'twilio'` and `event_type like 'voice.%'`.
 4. Confirm no outbound SMS was sent.
 
 ---
@@ -340,12 +336,7 @@ git diff --cached --name-only
 Current next step:
 
 ```txt
-Upgrade Twilio account or test from a verified caller ID, then verify inbound voice webhook.
+Test a real MVP phone path: conditional forwarding from a clinic-like phone system, or direct tracking number call to the Twilio number.
 ```
-
-After voice verification, test one of the real MVP phone event paths:
-
-- conditional forwarding from a clinic-like phone system
-- direct tracking number call to the Twilio number
 
 Do not enable outbound SMS until clinic mapping, opt-out enforcement, and explicit owner approval are complete.

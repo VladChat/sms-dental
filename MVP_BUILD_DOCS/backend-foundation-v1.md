@@ -20,9 +20,10 @@ Verified:
 - `/api/health` passes.
 - `/api/internal/health` passes with `db.ok: true`.
 - Supabase foundation migration has been applied.
+- Twilio account: Active / Full (upgraded from Trial on 2026-05-26).
 - Twilio webhooks have been configured through Twilio API.
-- Inbound SMS webhook has been verified and recorded in `webhook_events`.
-- Inbound voice webhook route is configured, but real voice testing from unverified caller IDs is blocked while the Twilio account remains Trial.
+- Inbound SMS webhook: verified and recorded in `webhook_events`.
+- Inbound voice webhook: verified end-to-end (2026-05-26). Returns polite `<Say>` + `<Hangup/>` TwiML. Callers hear an acknowledgement and the call ends cleanly.
 
 ---
 
@@ -173,7 +174,7 @@ Twilio IncomingPhoneNumber and Messaging Service webhook fields have been config
 
 Inbound SMS has been verified.
 
-Inbound voice is pending full verification because Twilio Trial account restrictions block normal inbound voice webhook testing from unverified caller IDs.
+Inbound voice is verified. The handler returns polite TwiML and records the event in `webhook_events`.
 
 ---
 
@@ -204,7 +205,7 @@ In every case the unique index `webhook_events (provider, external_id)` guarante
 
 ## Suggested next steps
 
-1. Upgrade Twilio account or test from verified caller ID to complete inbound voice webhook verification.
+1. Test a real MVP phone path: conditional forwarding from a clinic-like phone system or direct tracking number call.
 2. Define clinic connection mode for first real test customer: conditional forwarding, tracking number, or hybrid.
 3. Create clinic/phone mapping milestone.
 4. Wire messaging milestone: opt-out enforcement, duplicate suppression, safe outbound SMS helper, controlled test to owner-owned phone only.
