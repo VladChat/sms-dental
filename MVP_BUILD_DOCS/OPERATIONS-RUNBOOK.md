@@ -751,3 +751,183 @@ Live SMS still requires all four conditions:
 3. Owner approval.
 4. Explicit `SMS_RECOVERY_MODE=live` and per-clinic
    `sms_recovery_enabled=true` toggle.
+
+---
+
+## SMS Messaging Status Callback Wiring
+
+The `/api/webhooks/twilio/messaging/status` route exists and is fully
+implemented (signature-validated, idempotent, no SMS, returns 200 JSON
+ack). Twilio's `IncomingPhoneNumber.create()` API does not expose a
+per-number SMS status callback field, so this route is not configured
+on individual numbers. To make Twilio actually call it, one of these
+must be in place:
+
+### Option A — Messaging Service status callback (recommended, one-time)
+
+Set the Messaging Service `statusCallback` to:
+
+```
+https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status
+```
+
+Twilio Console path: **Messaging → Services → (your service) → Sender
+Pool / Integration → Status Callback URL**. Save. From that point all
+outbound SMS sent via the Messaging Service triggers a delivery status
+callback to this URL.
+
+### Option B — Per-message statusCallback (code path)
+
+Add `statusCallback` to `client.messages.create(...)` in
+`lib/twilio/outbound-sms.ts`. This is a small, contained future
+improvement — it does not enable any new SMS, it only adds status
+visibility per send. Not required for onboarding to function.
+
+The current onboarding flow does not depend on inbound status
+callbacks. It only requires:
+
+- `voice/incoming` and `voice/status` (configured automatically on each
+  purchased Twilio number by `purchaseNumberAndConfigure`).
+- `messaging/incoming` (configured automatically on each purchased
+  Twilio number).
+
+---
+
+## Apply the Onboarding Migration
+
+Migration file:
+
+```
+supabase/migrations/20260526000300_onboarding_setup_requests.sql
+```
+
+This adds the `setup_requests` table and extends `clinics` with
+onboarding fields. Apply via Supabase SQL editor (or `psql` connected
+to `SUPABASE_DB_URL`) after owner approval.
+
+### Apply steps
+
+1. Open Supabase SQL editor for the production project.
+2. Paste the contents of
+   `supabase/migrations/20260526000300_onboarding_setup_requests.sql`.
+3. Run as the service role.
+
+### Verification queries (read-only)
+
+Run these after applying. Each should return the expected row counts.
+
+```sql
+-- 1) setup_requests table exists.
+select table_name from information_schema.tables
+where table_schema = 'public' and table_name = 'setup_requests';
+-- expect: 1 row
+
+-- 2) setup_requests has token-hash column and unique index.
+select column_name from information_schema.columns
+where table_schema = 'public' and table_name = 'setup_requests'
+  and column_name = 'setup_token_hash';
+-- expect: 1 row
+
+select indexname from pg_indexes
+where schemaname = 'public'
+  and tablename = 'setup_requests'
+  and indexname = 'setup_requests_setup_token_hash_key';
+-- expect: 1 row
+
+-- 3) clinics has the new onboarding fields.
+select column_name from information_schema.columns
+where table_schema = 'public' and table_name = 'clinics'
+  and column_name in (
+    'legal_business_name', 'main_phone', 'owner_contact_name',
+    'owner_contact_email', 'owner_contact_phone',
+    'test_patient_phone', 'setup_status'
+  )
+order by column_name;
+-- expect: 7 rows
+
+-- 4) Owner-test clinic is marked active.
+select slug, setup_status from public.clinics
+where slug = 'owner-test';
+-- expect: setup_status = 'active'
+
+-- 5) RLS is enabled on setup_requests.
+select relname, relrowsecurity from pg_class
+where relname = 'setup_requests';
+-- expect: relrowsecurity = true
+```
+
+If any of these returns an unexpected result, do not proceed with
+onboarding traffic. Re-run the migration or contact the operator.
+
+---
+
+## Required Environment Variables Before Owner-Only Testing
+
+The onboarding code works in three modes depending on env state.
+Production env vars are not yet set; the following table is the
+authoritative reference.
+
+| Env var                          | Required for production? | Owner-only testing default       |
+|----------------------------------|--------------------------|----------------------------------|
+| APP_BASE_URL                     | yes                      | `http://localhost:3000` (local)  |
+| PUBLIC_SITE_URL                  | yes                      | `https://missedcallsdental.com`  |
+| RESEND_API_KEY                   | yes                      | unset (use fallback below)       |
+| SETUP_EMAIL_FROM                 | yes                      | unset (use fallback below)       |
+| TWILIO_NUMBER_PURCHASE_ENABLED   | yes (set to `true`)      | `false` (never purchase yet)     |
+| OWNER_TEST_SETUP_LINK_FALLBACK   | no (must stay `false`)   | `true` only during local testing |
+| TWILIO_ACCOUNT_SID               | yes (already configured) | already configured               |
+| TWILIO_AUTH_TOKEN                | yes (already configured) | already configured               |
+| TWILIO_MESSAGING_SERVICE_SID     | yes (already configured) | already configured               |
+| SUPABASE_DB_URL                  | yes (already configured) | already configured               |
+| PUBLIC_WEBHOOK_BASE_URL          | yes (already configured) | already configured               |
+
+For Vercel-production rollout (do not run until owner explicitly says
+to), set these in `Project → Settings → Environment Variables`:
+
+```
+APP_BASE_URL=https://app.missedcallsdental.com
+PUBLIC_SITE_URL=https://missedcallsdental.com
+RESEND_API_KEY=<resend api key>
+SETUP_EMAIL_FROM=Missed Calls Dental <support@missedcallsdental.com>
+TWILIO_NUMBER_PURCHASE_ENABLED=false   # flip to true ONLY when ready to spend
+OWNER_TEST_SETUP_LINK_FALLBACK=false   # MUST stay false in production
+```
+
+For owner-only local testing without configuring Resend:
+
+```
+OWNER_TEST_SETUP_LINK_FALLBACK=true
+TWILIO_NUMBER_PURCHASE_ENABLED=false
+```
+
+In that mode, `POST /api/setup-requests` returns the setup link in the
+JSON response instead of sending email, and the number-purchase route
+returns 503 instead of contacting Twilio.
+
+### Safe next step for owner-only testing
+
+1. Apply the migration in Supabase (see Apply Steps above) and run the
+   verification queries.
+2. Set local env in `.env.local`:
+   - `APP_BASE_URL=http://localhost:3000`
+   - `PUBLIC_SITE_URL=https://missedcallsdental.com`
+   - `OWNER_TEST_SETUP_LINK_FALLBACK=true`
+   - `TWILIO_NUMBER_PURCHASE_ENABLED=false`
+3. Start the dev server: `npm run dev`.
+4. POST a test request:
+   ```
+   curl -s -X POST http://localhost:3000/api/setup-requests \
+     -H 'content-type: application/json' \
+     -d '{"full_name":"Owner Test","work_email":"owner@example.com"}'
+   ```
+   Expect a JSON response containing a `setup_url`.
+5. Open the returned setup URL in a browser. Fill out the clinic form,
+   then watch the number-search step list available Twilio numbers.
+6. Click **Use this number**. Expect a 503 `purchase_disabled` response
+   — this is the safe expected outcome with
+   `TWILIO_NUMBER_PURCHASE_ENABLED=false`. No Twilio number is
+   purchased. No SMS is sent.
+
+Only after that dry run is clean should the owner consider flipping
+`TWILIO_NUMBER_PURCHASE_ENABLED=true` and rerunning the same flow with
+a real number purchase.
