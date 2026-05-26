@@ -672,3 +672,82 @@ WHERE patient_phone = '+12245329236';
 ```
 
 After reset passes, proceed with the first-call live test.
+
+---
+
+## Automated Clinic Onboarding
+
+The automated onboarding flow lives entirely on the app domain:
+
+```
+https://app.missedcallsdental.com
+```
+
+The public marketing site (`docs/`) is the entry form only. The setup
+link sent by email always uses the app base URL.
+
+### Required environment variables
+
+```
+APP_BASE_URL=https://app.missedcallsdental.com
+PUBLIC_SITE_URL=https://missedcallsdental.com
+RESEND_API_KEY=<resend api key>
+SETUP_EMAIL_FROM=Missed Calls Dental <support@missedcallsdental.com>
+TWILIO_NUMBER_PURCHASE_ENABLED=true   # only when ready to spend money
+OWNER_TEST_SETUP_LINK_FALLBACK=false  # never true in production
+```
+
+Verify presence (no values) via `GET /api/internal/health` with the
+internal admin secret.
+
+### Onboarding URL surface
+
+- Public form target: `POST /api/setup-requests`
+- Setup page (token-scoped): `GET /setup/[token]`
+- Clinic form save:        `POST /api/onboarding/[token]/clinic`
+- Number search:           `GET  /api/onboarding/[token]/numbers?area_code=XXX`
+- Number purchase:         `POST /api/onboarding/[token]/numbers/purchase`
+- Status deep link:        `GET  /setup/[token]/status`
+
+### Safety checks
+
+Before flipping `TWILIO_NUMBER_PURCHASE_ENABLED=true`:
+
+1. Confirm the Twilio account billing plan covers the expected number
+   cost.
+2. Confirm webhook URLs (`/api/webhooks/twilio/...`) are reachable in
+   production.
+3. Confirm `RESEND_API_KEY` and `SETUP_EMAIL_FROM` are set and verified
+   in Resend.
+4. Confirm `OWNER_TEST_SETUP_LINK_FALLBACK` is not set or is `false`.
+
+The purchase route is idempotent at the clinic level. If a clinic
+already has an active `office_texting` number in `clinic_phone_numbers`,
+no second number is purchased.
+
+### Token security
+
+- Raw setup tokens are 32 random bytes hex-encoded (64 characters).
+- The database stores only the SHA-256 hash (`setup_token_hash`).
+- Tokens expire 72 hours after issue.
+- The setup URL is composed from `APP_BASE_URL` only — never from the
+  request `Host` header.
+- Raw tokens are never logged.
+
+### SMS remains off after onboarding
+
+Successful number assignment does NOT enable live SMS:
+
+```
+clinic.is_active             = true
+clinic.sms_recovery_enabled  = false
+clinic.setup_status          = 'number_assigned'
+```
+
+Live SMS still requires all four conditions:
+
+1. Twilio Toll-Free / A2P compliance approval.
+2. QA passes (see Section 12 of the build guide).
+3. Owner approval.
+4. Explicit `SMS_RECOVERY_MODE=live` and per-clinic
+   `sms_recovery_enabled=true` toggle.

@@ -722,3 +722,100 @@ Result:
 - Twilio settings changed: no.
 - Source/backend code changed: no.
 - Public site files changed: no.
+
+---
+
+## 2026-05-26 — Automated clinic onboarding workflow
+
+Implemented the automated onboarding flow per
+`MVP_BUILD_DOCS/ONBOARDING-WORKFLOW-BUILD-GUIDE.md`.
+
+Changes:
+
+- New migration `supabase/migrations/20260526000300_onboarding_setup_requests.sql`:
+  - adds `setup_requests` table (stores `setup_token_hash`, never raw tokens)
+  - extends `clinics` with `legal_business_name`, `main_phone`,
+    `owner_contact_name`, `owner_contact_email`, `owner_contact_phone`,
+    `test_patient_phone`, `setup_status`
+  - marks the existing owner-test clinic `setup_status='active'`
+- New libraries:
+  - `lib/onboarding/tokens.ts` — 32-byte hex setup tokens, SHA-256 hash,
+    72-hour expiry, constant-time comparison, `buildSetupUrl` using the
+    trusted `APP_BASE_URL`.
+  - `lib/onboarding/verify.ts` — token lookup + expiry/state checks.
+  - `lib/db/setup-requests.ts` — insert/find/update setup request rows.
+  - `lib/db/clinic-phone-numbers.ts` — find/upsert active office texting
+    number for a clinic.
+  - `lib/db/clinics.ts` — extended with `findClinicById`,
+    `upsertClinicForOnboarding`, `setClinicSetupStatus`.
+  - `lib/email/setup-link-email.ts` — Resend-based delivery, fails loud.
+  - `lib/twilio/numbers.ts` — search + purchase + webhook auto-config
+    (`voice/incoming`, `voice/status`, `messaging/incoming`,
+    `messaging/status`), attaches the purchased number to the Messaging
+    Service best-effort.
+- New `lib/env.ts` helpers:
+  - `getAppDomains()` / `getAppDomainsSafe()`
+  - `getSetupEmailEnv()`
+  - `isTwilioNumberPurchaseEnabled()`
+  - `isOwnerTestSetupLinkFallbackEnabled()`
+- New API routes (all server-only, never expose secrets):
+  - `POST /api/setup-requests` — public marketing form target; creates
+    request row, issues token, sends email, supports owner-test fallback.
+    CORS allows `PUBLIC_SITE_URL` only.
+  - `POST /api/onboarding/[token]/clinic` — validates token, persists
+    clinic onboarding details.
+  - `GET /api/onboarding/[token]/numbers?area_code=XXX` — searches Twilio
+    available local US numbers (Voice + SMS).
+  - `POST /api/onboarding/[token]/numbers/purchase` — purchases the
+    selected number iff `TWILIO_NUMBER_PURCHASE_ENABLED=true`, idempotent
+    at clinic level. Stores `clinic_phone_numbers` with
+    `role='office_texting'`.
+- New pages:
+  - `app/setup/[token]/page.tsx` — branches by request status (form,
+    search, status).
+  - `app/setup/[token]/status/page.tsx` — direct status deep link.
+- Public marketing site:
+  - `docs/index.html` form `action` updated to
+    `https://app.missedcallsdental.com/api/setup-requests`, method `post`.
+  - `docs/script.js` submit handler swapped from mailto to a real `fetch`
+    POST. On success, redirects to `confirm.html` (or the URL returned by
+    the API).
+  - `docs/confirm.html` copy updated to match the build guide:
+    “Check your email for your secure setup link. Your office texting
+    number will be selected during setup. Your existing office phone
+    number will not be replaced.”
+- `.env.local.example`:
+  - Added `APP_BASE_URL`, `PUBLIC_SITE_URL`, `RESEND_API_KEY`,
+    `SETUP_EMAIL_FROM`, `TWILIO_NUMBER_PURCHASE_ENABLED=false`,
+    `OWNER_TEST_SETUP_LINK_FALLBACK=false`.
+
+Customer-facing UI strings used verbatim:
+
+- Title: “Choose your office texting number”
+- Subtitle: “This is an additional number for missed-call text follow-ups.
+  It will not replace your existing office phone number.”
+- Button: “Use this number”
+- Success title: “Your office texting number is ready”
+- Status explanation: “Use this number for missed-call forwarding or
+  tracking. Your existing office phone number does not change.”
+
+Safety rules followed:
+
+- No live SMS enabled. `sms_recovery_enabled` stays `false`.
+- `SMS_RECOVERY_MODE` not changed.
+- `TWILIO_NUMBER_PURCHASE_ENABLED` defaults to `false` in env example.
+  Production must explicitly set it to `true` before any real purchase.
+- Setup tokens never logged. Only SHA-256 hashes stored in DB.
+- Setup links built only from the trusted `APP_BASE_URL`.
+- Existing Twilio numbers not deleted or released.
+- Twilio Toll-Free verification not modified.
+- Stripe not touched.
+- `.env.local` not committed.
+
+Migration applied: no (apply manually via Supabase SQL editor with owner
+approval).
+
+Result: automated onboarding code path in place. Verified locally with
+`npm run typecheck` and `npm run build`. Public site form now targets the
+app domain. SMS remains disabled by default. Live SMS still requires
+compliance approval, QA pass, and explicit owner action.

@@ -422,3 +422,60 @@ Short checklist for the operator or agent running this onboarding. Run in order.
 - See `05-sms-rules-and-templates.md` for future SMS templates.
 - See `08-compliance-and-onboarding.md` for the full future onboarding vision.
 - See `OPERATIONS-RUNBOOK.md` Section 11 for the quick DB command reference.
+
+---
+
+## Automated Onboarding Path (added 2026-05-26)
+
+The system now supports an automated onboarding flow for new clinics
+end-to-end. The manual operator path below remains valid as a fallback,
+but the default for any new clinic is the automated flow.
+
+### Automated flow at a glance
+
+1. Owner visits the public marketing site
+   (`https://missedcallsdental.com`) and submits full name + work email.
+2. `POST /api/setup-requests` creates a setup request, issues a secure
+   token (hash stored in DB), and emails a setup link of the form:
+
+   ```
+   https://app.missedcallsdental.com/setup/<setup-token>
+   ```
+
+3. Owner opens the setup link.
+4. Owner fills the clinic setup form (clinic name, legal/business name,
+   main office phone, timezone, owner contact, test patient phone,
+   setup mode).
+5. App searches Twilio for available local US numbers with Voice + SMS
+   capability around the clinic main-office area code.
+6. Owner picks an "office texting number" and clicks **Use this
+   number**.
+7. App purchases the chosen Twilio number (only when
+   `TWILIO_NUMBER_PURCHASE_ENABLED=true`), configures voice + SMS
+   webhooks, and stores the mapping in `clinic_phone_numbers` with
+   `role='office_texting'`.
+8. App shows the **Your office texting number is ready** status page
+   with forwarding and QA instructions.
+
+SMS remains disabled at this point. Live customer SMS still requires:
+
+- Twilio Toll-Free / A2P compliance approval.
+- QA pass (forwarding test, caller-ID preservation, owner-test SMS QA).
+- Explicit owner approval to flip
+  `SMS_RECOVERY_MODE=live` and `clinics.sms_recovery_enabled=true` for
+  that single clinic.
+
+### Test clinic for controlled QA
+
+The test clinic main phone for the controlled Google Voice test is:
+
+```
++12245329257
+```
+
+This is the clinic-side number, **not** a Twilio number. The assigned
+Twilio office texting number is separate. Google Voice must forward
+missed/unanswered calls from this clinic number to the assigned Twilio
+number. The first QA test must verify caller ID preservation: Twilio
+must receive `From` as the test patient phone, not as the Google Voice
+clinic number. If caller ID fails, do not enable SMS for that clinic.
