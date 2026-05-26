@@ -9,10 +9,8 @@ import postgres, { type Sql } from "postgres";
 //
 // The client is created on first call and reused. It does not open a TCP
 // connection at module import time, so `next build` never needs DB access.
-//
-// Production note: when using the Supabase transaction-mode pooler (port 6543),
-// callers should set `prepare: false`. Most callers will use the direct
-// connection (port 5432) and can leave defaults in place.
+// prepare:false is required for Supabase's transaction-mode pooler (port 6543)
+// and is safe for direct connections too.
 
 let cachedClient: Sql | undefined;
 
@@ -37,6 +35,7 @@ export function getDb(): Sql {
     max: 1,
     idle_timeout: 20,
     connect_timeout: 10,
+    prepare: false,
   });
   return cachedClient;
 }
