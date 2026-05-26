@@ -6,12 +6,12 @@ import {
 } from "@/lib/twilio/request";
 import { verifyTwilioSignature } from "@/lib/twilio/signature";
 import { recordWebhookEvent } from "@/lib/db/webhook-events";
-import { isDatabaseConfigured } from "@/lib/db/client";
+import { isDatabaseConfigured, getDb } from "@/lib/db/client";
 import { normalizePhone } from "@/lib/phone/normalize";
 import { lookupClinicByPhone } from "@/lib/db/clinics";
 import { upsertCallEvent } from "@/lib/db/call-events";
-import { getOrCreateConversation } from "@/lib/db/conversations";
-import { sendRecoverySms } from "@/lib/twilio/outbound-sms";
+import { hasSentRecoverySmsSince } from "@/lib/db/messages";
+import { getSmsRecoveryConfig } from "@/lib/env";
 import { logger } from "@/lib/logging/logger";
 
 export const runtime = "nodejs";
@@ -26,15 +26,45 @@ function escapeXml(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
+// Prediction for which greeting to play. Read-only — never sends SMS.
+// Mirrors the guard logic in sendRecoverySms() so the greeting matches
+// what voice/status will do after the call ends.
+type GreetingPrediction = "will_send" | "duplicate" | "none";
+
+async function predictGreeting(
+  from: string,
+  clinicId: string,
+): Promise<GreetingPrediction> {
+  const config = getSmsRecoveryConfig();
+  if (config.mode !== "owner_test" || !config.allowedNumbers.includes(from)) {
+    return "none";
+  }
+
+  // Opt-out check (read-only).
+  const sql = getDb();
+  const optRows = await sql<{ opted_back_in_at: string | null }[]>`
+    select opted_back_in_at from public.opt_outs
+    where clinic_id   = ${clinicId}
+      and phone_number = ${from}
+    limit 1
+  `;
+  if (optRows[0] && optRows[0].opted_back_in_at === null) return "none";
+
+  // Duplicate suppression window check (read-only).
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const alreadySent = await hasSentRecoverySmsSince(clinicId, from, oneDayAgo);
+  return alreadySent ? "duplicate" : "will_send";
+}
+
 function buildVoiceTwiml(
   clinicName: string | null,
-  smsDecision: "will_send" | "duplicate" | "none",
+  prediction: GreetingPrediction,
 ): string {
   const name = clinicName ? escapeXml(clinicName) : "us";
   let message: string;
-  if (smsDecision === "will_send") {
+  if (prediction === "will_send") {
     message = `Thanks for calling ${name}. Sorry we missed you. We'll text you now so you can request an appointment or a call back.`;
-  } else if (smsDecision === "duplicate") {
+  } else if (prediction === "duplicate") {
     message = `Thanks for calling ${name}. Sorry we missed you. We already sent a text, and our team will follow up shortly.`;
   } else {
     message = `Thanks for calling ${name}. Sorry we missed you. Our team will follow up shortly.`;
@@ -45,11 +75,11 @@ function buildVoiceTwiml(
 // Twilio incoming voice webhook.
 //   1. Validate Twilio signature.
 //   2. Record webhook_event idempotently.
-//   3. Upsert call_events row keyed by CallSid.
-//   4. Look up clinic by the dialed (To) number.
-//   5. Get or create patient_conversation.
-//   6. Attempt recovery SMS (all safety guards enforced inside sendRecoverySms).
-//   7. Return polite TwiML: Say + Hangup. Always returned regardless of step 3–6.
+//   3. Upsert call_events row.
+//   4. Read-only prediction: select voice greeting based on current state.
+//   5. Return TwiML quickly. No SMS is sent here.
+//
+// SMS recovery is handled after call completion in voice/status/route.ts.
 export async function POST(request: NextRequest) {
   const url = reconstructTwilioWebhookUrl(request);
   const params = await readTwilioFormPayload(request);
@@ -95,18 +125,14 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Steps 3–6: clinic mapping, call event, conversation, SMS.
-  // All wrapped in a single guard: skip if duplicate or DB not ready.
-  let smsDecision: "will_send" | "duplicate" | "none" = "none";
+  // Steps 3–4: call event + read-only greeting prediction.
+  let prediction: GreetingPrediction = "none";
   let clinicNameForTwiml: string | null = null;
 
   if (!isDuplicate && isDatabaseConfigured() && callSid) {
     try {
-      // Look up clinic by the Twilio number that was dialed.
       const clinic = await lookupClinicByPhone(to);
 
-      // Upsert call_events row. Every inbound call that hits our TwiML is
-      // effectively a missed call — we play a message and hang up.
       await upsertCallEvent({
         clinicId: clinic?.id ?? null,
         callSid,
@@ -120,35 +146,14 @@ export async function POST(request: NextRequest) {
 
       if (clinic && from) {
         clinicNameForTwiml = clinic.name;
-
-        // Establish or find the conversation thread for this patient.
-        const { id: conversationId } = await getOrCreateConversation(
-          clinic.id,
-          from,
-        );
-
-        // Attempt recovery SMS. sendRecoverySms enforces all guards:
-        //   - SMS_RECOVERY_MODE must be owner_test
-        //   - caller must be in SMS_TEST_ALLOWED_TO
-        //   - opt-out check
-        //   - 24-hour duplicate suppression
-        // Guard runs hasSentRecoverySmsSince BEFORE recordOutboundMessage,
-        // so smsResult.sent correctly reflects whether this is the first SMS.
-        const smsResult = await sendRecoverySms({
-          clinic,
-          patientPhone: from,
-          twilioPhone: to,
-          conversationId,
-        });
-
-        if (smsResult.sent) {
-          smsDecision = "will_send";
-        } else if (smsResult.reason === "duplicate_suppressed") {
-          smsDecision = "duplicate";
-        } else {
-          logger.info("twilio.voice.sms_skipped", {
+        // Predict greeting based on read-only state. Non-fatal — fall back to
+        // "none" if prediction fails so TwiML is always returned.
+        try {
+          prediction = await predictGreeting(from, clinic.id);
+        } catch (err) {
+          logger.warn("twilio.voice.prediction_failed", {
             callSid,
-            reason: smsResult.reason,
+            message: err instanceof Error ? err.message : "unknown",
           });
         }
       } else if (!clinic) {
@@ -163,5 +168,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return twimlResponse(buildVoiceTwiml(clinicNameForTwiml, smsDecision));
+  return twimlResponse(buildVoiceTwiml(clinicNameForTwiml, prediction));
 }
