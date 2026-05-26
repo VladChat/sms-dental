@@ -819,3 +819,81 @@ Result: automated onboarding code path in place. Verified locally with
 `npm run typecheck` and `npm run build`. Public site form now targets the
 app domain. SMS remains disabled by default. Live SMS still requires
 compliance approval, QA pass, and explicit owner action.
+
+---
+
+## 2026-05-26 — Onboarding workflow verification pass
+
+Verification-only pass against commit `d9d3402` (`feat: add automated
+clinic onboarding workflow`).
+
+Verified consistent and correct:
+
+- Setup request creation: `POST /api/setup-requests` validates
+  full_name + work_email, inserts a row in `setup_requests`, then either
+  sends the Resend email or (if `OWNER_TEST_SETUP_LINK_FALLBACK=true`)
+  returns the setup link inline.
+- Token generation: `lib/onboarding/tokens.ts` issues 32 random bytes
+  hex-encoded (64-char), persists SHA-256 hash only, expires 72 h after
+  issue, compares constant-time via `timingSafeEqual`.
+- Setup link generation: `buildSetupUrl` uses the trusted `APP_BASE_URL`
+  only; no request-host fallback.
+- Resend email sending: `lib/email/setup-link-email.ts` POSTs the
+  Resend REST API; on non-2xx it throws `SetupEmailDeliveryError` which
+  the route catches, sets `email_status='failed:<status>'`, leaves the
+  request in `requested`, and returns 502 to the caller.
+- Clinic onboarding form: `POST /api/onboarding/[token]/clinic`
+  validates all fields, normalizes phones to E.164, upserts the clinic,
+  sets `setup_status='clinic_details_completed'`, and attaches the
+  clinic to the setup request.
+- Number search: `GET /api/onboarding/[token]/numbers` reads the clinic
+  main-phone area code (or `?area_code=` query) and lists Twilio US
+  local numbers with Voice + SMS capability. Search never purchases.
+- Number purchase safety: route returns 503 when
+  `TWILIO_NUMBER_PURCHASE_ENABLED` is not exactly `"true"`. Idempotent
+  at clinic level: if an active `role='office_texting'` row already
+  exists, returns it without contacting Twilio.
+- Clinic creation/update: `upsertClinicForOnboarding` sets defaults
+  `is_active=true`, `sms_recovery_enabled=false`,
+  `setup_status='clinic_details_completed'` on insert.
+- `clinic_phone_numbers` mapping: `upsertOfficeTextingNumber` writes
+  `role='office_texting'`, `is_active=true`, with the Twilio Phone
+  Number SID. Upsert keyed by unique `phone_number`.
+- SMS off by default: grep across `lib/` and `app/` confirms no code
+  path sets `sms_recovery_enabled = true`. The purchase route only
+  sets `setup_status='number_assigned'`.
+
+False-positive correction from the prior commit's "Blockers" section:
+
+- The earlier report claimed the SMS messaging status webhook route did
+  not yet exist. It does:
+  `app/api/webhooks/twilio/messaging/status/route.ts`. The handler is
+  signature-validated, idempotent on `(MessageSid, MessageStatus)` via
+  `webhook_events.external_id = 'sms_status:<sid>:<status>'`, sends no
+  SMS, and returns a 200 JSON ack. No code change was needed.
+
+Wiring nuance documented in OPERATIONS-RUNBOOK.md:
+
+- Twilio's `incomingPhoneNumbers.create()` does not expose a
+  per-number SMS status callback URL field. The
+  `/api/webhooks/twilio/messaging/status` route receives data when one
+  of the following is true:
+  1. The Messaging Service is configured with that URL as its
+     `statusCallback` (one-time operator action in the Twilio Console
+     or via the Messaging Service API).
+  2. Outbound `messages.create()` is called with a per-message
+     `statusCallback` parameter pointing at the route. The current
+     outbound sender in `lib/twilio/outbound-sms.ts` does not do this
+     today; that's a small future improvement, not a blocker.
+
+Migration applied: no (still pending). The new migration
+`20260526000300_onboarding_setup_requests.sql` has not been applied.
+Apply instructions and verification queries are in OPERATIONS-RUNBOOK.md.
+
+Result:
+
+- `npm run typecheck` passes.
+- `npm run build` passes; all expected routes are emitted (see route
+  table in OPERATIONS-RUNBOOK.md).
+- No live SMS sent. No Twilio settings changed. No Stripe changes.
+- No secrets printed. `.env.local` not committed.
