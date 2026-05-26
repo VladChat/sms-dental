@@ -383,7 +383,7 @@ Default behavior (`SMS_RECOVERY_MODE` unset or `disabled`): **no SMS is ever sen
 - Caller is not opted out (`opt_outs` table)
 - No outbound SMS was sent to this (clinic, caller) pair in the past 24 hours
 
-`live` mode: not yet implemented.
+`live` mode: implemented — requires `SMS_RECOVERY_MODE=live` in Vercel AND `clinics.sms_recovery_enabled=true` per clinic. A2P/toll-free registration must be approved before enabling. See `A2P-10DLC-COMPLIANCE-READINESS.md`.
 
 ### SMS message template
 
@@ -524,9 +524,11 @@ will block SMS because `sms_recovery_enabled=false`.
 2. Confirm `voice.ringing` + `voice.completed` events appear in `webhook_events`.
 3. Confirm no outbound row appears in `messages` (SMS guard blocked it).
 
-### Step 5 — Enable SMS for the clinic (requires owner approval)
+### Step 5 — Enable SMS for the clinic (requires A2P approval + owner approval)
 
-Only after live testing confirms call recording works and owner approves:
+**A2P/toll-free compliance prerequisite:** before enabling live SMS for any real clinic, Twilio Toll-Free Verification (for `+1 844 723 4944`) or 10DLC campaign registration must be approved. Do not set `SMS_RECOVERY_MODE=live` until carrier compliance is confirmed. See `A2P-10DLC-COMPLIANCE-READINESS.md`.
+
+Only after A2P/toll-free is approved, live testing confirms call recording works, and owner approves:
 
 ```sql
 UPDATE public.clinics
@@ -580,11 +582,13 @@ Owner-only SMS recovery: **complete and verified (2026-05-26).**
 Current next step:
 
 ```txt
-Onboard first real clinic using Section 11 procedure.
-SMS_RECOVERY_MODE must be changed to live and sms_recovery_enabled set true
-per clinic before any real patient SMS fires.
-Do not enable live SMS mode until clinic phone strategy is tested and
-owner explicitly approves.
+1. Complete A2P/toll-free registration before enabling live SMS.
+   See MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md for required steps.
+2. Once registration is approved, onboard first real clinic using Section 11 procedure.
+   SMS_RECOVERY_MODE must be changed to live and sms_recovery_enabled set true
+   per clinic before any real patient SMS fires.
+   Do not enable live SMS mode until clinic phone strategy is tested,
+   A2P/toll-free is approved, and owner explicitly approves.
 ```
 
 ---

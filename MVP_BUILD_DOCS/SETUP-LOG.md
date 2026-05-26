@@ -572,19 +572,22 @@ Goal: handle STOP/START/HELP inbound SMS and enforce opt-out in future recovery 
 - `app/api/webhooks/twilio/messaging/incoming/route.ts` — full rewrite with:
   - clinic lookup by `To` number
   - `getOrCreateConversation` + `recordInboundMessage` for all inbound messages
-  - STOP → `upsertOptOut` + TwiML reply
-  - START → `clearOptOut` + TwiML reply
-  - HELP → TwiML reply with clinic name + STOP hint
+  - STOP → `upsertOptOut` (DB write only)
+  - START → `clearOptOut` (DB write only)
+  - HELP → no DB change
   - ordinary replies → stored, no auto-reply
+  - all cases return empty `<Response/>`
 
-### Behavior
+### Behavior (as of double-reply fix — see entry below)
 
-| Keyword | DB write | Reply |
+| Keyword | DB write | TwiML reply |
 |---|---|---|
-| STOP | `opt_outs` upsert (opted_back_in_at cleared) | Unsubscribed confirmation |
-| START | `opt_outs` update (opted_back_in_at set to now()) | Re-subscribed confirmation |
-| HELP | none | Clinic name + STOP hint |
+| STOP | `opt_outs` upsert (opted_back_in_at cleared) | empty `<Response/>` |
+| START | `opt_outs` update (opted_back_in_at set to now()) | empty `<Response/>` |
+| HELP | none | empty `<Response/>` |
 | *(other)* | none | empty `<Response/>` |
+
+Twilio's Messaging Service sends STOP/START/HELP compliance replies at the platform level. Our webhook returns empty `<Response/>` to avoid duplicate replies. See double-reply fix entry below.
 
 All inbound messages stored in `messages` table regardless of keyword.
 
@@ -664,7 +667,30 @@ Current safe health state:
 Current next action:
 
 ```txt
-Onboard first real clinic using OPERATIONS-RUNBOOK.md Section 11.
-Insert clinic row, map Twilio number, verify call recording with SMS off.
-Get owner approval before enabling live SMS mode.
+Complete A2P/10DLC or toll-free registration before enabling live patient SMS.
+See MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md for required steps.
+Once registration is approved, onboard first real clinic using OPERATIONS-RUNBOOK.md Section 11.
 ```
+
+---
+
+## 2026-05-26 — First clinic onboarding package and A2P compliance readiness
+
+### First clinic onboarding package
+
+Created `MVP_BUILD_DOCS/FIRST-CLINIC-ONBOARDING.md` — practical step-by-step guide for safely onboarding the first real clinic under the current MVP backend.
+
+Sections: clinic information intake, two onboarding modes (conditional forwarding vs tracking number), 9-step technical checklist with SQL verification queries, go-live safety checklist, rollback SQL commands, clinic-facing setup instructions draft, internal operator checklist.
+
+### A2P compliance readiness package
+
+Created `MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md` — covers what must be done before live patient SMS, recommended registration path (toll-free verification vs 10DLC), campaign wording templates, sample messages, website checklist, go/no-go checklist, and internal risk notes.
+
+Key finding: current Twilio number (`+1 844 723 4944`) is toll-free. Toll-Free Verification is the fastest path to live patient SMS compliance.
+
+Action required before first real clinic SMS:
+1. Add Terms of Service and Privacy Policy to `missedcallsdental.com`.
+2. Submit Toll-Free Verification in Twilio Console.
+3. Wait for approval (3–7 business days).
+
+No source files changed. No live SMS sent. No Twilio settings changed. No secrets printed.

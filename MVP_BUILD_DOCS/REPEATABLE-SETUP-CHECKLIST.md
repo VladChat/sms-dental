@@ -282,8 +282,6 @@ Known commits:
 ccab9d6 feat: improve missed-call voice greeting copy
 ```
 
-Next: wire inbound SMS STOP/START opt-out enforcement, then plan real clinic onboarding.
-
 ---
 
 ## Phase 8A — SMS timing fix and voice/status callback
@@ -336,20 +334,20 @@ a947323 feat: send missed-call SMS after voice completion
   - [x] Records inbound message (`direction='inbound'`, `detected_keyword`).
   - [x] STOP: calls `upsertOptOut` — future `sendRecoverySms` will be blocked.
   - [x] START: calls `clearOptOut` — future sends permitted again.
-  - [x] HELP: replies with clinic name + STOP hint.
+  - [x] HELP: returns empty `<Response/>` (Twilio platform sends compliance reply).
   - [x] Ordinary replies: stored, no auto-reply (future milestone).
 - [x] Verify `sendRecoverySms` already checks `opt_outs` (it does — no change needed).
 - [x] Run `npm run typecheck`: pass.
 - [x] Run `npm run build`: pass.
 - [x] Deploy and verify `/api/health`.
-- [ ] Live test: send STOP from owner test phone, confirm opt-out row created.
-- [ ] Live test: send START from same phone, confirm opt-out cleared.
-- [ ] Live test: verify next call does not trigger recovery SMS after STOP.
-- [ ] Live test: verify next call resumes recovery SMS after START.
+- [x] Live test: send STOP from owner test phone, confirm opt-out row created.
+- [x] Live test: send START from same phone, confirm opt-out cleared.
+- [x] Live test: verify next call does not trigger recovery SMS after STOP.
+- [x] Live test: verify next call resumes recovery SMS after START.
 
-Current project status: code complete, deployed, awaiting live opt-out test.
+Note: STOP/START/HELP originally returned TwiML `<Message>` replies causing duplicate messages (Twilio platform also sends compliance replies). Fixed in commit `a8d1451` — all keywords now return empty `<Response/>`. DB writes are unchanged.
 
-Known commit: see checklist Phase 9+.
+Current project status: complete (2026-05-26).
 
 ---
 
@@ -375,6 +373,9 @@ Current project status: complete (2026-05-26).
 
 Use OPERATIONS-RUNBOOK.md Section 11 for the step-by-step procedure.
 
+**A2P/toll-free registration is a hard prerequisite before enabling live SMS.** Complete Phase 8E before setting `SMS_RECOVERY_MODE=live`.
+
+- [ ] A2P/toll-free compliance approved (see Phase 8E — must be done before enabling live SMS).
 - [ ] Choose phone event strategy (conditional forwarding or tracking number).
 - [ ] Insert clinic row (`sms_recovery_enabled = false` by default).
 - [ ] Map Twilio number.
@@ -387,6 +388,26 @@ Use OPERATIONS-RUNBOOK.md Section 11 for the step-by-step procedure.
 - [ ] Verify recovery SMS fires after first missed call.
 - [ ] Verify duplicate suppression.
 - [ ] Document clinic slug and phone mapping.
+
+Current project status: not started.
+
+---
+
+## Phase 8E — A2P/10DLC compliance readiness
+
+See `A2P-10DLC-COMPLIANCE-READINESS.md` for full detail, wording, and checklists.
+
+- [ ] Add Terms of Service page to `missedcallsdental.com`.
+- [ ] Add Privacy Policy page to `missedcallsdental.com`.
+- [ ] Add SMS opt-out disclosure to website.
+- [ ] Submit Toll-Free Verification in Twilio Console for `+1 844 723 4944`.
+- [ ] Wait for Twilio approval (typically 3–7 business days).
+- [ ] Confirm approved status before proceeding to Phase 8D SMS enablement.
+
+If using local 10DLC number instead of toll-free:
+- [ ] Register Brand with TCR (EIN, business name, website, vertical).
+- [ ] Register Campaign with TCR (use case, message flow, sample messages, opt-in method).
+- [ ] Link approved Campaign to Twilio number.
 
 Current project status: not started.
 

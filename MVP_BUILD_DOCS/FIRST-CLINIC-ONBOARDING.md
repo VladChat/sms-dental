@@ -6,6 +6,8 @@ Last updated: 2026-05-26
 
 This document covers the practical steps to safely onboard the first real clinic with the current MVP backend.
 
+**A2P/Toll-Free compliance prerequisite:** Before enabling live SMS for any real clinic, Twilio Toll-Free Verification (or 10DLC campaign registration) must be approved. Do not skip this. See `A2P-10DLC-COMPLIANCE-READINESS.md` for the full checklist and action items.
+
 **What the system does today:**
 - Records every inbound call (voice webhook → Supabase `call_events`).
 - Plays a voice greeting and hangs up cleanly.
@@ -234,9 +236,11 @@ Send `START` from the same phone. Verify `opted_back_in_at` is set.
 
 ---
 
-### Step 7 — Enable SMS for the clinic (requires owner approval)
+### Step 7 — Enable SMS for the clinic (requires A2P approval + owner approval)
 
-Only after Steps 4–6 pass AND owner explicitly approves:
+**Before this step:** confirm that A2P/Toll-Free Verification is approved in Twilio. See `A2P-10DLC-COMPLIANCE-READINESS.md` Section 6 (go/no-go checklist). Enabling live SMS without carrier compliance risks silent message filtering for all patients.
+
+Only after A2P/toll-free is approved AND Steps 4–6 pass AND owner explicitly approves:
 
 ```sql
 UPDATE public.clinics
@@ -302,7 +306,7 @@ Before declaring a clinic live for real patient calls:
 - [ ] SMS copy approved by owner: *"Hi, this is {clinic_name}. We missed your call. Would you like us to help schedule an appointment?"*
 - [ ] Voice greeting copy approved by owner
 - [ ] Rollback command noted and ready (see Section 5)
-- [ ] Twilio A2P/10DLC compliance status confirmed (toll-free or local number campaign)
+- [ ] Twilio A2P/10DLC or Toll-Free Verification approved (see `A2P-10DLC-COMPLIANCE-READINESS.md`)
 - [ ] Owner understands system limitations (no reply routing, no dashboard yet)
 
 ---
