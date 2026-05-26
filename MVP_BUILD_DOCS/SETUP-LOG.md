@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 This log records what was done, in order, without storing secrets.
 
@@ -472,6 +472,84 @@ docs: record owner-only SMS recovery test
 
 ---
 
+## 2026-05-26 — Improved voice greeting copy (first-call vs repeat-call)
+
+Goal: play a more informative greeting that tells first-time callers a text is coming.
+
+Fix applied:
+
+- Added `buildVoiceTwiml(clinicName, smsDecision)` to `app/api/webhooks/twilio/voice/incoming/route.ts`.
+- First-call greeting (SMS will send): "Thanks for calling {{clinic_name}}. Sorry we missed you. We'll text you now so you can request an appointment or a call back."
+- Repeat-call greeting (duplicate suppressed): "Thanks for calling {{clinic_name}}. Sorry we missed you. We already sent a text, and our team will follow up shortly."
+- Fallback: "Thanks for calling us. Sorry we missed you. Our team will follow up shortly."
+- XML-escaped clinic name.
+- `npm run typecheck`: pass. `npm run build`: pass.
+
+Commit:
+
+```txt
+ccab9d6 feat: improve missed-call voice greeting copy
+```
+
+Second test phone added to allowlist (`+1847957****`). First live test confirmed first-call greeting played and SMS arrived.
+
+UX issue found: SMS arrived before the caller finished hearing the greeting, because SMS was sent synchronously inside the voice/incoming webhook before TwiML was returned to Twilio. Documented for fix in next entry.
+
+---
+
+## 2026-05-26 — SMS timing fix: send SMS after voice call completes
+
+Problem: SMS arrived on caller's phone while they were still listening to the voice greeting.
+
+Root cause: `sendRecoverySms()` was called synchronously inside `voice/incoming` before TwiML was returned. Twilio does not begin playing `<Say>` until it receives the TwiML response, so any SMS sent during that request fires before the caller hears a word.
+
+Additional finding: `IncomingPhoneNumber.statusCallback` was misconfigured — it pointed to the messaging status URL (`/api/webhooks/twilio/messaging/status`) rather than a voice-specific endpoint. Voice `completed` status callbacks were being sent to the messaging handler, which ignored them.
+
+Fix applied:
+
+- Added `app/api/webhooks/twilio/voice/status/route.ts` — dedicated voice status callback endpoint.
+  - Validates Twilio signature.
+  - Only processes `CallStatus=completed`; other statuses return 200 immediately.
+  - Uses `externalId = "voice:status:${callSid}"` (distinct from ringing event) so Twilio retries are deduplicated without blocking SMS.
+  - Calls `getOrCreateConversation` + `sendRecoverySms` with all guards unchanged.
+  - Returns empty `<Response/>` TwiML.
+- Modified `app/api/webhooks/twilio/voice/incoming/route.ts`:
+  - Removed all SMS sending logic (`getOrCreateConversation`, `sendRecoverySms`).
+  - Added `predictGreeting(from, clinicId)` — read-only mirror of send guards (mode, allowlist, opt-out, 24h window) for selecting which greeting to play. Never creates or sends SMS.
+  - Greeting selection now uses read-only prediction; the authoritative send/skip decision still happens in `sendRecoverySms()` inside `voice/status`.
+- Updated Twilio `IncomingPhoneNumber.statusCallback` via API (not Console) to point to new voice status endpoint.
+
+Reusable test caller documented:
+
+- `+12245329236` (masked: `+122•••••36`) is the designated reusable owner-test caller for first-call live tests.
+- Reset procedure documented in OPERATIONS-RUNBOOK.md Section 11.
+- Reset removes outbound messages, patient conversation, and call events for this caller+clinic pair only.
+- Never resets real/live caller data.
+
+New call timeline after fix:
+
+```
+t=0ms    Twilio POSTs to voice/incoming
+t=~300ms TwiML returned — Twilio plays greeting to caller
+t=~9s    Caller finishes hearing greeting, call ends
+t=~9.5s  Twilio POSTs to voice/status (CallStatus=completed)
+t=~9.8s  sendRecoverySms fires
+t=~11s   SMS arrives on caller's phone
+```
+
+Twilio settings changed: yes — `IncomingPhoneNumber.statusCallback` updated from messaging URL to `/api/webhooks/twilio/voice/status`.
+
+Verification:
+
+- `npm run typecheck`: pass.
+- `npm run build`: pass.
+- Deployed to Production.
+- `/api/health`: pass.
+
+Commit: see below.
+
+---
+
 ## Current state summary
 
 Current live backend:
@@ -486,11 +564,16 @@ Current safe health state:
 - `/api/internal/health`: pass.
 - `db.ok`: true.
 - Inbound SMS webhook: verified.
-- Inbound voice webhook: verified end-to-end. Callers hear a polite acknowledgement and the call ends cleanly.
+- Inbound voice webhook: verified end-to-end.
+  - Callers hear a contextual greeting (first-call or repeat-call) and the call ends cleanly.
+  - SMS recovery is sent AFTER the call ends via voice/status callback.
+  - First-call greeting: "Thanks for calling {{clinic_name}}. Sorry we missed you. We'll text you now…"
+  - Repeat-call greeting: "Thanks for calling {{clinic_name}}. Sorry we missed you. We already sent a text…"
 - Clinic mapping: `Owner Test Dental Office` mapped to `+18447234944` in DB.
-- Outbound SMS: owner-test mode active. End-to-end delivery confirmed. Duplicate suppression confirmed.
-- Inbound SMS reply handling: recorded in `webhook_events` only; full reply flow is a future milestone.
+- Outbound SMS: owner-test mode active. SMS now sent after call completion, not during incoming webhook.
+- Duplicate suppression: confirmed working.
 - Broad/live SMS: disabled.
+- Twilio `statusCallback`: `/api/webhooks/twilio/voice/status` (updated 2026-05-26).
 
 Current next action:
 

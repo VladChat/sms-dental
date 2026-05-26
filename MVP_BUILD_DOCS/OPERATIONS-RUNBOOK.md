@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -238,19 +238,36 @@ Do not change nameservers. Do not change root apex or `www` records without expl
 Current live webhook URLs:
 
 ```txt
-Voice incoming: https://app.missedcallsdental.com/api/webhooks/twilio/voice/incoming
-Inbound SMS:    https://app.missedcallsdental.com/api/webhooks/twilio/messaging/incoming
-SMS status:     https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status
+Voice incoming:      https://app.missedcallsdental.com/api/webhooks/twilio/voice/incoming
+Voice status (new):  https://app.missedcallsdental.com/api/webhooks/twilio/voice/status
+Inbound SMS:         https://app.missedcallsdental.com/api/webhooks/twilio/messaging/incoming
+SMS status:          https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status
 ```
+
+Current Twilio IncomingPhoneNumber webhook fields:
+
+- `voiceUrl` → `/api/webhooks/twilio/voice/incoming`
+- `voiceMethod` → `POST`
+- `statusCallback` → `/api/webhooks/twilio/voice/status` (updated 2026-05-26; was previously pointing to messaging/status by mistake)
+- `statusCallbackMethod` → `POST`
+- `smsUrl` → `/api/webhooks/twilio/messaging/incoming`
+- `smsMethod` → `POST`
 
 Current behavior:
 
 - Unsigned manual POST returns `403`, which is correct.
 - Twilio-signed requests pass validation.
 - Inbound SMS: verified.
-- Inbound voice: verified. Returns polite `<Say>` + `<Hangup/>` TwiML. Callers hear an acknowledgement then the call ends cleanly.
-- Handlers record idempotent `webhook_events` rows.
-- Handlers do not send outbound SMS.
+- Inbound voice: verified. Returns dynamic `<Say>` + `<Hangup/>` TwiML. Callers hear a first-call or repeat-call greeting then the call ends cleanly.
+- `voice/incoming` handler: validates signature, records `webhook_events`, upserts `call_events`, performs read-only greeting prediction, returns TwiML. Does NOT send SMS.
+- `voice/status` handler: receives `CallStatus=completed` after the call ends, validates signature, records `webhook_events` (keyed `voice:status:<CallSid>`), looks up clinic, calls `sendRecoverySms()`. SMS is sent here, not in voice/incoming.
+- Duplicate Twilio retries of either endpoint are deduplicated by `webhook_events` unique constraint.
+
+Voice greeting logic (read-only prediction in voice/incoming):
+
+- `will_send` (first call, SMS eligible): "Thanks for calling {{clinic_name}}. Sorry we missed you. We'll text you now so you can request an appointment or a call back."
+- `duplicate` (24h window, SMS suppressed): "Thanks for calling {{clinic_name}}. Sorry we missed you. We already sent a text, and our team will follow up shortly."
+- `none` (no clinic / gated / error): "Thanks for calling us. Sorry we missed you. Our team will follow up shortly."
 
 Current phone number and Messaging Service webhook fields were updated through Twilio API and verified by API read-back.
 
@@ -266,21 +283,24 @@ Configured fields:
 - Messaging Service `inboundMethod`
 - Messaging Service `statusCallback`
 
-### Voice webhook verification (completed 2026-05-26)
+### Voice webhook verification (updated 2026-05-26)
 
-Verified end-to-end after Twilio account upgrade from Trial to Active:
+Current end-to-end flow for each inbound call:
 
-1. Inbound call hits `+1 844 723 4944` → Twilio fires POST to voice webhook URL.
-2. Vercel processes request: validates Twilio signature, records `voice.ringing` in `webhook_events`, returns TwiML.
-3. Supabase `webhook_events` receives a row keyed as `voice:<CallSid>`.
-4. Caller hears: "Thanks for calling. We missed your call and will be in touch shortly. Goodbye." then call ends.
+1. Inbound call hits `+1 844 723 4944` → Twilio fires POST to `voiceUrl` (`voice/incoming`).
+2. `voice/incoming`: validates signature, records `voice.ringing` in `webhook_events`, upserts `call_events`, performs read-only greeting prediction, returns `<Say>+<Hangup/>` TwiML. No SMS sent.
+3. Caller hears the appropriate greeting (first-call or repeat-call) then the call ends.
+4. Twilio fires POST to `statusCallback` (`voice/status`) with `CallStatus=completed`.
+5. `voice/status`: validates signature, records `voice.completed` (keyed `voice:status:<CallSid>`), looks up clinic, calls `sendRecoverySms()`. SMS fires here, after the call ends.
 
 To re-verify after any change:
 
 1. Make one inbound call to the Twilio number.
 2. Check Vercel logs for `POST /api/webhooks/twilio/voice/incoming` → expect HTTP 200.
-3. Query `webhook_events` where `provider = 'twilio'` and `event_type like 'voice.%'`.
-4. Confirm no outbound SMS was sent.
+3. Check Vercel logs for `POST /api/webhooks/twilio/voice/status` → expect HTTP 200.
+4. Query `webhook_events` for `event_type = 'voice.ringing'` and `event_type = 'voice.completed'` for the same call.
+5. If `SMS_RECOVERY_MODE=owner_test` and caller is allowlisted: confirm one `messages` row created and SMS delivered.
+6. Confirm no outbound SMS was sent during the `voice/incoming` request (only during `voice/status`).
 
 ---
 
@@ -332,6 +352,18 @@ git diff --cached --name-only
 ---
 
 ## 9. Outbound SMS Recovery — Owner Test Mode
+
+### When SMS is sent
+
+SMS is now sent AFTER the voice call ends, not during the incoming webhook.
+
+Flow:
+1. `voice/incoming` fires when the call starts — returns TwiML, no SMS.
+2. Caller hears the greeting, call ends.
+3. `voice/status` fires when Twilio sends `CallStatus=completed`.
+4. `sendRecoverySms()` is called from `voice/status`.
+
+This ensures the caller hears the full greeting before any SMS arrives on their phone.
 
 ### Safety model
 
@@ -387,11 +419,11 @@ Current test mapping:
 
 ## 10. Current Next Step
 
-Owner-only SMS recovery test: **complete and verified (2026-05-26).**
+Owner-only SMS recovery: **complete and verified (2026-05-26).**
 
-- First call: SMS delivered to owner phone. `call_events`, `patient_conversations`, `messages` all created. ✓
-- Duplicate suppression: second call within 24h produced no second SMS. ✓
-- `SMS_RECOVERY_MODE=owner_test` and `SMS_TEST_ALLOWED_TO` are set in Vercel Production.
+- SMS timing fix deployed: SMS now sends after call completion via `voice/status` callback.
+- First-call and repeat-call greetings verified end-to-end.
+- Duplicate suppression: confirmed.
 
 Current next step:
 
@@ -401,3 +433,83 @@ Then plan real clinic onboarding: conditional forwarding or tracking number mode
 ```
 
 Do not enable `live` SMS mode until opt-out enforcement, clinic onboarding, and explicit owner approval are complete.
+
+---
+
+## 11. Reusable Test Caller Reset Procedure
+
+### Purpose
+
+Before first-call live tests, reset the designated test caller so the next call behaves like a brand-new missed caller (clears duplicate suppression window and prior conversation state).
+
+### Designated resettable test caller
+
+```txt
++12245329236  (masked in reports as +122•••••36)
+```
+
+This number must be in `SMS_TEST_ALLOWED_TO` before testing.
+
+### Scope constraints
+
+- Reset affects ONLY `+12245329236` at Owner Test Dental Office (slug: `owner-test`, clinic id: `e9f21de4-3a35-4216-bb16-66ea3aeb2e47`).
+- Never reset real clinic callers.
+- Never reset all callers at once.
+- Never run with `live` SMS mode.
+- Run SQL directly via Supabase admin SQL editor or local admin DB connection (`SUPABASE_DB_DIRECT_URL`). Never expose as a public API endpoint.
+
+### Reset SQL
+
+```sql
+-- Reset reusable owner-test caller before first-call live tests.
+-- Target: +12245329236 at Owner Test Dental Office (slug: owner-test)
+-- SAFETY: only deletes rows for this exact caller and this exact test clinic.
+-- NEVER run against real clinic callers or with live SMS mode enabled.
+
+DO $$
+DECLARE
+  v_clinic_id uuid;
+  v_phone     text := '+12245329236';
+  v_slug      text := 'owner-test';
+BEGIN
+  SELECT id INTO v_clinic_id FROM public.clinics WHERE slug = v_slug;
+  IF v_clinic_id IS NULL THEN
+    RAISE EXCEPTION 'Clinic slug % not found — aborting reset', v_slug;
+  END IF;
+
+  -- 1. Delete outbound messages — clears 24h duplicate suppression window.
+  DELETE FROM public.messages
+  WHERE clinic_id  = v_clinic_id
+    AND to_number  = v_phone
+    AND direction  = 'outbound';
+
+  -- 2. Delete patient conversation — allows fresh conversation on next call.
+  DELETE FROM public.patient_conversations
+  WHERE clinic_id    = v_clinic_id
+    AND patient_phone = v_phone;
+
+  -- 3. Delete call events for this test caller at this clinic.
+  DELETE FROM public.call_events
+  WHERE clinic_id   = v_clinic_id
+    AND from_number = v_phone;
+
+  RAISE NOTICE 'Reset complete for % at clinic % (%)',
+    v_phone, v_slug, v_clinic_id;
+END $$;
+```
+
+`webhook_events` are keyed by `CallSid` (not phone number) and do not need to be deleted. Each new call has a new `CallSid`.
+
+### Verify reset
+
+```sql
+SELECT COUNT(*) FROM public.messages
+WHERE to_number = '+12245329236' AND direction = 'outbound';
+-- Expected: 0
+
+SELECT COUNT(*) FROM public.patient_conversations
+WHERE patient_phone = '+12245329236';
+-- Expected: 0
+```
+
+After reset passes, proceed with the first-call live test.

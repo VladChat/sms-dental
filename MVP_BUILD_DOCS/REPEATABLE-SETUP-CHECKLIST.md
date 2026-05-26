@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Repeatable setup checklist for this project and future similar SaaS projects  
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 Use this checklist when repeating the same pattern for another client/project.
 
@@ -264,6 +264,7 @@ Current project status: complete.
 - [x] Confirmed SMS delivered to owner phone.
 - [x] Confirmed duplicate suppression (second call within 24h → no second SMS).
 - [x] Document exact SMS copy.
+- [x] Fix SMS timing: move SMS send to voice/status callback after call ends (Phase 8A below).
 - [ ] Confirm Twilio/TCR/toll-free compliance status before enabling live mode.
 
 SMS copy:
@@ -272,15 +273,47 @@ SMS copy:
 Hi, this is {{clinic_name}}. We missed your call. Would you like us to help schedule an appointment?
 ```
 
-Current project status: owner-test mode complete and verified (2026-05-26).
+Current project status: owner-test mode complete and verified (2026-05-26). SMS timing fix applied.
 
 Known commits:
 
 ```txt
 4033903 feat: add owner-only missed call SMS flow
+ccab9d6 feat: improve missed-call voice greeting copy
 ```
 
 Next: wire inbound SMS STOP/START opt-out enforcement, then plan real clinic onboarding.
+
+---
+
+## Phase 8A — SMS timing fix and voice/status callback
+
+- [x] Add `app/api/webhooks/twilio/voice/status/route.ts`.
+  - [x] Validates Twilio signature.
+  - [x] Only processes `CallStatus=completed`; other statuses return 200 silently.
+  - [x] Uses `externalId = "voice:status:${callSid}"` (distinct from ringing event).
+  - [x] Calls `getOrCreateConversation` + `sendRecoverySms` with all guards unchanged.
+  - [x] Returns empty `<Response/>` TwiML.
+- [x] Remove SMS sending from `voice/incoming`.
+- [x] Add read-only greeting prediction to `voice/incoming`.
+  - [x] Prediction mirrors guard logic (mode, allowlist, opt-out, 24h window).
+  - [x] Prediction is read-only — never writes or sends.
+- [x] Update Twilio `IncomingPhoneNumber.statusCallback` via API to point to voice/status URL.
+- [x] Confirm voice/status callback fires after call completion.
+- [x] Confirm SMS arrives after, not during, the voice greeting.
+- [x] Document reusable test caller reset procedure.
+
+Reusable resettable test caller:
+
+```txt
++12245329236
+```
+
+Reset procedure: see OPERATIONS-RUNBOOK.md Section 11.
+
+Current project status: complete.
+
+Known commit: see Phase 9 or later entries.
 
 ---
 
