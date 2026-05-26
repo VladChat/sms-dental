@@ -467,6 +467,106 @@ ORDER BY created_at DESC LIMIT 10;
 
 ---
 
+## 11. First Clinic Onboarding Procedure
+
+Use this procedure to safely add a real clinic to the system.  
+**Do not skip the SMS enable step — new clinics default to SMS off.**
+
+### Prerequisites
+
+- Clinic has chosen a phone event strategy (conditional forwarding or tracking number — see Section 1).
+- Twilio number for the clinic is provisioned and webhook URLs are set.
+- `SMS_RECOVERY_MODE` is still `owner_test` or `disabled` until live mode is approved.
+
+### Step 1 — Insert clinic row
+
+```sql
+INSERT INTO public.clinics (name, slug, timezone, is_active, sms_recovery_enabled)
+VALUES (
+  'Acme Dental',           -- clinic display name, used in recovery SMS body
+  'acme-dental',           -- internal slug, lowercase-hyphenated, used in logs
+  'America/Chicago',       -- IANA timezone
+  true,                    -- is_active: false = full kill switch
+  false                    -- sms_recovery_enabled: always false on insert
+);
+```
+
+`sms_recovery_enabled = false` is the safe default. No SMS will be sent until Step 5.
+
+### Step 2 — Map Twilio number
+
+```sql
+INSERT INTO public.clinic_phone_numbers (clinic_id, phone_number, twilio_phone_number_sid, role, is_active)
+VALUES (
+  (SELECT id FROM public.clinics WHERE slug = 'acme-dental'),
+  '+1XXXXXXXXXX',          -- E.164 Twilio number assigned to this clinic
+  'PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',  -- Twilio Phone Number SID (optional)
+  'recovery',              -- role hint
+  true
+);
+```
+
+### Step 3 — Verify SMS is off by default
+
+```sql
+SELECT slug, is_active, sms_recovery_enabled
+FROM public.clinics
+WHERE slug = 'acme-dental';
+-- Expected: is_active=true, sms_recovery_enabled=false
+```
+
+`lookupClinicByPhone` will find the clinic for call recording but `sendRecoverySms` Guard 2
+will block SMS because `sms_recovery_enabled=false`.
+
+### Step 4 — Verify inbound call recording (no SMS)
+
+1. Make a test call to the clinic Twilio number.
+2. Confirm `voice.ringing` + `voice.completed` events appear in `webhook_events`.
+3. Confirm no outbound row appears in `messages` (SMS guard blocked it).
+
+### Step 5 — Enable SMS for the clinic (requires owner approval)
+
+Only after live testing confirms call recording works and owner approves:
+
+```sql
+UPDATE public.clinics
+SET sms_recovery_enabled = true
+WHERE slug = 'acme-dental';
+```
+
+Also requires `SMS_RECOVERY_MODE=live` in Vercel env vars and redeployment before SMS fires.
+
+### Step 6 — Verify STOP/START opt-out
+
+1. Send STOP from a test phone to the clinic Twilio number.
+2. Confirm `opt_outs` row is written with `opted_back_in_at = null`.
+3. Make a missed call — confirm no recovery SMS arrives.
+4. Send START — confirm `opted_back_in_at` is set.
+5. Make another missed call — confirm recovery SMS arrives.
+
+### Step 7 — Disable or roll back a clinic
+
+**Disable SMS only** (keep call recording):
+```sql
+UPDATE public.clinics SET sms_recovery_enabled = false WHERE slug = 'acme-dental';
+```
+Takes effect immediately — no redeploy needed.
+
+**Disable clinic entirely** (stops all lookups, no call recording):
+```sql
+UPDATE public.clinics SET is_active = false WHERE slug = 'acme-dental';
+```
+
+**Remove phone mapping** (stops routing without deleting clinic):
+```sql
+UPDATE public.clinic_phone_numbers SET is_active = false
+WHERE phone_number = '+1XXXXXXXXXX';
+```
+
+All three are instant and reversible. No code change or redeploy required.
+
+---
+
 ## 12. Current Next Step
 
 Owner-only SMS recovery: **complete and verified (2026-05-26).**
@@ -474,14 +574,17 @@ Owner-only SMS recovery: **complete and verified (2026-05-26).**
 - SMS timing fix deployed: SMS now sends after call completion via `voice/status` callback.
 - First-call and repeat-call greetings verified end-to-end.
 - Duplicate suppression: confirmed.
-
-Inbound SMS opt-out enforcement: **complete (2026-05-26).**
+- Inbound SMS opt-out enforcement: complete (2026-05-26).
+- Clinic onboarding safety gate: complete (2026-05-26).
 
 Current next step:
 
 ```txt
-Plan real clinic onboarding: conditional forwarding or tracking number mode.
-Do not enable live SMS mode until clinic onboarding and explicit owner approval are complete.
+Onboard first real clinic using Section 11 procedure.
+SMS_RECOVERY_MODE must be changed to live and sms_recovery_enabled set true
+per clinic before any real patient SMS fires.
+Do not enable live SMS mode until clinic phone strategy is tested and
+owner explicitly approves.
 ```
 
 ---

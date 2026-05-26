@@ -4,6 +4,7 @@ export type ClinicRow = {
   id: string;
   name: string;
   is_active: boolean;
+  sms_recovery_enabled: boolean;
 };
 
 // Look up the active clinic that owns a given E.164 phone number.
@@ -14,7 +15,7 @@ export async function lookupClinicByPhone(
   if (!phoneNumber) return null;
   const sql = getDb();
   const rows = await sql<ClinicRow[]>`
-    select c.id, c.name, c.is_active
+    select c.id, c.name, c.is_active, c.sms_recovery_enabled
     from public.clinics c
     join public.clinic_phone_numbers cpn on cpn.clinic_id = c.id
     where cpn.phone_number = ${phoneNumber}

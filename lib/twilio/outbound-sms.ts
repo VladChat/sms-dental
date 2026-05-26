@@ -9,7 +9,7 @@ import { touchConversation } from "../db/conversations";
 import { logger } from "../logging/logger";
 
 export type SendRecoverySmsInput = {
-  clinic: { id: string; name: string };
+  clinic: { id: string; name: string; sms_recovery_enabled: boolean };
   patientPhone: string;
   twilioPhone: string;
   conversationId: string | null;
@@ -27,28 +27,38 @@ export type SendRecoverySmsResult =
 export async function sendRecoverySms(
   input: SendRecoverySmsInput,
 ): Promise<SendRecoverySmsResult> {
-  // Guard 1: SMS_RECOVERY_MODE must be owner_test.
-  // Default is "disabled", so no SMS is ever sent unless explicitly configured.
+  // Guard 1: SMS_RECOVERY_MODE must be owner_test or live.
+  // Default is "disabled" — no SMS is ever sent unless explicitly configured.
   const config = getSmsRecoveryConfig();
-  if (config.mode !== "owner_test") {
+  if (config.mode !== "owner_test" && config.mode !== "live") {
     return { sent: false, reason: `sms_mode_${config.mode}` };
   }
 
-  // Guard 2: patient phone must be in the explicit allowlist.
-  if (!config.allowedNumbers.includes(input.patientPhone)) {
+  // Guard 2 (live mode only): clinic must have sms_recovery_enabled = true.
+  // New clinics default to false — safe until explicitly onboarded.
+  // In owner_test mode the allowlist is the gate; this flag is not checked.
+  if (config.mode === "live" && !input.clinic.sms_recovery_enabled) {
+    logger.info("twilio.sms.skipped_clinic_disabled", {
+      clinicId: input.clinic.id,
+    });
+    return { sent: false, reason: "clinic_sms_disabled" };
+  }
+
+  // Guard 3 (owner_test mode only): patient phone must be in the explicit allowlist.
+  if (config.mode === "owner_test" && !config.allowedNumbers.includes(input.patientPhone)) {
     logger.info("twilio.sms.skipped_not_allowlisted", {
       clinicId: input.clinic.id,
     });
     return { sent: false, reason: "caller_not_allowlisted" };
   }
 
-  // Guard 3: opt-out check.
+  // Guard 4: opt-out check.
   const isOptedOut = await isPhoneOptedOut(input.clinic.id, input.patientPhone);
   if (isOptedOut) {
     return { sent: false, reason: "opted_out" };
   }
 
-  // Guard 4: duplicate suppression — no repeat SMS within 24 hours.
+  // Guard 5: duplicate suppression — no repeat SMS within 24 hours.
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const alreadySent = await hasSentRecoverySmsSince(
     input.clinic.id,
