@@ -17,7 +17,30 @@ import { logger } from "@/lib/logging/logger";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const VOICE_TWIML = `<Response><Say voice="alice">Thanks for calling. We missed your call and will be in touch shortly. Goodbye.</Say><Hangup/></Response>`;
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function buildVoiceTwiml(
+  clinicName: string | null,
+  smsDecision: "will_send" | "duplicate" | "none",
+): string {
+  const name = clinicName ? escapeXml(clinicName) : "us";
+  let message: string;
+  if (smsDecision === "will_send") {
+    message = `Thanks for calling ${name}. Sorry we missed you. We'll text you now so you can request an appointment or a call back.`;
+  } else if (smsDecision === "duplicate") {
+    message = `Thanks for calling ${name}. Sorry we missed you. We already sent a text, and our team will follow up shortly.`;
+  } else {
+    message = `Thanks for calling ${name}. Sorry we missed you. Our team will follow up shortly.`;
+  }
+  return `<Response><Say voice="alice">${message}</Say><Hangup/></Response>`;
+}
 
 // Twilio incoming voice webhook.
 //   1. Validate Twilio signature.
@@ -74,6 +97,9 @@ export async function POST(request: NextRequest) {
 
   // Steps 3–6: clinic mapping, call event, conversation, SMS.
   // All wrapped in a single guard: skip if duplicate or DB not ready.
+  let smsDecision: "will_send" | "duplicate" | "none" = "none";
+  let clinicNameForTwiml: string | null = null;
+
   if (!isDuplicate && isDatabaseConfigured() && callSid) {
     try {
       // Look up clinic by the Twilio number that was dialed.
@@ -93,6 +119,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (clinic && from) {
+        clinicNameForTwiml = clinic.name;
+
         // Establish or find the conversation thread for this patient.
         const { id: conversationId } = await getOrCreateConversation(
           clinic.id,
@@ -104,6 +132,8 @@ export async function POST(request: NextRequest) {
         //   - caller must be in SMS_TEST_ALLOWED_TO
         //   - opt-out check
         //   - 24-hour duplicate suppression
+        // Guard runs hasSentRecoverySmsSince BEFORE recordOutboundMessage,
+        // so smsResult.sent correctly reflects whether this is the first SMS.
         const smsResult = await sendRecoverySms({
           clinic,
           patientPhone: from,
@@ -111,7 +141,11 @@ export async function POST(request: NextRequest) {
           conversationId,
         });
 
-        if (!smsResult.sent) {
+        if (smsResult.sent) {
+          smsDecision = "will_send";
+        } else if (smsResult.reason === "duplicate_suppressed") {
+          smsDecision = "duplicate";
+        } else {
           logger.info("twilio.voice.sms_skipped", {
             callSid,
             reason: smsResult.reason,
@@ -129,5 +163,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return twimlResponse(VOICE_TWIML);
+  return twimlResponse(buildVoiceTwiml(clinicNameForTwiml, smsDecision));
 }
