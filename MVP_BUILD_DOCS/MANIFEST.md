@@ -20,6 +20,7 @@ Operational documentation:
 - `FIRST-CLINIC-ONBOARDING.md` — step-by-step procedure for safely onboarding the first real clinic.
 - `A2P-10DLC-COMPLIANCE-READINESS.md` — A2P/toll-free compliance requirements before live patient SMS.
 - `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md` — copy-ready Twilio Toll-Free Verification submission packet.
+- `ONBOARDING-WORKFLOW-BUILD-GUIDE.md` — source of truth for the automated clinic onboarding workflow (`/setup/[token]`, office texting number selection, Twilio purchase, webhooks).
 
 Core package files:
 

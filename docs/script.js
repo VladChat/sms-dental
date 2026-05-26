@@ -114,7 +114,7 @@
     });
   }
 
-  /* ---------- Trial / setup form (used on index) ---------- */
+  /* ---------- Setup-request form (POSTs to app.missedcallsdental.com) ---------- */
   var form = document.getElementById('trial-form');
   if (form) {
     var trialError = document.getElementById('trial-error');
@@ -122,6 +122,13 @@
       if (!trialError) return;
       trialError.textContent = message || '';
       trialError.hidden = !message;
+    }
+    var submitBtn = form.querySelector('button[type="submit"]');
+    var submitDefaultLabel = submitBtn ? submitBtn.textContent : 'Send setup link';
+    function setSubmitting(state) {
+      if (!submitBtn) return;
+      submitBtn.disabled = !!state;
+      submitBtn.textContent = state ? 'Sending…' : submitDefaultLabel;
     }
 
     var nameInput = document.getElementById('full-name');
@@ -146,23 +153,38 @@
         return;
       }
       setTrialError('');
-      var subject = encodeURIComponent('Setup link request');
-      var body = encodeURIComponent(
-        'Hi,\n\nPlease send a setup link for Missed Calls Dental.\n\n' +
-        'Name: ' + name + '\n' +
-        'Work email: ' + email + '\n\nThank you.'
-      );
-      // Trigger mail client in a way that does not navigate the current page.
-      var mailLink = document.createElement('a');
-      mailLink.href = 'mailto:support@missedcallsdental.com?subject=' + subject + '&body=' + body;
-      mailLink.style.display = 'none';
-      document.body.appendChild(mailLink);
-      mailLink.click();
-      document.body.removeChild(mailLink);
-      // Show the branded confirmation page.
-      window.setTimeout(function () {
-        window.location.href = 'confirm.html';
-      }, 180);
+      setSubmitting(true);
+
+      var actionUrl = form.getAttribute('action') || '';
+      var confirmUrl = form.getAttribute('data-confirm-url') || 'confirm.html';
+
+      fetch(actionUrl, {
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ full_name: name, work_email: email }),
+      })
+        .then(function (res) {
+          return res.json().catch(function () { return null; }).then(function (data) {
+            return { ok: res.ok, status: res.status, data: data };
+          });
+        })
+        .then(function (result) {
+          if (!result.ok) {
+            var msg = (result.data && result.data.error && result.data.error.message)
+              || 'We could not send your setup link right now. Please try again in a moment.';
+            setTrialError(msg);
+            setSubmitting(false);
+            return;
+          }
+          var nextUrl = (result.data && result.data.confirm_url) || confirmUrl;
+          window.location.href = nextUrl;
+        })
+        .catch(function () {
+          setTrialError('We could not reach the server. Please try again in a moment.');
+          setSubmitting(false);
+        });
     });
   }
 })();

@@ -471,3 +471,46 @@ Before giving an agent a task, confirm:
 - [ ] Does this task create durable operational knowledge that should update operations docs?
 
 If any production system changes, ask for explicit approval first.
+
+---
+
+## Phase — Automated clinic onboarding
+
+Reusable pattern for any future SaaS that onboards business customers
+through an email-first link, with a server-side third-party number
+purchase as part of setup.
+
+Lessons applied here:
+
+- Public marketing form on apex domain (`docs/`) does a CORS `POST` to
+  the app domain (`app.*`). Never let the static site try to call
+  third-party APIs directly.
+- Setup links are composed from a single trusted env var
+  (`APP_BASE_URL`). Never use the request `Host` header.
+- Setup tokens are 32 random bytes hex-encoded, SHA-256 hashed in DB,
+  with a fixed 72-hour expiry and constant-time comparison.
+- Database column is named `setup_token_hash`, never `setup_token`.
+- Third-party purchases (Twilio numbers) are gated by a boolean env
+  flag (`TWILIO_NUMBER_PURCHASE_ENABLED=true`). Search is always
+  allowed; purchase requires the flag.
+- Purchase routes are idempotent at the tenant level: if the tenant
+  already has an active assignment, return it without contacting the
+  provider.
+- Public-facing wording for the assigned number is "office texting
+  number" — never the internal billing/role term.
+- Confirmation page tells the user the existing office phone number is
+  not replaced.
+- Live customer SMS stays disabled after onboarding. Production go-live
+  requires compliance approval, QA pass, owner approval, and an
+  explicit mode flag.
+
+Required env names for this pattern:
+
+```
+APP_BASE_URL
+PUBLIC_SITE_URL
+RESEND_API_KEY
+SETUP_EMAIL_FROM
+TWILIO_NUMBER_PURCHASE_ENABLED
+OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
+```
