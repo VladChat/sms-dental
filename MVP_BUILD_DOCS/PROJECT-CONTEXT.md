@@ -14,21 +14,14 @@ This document summarizes the product goal, repository structure, implementation 
 - **Internal project name sometimes used:** Dental SMS
 - **Primary domain:** `https://missedcallsdental.com`
 - **Product type:** B2B SaaS for small dental clinics
-- **Primary customer:** Small dental clinics and dental offices with front desk call volume
+- **Primary customer:** Small independent dental offices with front desk call volume
 - **Primary business goal:** Help dental offices recover missed patient calls and convert them into appointment opportunities.
 
 ---
 
 ## 2. Core Problem
 
-Dental offices miss phone calls.
-
-A missed phone call can mean:
-
-- a lost new patient
-- a delayed appointment request
-- extra manual follow-up work for the front desk
-- lower trust if the patient never hears back
+Dental offices miss phone calls. Missed calls can mean lost new patients, delayed appointment requests, extra front-desk work, and lower trust if the patient never hears back.
 
 Many patients do not call back after a missed call. The product acts as a missed-call recovery layer.
 
@@ -36,23 +29,87 @@ Many patients do not call back after a missed call. The product acts as a missed
 
 ## 3. Core Solution
 
-Missed Calls Dental detects missed call events and sends a professional SMS follow-up to the caller.
-
-The product should behave like a simple, trustworthy recovery assistant for the dental front desk.
+Missed Calls Dental sends a professional SMS follow-up after a call event reaches our system.
 
 Core idea:
 
-`missed call -> verified backend event -> safe SMS follow-up -> patient reply -> front desk follow-up -> booked/lost outcome`
+`call event -> verified backend event -> safe SMS follow-up -> patient reply -> front desk follow-up -> booked/lost outcome`
 
 The product is not an AI receptionist in the MVP. It is not a dental CRM. It is not a PMS integration. It is not a phone system replacement.
 
+Important clarification:
+
+Missed Calls Dental cannot automatically detect calls to an unrelated clinic phone number. A call must reach the system through one of the supported phone event strategies below.
+
 ---
 
-## 4. MVP Scope
+## 4. MVP Phone Event Strategy
+
+The MVP supports two practical ways for a dental office call to reach our system, plus a hybrid option.
+
+### Option A — Conditional forwarding mode
+
+The clinic keeps its existing main phone number.
+
+The clinic or its phone provider configures no-answer, busy, unavailable, or after-hours forwarding to the assigned Twilio recovery number.
+
+Flow:
+
+`patient calls clinic main number -> clinic misses / busy / after-hours -> clinic phone provider forwards call to Twilio number -> Twilio webhook -> backend event -> SMS recovery`
+
+This is the preferred MVP path for clinics that want to keep their main published number.
+
+Requirements:
+
+- The clinic's phone provider must support conditional forwarding.
+- The forwarded call should preserve the original caller ID. If `From` becomes the clinic number instead of the patient number, SMS recovery cannot reliably message the patient.
+- Voicemail should not answer before forwarding happens.
+
+### Option B — Tracking number mode
+
+The clinic uses the assigned Twilio number as a dedicated tracking/recovery number.
+
+The clinic can publish this number on:
+
+- a campaign landing page
+- Google Ads
+- print mailers
+- a website CTA
+- a special promotion or new-patient campaign
+
+Flow:
+
+`patient calls tracking number -> Twilio webhook -> backend event -> SMS recovery`
+
+This is simpler technically because the call reaches Twilio directly. It may be useful for ads or campaigns even if the clinic does not want to change its main phone system.
+
+### Option C — Hybrid mode
+
+The clinic can use both:
+
+- main clinic number with no-answer/busy forwarding to the Twilio recovery number
+- dedicated Twilio tracking number for selected campaigns or channels
+
+This may be the most practical setup for early customers.
+
+### Future direction — direct provider integrations
+
+Future versions may integrate directly with phone providers or dental communication platforms.
+
+Possible future flow:
+
+`RingCentral / Dialpad / Weave / Nextiva / other provider webhook -> backend missed-call event -> Twilio SMS`
+
+This is not required for the first MVP.
+
+---
+
+## 5. MVP Scope
 
 The MVP should include:
 
-- missed call detection through Twilio
+- call event ingestion through Twilio webhooks
+- support for conditional forwarding and tracking number modes
 - automatic or controlled SMS recovery flow
 - inbound SMS handling
 - STOP / START / HELP handling
@@ -61,7 +118,7 @@ The MVP should include:
 - manual booked/lost outcome tracking later
 - Supabase/Postgres database
 - Stripe billing later
-- Vercel-hosted Next.js app/backend later
+- Vercel-hosted Next.js app/backend
 
 The MVP should not include:
 
@@ -71,6 +128,7 @@ The MVP should not include:
 - call recording
 - transcription
 - number porting
+- direct phone provider integrations in the first version
 - PMS integration
 - complex CRM features
 - aggressive sales automation
@@ -79,7 +137,7 @@ The MVP should not include:
 
 ---
 
-## 5. Current Repository Structure
+## 6. Current Repository Structure
 
 - **Owner's local repository path:** `C:\Users\vladi\Documents\vcoding\projects\sms-dental`
 - **GitHub repository:** `https://github.com/VladChat/sms-dental.git`
@@ -88,8 +146,8 @@ The MVP should not include:
 Important folders and files:
 
 - `docs/` — Existing public marketing website. It is deployed by GitHub Pages. Do not modify it unless the user explicitly asks.
-- `app/` — Reserved for the future Next.js SaaS app, clinic dashboard, and backend API routes. Use this direction for backend/app implementation.
-- `MVP_BUILD_DOCS/` — Planning, architecture, compliance, access, deployment, and handoff documentation.
+- `app/` — Next.js SaaS app/backend direction.
+- `MVP_BUILD_DOCS/` — Planning, architecture, compliance, access, deployment, operations, and handoff documentation.
 - `Skills/` — Universal project/reference instructions for agents.
 - `.claude/skills/` — Claude-specific skills for Claude Code.
 - `.local-agent/` — Local-only ignored agent notes. This folder must not be committed.
@@ -98,61 +156,53 @@ Important folders and files:
 
 ---
 
-## 6. Current Website Hosting
+## 7. Current Website Hosting
 
 - **Current public marketing website folder:** `docs/`
 - **Current local static website preview:** `http://localhost:8080/`
 - **Current production website:** `https://missedcallsdental.com`
 - **Current production hosting:** GitHub Pages from `docs/`
 
-Do not break the existing GitHub Pages site.
-
-Keep `docs/CNAME`.
-
-Do not restore a root `CNAME`.
+Do not break the existing GitHub Pages site. Keep `docs/CNAME`. Do not restore a root `CNAME`.
 
 ---
 
-## 7. Future App / Backend Hosting Direction
+## 8. App / Backend Hosting
 
-The future SaaS app and backend should be built as a Next.js App Router app using the existing `app/` direction.
+The SaaS app and backend are built as a Next.js App Router app using the existing `app/` direction.
 
 Do not create a separate `backend/` folder unless the user explicitly changes the architecture.
 
-- **Planned hosting:** Vercel
-- **Likely future app/backend domain:** `https://app.missedcallsdental.com`
+- **Hosting:** Vercel
+- **App/backend domain:** `https://app.missedcallsdental.com`
+- **Vercel fallback domain:** `https://sms-dental.vercel.app`
+- **Vercel project:** `sms-dental`
+- **Vercel team slug:** `vladchat-1500s-projects`
+- **Vercel team ID:** `team_1F2PWbZbJldYTbtZ8HlEVMCm`
 
-The current Vercel account/team known from MCP verification:
-
-- **Team name:** `vladchat-1500's projects`
-- **Team slug:** `vladchat-1500s-projects`
-- **Team ID:** `team_1F2PWbZbJldYTbtZ8HlEVMCm`
-
-At the time this context was written, no Vercel project existed yet for this repository.
-
-Do not create a Vercel project or deploy without explicit user approval.
+Do not deploy, modify env vars, or change domains without explicit user approval.
 
 ---
 
-## 8. Required Services
+## 9. Required Services
 
 The project uses or plans to use:
 
 - **Twilio** — Phone number, call webhooks, SMS sending, inbound SMS, and delivery status callbacks.
 - **Supabase / Postgres** — Database, future auth, clinic records, messages, webhook events, and app data.
 - **Stripe** — Billing and subscriptions later.
-- **Vercel** — Future Next.js app/backend hosting.
+- **Vercel** — Next.js app/backend hosting.
 - **GitHub** — Source control.
+- **Namecheap** — DNS for `missedcallsdental.com`.
 
 ---
 
-## 9. Required Environment Variable Names
+## 10. Required Environment Variable Names
 
-The repository currently uses these environment variable names.
-
-Never print values. Never commit real values.
+The repository currently uses these environment variable names. Never print values. Never commit real values.
 
 - `SUPABASE_DB_URL`
+- `SUPABASE_DB_DIRECT_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
@@ -164,88 +214,60 @@ Never print values. Never commit real values.
 - `STRIPE_ACCOUNT_ID`
 - `JOB_RUNNER_SECRET`
 - `INTERNAL_ADMIN_SECRET`
+- `PUBLIC_WEBHOOK_BASE_URL`
 
 Local development values belong in `.env.local`.
 
 Committed placeholders belong in `.env.local.example`.
 
-Vercel values later belong in Vercel Project Settings → Environment Variables.
+Vercel values belong in Vercel Project Settings → Environment Variables.
 
 Do not duplicate secrets into `app/`.
 
 ---
 
-## 10. Agent Access Model
+## 11. Backend Foundation State
 
-Agents do not need personal account passwords.
+Backend Foundation v1 has been built, committed, pushed, deployed, and verified.
 
-Correct access model:
+Current live backend:
 
-- GitHub through local repo or GitHub connector
-- Vercel through Vercel MCP / CLI after owner authorization
-- Supabase through CLI/MCP only when configured and approved
-- Stripe through test/sandbox mode only when configured and approved
-- Twilio through local env / console / approved tools only
+- `https://app.missedcallsdental.com`
 
-Agents must not ask the user to paste passwords into chat.
+Verified:
 
-Agents may ask the user to approve browser-based OAuth flows or paste secrets directly into local terminal/config files, but not into chat.
-
----
-
-## 11. Backend Foundation Direction
-
-The first backend milestone is a local, safe, buildable foundation.
-
-It should create:
-
-- root Next.js/Vercel project foundation
-- `app/` App Router structure
-- `app/api/health`
-- internal health route protected by `INTERNAL_ADMIN_SECRET`
-- lazy env validation
-- Supabase/Postgres helper using `SUPABASE_DB_URL`
-- Supabase migration SQL under `supabase/migrations/`
-- Twilio signature validation helper
-- Twilio incoming voice webhook route
-- Twilio incoming SMS webhook route
-- Twilio message status callback route
-- Stripe webhook placeholder
-- structured logging
-- idempotency-ready event handling
-
-It should not:
-
-- deploy
-- create Vercel project
-- apply Supabase migrations to live DB
-- change Twilio Console
-- send SMS
-- create Stripe resources
-- modify `docs/`
-- commit or push without explicit instruction
+- `/api/health` passes.
+- `/api/internal/health` passes.
+- deployed `db.ok` is true.
+- Supabase foundation migration has been applied.
+- Twilio inbound SMS webhook has been verified.
+- Twilio voice webhook route exists and is configured, but real voice testing is blocked until Twilio account trial restrictions are resolved.
 
 ---
 
-## 12. Planned Webhook URLs
+## 12. Webhook URLs
 
-Likely future Twilio voice webhook:
+Live Twilio voice webhook:
 
 - `https://app.missedcallsdental.com/api/webhooks/twilio/voice/incoming`
 
-Likely future Twilio inbound SMS webhook:
+Live Twilio inbound SMS webhook:
 
 - `https://app.missedcallsdental.com/api/webhooks/twilio/messaging/incoming`
 
-Likely future Twilio message status callback:
+Live Twilio message status callback:
 
 - `https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status`
 
-Likely future Stripe webhook:
+Future Stripe webhook:
 
 - `https://app.missedcallsdental.com/api/webhooks/stripe`
 
-These URLs should not be configured in Twilio or Stripe until the backend is deployed and explicitly approved by the user.
+Twilio webhooks are configured through the Twilio API.
+
+Do not change Twilio settings without explicit owner approval.
+
+Do not send outbound SMS without explicit owner approval.
 
 ---
 
@@ -253,7 +275,7 @@ These URLs should not be configured in Twilio or Stripe until the backend is dep
 
 Use Supabase/Postgres.
 
-Initial foundation tables should likely include:
+Foundation tables:
 
 - `clinics`
 - `clinic_phone_numbers`
@@ -274,7 +296,7 @@ Design principles:
 - prepare for future clinic dashboard
 - respect opt-out status before any outbound SMS
 
-Do not apply migrations to production without explicit approval.
+Do not apply future migrations to production without explicit approval.
 
 ---
 
@@ -282,60 +304,19 @@ Do not apply migrations to production without explicit approval.
 
 SMS must be professional, clear, and dental-office appropriate.
 
-Avoid:
+Avoid spammy wording, fake urgency, discounts as pressure, diagnosis or medical advice, aggressive sales copy, and fake guarantees.
 
-- spammy wording
-- fake urgency
-- discounts as pressure
-- diagnosis or medical advice
-- claims like “you need treatment”
-- aggressive sales copy
-- fake guarantees
-
-Respect:
-
-- STOP
-- START
-- HELP
-- opt-out state
-- clear sender identity
-- patient trust
+Respect STOP, START, HELP, opt-out state, clear sender identity, and patient trust.
 
 Default safe SMS style:
 
 > Hi, this is {{clinic_name}}. We missed your call. Would you like us to help schedule an appointment?
 
-Do not send real SMS without explicit user approval.
+Do not send real outbound SMS without explicit user approval.
 
 ---
 
-## 15. Product Tone
-
-The product should feel:
-
-- professional
-- clear
-- simple
-- trustworthy
-- calm
-- dental-office appropriate
-- B2B SaaS, not childish
-- good enough for Stripe verification
-- good enough for Twilio review
-- good enough for real clinic customers
-
-Avoid:
-
-- fake testimonials
-- fake statistics
-- vague AI hype
-- childish UI
-- messy startup design
-- unsupported medical or revenue claims
-
----
-
-## 16. Safety Boundaries
+## 15. Safety Boundaries
 
 Always follow these rules:
 
@@ -345,7 +326,7 @@ Always follow these rules:
 - Do not commit `.local-agent/`.
 - Do not modify `docs/` unless explicitly requested.
 - Do not send SMS without explicit approval.
-- Do not change Twilio Console webhooks without explicit approval.
+- Do not change Twilio Console/API webhooks without explicit approval.
 - Do not deploy without explicit approval.
 - Do not create Vercel/Supabase/Stripe/Twilio cloud resources without explicit approval.
 - Do not run destructive SQL.
@@ -355,54 +336,13 @@ Always follow these rules:
 
 ---
 
-## 17. Read These Files for More Detail
+## 16. Current Immediate Next Step
 
-Before coding, read:
+The immediate next product/technical step is to finish Twilio voice verification and then define the clinic onboarding flow for the two MVP connection modes.
 
-- `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`
-- `MVP_BUILD_DOCS/START-HERE.md`
-- `MVP_BUILD_DOCS/AGENT-RULES.md`
-- `MVP_BUILD_DOCS/backend-foundation-handoff.md`
-- `app/README.md`
-- `.env.local.example`
-- `AGENTS.md`
-- `Skills/missed-calls-dental-product-context.md`
+Current blockers/notes:
 
-For backend implementation, also read:
-
-- `MVP_BUILD_DOCS/02-technical-architecture.md`
-- `MVP_BUILD_DOCS/03-database-schema.md`
-- `MVP_BUILD_DOCS/04-api-and-webhooks.md`
-- `MVP_BUILD_DOCS/05-sms-rules-and-templates.md`
-- `MVP_BUILD_DOCS/10-env-and-deploy.md`
-- `MVP_BUILD_DOCS/11-access-and-secrets-handoff.md`
-
-For Twilio/SMS work, read:
-
-- `Skills/twilio-dental-sms.md`
-
-For Supabase/Postgres work, read:
-
-- `Skills/supabase-postgres-best-practices.md`
-
-For Stripe work, read:
-
-- `Skills/stripe-best-practices.md`
-
-For UI/design/copy work, read:
-
-- `Skills/page-cro-dental-saas.md`
-- `Skills/copywriting.md`
-- `Skills/frontend-design.md`
-
----
-
-## 18. Current Immediate Next Step
-
-The immediate next engineering step is Backend Foundation v1.
-
-That means:
-
-Create a safe local Next.js/Vercel foundation in the existing `app/` direction, with API route skeletons, environment handling, Supabase migration SQL, Twilio webhook validation, Stripe webhook placeholder, structured logging, and documentation.
-
-Do not deploy or change production systems during Backend Foundation v1.
+- Inbound SMS webhook has been verified.
+- Inbound voice webhook is configured but real calls from unverified caller IDs are blocked by Twilio Trial account restrictions.
+- To fully test inbound voice, upgrade Twilio to a paid account or test from a verified caller ID.
+- After voice is verified, test the real MVP phone path: conditional forwarding or tracking number mode.

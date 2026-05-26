@@ -15,13 +15,19 @@ Current live state:
 - Supabase foundation migration has been applied.
 - Vercel production backend can reach Supabase through the Supabase transaction pooler.
 - `PUBLIC_WEBHOOK_BASE_URL` is set to `https://app.missedcallsdental.com`.
+- Twilio webhooks are configured by API.
+- Inbound SMS webhook has been verified.
+- Inbound voice webhook configuration is correct, but full real-call verification is pending because the Twilio account is still Trial and blocks voice webhook testing from unverified caller IDs.
 - `docs/` remains the GitHub Pages marketing website and must stay untouched unless explicitly requested.
 
 Current active milestone:
 
-- Twilio webhook setup and inbound verification.
-- Configure Twilio webhooks only after owner approval.
-- Do not send outbound SMS yet.
+- Finish Twilio voice verification by upgrading Twilio to paid or testing from a verified caller ID.
+- Keep outbound SMS disabled.
+- Define and test the MVP phone event strategy:
+  - conditional forwarding mode
+  - tracking number mode
+  - hybrid mode
 - Do not build the dashboard yet.
 - Do not create Stripe resources yet.
 
@@ -36,8 +42,12 @@ Build the MVP described in the docs. Do not expand scope.
 The required MVP flow is:
 
 ```txt
-missed call -> Twilio webhook -> first SMS -> inbound reply/callback -> recovery inbox -> manual booked/lost -> dashboard/billing
+call event reaches system -> Twilio webhook -> safe SMS recovery -> inbound reply/callback -> recovery inbox -> manual booked/lost -> dashboard/billing
 ```
+
+Important:
+
+The app cannot automatically detect calls to an unrelated clinic phone number. For MVP, the call must reach the system through conditional forwarding, a dedicated tracking number, or hybrid usage. Future versions may add direct phone-provider integrations.
 
 Do not build:
 
@@ -47,6 +57,7 @@ PMS integration
 dental CRM
 call recording/transcription
 number porting
+full phone-provider integration layer in the first MVP
 Fly.io deployment
 ```
 
@@ -75,7 +86,8 @@ Durable operational knowledge includes:
 - DNS changes.
 - Vercel project/domain/env/deploy changes.
 - Supabase migrations, schema changes, pooler/direct connection lessons, or RLS changes.
-- Twilio webhook, phone number, Messaging Service, toll-free verification, or SMS/call test changes.
+- Twilio webhook, phone number, Messaging Service, toll-free verification, trial limitation, or SMS/call test changes.
+- Phone event strategy changes, including forwarding mode, tracking number mode, hybrid mode, and caller ID preservation tests.
 - Stripe product, price, webhook, billing, or subscription changes.
 - New public URLs or webhook URLs.
 - New required environment variable names.
@@ -90,14 +102,7 @@ Update only the relevant documents:
 - `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` for how to operate, verify, or troubleshoot the system.
 - `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md` for reusable setup steps and best practices.
 
-Do not document:
-
-- Secrets, passwords, full DB URLs with passwords, API keys, auth tokens, service role key values, or private patient data.
-- Long raw logs.
-- Temporary failed commands unless they produced a confirmed reusable fix.
-- Speculation.
-- Duplicate facts already recorded clearly.
-- Minor local-only edits with no operational value.
+Do not document secrets, passwords, full DB URLs with passwords, API keys, auth tokens, service role key values, private patient data, long raw logs, speculation, or duplicate facts.
 
 Final reports must include one of these lines:
 
@@ -140,23 +145,9 @@ real Supabase service-role keys
 full database URLs with passwords
 ```
 
-Use environment variables at runtime.
-
 ---
 
-## 5. MCP/tool use rules
-
-Use MCP tools only when configured by the owner.
-
-Safe without approval:
-
-```txt
-read docs
-search docs
-read staging logs
-list staging schema
-generate TypeScript types from staging
-```
+## 5. Approval-required actions
 
 Requires owner approval:
 
@@ -170,9 +161,8 @@ change Twilio production webhook URLs
 purchase Twilio numbers
 send real patient SMS
 modify DNS
+upgrade provider account or change paid billing settings
 ```
-
-Never connect MCP to production data unless the owner explicitly says so.
 
 ---
 
@@ -212,30 +202,7 @@ be idempotent
 
 ---
 
-## 8. UI rules
-
-Keep the UI narrow and operational.
-
-Do not create a CRM.
-
-Prioritize:
-
-```txt
-Overview
-Recovery Inbox
-Opportunity Detail
-Settings
-Billing
-Admin/Activation
-```
-
-The front desk must be able to quickly see urgent conversations and mark booked/lost.
-
-For dashboard, UI mockups, landing page redesign, admin screens, or other design-heavy work, consider using Claude Design for visual prototypes before implementation.
-
----
-
-## 9. Messaging rules
+## 8. Messaging rules
 
 Use deterministic rules, not conversational AI.
 
@@ -247,30 +214,16 @@ Do not send outbound SMS until clinic mapping, opt-out enforcement, duplicate su
 
 ---
 
+## 9. UI rules
+
+Keep the UI narrow and operational. Do not create a CRM.
+
+For dashboard, UI mockups, landing page redesign, admin screens, or other design-heavy work, consider using Claude Design for visual prototypes before implementation.
+
+---
+
 ## 10. Production rule
 
 Do not treat a successful deployment as production readiness.
 
-Production readiness requires:
-
-```txt
-staging E2E pass
-RLS verification
-Twilio webhook verification
-Stripe webhook verification
-STOP handling test
-follow-up cancellation test
-callback bridge test
-owner approval
-```
-
----
-
-## 11. When blocked
-
-If a provider credential or account setup is missing:
-
-1. Continue with mock implementation or placeholder.
-2. Document exactly what value is needed.
-3. Ask only for the minimum test/staging value required for the current milestone.
-4. Do not ask for production secrets in chat.
+Production readiness requires staging E2E pass, RLS verification, Twilio webhook verification, Stripe webhook verification, STOP handling test, follow-up cancellation test, callback bridge test, and owner approval.

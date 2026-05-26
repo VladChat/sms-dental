@@ -37,6 +37,7 @@ Do not add project-only noise, logs, secrets, or one-time debugging details.
 - [ ] Create or update `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`.
 - [ ] Create or update agent instructions.
 - [ ] Add operational documentation update rule to agent instructions.
+- [ ] Document the phone event strategy early so agents do not assume the app can magically detect calls to unrelated clinic numbers.
 
 Current project status: complete.
 
@@ -177,19 +178,51 @@ https://app.missedcallsdental.com
 
 ---
 
+## Phase 5A — Define clinic phone event strategy
+
+Before onboarding a clinic, choose one or more connection modes.
+
+### Conditional forwarding mode
+
+- [ ] Clinic keeps its existing main number.
+- [ ] Clinic/provider configures no-answer, busy, unavailable, or after-hours forwarding to the assigned Twilio number.
+- [ ] Test that forwarded calls reach Twilio.
+- [ ] Test that forwarded calls preserve original patient caller ID.
+- [ ] Confirm voicemail does not answer before forwarding.
+
+### Tracking number mode
+
+- [ ] Clinic uses assigned Twilio number as dedicated tracking number.
+- [ ] Decide where it will be published:
+  - website CTA
+  - landing page
+  - Google Ads
+  - print/mailers
+  - campaign-specific material
+- [ ] Test one direct inbound call to the tracking number.
+
+### Hybrid mode
+
+- [ ] Use conditional forwarding for missed/no-answer main-number calls.
+- [ ] Use tracking number for selected campaigns.
+
+Current project status: product strategy clarified, implementation testing pending.
+
+---
+
 ## Phase 6 — Twilio webhook setup
 
-- [ ] Confirm Twilio env variables exist locally without printing values.
-- [ ] Confirm backend webhook endpoints are live.
-- [ ] Confirm unsigned manual POST returns 403.
-- [ ] Fetch current Twilio phone number webhook settings.
-- [ ] Fetch current Twilio Messaging Service settings.
-- [ ] Update IncomingPhoneNumber webhooks.
-- [ ] Update Messaging Service webhooks.
-- [ ] Verify Twilio settings after update.
-- [ ] Do not send outbound SMS.
+- [x] Confirm Twilio env variables exist locally without printing values.
+- [x] Confirm backend webhook endpoints are live.
+- [x] Confirm unsigned manual POST returns 403.
+- [x] Fetch current Twilio phone number webhook settings.
+- [x] Fetch current Twilio Messaging Service settings.
+- [x] Update IncomingPhoneNumber webhooks.
+- [x] Update Messaging Service webhooks.
+- [x] Verify Twilio settings after update.
+- [x] Do not send outbound SMS.
 
-Current project status: pending.
+Current project status: webhook setup complete by API.
 
 Expected webhook URLs:
 
@@ -203,15 +236,24 @@ https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status
 
 ## Phase 7 — Inbound Twilio verification
 
-- [ ] Send one inbound SMS from owner phone to Twilio number.
-- [ ] Make one inbound call to Twilio number.
-- [ ] Query recent `webhook_events`.
-- [ ] Confirm inbound SMS event recorded.
+- [x] Send one inbound SMS from owner phone to Twilio number.
+- [x] Query recent `webhook_events`.
+- [x] Confirm inbound SMS event recorded.
 - [ ] Confirm voice event recorded.
-- [ ] Confirm no outbound SMS was sent.
-- [ ] Document results in `SETUP-LOG.md`.
+- [x] Confirm no outbound SMS was sent.
+- [x] Document results in `SETUP-LOG.md`.
 
-Current project status: pending.
+Current project status:
+
+- Inbound SMS verified.
+- Inbound voice pending because Twilio Trial account blocks realistic inbound voice webhook testing from unverified caller IDs.
+
+Before continuing:
+
+- [ ] Upgrade Twilio account to paid, or test from a verified caller ID.
+- [ ] Make one inbound voice call to Twilio number.
+- [ ] Confirm Vercel received `/api/webhooks/twilio/voice/incoming`.
+- [ ] Confirm Supabase recorded `voice.%` webhook event.
 
 ---
 
