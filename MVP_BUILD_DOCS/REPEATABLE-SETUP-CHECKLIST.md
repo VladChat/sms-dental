@@ -313,7 +313,11 @@ Reset procedure: see OPERATIONS-RUNBOOK.md Section 11.
 
 Current project status: complete.
 
-Known commit: see Phase 9 or later entries.
+Known commit:
+
+```txt
+a947323 feat: send missed-call SMS after voice completion
+```
 
 ---
 
