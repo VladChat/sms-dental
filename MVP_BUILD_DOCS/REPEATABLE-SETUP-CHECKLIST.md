@@ -321,6 +321,38 @@ a947323 feat: send missed-call SMS after voice completion
 
 ---
 
+## Phase 8B — Inbound SMS opt-out enforcement
+
+- [x] Confirm `opt_outs` table exists with `(clinic_id, phone_number)` unique key.
+- [x] Confirm `messages` table supports `direction='inbound'` and `detected_keyword` column.
+- [x] No migration needed — foundation schema is complete.
+- [x] Add `lib/db/opt-outs.ts` — `upsertOptOut` (STOP) and `clearOptOut` (START).
+- [x] Add `recordInboundMessage` to `lib/db/messages.ts`.
+- [x] Rewrite `app/api/webhooks/twilio/messaging/incoming/route.ts`:
+  - [x] Validates Twilio signature.
+  - [x] Records `webhook_events` idempotently.
+  - [x] Looks up clinic by `To` number.
+  - [x] Gets or creates patient conversation.
+  - [x] Records inbound message (`direction='inbound'`, `detected_keyword`).
+  - [x] STOP: calls `upsertOptOut` — future `sendRecoverySms` will be blocked.
+  - [x] START: calls `clearOptOut` — future sends permitted again.
+  - [x] HELP: replies with clinic name + STOP hint.
+  - [x] Ordinary replies: stored, no auto-reply (future milestone).
+- [x] Verify `sendRecoverySms` already checks `opt_outs` (it does — no change needed).
+- [x] Run `npm run typecheck`: pass.
+- [x] Run `npm run build`: pass.
+- [x] Deploy and verify `/api/health`.
+- [ ] Live test: send STOP from owner test phone, confirm opt-out row created.
+- [ ] Live test: send START from same phone, confirm opt-out cleared.
+- [ ] Live test: verify next call does not trigger recovery SMS after STOP.
+- [ ] Live test: verify next call resumes recovery SMS after START.
+
+Current project status: code complete, deployed, awaiting live opt-out test.
+
+Known commit: see checklist Phase 9+.
+
+---
+
 ## Phase 9 — Billing milestone
 
 Do not start until owner approves.

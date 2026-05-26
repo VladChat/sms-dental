@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-05-26
+Last updated: 2026-05-26 (opt-out enforcement)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -417,7 +417,63 @@ Current test mapping:
 
 ---
 
-## 10. Current Next Step
+## 10. Inbound SMS Opt-Out Handling
+
+### Behavior
+
+The `messaging/incoming` webhook now fully processes inbound SMS replies:
+
+| Keyword | Trigger words | DB action | TwiML reply |
+|---|---|---|---|
+| `stop` | STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT | `upsertOptOut(clinic, caller)` | Unsubscribed confirmation |
+| `start` | START, UNSTOP, YES | `clearOptOut(clinic, caller)` | Re-subscribed confirmation |
+| `help` | HELP, INFO | none | Clinic name + STOP hint |
+| *(ordinary)* | anything else | none | empty `<Response/>` |
+
+All inbound messages (including ordinary replies) are stored in the `messages` table with `direction='inbound'` and `detected_keyword` set when applicable.
+
+### Opt-out storage
+
+Table: `public.opt_outs`
+
+- `upsertOptOut(clinicId, phone)` — inserts or refreshes opt-out row; sets `opted_out_at = now()` and clears `opted_back_in_at = null`.
+- `clearOptOut(clinicId, phone)` — sets `opted_back_in_at = now()` on an existing row; no-op if caller was never opted out.
+
+`sendRecoverySms` already checks `opted_back_in_at IS NULL` to determine opt-out status. No change to that guard was needed — it was already wired to the `opt_outs` table.
+
+### Reply messages (TwiML `<Message>`)
+
+STOP: `"You've been unsubscribed from {{clinic_name}}. No further messages will be sent. Reply START to re-subscribe."`
+
+START: `"You've been re-subscribed to {{clinic_name}}. Reply STOP to unsubscribe at any time."`
+
+HELP: `"{{clinic_name}}: Reply STOP to stop messages. For appointment questions, contact us directly."`
+
+If Twilio's Messaging Service has Advanced Opt-Out enabled, the carrier may also send its own STOP/START acknowledgement. Both responses together are compliant; no action needed.
+
+### Ordinary replies
+
+Stored in `messages` (direction=inbound), conversation `last_message_at` updated. No auto-reply is sent. Full reply handling is a future milestone.
+
+### Verification queries
+
+```sql
+-- Check opt-out state for a phone number
+SELECT phone_number, opted_out_at, opted_back_in_at
+FROM public.opt_outs
+WHERE clinic_id = 'e9f21de4-3a35-4216-bb16-66ea3aeb2e47';
+
+-- Check inbound messages
+SELECT id, from_number, body, detected_keyword, status, created_at
+FROM public.messages
+WHERE clinic_id = 'e9f21de4-3a35-4216-bb16-66ea3aeb2e47'
+  AND direction = 'inbound'
+ORDER BY created_at DESC LIMIT 10;
+```
+
+---
+
+## 12. Current Next Step
 
 Owner-only SMS recovery: **complete and verified (2026-05-26).**
 
@@ -425,18 +481,18 @@ Owner-only SMS recovery: **complete and verified (2026-05-26).**
 - First-call and repeat-call greetings verified end-to-end.
 - Duplicate suppression: confirmed.
 
+Inbound SMS opt-out enforcement: **complete (2026-05-26).**
+
 Current next step:
 
 ```txt
-Wire inbound SMS STOP/START opt-out enforcement into the messaging/incoming webhook.
-Then plan real clinic onboarding: conditional forwarding or tracking number mode.
+Plan real clinic onboarding: conditional forwarding or tracking number mode.
+Do not enable live SMS mode until clinic onboarding and explicit owner approval are complete.
 ```
-
-Do not enable `live` SMS mode until opt-out enforcement, clinic onboarding, and explicit owner approval are complete.
 
 ---
 
-## 11. Reusable Test Caller Reset Procedure
+## 13. Reusable Test Caller Reset Procedure
 
 ### Purpose
 
