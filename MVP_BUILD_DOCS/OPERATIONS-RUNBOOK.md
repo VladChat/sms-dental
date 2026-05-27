@@ -923,8 +923,9 @@ returns 503 instead of contacting Twilio.
      -d '{"work_email":"owner@example.com"}'
    ```
    Expect a JSON response containing a `setup_url`.
-5. Open the returned setup URL in a browser. Fill out the clinic form,
-   then watch the number-search step list available Twilio numbers.
+5. Open the returned setup URL in a browser. Fill out the 3-field
+   Step 1 form (clinic name, main office phone, ZIP code), then watch
+   the number-search step list available Twilio numbers.
 6. Click **Use this number**. Expect a 503 `purchase_disabled` response
    — this is the safe expected outcome with
    `TWILIO_NUMBER_PURCHASE_ENABLED=false`. No Twilio number is
@@ -936,33 +937,43 @@ a real number purchase.
 
 ---
 
-## Country-aware onboarding (MVP scope)
+## Onboarding scope (MVP — U.S.-only, 3-field Step 1)
 
-Automated onboarding currently supports **United States** and **Canada**.
-The clinic country picker shows a third "Other (contact us)" option that
-disables the form and surfaces:
+Automated onboarding is **United States only**. Step 1 of the clinic
+setup form asks for only the three fields needed to advance to number
+search:
+
+- **Clinic name** — shown to patients in follow-up messages.
+- **Main office phone** — the number patients currently call. Accepts
+  any common U.S. format (`(224) 555-1234`, `224-555-1234`, `2245551234`,
+  `+12245551234`) and is normalized to E.164 internally.
+- **ZIP code** — used to find local numbers near the office.
+
+Everything else (legal business name, owner contact phone, timezone,
+test patient phone, setup mode, etc.) is collected later only when it
+is actually required for the next step. See `AGENTS.md` →
+"Form and Onboarding Scope Rule".
+
+There is no country selector in the UI. The server forces
+`country = 'US'` and rejects any non-US payload with:
 
 ```
-Not available yet. Contact us if your clinic is outside the United
-States or Canada.
+Automated setup is currently available for U.S. clinics only.
 ```
 
-The server enforces the same allowlist (`400 country_not_supported`)
-so other countries cannot complete onboarding even if the client check
-is bypassed. Expanding the allowlist later is one migration line and
-one Zod enum update.
+Expanding internationally later is a separate module decision, not a
+one-line config flip.
 
 ### Local vs. toll-free number search
 
 The number-search step is a tabbed UI:
 
-- **Local number** — searched against the clinic's stored country with
-  an optional 3-digit area code (defaulted to the clinic's preferred
-  area code, then derived from the main phone). The clinic's stored
-  `state_region` and `postal_code` are also passed to Twilio when set
-  so the result locality is closer to the office.
+- **Local number** — searched against `US` with an area code derived
+  from the clinic's main phone (and/or the explicit area code field in
+  the search UI). The saved ZIP code is passed to Twilio as
+  `inPostalCode` so the result locality is closer to the office.
   Helper: *Looks local to patients near your office.*
-- **Toll-free number** — searched against the clinic's stored country.
+- **Toll-free number** — searched against `US`.
   Helper: *Business-style number. SMS use may require toll-free
   verification before live patient messaging.*
 
@@ -971,10 +982,10 @@ the operator can confirm what they're approving.
 
 ### Toll-free SMS verification note
 
-Toll-free SMS in the United States and Canada requires Twilio
-toll-free verification before live patient messaging. The number can
-be purchased and used for voice immediately, but SMS recovery for
-that number must wait for verification + the standard go-live gate.
+Toll-free SMS in the U.S. requires Twilio toll-free verification before
+live patient messaging. The number can be purchased and used for voice
+immediately, but SMS recovery for that number must wait for verification
++ the standard go-live gate.
 The submission packet lives in
 `MVP_BUILD_DOCS/TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
 

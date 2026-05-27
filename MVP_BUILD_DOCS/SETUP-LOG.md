@@ -1047,3 +1047,59 @@ Result:
 - Env files changed: no.
 - Live SMS enabled: no.
 - Twilio/Vercel/Stripe settings changed: no.
+
+---
+
+## 2026-05-27 — Onboarding Step 1 simplified to U.S.-only 3-field form
+
+- Applied the project-wide Form and Onboarding Scope Rule (`AGENTS.md`)
+  to the clinic setup flow.
+- Step 1 of `app/setup/[token]` now asks for only the three fields
+  required to advance to number search:
+  - Clinic name — helper: *Shown to patients in your follow-up messages.*
+  - Main office phone — helper: *The number patients currently call.*
+  - ZIP code — helper: *Used to find local numbers near your office.*
+- Removed from Step 1 UI: legal/business name, country selector,
+  city, state/province, preferred area code, timezone (IANA),
+  owner/admin contact name/email/phone, test patient phone, setup mode.
+- MVP automated onboarding is now **U.S.-only**. No country selector
+  in the UI. Backend forces `country = 'US'` and rejects any non-US
+  payload with `400 country_not_supported`:
+  "Automated setup is currently available for U.S. clinics only."
+- Owner email is now taken from the verified setup request, not from
+  a separate Step 1 field.
+- Main office phone accepts common U.S. formats
+  (`(224) 555-1234`, `224-555-1234`, `2245551234`, `+12245551234`)
+  via `lib/phone/normalize.ts` and is normalized to E.164 before storage.
+- ZIP code validated `^\d{5}(-\d{4})?$`. Saved to `clinics.postal_code`
+  and passed to Twilio local search as `inPostalCode`. Area code for
+  local search is derived from the main office phone as fallback;
+  `preferred_area_code` is no longer collected in Step 1.
+
+Database schema: unchanged. Removed fields are still nullable columns
+on `public.clinics`, kept for backward compatibility with existing rows
+and future collection later in onboarding. The `upsertClinicForOnboarding`
+update path now uses `coalesce()` so re-saving Step 1 does not blow away
+values entered in later steps.
+
+Docs updated:
+
+- `MVP_BUILD_DOCS/MANIFEST.md` — onboarding scope summary.
+- `MVP_BUILD_DOCS/FIRST-CLINIC-ONBOARDING.md` — Step 1 description, U.S.-only.
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` — onboarding-scope section, dry-run wording.
+- `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md` — U.S.-only 3-field Step 1 checklist.
+
+Result:
+
+- Files changed: `app/setup/[token]/page.tsx`,
+  `app/setup/[token]/_components/ClinicForm.tsx`,
+  `app/api/onboarding/[token]/clinic/route.ts`,
+  `lib/db/clinics.ts`, `lib/phone/normalize.ts`, and the docs above.
+- Typecheck: pass.
+- Build: pass.
+- Live SMS enabled: no.
+- `TWILIO_NUMBER_PURCHASE_ENABLED`: unchanged (still false).
+- `sms_recovery_enabled`: unchanged (still false).
+- Twilio/Vercel/Stripe settings changed: no.
+- Secrets printed: no.
+- Env files committed: no.

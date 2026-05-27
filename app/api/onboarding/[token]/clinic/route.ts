@@ -20,42 +20,29 @@ import { isValidE164, normalizePhone } from "../../../../../lib/phone/normalize"
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Empty strings -> undefined so optional fields stay optional after FormData
-// round-trips, and so they don't fail .max(n) on z.string() with whitespace.
-const optionalString = z
-  .union([z.string(), z.undefined(), z.null()])
-  .transform((v) => (typeof v === "string" ? v.trim() : v ?? undefined))
-  .transform((v) => (typeof v === "string" && v.length === 0 ? undefined : v))
-  .optional();
+// MVP onboarding Step 1 is U.S.-only and asks for only the three fields
+// required to complete the next step (number search): clinic name, main
+// office phone, and ZIP code. See AGENTS.md "Form and Onboarding Scope Rule".
+//
+// Older payloads that include extra fields (city, state_region, country,
+// timezone, owner_*, test_patient_phone, setup_mode, preferred_area_code,
+// legal_business_name) are still accepted for backward compatibility, but
+// only the three required fields drive behavior here. Any submitted country
+// other than "US" is rejected because automated onboarding does not yet
+// support other countries.
 
-const ClinicFormSchema = z.object({
-  name: z.string().trim().min(2).max(160),
-  legal_business_name: z.string().trim().min(2).max(200),
-  main_phone: z.string().trim().min(7).max(20),
-  timezone: z.string().trim().min(3).max(60),
-  owner_contact_name: z.string().trim().min(2).max(160),
-  owner_contact_email: z.string().trim().email().max(254),
-  owner_contact_phone: z.string().trim().min(7).max(20),
-  test_patient_phone: z.string().trim().min(7).max(20),
-  setup_mode: z.enum([
-    "conditional_forwarding",
-    "tracking_number",
-    "google_voice_forwarding_test",
-  ]),
-  // Location fields for country-aware number search. Only US/CA are
-  // accepted by automated onboarding; other countries route to manual
-  // contact and never reach this endpoint.
-  country: z.enum(["US", "CA"]),
-  city: optionalString.pipe(z.string().max(120).optional()),
-  state_region: optionalString.pipe(z.string().max(80).optional()),
-  postal_code: optionalString.pipe(z.string().max(20).optional()),
-  preferred_area_code: optionalString.pipe(
-    z
+const ClinicFormSchema = z
+  .object({
+    name: z.string().trim().min(2).max(160),
+    main_phone: z.string().trim().min(7).max(40),
+    postal_code: z
       .string()
-      .regex(/^\d{3}$/u, "Preferred area code must be 3 digits.")
-      .optional(),
-  ),
-});
+      .trim()
+      .regex(/^\d{5}(-\d{4})?$/u, "Please enter a 5-digit ZIP code."),
+    // Accepted but optional / ignored for behavior. Helps stale clients.
+    country: z.string().trim().optional(),
+  })
+  .passthrough();
 
 export async function POST(
   req: NextRequest,
@@ -76,48 +63,39 @@ export async function POST(
   }
   const parsed = ClinicFormSchema.safeParse(body);
   if (!parsed.success) {
-    // Surface the country-allowlist case with clear, action-oriented copy.
-    const countryIssue = parsed.error.issues.find((i) =>
-      i.path.includes("country"),
-    );
-    if (countryIssue) {
-      return jsonError(
-        400,
-        "country_not_supported",
-        "Not available yet. Contact us if your clinic is outside the United States or Canada.",
-      );
+    const zipIssue = parsed.error.issues.find((i) => i.path.includes("postal_code"));
+    if (zipIssue) {
+      return jsonBadRequest("Please enter a 5-digit ZIP code.");
     }
     return jsonBadRequest("Please complete all required fields.");
   }
 
-  const normalize = (value: string) => normalizePhone(value);
-  const phones = {
-    main_phone: normalize(parsed.data.main_phone),
-    owner_contact_phone: normalize(parsed.data.owner_contact_phone),
-    test_patient_phone: normalize(parsed.data.test_patient_phone),
-  };
-  for (const [field, value] of Object.entries(phones)) {
-    if (!isValidE164(value)) {
-      return jsonBadRequest(
-        `Please enter ${field.replace(/_/g, " ")} in E.164 format (e.g. +12245551234).`,
-      );
-    }
+  // U.S.-only automated onboarding: reject any non-US country if a stale
+  // client sends one. Missing country is treated as US.
+  const submittedCountry = (parsed.data.country ?? "US").toUpperCase();
+  if (submittedCountry !== "US") {
+    return jsonError(
+      400,
+      "country_not_supported",
+      "Automated setup is currently available for U.S. clinics only.",
+    );
+  }
+
+  const mainPhone = normalizePhone(parsed.data.main_phone);
+  if (!isValidE164(mainPhone)) {
+    return jsonBadRequest(
+      "Please enter a valid U.S. phone number for your main office phone.",
+    );
   }
 
   const input: ClinicOnboardingInput = {
     name: parsed.data.name,
-    legalBusinessName: parsed.data.legal_business_name,
-    mainPhone: phones.main_phone,
-    timezone: parsed.data.timezone,
-    ownerContactName: parsed.data.owner_contact_name,
-    ownerContactEmail: parsed.data.owner_contact_email.toLowerCase(),
-    ownerContactPhone: phones.owner_contact_phone,
-    testPatientPhone: phones.test_patient_phone,
-    country: parsed.data.country,
-    city: parsed.data.city ?? null,
-    stateRegion: parsed.data.state_region ?? null,
-    postalCode: parsed.data.postal_code ?? null,
-    preferredAreaCode: parsed.data.preferred_area_code ?? null,
+    mainPhone,
+    country: "US",
+    postalCode: parsed.data.postal_code,
+    // Use the verified setup-request email as the owner contact email so we
+    // don't ask the user twice. Everything else is collected later.
+    ownerContactEmail: setupRequest.owner_email,
   };
 
   const clinic = await upsertClinicForOnboarding({
