@@ -434,7 +434,8 @@ but the default for any new clinic is the automated flow.
 ### Automated flow at a glance
 
 1. Owner visits the public marketing site
-   (`https://missedcallsdental.com`) and submits full name + work email.
+   (`https://missedcallsdental.com`) and submits their work email
+   (the public form is email-only; owner name is collected later in onboarding).
 2. `POST /api/setup-requests` creates a setup request, issues a secure
    token (hash stored in DB), and emails a setup link of the form:
 

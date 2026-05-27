@@ -16,7 +16,8 @@ The finished workflow must let a dental clinic complete setup without a human op
 
 Final production flow:
 
-1. Clinic owner enters full name and work email on the public website.
+1. Clinic owner enters their work email on the public website (email-only form;
+   owner name is collected later during onboarding).
 2. Backend creates a setup request.
 3. Backend generates a secure one-time setup token.
 4. Backend sends a setup email containing a unique setup link.
@@ -130,8 +131,11 @@ The existing public website form is the entry point.
 
 Required fields:
 
+- Work email (the only field on the public form)
+
+Optional fields (backward-compatible; `"Clinic owner"` fallback used when omitted):
+
 - Full name
-- Work email
 
 On submit:
 
