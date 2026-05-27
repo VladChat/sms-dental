@@ -122,7 +122,7 @@ function rankAndMap(params: {
   const filtered = params.list.filter(
     (n) =>
       Boolean(n.capabilities?.voice) &&
-      Boolean(n.capabilities?.sms) &&
+      Boolean(n.capabilities?.SMS) &&
       typeof n.phoneNumber === "string" &&
       n.phoneNumber.length > 0,
   );
@@ -148,8 +148,8 @@ function rankAndMap(params: {
         postal_code: (n.postalCode as string | null) ?? null,
         capabilities: {
           voice: Boolean(n.capabilities?.voice),
-          sms: Boolean(n.capabilities?.sms),
-          mms: Boolean(n.capabilities?.mms),
+          sms: Boolean(n.capabilities?.SMS),
+          mms: Boolean(n.capabilities?.MMS),
         },
         address_requirements: addressReq,
         recommended: false,
@@ -173,7 +173,9 @@ type TwilioAvailableNumberLike = {
   locality?: string | null;
   region?: string | null;
   postalCode?: string | null;
-  capabilities?: { voice?: boolean; sms?: boolean; mms?: boolean };
+  // Twilio SDK returns capabilities with mixed casing: SMS/MMS uppercase,
+  // voice lowercase. We expose the normalized lowercase shape via AvailableNumber.
+  capabilities?: { voice?: boolean; SMS?: boolean; MMS?: boolean };
   addressRequirements?: string;
 };
 
