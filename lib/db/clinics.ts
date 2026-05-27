@@ -18,23 +18,31 @@ export type ClinicSetupStatus =
   | "cancelled"
   | "expired";
 
-// MVP automated-onboarding allowlist. Other countries route to the manual
-// "contact us" path and never reach this code.
+// MVP automated-onboarding allowlist. The current MVP flow is U.S.-only.
+// "CA" remains in the union for forward-compatibility of any historical
+// rows or future expansion, but onboarding entry points reject non-US.
 export type ClinicCountry = "US" | "CA";
 
+// Step 1 of onboarding collects only the three fields required to advance
+// to number search: name, mainPhone, postalCode. country is forced to
+// "US" by the API route. ownerContactEmail is taken from the verified
+// setup request, not from the form. Everything else is collected later
+// (settings, admin review, billing/compliance, future onboarding steps).
 export type ClinicOnboardingInput = {
   name: string;
-  legalBusinessName: string;
   mainPhone: string;
-  timezone: string;
-  ownerContactName: string;
-  ownerContactEmail: string;
-  ownerContactPhone: string;
-  testPatientPhone: string;
   country: ClinicCountry;
+  postalCode: string;
+  ownerContactEmail: string;
+  // Optional / collected later. Kept here because the DB columns still
+  // exist for backward compatibility with older onboarding data.
+  legalBusinessName?: string | null;
+  timezone?: string | null;
+  ownerContactName?: string | null;
+  ownerContactPhone?: string | null;
+  testPatientPhone?: string | null;
   city?: string | null;
   stateRegion?: string | null;
-  postalCode?: string | null;
   preferredAreaCode?: string | null;
 };
 
@@ -102,9 +110,18 @@ export async function upsertClinicForOnboarding(params: {
 }): Promise<ClinicOnboardingRow> {
   const sql = getDb();
   const i = params.input;
+
+  // Optional fields default to null on insert and are preserved with
+  // coalesce() on update so re-saving Step 1 doesn't wipe out data the
+  // user may have entered in a later step.
+  const legalBusinessName = i.legalBusinessName ?? null;
+  // timezone defaults to 'America/Chicago' on the column itself.
+  const timezone = i.timezone ?? null;
+  const ownerContactName = i.ownerContactName ?? null;
+  const ownerContactPhone = i.ownerContactPhone ?? null;
+  const testPatientPhone = i.testPatientPhone ?? null;
   const city = i.city ?? null;
   const stateRegion = i.stateRegion ?? null;
-  const postalCode = i.postalCode ?? null;
   const preferredAreaCode = i.preferredAreaCode ?? null;
 
   if (params.existingClinicId) {
@@ -112,18 +129,18 @@ export async function upsertClinicForOnboarding(params: {
       update public.clinics
       set
         name = ${i.name},
-        legal_business_name = ${i.legalBusinessName},
+        legal_business_name = coalesce(${legalBusinessName}, legal_business_name),
         main_phone = ${i.mainPhone},
-        timezone = ${i.timezone},
-        owner_contact_name = ${i.ownerContactName},
+        timezone = coalesce(${timezone}, timezone),
+        owner_contact_name = coalesce(${ownerContactName}, owner_contact_name),
         owner_contact_email = ${i.ownerContactEmail},
-        owner_contact_phone = ${i.ownerContactPhone},
-        test_patient_phone = ${i.testPatientPhone},
+        owner_contact_phone = coalesce(${ownerContactPhone}, owner_contact_phone),
+        test_patient_phone = coalesce(${testPatientPhone}, test_patient_phone),
         country = ${i.country},
-        city = ${city},
-        state_region = ${stateRegion},
-        postal_code = ${postalCode},
-        preferred_area_code = ${preferredAreaCode},
+        city = coalesce(${city}, city),
+        state_region = coalesce(${stateRegion}, state_region),
+        postal_code = ${i.postalCode},
+        preferred_area_code = coalesce(${preferredAreaCode}, preferred_area_code),
         setup_status = case
           when setup_status in ('setup_pending') then 'clinic_details_completed'
           else setup_status
@@ -141,17 +158,19 @@ export async function upsertClinicForOnboarding(params: {
     return row;
   }
 
+  // For inserts, leave timezone NULL so the column default
+  // ('America/Chicago') is applied. Other optional columns are nullable.
   const rows = await sql<ClinicOnboardingRow[]>`
     insert into public.clinics
-      (name, legal_business_name, main_phone, timezone,
+      (name, legal_business_name, main_phone,
        owner_contact_name, owner_contact_email, owner_contact_phone,
        test_patient_phone, country, city, state_region, postal_code,
        preferred_area_code, is_active, sms_recovery_enabled, setup_status)
     values
-      (${i.name}, ${i.legalBusinessName}, ${i.mainPhone}, ${i.timezone},
-       ${i.ownerContactName}, ${i.ownerContactEmail}, ${i.ownerContactPhone},
-       ${i.testPatientPhone}, ${i.country}, ${city}, ${stateRegion},
-       ${postalCode}, ${preferredAreaCode}, true, false,
+      (${i.name}, ${legalBusinessName}, ${i.mainPhone},
+       ${ownerContactName}, ${i.ownerContactEmail}, ${ownerContactPhone},
+       ${testPatientPhone}, ${i.country}, ${city}, ${stateRegion},
+       ${i.postalCode}, ${preferredAreaCode}, true, false,
        'clinic_details_completed')
     returning
       id, name, is_active, sms_recovery_enabled,

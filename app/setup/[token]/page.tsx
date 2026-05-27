@@ -42,11 +42,7 @@ export default async function SetupTokenPage({
   ) {
     return (
       <PageShell>
-        <ClinicForm
-          token={token}
-          ownerName={setupRequest.owner_full_name}
-          ownerEmail={setupRequest.owner_email}
-        />
+        <ClinicForm token={token} />
       </PageShell>
     );
   }

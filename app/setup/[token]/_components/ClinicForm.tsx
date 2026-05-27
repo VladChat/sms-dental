@@ -4,26 +4,15 @@ import { useState } from "react";
 
 type Props = {
   token: string;
-  ownerName: string;
-  ownerEmail: string;
 };
 
-type CountryChoice = "US" | "CA" | "other";
-
-export function ClinicForm({ token, ownerName, ownerEmail }: Props) {
+export function ClinicForm({ token }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [country, setCountry] = useState<CountryChoice>("US");
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (country === "other") {
-      setError(
-        "Not available yet. Contact us if your clinic is outside the United States or Canada.",
-      );
-      return;
-    }
     setSubmitting(true);
     try {
       const form = event.currentTarget;
@@ -39,7 +28,6 @@ export function ClinicForm({ token, ownerName, ownerEmail }: Props) {
         setError(data?.error?.message ?? "Could not save clinic details. Please check your entries.");
         return;
       }
-      // Refresh to advance to the next step.
       window.location.reload();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -48,145 +36,41 @@ export function ClinicForm({ token, ownerName, ownerEmail }: Props) {
     }
   }
 
-  const stateLabel = country === "CA" ? "Province" : "State";
-  const postalLabel = country === "CA" ? "Postal code" : "ZIP code";
-  const postalPlaceholder = country === "CA" ? "M5H 2N2" : "60010";
-
   return (
     <section style={cardStyle}>
       <p style={eyebrowStyle}>Step 1 of 2</p>
       <h2 style={h2Style}>Tell us about your clinic</h2>
       <p style={helperStyle}>
-        Your main office number stays the same. We will help you choose an additional office
-        texting number for missed-call follow-ups.
+        Just three quick details so we can set up your office texting number. Your main office
+        number stays the same.
       </p>
 
       <form onSubmit={onSubmit} style={{ marginTop: 20 }} noValidate>
-        <input type="hidden" name="owner_email_readonly" value={ownerEmail} />
-
-        <Field label="Public-facing clinic name" name="name" required defaultValue="" />
         <Field
-          label="Legal/business name"
-          name="legal_business_name"
+          label="Clinic name"
+          name="name"
           required
-          defaultValue=""
+          helper="Shown to patients in your follow-up messages."
+          placeholder="Bright Smile Dental"
         />
         <Field
-          label="Main office phone number (E.164, e.g. +12245551234)"
+          label="Main office phone"
           name="main_phone"
           required
-          placeholder="+12245551234"
+          helper="The number patients currently call."
+          placeholder="(224) 555-1234"
           inputMode="tel"
-        />
-
-        <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
-          <label htmlFor="country" style={labelStyle}>
-            Country
-          </label>
-          <select
-            id="country"
-            name="country"
-            required
-            value={country}
-            onChange={(e) => setCountry(e.target.value as CountryChoice)}
-            style={inputStyle}
-          >
-            <option value="US">United States</option>
-            <option value="CA">Canada</option>
-            <option value="other">Other (contact us)</option>
-          </select>
-          {country === "other" ? (
-            <p
-              role="status"
-              style={{
-                margin: "6px 0 0",
-                padding: "10px 12px",
-                borderRadius: 10,
-                background: "#fff7ed",
-                border: "1px solid #fed7aa",
-                color: "#9a3412",
-                fontSize: 14,
-              }}
-            >
-              Not available yet. Contact us if your clinic is outside the United States or Canada.
-            </p>
-          ) : (
-            <p style={{ margin: "4px 0 0", color: "#6b7280", fontSize: 12 }}>
-              Automated onboarding currently supports the United States and Canada.
-            </p>
-          )}
-        </div>
-
-        <Field label="City" name="city" defaultValue="" />
-        <Field
-          label={`${stateLabel} (optional, e.g. ${country === "CA" ? "ON" : "IL"})`}
-          name="state_region"
-          defaultValue=""
+          autoComplete="tel"
         />
         <Field
-          label={`${postalLabel} (optional)`}
+          label="ZIP code"
           name="postal_code"
-          placeholder={postalPlaceholder}
-          defaultValue=""
-        />
-        <Field
-          label="Preferred area code (optional, 3 digits)"
-          name="preferred_area_code"
-          placeholder="224"
+          required
+          helper="Used to find local numbers near your office."
+          placeholder="60010"
           inputMode="numeric"
-          defaultValue=""
+          autoComplete="postal-code"
         />
-
-        <Field
-          label="Timezone (IANA, e.g. America/Chicago)"
-          name="timezone"
-          required
-          defaultValue={country === "CA" ? "America/Toronto" : "America/Chicago"}
-        />
-        <Field
-          label="Owner / admin contact name"
-          name="owner_contact_name"
-          required
-          defaultValue={ownerName}
-        />
-        <Field
-          label="Owner / admin email"
-          name="owner_contact_email"
-          type="email"
-          required
-          defaultValue={ownerEmail}
-        />
-        <Field
-          label="Owner / admin phone (E.164)"
-          name="owner_contact_phone"
-          required
-          placeholder="+12245551234"
-          inputMode="tel"
-        />
-        <Field
-          label="Test patient phone for QA (E.164)"
-          name="test_patient_phone"
-          required
-          placeholder="+12245551234"
-          inputMode="tel"
-        />
-
-        <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
-          <label htmlFor="setup_mode" style={labelStyle}>
-            Setup mode
-          </label>
-          <select
-            id="setup_mode"
-            name="setup_mode"
-            required
-            defaultValue="conditional_forwarding"
-            style={inputStyle}
-          >
-            <option value="conditional_forwarding">Conditional forwarding</option>
-            <option value="tracking_number">Tracking number</option>
-            <option value="google_voice_forwarding_test">Google Voice forwarding test</option>
-          </select>
-        </div>
 
         {error && (
           <p
@@ -206,18 +90,13 @@ export function ClinicForm({ token, ownerName, ownerEmail }: Props) {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={submitting || country === "other"}
-          style={{
-            ...primaryBtnStyle,
-            ...(country === "other"
-              ? { background: "#9ca3af", cursor: "not-allowed" }
-              : {}),
-          }}
-        >
+        <button type="submit" disabled={submitting} style={primaryBtnStyle}>
           {submitting ? "Saving…" : "Continue"}
         </button>
+
+        <p style={footnoteStyle}>
+          Automated setup is currently available for U.S. clinics only.
+        </p>
       </form>
     </section>
   );
@@ -231,6 +110,8 @@ function Field({
   placeholder,
   defaultValue,
   inputMode,
+  autoComplete,
+  helper,
 }: {
   label: string;
   name: string;
@@ -239,9 +120,12 @@ function Field({
   placeholder?: string;
   defaultValue?: string;
   inputMode?: "text" | "tel" | "email" | "numeric";
+  autoComplete?: string;
+  helper?: string;
 }) {
+  const helperId = helper ? `${name}-helper` : undefined;
   return (
-    <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
+    <div style={{ display: "grid", gap: 6, marginBottom: 18 }}>
       <label htmlFor={name} style={labelStyle}>
         {label}
       </label>
@@ -253,10 +137,16 @@ function Field({
         placeholder={placeholder}
         defaultValue={defaultValue}
         inputMode={inputMode}
-        autoComplete="off"
+        autoComplete={autoComplete ?? "off"}
+        aria-describedby={helperId}
         spellCheck={false}
         style={inputStyle}
       />
+      {helper && (
+        <p id={helperId} style={helperLineStyle}>
+          {helper}
+        </p>
+      )}
     </div>
   );
 }
@@ -290,6 +180,11 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 600,
   color: "#111827",
 };
+const helperLineStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#6b7280",
+  fontSize: 12,
+};
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px 12px",
@@ -313,4 +208,9 @@ const primaryBtnStyle: React.CSSProperties = {
   fontWeight: 700,
   fontSize: 15,
   cursor: "pointer",
+};
+const footnoteStyle: React.CSSProperties = {
+  margin: "14px 0 0",
+  color: "#6b7280",
+  fontSize: 12,
 };

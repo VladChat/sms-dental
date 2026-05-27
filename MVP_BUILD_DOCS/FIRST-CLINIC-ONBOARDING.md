@@ -446,11 +446,16 @@ but the default for any new clinic is the automated flow.
    ```
 
 3. Owner opens the setup link.
-4. Owner fills the clinic setup form (clinic name, legal/business name,
-   main office phone, timezone, owner contact, test patient phone,
-   setup mode).
+4. Owner fills the clinic setup form. **Step 1 collects only three fields**:
+   clinic name, main office phone (any common U.S. format — normalized to
+   E.164 internally), and ZIP code. Owner email comes from the verified
+   setup request. Other details (legal name, owner contact phone, timezone,
+   test patient phone, setup mode) are collected later only when they are
+   actually required for the next step. See `AGENTS.md` →
+   "Form and Onboarding Scope Rule".
 5. App searches Twilio for available local US numbers with Voice + SMS
-   capability around the clinic main-office area code.
+   capability, using the ZIP code and/or the area code derived from the
+   main office phone.
 6. Owner picks an "office texting number" and clicks **Use this
    number**.
 7. App purchases the chosen Twilio number (only when
@@ -485,32 +490,30 @@ clinic number. If caller ID fails, do not enable SMS for that clinic.
 
 ---
 
-## Country scope (added 2026-05-27)
+## Country scope (updated 2026-05-27 — U.S.-only MVP)
 
-For the MVP, automated onboarding actively supports **United States**
-and **Canada**. The clinic setup form's country picker exposes those
-two countries plus an "Other (contact us)" option that disables the
-form and shows:
+Automated onboarding is now **United States only**. The clinic setup
+form does not show a country selector; the backend forces
+`country = 'US'` and rejects any non-US payload with:
 
 ```
-Not available yet. Contact us if your clinic is outside the United
-States or Canada.
+Automated setup is currently available for U.S. clinics only.
 ```
 
-The server enforces the same allowlist; clients cannot bypass it.
+International onboarding can be added later as separate modules.
 
 ### Local vs. toll-free choice
 
 The number-search step is split into two tabs:
 
-- **Local number** uses the clinic's selected country and optional
-  preferred area code / state-province / postal code to surface
-  numbers that look local to patients near the office.
-- **Toll-free number** lists country-scoped toll-free numbers.
-  Toll-free SMS in the United States and Canada requires Twilio
-  toll-free verification before live patient messaging — voice works
-  immediately once the number is assigned, SMS waits for verification
-  and the standard go-live gate.
+- **Local number** uses the saved ZIP code (passed to Twilio as
+  `inPostalCode`) and/or the area code derived from the clinic's main
+  office phone to surface numbers that look local to patients near
+  the office.
+- **Toll-free number** lists U.S. toll-free numbers. Toll-free SMS in
+  the U.S. requires Twilio toll-free verification before live patient
+  messaging — voice works immediately once the number is assigned,
+  SMS waits for verification and the standard go-live gate.
 
 ### Production safety still applies
 

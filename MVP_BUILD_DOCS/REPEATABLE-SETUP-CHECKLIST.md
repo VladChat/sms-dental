@@ -520,14 +520,18 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 
 ---
 
-## Country-aware onboarding (added 2026-05-27)
+## U.S.-only onboarding, 3-field Step 1 (updated 2026-05-27)
 
-- [ ] Confirm the clinic's country is **United States** or **Canada**.
-      Other countries are not supported by automated onboarding yet and
-      will hit a "Not available yet. Contact us…" notice.
-- [ ] On the clinic setup form, fill country + city + state/province +
-      ZIP/postal code (state/province and postal code are optional but
-      improve number-search quality).
+- [ ] Confirm the clinic is in the **United States**. Automated
+      onboarding is U.S.-only; the UI does not show a country
+      selector, and the backend rejects any non-US payload with
+      "Automated setup is currently available for U.S. clinics only."
+- [ ] On Step 1 of the clinic setup form, the owner fills only
+      **clinic name**, **main office phone** (any common U.S. format
+      — normalized to E.164 internally), and **ZIP code**.
+      No legal name, owner phone, timezone, test patient phone, or
+      setup mode is asked here. See `AGENTS.md` →
+      "Form and Onboarding Scope Rule".
 - [ ] On the number-search step, decide between **Local** and **Toll-free**:
   - Local: looks local to patients near the office. Use when the clinic
     has a strong local identity or you want caller ID to match the
