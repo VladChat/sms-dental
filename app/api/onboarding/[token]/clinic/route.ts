@@ -20,6 +20,14 @@ import { isValidE164, normalizePhone } from "../../../../../lib/phone/normalize"
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Empty strings -> undefined so optional fields stay optional after FormData
+// round-trips, and so they don't fail .max(n) on z.string() with whitespace.
+const optionalString = z
+  .union([z.string(), z.undefined(), z.null()])
+  .transform((v) => (typeof v === "string" ? v.trim() : v ?? undefined))
+  .transform((v) => (typeof v === "string" && v.length === 0 ? undefined : v))
+  .optional();
+
 const ClinicFormSchema = z.object({
   name: z.string().trim().min(2).max(160),
   legal_business_name: z.string().trim().min(2).max(200),
@@ -34,6 +42,19 @@ const ClinicFormSchema = z.object({
     "tracking_number",
     "google_voice_forwarding_test",
   ]),
+  // Location fields for country-aware number search. Only US/CA are
+  // accepted by automated onboarding; other countries route to manual
+  // contact and never reach this endpoint.
+  country: z.enum(["US", "CA"]),
+  city: optionalString.pipe(z.string().max(120).optional()),
+  state_region: optionalString.pipe(z.string().max(80).optional()),
+  postal_code: optionalString.pipe(z.string().max(20).optional()),
+  preferred_area_code: optionalString.pipe(
+    z
+      .string()
+      .regex(/^\d{3}$/u, "Preferred area code must be 3 digits.")
+      .optional(),
+  ),
 });
 
 export async function POST(
@@ -55,6 +76,17 @@ export async function POST(
   }
   const parsed = ClinicFormSchema.safeParse(body);
   if (!parsed.success) {
+    // Surface the country-allowlist case with clear, action-oriented copy.
+    const countryIssue = parsed.error.issues.find((i) =>
+      i.path.includes("country"),
+    );
+    if (countryIssue) {
+      return jsonError(
+        400,
+        "country_not_supported",
+        "Not available yet. Contact us if your clinic is outside the United States or Canada.",
+      );
+    }
     return jsonBadRequest("Please complete all required fields.");
   }
 
@@ -81,6 +113,11 @@ export async function POST(
     ownerContactEmail: parsed.data.owner_contact_email.toLowerCase(),
     ownerContactPhone: phones.owner_contact_phone,
     testPatientPhone: phones.test_patient_phone,
+    country: parsed.data.country,
+    city: parsed.data.city ?? null,
+    stateRegion: parsed.data.state_region ?? null,
+    postalCode: parsed.data.postal_code ?? null,
+    preferredAreaCode: parsed.data.preferred_area_code ?? null,
   };
 
   const clinic = await upsertClinicForOnboarding({
@@ -97,5 +134,6 @@ export async function POST(
     ok: true,
     clinic_id: clinic.id,
     main_phone: clinic.main_phone,
+    country: clinic.country,
   });
 }

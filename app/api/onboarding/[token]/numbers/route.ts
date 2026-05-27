@@ -8,17 +8,22 @@ import {
 import { lookupSetupRequestByRawToken } from "../../../../../lib/onboarding/verify";
 import { findClinicById } from "../../../../../lib/db/clinics";
 import {
-  searchAvailableLocalNumbers,
   phoneAreaCode,
+  searchAvailableLocalNumbers,
+  searchAvailableTollFreeNumbers,
+  isSupportedCountry,
+  type SupportedCountry,
 } from "../../../../../lib/twilio/numbers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /api/onboarding/[token]/numbers?area_code=224
+// GET /api/onboarding/[token]/numbers
+//   ?type=local|toll_free     (default: local)
+//   ?country=US|CA            (default: clinic country)
+//   ?area_code=3-digit        (local only — overrides clinic default)
 //
-// Returns 5–10 Twilio local US numbers with Voice + SMS capability. Search
-// is read-only; the route never purchases anything.
+// Search is read-only. The route never purchases anything.
 
 export async function GET(
   req: NextRequest,
@@ -43,21 +48,69 @@ export async function GET(
   }
 
   const url = new URL(req.url);
-  const requestedAreaCode = url.searchParams.get("area_code")?.trim() ?? "";
-  const areaCode =
-    requestedAreaCode && /^\d{3}$/.test(requestedAreaCode)
-      ? requestedAreaCode
-      : clinic.main_phone
-        ? phoneAreaCode(clinic.main_phone) ?? undefined
-        : undefined;
-  if (requestedAreaCode && !/^\d{3}$/.test(requestedAreaCode)) {
-    return jsonBadRequest("Area code must be a 3-digit US area code.");
+  const requestedType = (url.searchParams.get("type") ?? "local").trim();
+  if (requestedType !== "local" && requestedType !== "toll_free") {
+    return jsonBadRequest("type must be 'local' or 'toll_free'.");
   }
 
+  // Country resolution: explicit query param wins; otherwise use the clinic's
+  // stored country; otherwise fall back to US for legacy rows.
+  const requestedCountry = url.searchParams.get("country")?.trim().toUpperCase() ?? "";
+  let country: SupportedCountry;
+  if (requestedCountry) {
+    if (!isSupportedCountry(requestedCountry)) {
+      return jsonError(
+        400,
+        "country_not_supported",
+        "Not available yet. Contact us if your clinic is outside the United States or Canada.",
+      );
+    }
+    country = requestedCountry;
+  } else if (isSupportedCountry(clinic.country)) {
+    country = clinic.country;
+  } else {
+    country = "US";
+  }
+
+  if (requestedType === "toll_free") {
+    const numbers = await searchAvailableTollFreeNumbers({
+      country,
+      limit: 10,
+    });
+    return jsonOk({
+      ok: true,
+      type: "toll_free",
+      country,
+      area_code: null,
+      numbers,
+    });
+  }
+
+  // Local search: prefer the explicit area_code query, then clinic's stored
+  // preferred area code, then derive from the clinic main phone.
+  const requestedAreaCode = url.searchParams.get("area_code")?.trim() ?? "";
+  if (requestedAreaCode && !/^\d{3}$/.test(requestedAreaCode)) {
+    return jsonBadRequest("Area code must be a 3-digit area code.");
+  }
+  const storedPreferred = clinic.preferred_area_code ?? "";
+  const phoneDerived = clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null;
+  const areaCode =
+    (requestedAreaCode || storedPreferred || phoneDerived || "").trim() ||
+    undefined;
+
   const numbers = await searchAvailableLocalNumbers({
+    country,
     areaCode,
+    inRegion: clinic.state_region ?? undefined,
+    inPostalCode: clinic.postal_code ?? undefined,
     limit: 10,
   });
 
-  return jsonOk({ ok: true, area_code: areaCode ?? null, numbers });
+  return jsonOk({
+    ok: true,
+    type: "local",
+    country,
+    area_code: areaCode ?? null,
+    numbers,
+  });
 }

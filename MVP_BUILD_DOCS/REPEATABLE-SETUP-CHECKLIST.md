@@ -514,3 +514,27 @@ SETUP_EMAIL_FROM
 TWILIO_NUMBER_PURCHASE_ENABLED
 OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 ```
+
+---
+
+## Country-aware onboarding (added 2026-05-27)
+
+- [ ] Confirm the clinic's country is **United States** or **Canada**.
+      Other countries are not supported by automated onboarding yet and
+      will hit a "Not available yet. Contact us…" notice.
+- [ ] On the clinic setup form, fill country + city + state/province +
+      ZIP/postal code (state/province and postal code are optional but
+      improve number-search quality).
+- [ ] On the number-search step, decide between **Local** and **Toll-free**:
+  - Local: looks local to patients near the office. Use when the clinic
+    has a strong local identity or you want caller ID to match the
+    region.
+  - Toll-free: business-style number. **Voice works immediately. SMS
+    requires Twilio toll-free verification before live patient
+    messaging.** See `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
+- [ ] Number purchase remains gated by `TWILIO_NUMBER_PURCHASE_ENABLED`.
+      Keep it `false` for dry runs; flip to `true` only when the owner
+      explicitly approves a real purchase.
+- [ ] Onboarding never enables live SMS automatically. Live SMS still
+      requires the standard go-live gate (compliance approval, QA pass,
+      explicit `sms_recovery_enabled=true` for that clinic only).
