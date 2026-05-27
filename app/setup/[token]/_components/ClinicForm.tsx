@@ -8,13 +8,22 @@ type Props = {
   ownerEmail: string;
 };
 
+type CountryChoice = "US" | "CA" | "other";
+
 export function ClinicForm({ token, ownerName, ownerEmail }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [country, setCountry] = useState<CountryChoice>("US");
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    if (country === "other") {
+      setError(
+        "Not available yet. Contact us if your clinic is outside the United States or Canada.",
+      );
+      return;
+    }
     setSubmitting(true);
     try {
       const form = event.currentTarget;
@@ -38,6 +47,10 @@ export function ClinicForm({ token, ownerName, ownerEmail }: Props) {
       setSubmitting(false);
     }
   }
+
+  const stateLabel = country === "CA" ? "Province" : "State";
+  const postalLabel = country === "CA" ? "Postal code" : "ZIP code";
+  const postalPlaceholder = country === "CA" ? "M5H 2N2" : "60010";
 
   return (
     <section style={cardStyle}>
@@ -65,11 +78,70 @@ export function ClinicForm({ token, ownerName, ownerEmail }: Props) {
           placeholder="+12245551234"
           inputMode="tel"
         />
+
+        <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
+          <label htmlFor="country" style={labelStyle}>
+            Country
+          </label>
+          <select
+            id="country"
+            name="country"
+            required
+            value={country}
+            onChange={(e) => setCountry(e.target.value as CountryChoice)}
+            style={inputStyle}
+          >
+            <option value="US">United States</option>
+            <option value="CA">Canada</option>
+            <option value="other">Other (contact us)</option>
+          </select>
+          {country === "other" ? (
+            <p
+              role="status"
+              style={{
+                margin: "6px 0 0",
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#fff7ed",
+                border: "1px solid #fed7aa",
+                color: "#9a3412",
+                fontSize: 14,
+              }}
+            >
+              Not available yet. Contact us if your clinic is outside the United States or Canada.
+            </p>
+          ) : (
+            <p style={{ margin: "4px 0 0", color: "#6b7280", fontSize: 12 }}>
+              Automated onboarding currently supports the United States and Canada.
+            </p>
+          )}
+        </div>
+
+        <Field label="City" name="city" defaultValue="" />
+        <Field
+          label={`${stateLabel} (optional, e.g. ${country === "CA" ? "ON" : "IL"})`}
+          name="state_region"
+          defaultValue=""
+        />
+        <Field
+          label={`${postalLabel} (optional)`}
+          name="postal_code"
+          placeholder={postalPlaceholder}
+          defaultValue=""
+        />
+        <Field
+          label="Preferred area code (optional, 3 digits)"
+          name="preferred_area_code"
+          placeholder="224"
+          inputMode="numeric"
+          defaultValue=""
+        />
+
         <Field
           label="Timezone (IANA, e.g. America/Chicago)"
           name="timezone"
           required
-          defaultValue="America/Chicago"
+          defaultValue={country === "CA" ? "America/Toronto" : "America/Chicago"}
         />
         <Field
           label="Owner / admin contact name"
@@ -134,7 +206,16 @@ export function ClinicForm({ token, ownerName, ownerEmail }: Props) {
           </p>
         )}
 
-        <button type="submit" disabled={submitting} style={primaryBtnStyle}>
+        <button
+          type="submit"
+          disabled={submitting || country === "other"}
+          style={{
+            ...primaryBtnStyle,
+            ...(country === "other"
+              ? { background: "#9ca3af", cursor: "not-allowed" }
+              : {}),
+          }}
+        >
           {submitting ? "Saving…" : "Continue"}
         </button>
       </form>
@@ -157,7 +238,7 @@ function Field({
   required?: boolean;
   placeholder?: string;
   defaultValue?: string;
-  inputMode?: "text" | "tel" | "email";
+  inputMode?: "text" | "tel" | "email" | "numeric";
 }) {
   return (
     <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>

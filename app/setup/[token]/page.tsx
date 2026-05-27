@@ -70,6 +70,8 @@ export default async function SetupTokenPage({
           token={token}
           mainPhone={clinic?.main_phone ?? null}
           clinicName={clinic?.name ?? "Your clinic"}
+          country={clinic?.country ?? "US"}
+          preferredAreaCode={clinic?.preferred_area_code ?? null}
         />
       </PageShell>
     );

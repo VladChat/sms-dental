@@ -897,3 +897,124 @@ Result:
   table in OPERATIONS-RUNBOOK.md).
 - No live SMS sent. No Twilio settings changed. No Stripe changes.
 - No secrets printed. `.env.local` not committed.
+
+---
+
+## 2026-05-27 — Country-aware onboarding (US + Canada) + toll-free option
+
+Scope: improve the clinic onboarding number-search flow so it works for
+real clinics in the United States and Canada, and offer toll-free as a
+separate, clearly labeled option.
+
+Changes:
+
+- New migration
+  `supabase/migrations/20260527000100_clinic_location.sql` adds
+  `country` (default `'US'`, checked against `('US','CA')`), `city`,
+  `state_region`, `postal_code`, and `preferred_area_code` to
+  `public.clinics`. Existing rows backfill to `'US'`. The migration
+  is idempotent (uses `add column if not exists` and a `do $$` block
+  to add the check constraint).
+- `lib/twilio/numbers.ts`
+  - `searchAvailableLocalNumbers` is now country-aware
+    (`SupportedCountry = "US" | "CA"`) and accepts optional `inRegion`
+    and `inPostalCode` filters.
+  - New `searchAvailableTollFreeNumbers` calls Twilio's toll-free
+    available-numbers endpoint with the same country scope.
+  - `AvailableNumber.type` (`"local" | "toll_free"`) and `.country`
+    flow through to the UI so cards can be labeled correctly.
+- `lib/db/clinics.ts`
+  - `ClinicOnboardingInput` and `ClinicOnboardingRow` extended with
+    `country`, `city`, `state_region` (column name), `postal_code`,
+    and `preferred_area_code`.
+  - `upsertClinicForOnboarding` persists the new fields on both insert
+    and update paths.
+- `app/api/onboarding/[token]/clinic/route.ts`
+  - Zod schema now requires `country in ("US","CA")` and accepts
+    optional `city`, `state_region`, `postal_code`, and
+    `preferred_area_code`. Country mismatch returns `400
+    country_not_supported` with the approved copy.
+- `app/api/onboarding/[token]/numbers/route.ts`
+  - Accepts `?type=local|toll_free` and `?country=US|CA`. Defaults to
+    the clinic's stored country. Local search uses the clinic's
+    `state_region` and `postal_code` to narrow Twilio search when set.
+    Returns `type` and `country` alongside `numbers`.
+- `app/setup/[token]/_components/ClinicForm.tsx`
+  - Adds a country picker with **United States**, **Canada**, and
+    **Other (contact us)**. Choosing **Other** disables submit and
+    shows the approved unsupported-country notice. Adds
+    optional city, state/province, ZIP/postal, and preferred area code
+    fields. Adjusts state and postal labels by country.
+- `app/setup/[token]/_components/NumberSearch.tsx`
+  - Adds a **Local** / **Toll-free** tab pair with the approved
+    per-tab helper copy. Toll-free tab includes a short non-alarming
+    note that toll-free SMS requires Twilio toll-free verification
+    before live patient messaging. Result cards show a `Local` or
+    `Toll-free` chip in addition to the `Recommended` badge.
+- `app/setup/[token]/page.tsx` passes `clinic.country` and
+  `clinic.preferred_area_code` into `NumberSearch`.
+
+Safety invariants preserved:
+
+- Number purchase is still gated by
+  `TWILIO_NUMBER_PURCHASE_ENABLED=true`. The purchase route was not
+  modified in this pass; the existing 503 `purchase_disabled` path
+  works for toll-free purchase attempts too.
+- Onboarding never sets `clinic.sms_recovery_enabled = true`. The
+  toll-free SMS verification gate is enforced operationally by the
+  existing live-SMS go-live procedure.
+- No existing Twilio numbers deleted/released. No Stripe changes. No
+  secrets printed or committed.
+
+Migration applied: no. Apply via Supabase SQL editor. Verification
+queries:
+
+```sql
+-- New columns exist on clinics
+select column_name from information_schema.columns
+where table_schema = 'public' and table_name = 'clinics'
+  and column_name in (
+    'country', 'city', 'state_region', 'postal_code', 'preferred_area_code'
+  )
+order by column_name;
+-- expect: 5 rows
+
+-- Country check constraint exists
+select conname from pg_constraint
+where conname = 'clinics_country_check';
+-- expect: 1 row
+
+-- Existing rows backfilled to 'US'
+select slug, country from public.clinics where country is null;
+-- expect: 0 rows
+```
+
+Verification result:
+
+- `npm run typecheck` passes.
+- `npm run build` passes. Build emits all expected routes including
+  the country-aware `/api/onboarding/[token]/numbers`.
+- No code path enables live SMS automatically.
+- Owner-only test data lives in this runbook only — production UI uses
+  the clinic's own location.
+
+Safe next step for owner-only dry run:
+
+1. Apply migration `20260527000100_clinic_location.sql` via Supabase
+   SQL editor and run the verification queries above.
+2. In `.env.local`, keep:
+   - `APP_BASE_URL=http://localhost:3000`
+   - `PUBLIC_SITE_URL=http://localhost:8080`
+   - `OWNER_TEST_SETUP_LINK_FALLBACK=true`
+   - `TWILIO_NUMBER_PURCHASE_ENABLED=false`
+3. `npm run dev` and POST a test setup request with the documented
+   owner-only credentials. Follow the returned setup link.
+4. On the clinic form, pick **Canada** to verify the state/province
+   and postal-code labels switch, then switch back to **United States**.
+5. On the number search step, switch between the **Local** and
+   **Toll-free** tabs to confirm both lists load and that each card
+   shows its `Local` or `Toll-free` chip.
+6. Click **Use this number** on either list. Expect a `503
+   purchase_disabled` response — that is the correct safe outcome
+   while `TWILIO_NUMBER_PURCHASE_ENABLED=false`. No Twilio number is
+   purchased. No SMS is sent.

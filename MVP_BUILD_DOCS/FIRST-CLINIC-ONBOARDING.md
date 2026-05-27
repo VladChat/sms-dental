@@ -479,3 +479,40 @@ missed/unanswered calls from this clinic number to the assigned Twilio
 number. The first QA test must verify caller ID preservation: Twilio
 must receive `From` as the test patient phone, not as the Google Voice
 clinic number. If caller ID fails, do not enable SMS for that clinic.
+
+---
+
+## Country scope (added 2026-05-27)
+
+For the MVP, automated onboarding actively supports **United States**
+and **Canada**. The clinic setup form's country picker exposes those
+two countries plus an "Other (contact us)" option that disables the
+form and shows:
+
+```
+Not available yet. Contact us if your clinic is outside the United
+States or Canada.
+```
+
+The server enforces the same allowlist; clients cannot bypass it.
+
+### Local vs. toll-free choice
+
+The number-search step is split into two tabs:
+
+- **Local number** uses the clinic's selected country and optional
+  preferred area code / state-province / postal code to surface
+  numbers that look local to patients near the office.
+- **Toll-free number** lists country-scoped toll-free numbers.
+  Toll-free SMS in the United States and Canada requires Twilio
+  toll-free verification before live patient messaging — voice works
+  immediately once the number is assigned, SMS waits for verification
+  and the standard go-live gate.
+
+### Production safety still applies
+
+- `TWILIO_NUMBER_PURCHASE_ENABLED=true` is the only switch that
+  permits a real purchase. Keep it `false` for dry runs.
+- Onboarding never sets `clinic.sms_recovery_enabled=true`.
+- The Toll-Free Verification submission packet lives in
+  `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.

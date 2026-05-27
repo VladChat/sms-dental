@@ -22,6 +22,16 @@ Operational documentation:
 - `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md` — copy-ready Twilio Toll-Free Verification submission packet.
 - `ONBOARDING-WORKFLOW-BUILD-GUIDE.md` — source of truth for the automated clinic onboarding workflow (`/setup/[token]`, office texting number selection, Twilio purchase, webhooks).
 
+Onboarding workflow scope (MVP):
+
+- Automated onboarding currently supports the United States and Canada only.
+- Other countries are routed to a manual contact path from the country picker.
+- Number search is split into separate Local and Toll-free choices; toll-free SMS requires Twilio toll-free verification before live patient messaging.
+- Number purchase remains gated by `TWILIO_NUMBER_PURCHASE_ENABLED=true`; onboarding never enables live SMS automatically.
+- Schema migrations under `supabase/migrations/`:
+  - `20260526000300_onboarding_setup_requests.sql` — `setup_requests` table + clinic onboarding fields.
+  - `20260527000100_clinic_location.sql` — clinic country / city / state_region / postal_code / preferred_area_code.
+
 Core package files:
 
 - `00-product-brief.md`

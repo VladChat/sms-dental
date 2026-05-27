@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+type SearchType = "local" | "toll_free";
+type Country = "US" | "CA";
 
 type AvailableNumber = {
   phone_number: string;
@@ -9,63 +12,83 @@ type AvailableNumber = {
   region: string | null;
   capabilities: { voice: boolean; sms: boolean };
   recommended: boolean;
+  type: SearchType;
+  country: Country;
 };
 
 type Props = {
   token: string;
   mainPhone: string | null;
   clinicName: string;
+  country: Country;
+  preferredAreaCode: string | null;
 };
 
-function defaultAreaCode(mainPhone: string | null): string {
-  if (!mainPhone) return "";
-  if (mainPhone.startsWith("+1") && mainPhone.length >= 5) {
+function defaultAreaCode(mainPhone: string | null, preferred: string | null): string {
+  if (preferred && /^\d{3}$/.test(preferred)) return preferred;
+  if (mainPhone && mainPhone.startsWith("+1") && mainPhone.length >= 5) {
     return mainPhone.slice(2, 5);
   }
   return "";
 }
 
-export function NumberSearch({ token, mainPhone, clinicName }: Props) {
-  const [areaCode, setAreaCode] = useState<string>(defaultAreaCode(mainPhone));
+export function NumberSearch({
+  token,
+  mainPhone,
+  clinicName,
+  country,
+  preferredAreaCode,
+}: Props) {
+  const [searchType, setSearchType] = useState<SearchType>("local");
+  const [areaCode, setAreaCode] = useState<string>(
+    defaultAreaCode(mainPhone, preferredAreaCode),
+  );
   const [searching, setSearching] = useState(false);
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [numbers, setNumbers] = useState<AvailableNumber[]>([]);
   const [resolvedAreaCode, setResolvedAreaCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function search(useAreaCode: string) {
-    setSearching(true);
-    setError(null);
-    try {
-      const url = new URL(
-        `/api/onboarding/${encodeURIComponent(token)}/numbers`,
-        window.location.origin,
-      );
-      if (useAreaCode) url.searchParams.set("area_code", useAreaCode);
-      const res = await fetch(url.toString());
-      const data = (await res.json()) as {
-        ok?: boolean;
-        area_code?: string | null;
-        numbers?: AvailableNumber[];
-        error?: { message?: string };
-      };
-      if (!res.ok || !data.ok) {
-        setError(data?.error?.message ?? "Could not search numbers. Please try again.");
+  const search = useCallback(
+    async (type: SearchType, useAreaCode: string) => {
+      setSearching(true);
+      setError(null);
+      try {
+        const url = new URL(
+          `/api/onboarding/${encodeURIComponent(token)}/numbers`,
+          window.location.origin,
+        );
+        url.searchParams.set("type", type);
+        url.searchParams.set("country", country);
+        if (type === "local" && useAreaCode) {
+          url.searchParams.set("area_code", useAreaCode);
+        }
+        const res = await fetch(url.toString());
+        const data = (await res.json()) as {
+          ok?: boolean;
+          area_code?: string | null;
+          numbers?: AvailableNumber[];
+          error?: { message?: string };
+        };
+        if (!res.ok || !data.ok) {
+          setError(data?.error?.message ?? "Could not search numbers. Please try again.");
+          setNumbers([]);
+          return;
+        }
+        setNumbers(data.numbers ?? []);
+        setResolvedAreaCode(data.area_code ?? null);
+      } catch {
+        setError("Could not search numbers. Please try again.");
         setNumbers([]);
-        return;
+      } finally {
+        setSearching(false);
       }
-      setNumbers(data.numbers ?? []);
-      setResolvedAreaCode(data.area_code ?? null);
-    } catch {
-      setError("Could not search numbers. Please try again.");
-      setNumbers([]);
-    } finally {
-      setSearching(false);
-    }
-  }
+    },
+    [token, country],
+  );
 
   useEffect(() => {
-    search(areaCode);
+    void search(searchType, areaCode);
     // intentionally empty deps — initial search only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -89,7 +112,7 @@ export function NumberSearch({ token, mainPhone, clinicName }: Props) {
       if (!res.ok || !data.ok) {
         if (data.error?.code === "number_no_longer_available") {
           setError("That number is no longer available. Please choose another number.");
-          await search(areaCode);
+          await search(searchType, areaCode);
           return;
         }
         setError(data.error?.message ?? "Could not assign that number. Please try again.");
@@ -103,6 +126,18 @@ export function NumberSearch({ token, mainPhone, clinicName }: Props) {
     }
   }
 
+  function changeTab(next: SearchType) {
+    if (next === searchType) return;
+    setSearchType(next);
+    setNumbers([]);
+    setResolvedAreaCode(null);
+    setError(null);
+    void search(next, areaCode);
+  }
+
+  const countryLabel = country === "CA" ? "Canada" : "United States";
+  const stateLabel = country === "CA" ? "province" : "state";
+
   return (
     <section style={cardStyle}>
       <p style={eyebrowStyle}>Step 2 of 2 · {clinicName}</p>
@@ -112,49 +147,107 @@ export function NumberSearch({ token, mainPhone, clinicName }: Props) {
         your existing office phone number.
       </p>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (/^\d{3}$/.test(areaCode) || areaCode === "") {
-            void search(areaCode);
-          } else {
-            setError("Area code must be a 3-digit US area code.");
-          }
-        }}
-        style={{
-          marginTop: 16,
-          display: "flex",
-          gap: 8,
-          alignItems: "end",
-        }}
-      >
-        <div style={{ display: "grid", gap: 6, flex: 1, maxWidth: 260 }}>
-          <label htmlFor="area_code" style={labelStyle}>
-            Area code
-          </label>
-          <input
-            id="area_code"
-            name="area_code"
-            value={areaCode}
-            onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
-            placeholder="224"
-            inputMode="numeric"
-            style={inputStyle}
-          />
-        </div>
+      <div role="tablist" aria-label="Number type" style={tabsRowStyle}>
         <button
-          type="submit"
-          disabled={searching}
-          style={{ ...secondaryBtnStyle, height: 44 }}
+          type="button"
+          role="tab"
+          aria-selected={searchType === "local"}
+          onClick={() => changeTab("local")}
+          style={searchType === "local" ? tabActiveStyle : tabStyle}
         >
-          {searching ? "Searching…" : "Search"}
+          Local number
         </button>
-      </form>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={searchType === "toll_free"}
+          onClick={() => changeTab("toll_free")}
+          style={searchType === "toll_free" ? tabActiveStyle : tabStyle}
+        >
+          Toll-free number
+        </button>
+      </div>
 
-      {resolvedAreaCode && (
-        <p style={{ marginTop: 8, color: "#6b7280", fontSize: 13 }}>
-          Showing local US numbers for area code {resolvedAreaCode}.
-        </p>
+      {searchType === "local" ? (
+        <>
+          <p style={tabHelperStyle}>Looks local to patients near your office.</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (/^\d{3}$/.test(areaCode) || areaCode === "") {
+                void search("local", areaCode);
+              } else {
+                setError("Area code must be a 3-digit area code.");
+              }
+            }}
+            style={{
+              marginTop: 12,
+              display: "flex",
+              gap: 8,
+              alignItems: "end",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "grid", gap: 6, flex: 1, maxWidth: 260 }}>
+              <label htmlFor="area_code" style={labelStyle}>
+                Area code ({countryLabel})
+              </label>
+              <input
+                id="area_code"
+                name="area_code"
+                value={areaCode}
+                onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                placeholder={country === "CA" ? "416" : "224"}
+                inputMode="numeric"
+                style={inputStyle}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={searching}
+              style={{ ...secondaryBtnStyle, height: 44 }}
+            >
+              {searching ? "Searching…" : "Search"}
+            </button>
+          </form>
+
+          {resolvedAreaCode && (
+            <p style={{ marginTop: 8, color: "#6b7280", fontSize: 13 }}>
+              Showing local {countryLabel} numbers for area code {resolvedAreaCode}.
+            </p>
+          )}
+          {!resolvedAreaCode && !searching && (
+            <p style={{ marginTop: 8, color: "#6b7280", fontSize: 13 }}>
+              Showing available local {countryLabel} numbers. Enter a different area code or{" "}
+              {stateLabel} to narrow the search.
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          <p style={tabHelperStyle}>
+            Business-style number. SMS use may require toll-free verification before live
+            patient messaging.
+          </p>
+          <p
+            style={{
+              marginTop: 10,
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "#f1f5f9",
+              border: "1px solid #cbd5e1",
+              color: "#0f172a",
+              fontSize: 13,
+            }}
+          >
+            Voice works immediately once assigned. SMS on toll-free numbers in the United
+            States and Canada requires Twilio toll-free verification before live patient
+            messaging. We&rsquo;ll cover this step with you before go-live.
+          </p>
+          <p style={{ marginTop: 8, color: "#6b7280", fontSize: 13 }}>
+            Showing available toll-free numbers for {countryLabel}.
+          </p>
+        </>
       )}
 
       {error && (
@@ -178,7 +271,9 @@ export function NumberSearch({ token, mainPhone, clinicName }: Props) {
       <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
         {numbers.length === 0 && !searching && (
           <p style={{ color: "#6b7280" }}>
-            No numbers found. Try a different area code.
+            No numbers found. {searchType === "local"
+              ? "Try a different area code."
+              : "Try refreshing in a moment."}
           </p>
         )}
         {numbers.map((n) => (
@@ -196,10 +291,13 @@ export function NumberSearch({ token, mainPhone, clinicName }: Props) {
             }}
           >
             <div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <strong style={{ fontSize: 17, color: "#111827" }}>
                   {n.phone_number}
                 </strong>
+                <span style={typeBadgeStyle(n.type)}>
+                  {n.type === "toll_free" ? "Toll-free" : "Local"}
+                </span>
                 {n.recommended && (
                   <span
                     style={{
@@ -235,6 +333,33 @@ export function NumberSearch({ token, mainPhone, clinicName }: Props) {
       </div>
     </section>
   );
+}
+
+function typeBadgeStyle(type: SearchType): React.CSSProperties {
+  if (type === "toll_free") {
+    return {
+      fontSize: 11,
+      letterSpacing: ".08em",
+      textTransform: "uppercase",
+      fontWeight: 700,
+      color: "#1e3a8a",
+      background: "#dbeafe",
+      border: "1px solid #bfdbfe",
+      padding: "2px 8px",
+      borderRadius: 999,
+    };
+  }
+  return {
+    fontSize: 11,
+    letterSpacing: ".08em",
+    textTransform: "uppercase",
+    fontWeight: 700,
+    color: "#334155",
+    background: "#f1f5f9",
+    border: "1px solid #e2e8f0",
+    padding: "2px 8px",
+    borderRadius: 999,
+  };
 }
 
 const cardStyle: React.CSSProperties = {
@@ -302,4 +427,36 @@ const secondaryBtnStyle: React.CSSProperties = {
   fontWeight: 600,
   fontSize: 14,
   cursor: "pointer",
+};
+const tabsRowStyle: React.CSSProperties = {
+  display: "inline-flex",
+  marginTop: 16,
+  padding: 4,
+  borderRadius: 999,
+  background: "#f1f5f9",
+  border: "1px solid #e2e8f0",
+  gap: 4,
+};
+const tabStyle: React.CSSProperties = {
+  appearance: "none",
+  padding: "8px 14px",
+  borderRadius: 999,
+  border: "1px solid transparent",
+  background: "transparent",
+  color: "#475569",
+  fontWeight: 600,
+  fontSize: 14,
+  cursor: "pointer",
+};
+const tabActiveStyle: React.CSSProperties = {
+  ...tabStyle,
+  background: "#ffffff",
+  border: "1px solid #cbd5e1",
+  color: "#0f172a",
+  boxShadow: "0 1px 2px rgba(15,23,42,.08)",
+};
+const tabHelperStyle: React.CSSProperties = {
+  margin: "10px 0 0",
+  color: "#475569",
+  fontSize: 14,
 };

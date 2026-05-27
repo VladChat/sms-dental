@@ -18,6 +18,10 @@ export type ClinicSetupStatus =
   | "cancelled"
   | "expired";
 
+// MVP automated-onboarding allowlist. Other countries route to the manual
+// "contact us" path and never reach this code.
+export type ClinicCountry = "US" | "CA";
+
 export type ClinicOnboardingInput = {
   name: string;
   legalBusinessName: string;
@@ -27,6 +31,11 @@ export type ClinicOnboardingInput = {
   ownerContactEmail: string;
   ownerContactPhone: string;
   testPatientPhone: string;
+  country: ClinicCountry;
+  city?: string | null;
+  stateRegion?: string | null;
+  postalCode?: string | null;
+  preferredAreaCode?: string | null;
 };
 
 export type ClinicOnboardingRow = ClinicRow & {
@@ -38,6 +47,11 @@ export type ClinicOnboardingRow = ClinicRow & {
   owner_contact_phone: string | null;
   test_patient_phone: string | null;
   setup_status: ClinicSetupStatus;
+  country: ClinicCountry;
+  city: string | null;
+  state_region: string | null;
+  postal_code: string | null;
+  preferred_area_code: string | null;
 };
 
 // Look up the active clinic that owns a given E.164 phone number.
@@ -68,7 +82,8 @@ export async function findClinicById(
       id, name, is_active, sms_recovery_enabled,
       legal_business_name, main_phone, timezone,
       owner_contact_name, owner_contact_email, owner_contact_phone,
-      test_patient_phone, setup_status
+      test_patient_phone, setup_status,
+      country, city, state_region, postal_code, preferred_area_code
     from public.clinics
     where id = ${id}
     limit 1
@@ -79,7 +94,7 @@ export async function findClinicById(
 /**
  * Insert a new clinic from onboarding form input or update an existing one
  * keyed by id. SMS is never enabled here; sms_recovery_enabled stays false
- * by default. setup_status starts at 'setup_pending'.
+ * by default. setup_status starts at 'clinic_details_completed'.
  */
 export async function upsertClinicForOnboarding(params: {
   existingClinicId?: string | null;
@@ -87,6 +102,10 @@ export async function upsertClinicForOnboarding(params: {
 }): Promise<ClinicOnboardingRow> {
   const sql = getDb();
   const i = params.input;
+  const city = i.city ?? null;
+  const stateRegion = i.stateRegion ?? null;
+  const postalCode = i.postalCode ?? null;
+  const preferredAreaCode = i.preferredAreaCode ?? null;
 
   if (params.existingClinicId) {
     const rows = await sql<ClinicOnboardingRow[]>`
@@ -100,6 +119,11 @@ export async function upsertClinicForOnboarding(params: {
         owner_contact_email = ${i.ownerContactEmail},
         owner_contact_phone = ${i.ownerContactPhone},
         test_patient_phone = ${i.testPatientPhone},
+        country = ${i.country},
+        city = ${city},
+        state_region = ${stateRegion},
+        postal_code = ${postalCode},
+        preferred_area_code = ${preferredAreaCode},
         setup_status = case
           when setup_status in ('setup_pending') then 'clinic_details_completed'
           else setup_status
@@ -109,7 +133,8 @@ export async function upsertClinicForOnboarding(params: {
         id, name, is_active, sms_recovery_enabled,
         legal_business_name, main_phone, timezone,
         owner_contact_name, owner_contact_email, owner_contact_phone,
-        test_patient_phone, setup_status
+        test_patient_phone, setup_status,
+        country, city, state_region, postal_code, preferred_area_code
     `;
     const row = rows[0];
     if (!row) throw new Error("clinic update returned no row");
@@ -120,16 +145,20 @@ export async function upsertClinicForOnboarding(params: {
     insert into public.clinics
       (name, legal_business_name, main_phone, timezone,
        owner_contact_name, owner_contact_email, owner_contact_phone,
-       test_patient_phone, is_active, sms_recovery_enabled, setup_status)
+       test_patient_phone, country, city, state_region, postal_code,
+       preferred_area_code, is_active, sms_recovery_enabled, setup_status)
     values
       (${i.name}, ${i.legalBusinessName}, ${i.mainPhone}, ${i.timezone},
        ${i.ownerContactName}, ${i.ownerContactEmail}, ${i.ownerContactPhone},
-       ${i.testPatientPhone}, true, false, 'clinic_details_completed')
+       ${i.testPatientPhone}, ${i.country}, ${city}, ${stateRegion},
+       ${postalCode}, ${preferredAreaCode}, true, false,
+       'clinic_details_completed')
     returning
       id, name, is_active, sms_recovery_enabled,
       legal_business_name, main_phone, timezone,
       owner_contact_name, owner_contact_email, owner_contact_phone,
-      test_patient_phone, setup_status
+      test_patient_phone, setup_status,
+      country, city, state_region, postal_code, preferred_area_code
   `;
   const row = rows[0];
   if (!row) throw new Error("clinic insert returned no row");

@@ -931,3 +931,61 @@ returns 503 instead of contacting Twilio.
 Only after that dry run is clean should the owner consider flipping
 `TWILIO_NUMBER_PURCHASE_ENABLED=true` and rerunning the same flow with
 a real number purchase.
+
+---
+
+## Country-aware onboarding (MVP scope)
+
+Automated onboarding currently supports **United States** and **Canada**.
+The clinic country picker shows a third "Other (contact us)" option that
+disables the form and surfaces:
+
+```
+Not available yet. Contact us if your clinic is outside the United
+States or Canada.
+```
+
+The server enforces the same allowlist (`400 country_not_supported`)
+so other countries cannot complete onboarding even if the client check
+is bypassed. Expanding the allowlist later is one migration line and
+one Zod enum update.
+
+### Local vs. toll-free number search
+
+The number-search step is a tabbed UI:
+
+- **Local number** — searched against the clinic's stored country with
+  an optional 3-digit area code (defaulted to the clinic's preferred
+  area code, then derived from the main phone). The clinic's stored
+  `state_region` and `postal_code` are also passed to Twilio when set
+  so the result locality is closer to the office.
+  Helper: *Looks local to patients near your office.*
+- **Toll-free number** — searched against the clinic's stored country.
+  Helper: *Business-style number. SMS use may require toll-free
+  verification before live patient messaging.*
+
+Both tabs show a `Local` or `Toll-free` chip on each result card so
+the operator can confirm what they're approving.
+
+### Toll-free SMS verification note
+
+Toll-free SMS in the United States and Canada requires Twilio
+toll-free verification before live patient messaging. The number can
+be purchased and used for voice immediately, but SMS recovery for
+that number must wait for verification + the standard go-live gate.
+The submission packet lives in
+`MVP_BUILD_DOCS/TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
+
+### Apply the country migration
+
+Migration file:
+
+```
+supabase/migrations/20260527000100_clinic_location.sql
+```
+
+Apply via Supabase SQL editor as the service role. Then run the
+verification queries in `SETUP-LOG.md` under the
+`2026-05-27 — Country-aware onboarding` entry.
+
+The migration is idempotent and safe to re-run.
