@@ -220,6 +220,8 @@ Keep the UI narrow and operational. Do not create a CRM.
 
 For dashboard, UI mockups, landing page redesign, admin screens, or other design-heavy work, consider using Claude Design for visual prototypes before implementation.
 
+For all forms, onboarding/setup flows, settings screens, and user-input UIs, follow the project-wide Form and Onboarding Scope Rule in `AGENTS.md`: ask only for what is needed for the next immediate step, defer non-essential fields, and explain why required fields are needed.
+
 ---
 
 ## 10. Production rule

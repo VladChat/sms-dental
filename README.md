@@ -44,3 +44,7 @@ private passwords or API keys
 ```
 
 Use `.env.local.example` for placeholders only.
+
+## Product UX standard for forms and onboarding
+
+Project-wide rule: all forms, onboarding/setup steps, dashboard settings, and user-input screens must ask only for data required for the next immediate step. Defer non-essential fields to later steps and explain why required fields are needed. Source of truth: `AGENTS.md` ("Form and Onboarding Scope Rule (Project-Wide)").

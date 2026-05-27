@@ -36,6 +36,20 @@ When project values conflict, use this priority:
 - `MVP_BUILD_DOCS/AGENT-RULES.md`
 - `Skills/missed-calls-dental-product-context.md`
 
+## Form and Onboarding Scope Rule (Project-Wide)
+
+For every form, onboarding step, setup flow, dashboard setting, or user-input screen, ask only for information required to complete the next immediate step.
+
+Do not collect fields only because they may be useful later. Move non-essential fields to profile completion, settings, admin review, billing/compliance, or later onboarding steps.
+
+If a field is required, add a short customer-facing explanation of why it is needed.
+
+This follows established form UX best practices, including Nielsen Norman Group's EAS framework: eliminate unnecessary fields first, automate where possible, and simplify what remains.
+
+Example:
+
+If the next step only needs clinic identity, office phone, and ZIP code, ask only for those fields. Do not ask for legal business name, owner phone, timezone, compliance details, billing details, or test data until those fields are actually required for the next step.
+
 For infrastructure, deployment, DNS, Supabase, Vercel, Twilio, Stripe, or production-like work, also read:
 
 - `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`

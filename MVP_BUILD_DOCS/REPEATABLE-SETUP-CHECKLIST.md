@@ -503,6 +503,9 @@ Lessons applied here:
 - Live customer SMS stays disabled after onboarding. Production go-live
   requires compliance approval, QA pass, owner approval, and an
   explicit mode flag.
+- Apply the project-wide form scope rule from `AGENTS.md`: collect only
+  what is needed for the next step, defer non-essential fields, and add
+  short "why this is needed" helper text for required fields.
 
 Required env names for this pattern:
 
