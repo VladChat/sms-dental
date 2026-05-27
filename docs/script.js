@@ -131,13 +131,7 @@
       submitBtn.textContent = state ? 'Sending…' : submitDefaultLabel;
     }
 
-    var nameInput = document.getElementById('full-name');
     var emailInput = document.getElementById('work-email');
-    if (nameInput) {
-      nameInput.addEventListener('input', function () {
-        setTrialError('');
-      });
-    }
     if (emailInput) {
       emailInput.addEventListener('input', function () {
         setTrialError('');
@@ -146,10 +140,9 @@
 
     form.addEventListener('submit', function (event) {
       event.preventDefault();
-      var name = nameInput ? nameInput.value.trim() : '';
       var email = emailInput ? emailInput.value.trim() : '';
-      if (!name || !email) {
-        setTrialError('Please enter your full name and work email.');
+      if (!email) {
+        setTrialError('Please enter your work email.');
         return;
       }
       setTrialError('');
@@ -163,7 +156,7 @@
         mode: 'cors',
         credentials: 'omit',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ full_name: name, work_email: email }),
+        body: JSON.stringify({ work_email: email }),
       })
         .then(function (res) {
           return res.json().catch(function () { return null; }).then(function (data) {
