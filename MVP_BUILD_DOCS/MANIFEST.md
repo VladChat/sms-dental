@@ -21,6 +21,7 @@ Operational documentation:
 - `A2P-10DLC-COMPLIANCE-READINESS.md` — A2P/toll-free compliance requirements before live patient SMS.
 - `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md` — copy-ready Twilio Toll-Free Verification submission packet.
 - `ONBOARDING-WORKFLOW-BUILD-GUIDE.md` — source of truth for the automated clinic onboarding workflow (`/setup/[token]`, office texting number selection, Twilio purchase, webhooks).
+- `../AGENTS.md` — repository-wide standing agent instructions, including the project-wide Form and Onboarding Scope Rule.
 
 Onboarding workflow scope (MVP):
 

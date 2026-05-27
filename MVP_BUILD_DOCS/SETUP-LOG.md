@@ -1019,3 +1019,31 @@ Safe next step for owner-only dry run:
    purchase_disabled` response — that is the correct safe outcome
    while `TWILIO_NUMBER_PURCHASE_ENABLED=false`. No Twilio number is
    purchased. No SMS is sent.
+
+---
+
+## 2026-05-27 — Project-wide form/onboarding scope rule documented
+
+- Added a permanent project-wide Form and Onboarding Scope Rule in `AGENTS.md`.
+- Rule applies to all forms, onboarding/setup flows, dashboard settings, and user-input screens.
+- Rule standard:
+  - Ask only for fields required for the next immediate step.
+  - Defer non-essential fields to later profile/settings/admin/compliance/billing stages.
+  - Add short customer-facing "why this is needed" explanations for required fields.
+  - Align with Nielsen Norman Group EAS framing: eliminate unnecessary fields, automate where possible, simplify what remains.
+- Added concise cross-references in:
+  - `README.md`
+  - `MVP_BUILD_DOCS/AGENT-RULES.md`
+  - `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+  - `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md`
+  - `MVP_BUILD_DOCS/FIRST-CLINIC-ONBOARDING.md`
+  - `MVP_BUILD_DOCS/MANIFEST.md`
+  - `Skills/page-cro-dental-saas.md`
+  - `.claude/skills/landing-page-cro/SKILL.md`
+
+Result:
+
+- Source/backend code changed: no.
+- Env files changed: no.
+- Live SMS enabled: no.
+- Twilio/Vercel/Stripe settings changed: no.

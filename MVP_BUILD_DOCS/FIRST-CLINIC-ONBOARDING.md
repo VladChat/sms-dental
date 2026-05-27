@@ -32,6 +32,8 @@ For the full future onboarding vision, see `08-compliance-and-onboarding.md`.
 
 Collect this before touching any system.
 
+Scope rule: ask only for information required for the next immediate onboarding step. Defer non-essential fields to later profile/settings/compliance steps and include a short customer-facing explanation for each required field.
+
 | Field | Notes |
 |---|---|
 | Legal/business name | For compliance records |

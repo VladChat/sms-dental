@@ -686,6 +686,8 @@ https://app.missedcallsdental.com
 The public marketing site (`docs/`) is the entry form only. The setup
 link sent by email always uses the app base URL.
 
+Form scope standard: follow `AGENTS.md` ("Form and Onboarding Scope Rule (Project-Wide)") for every onboarding/setup/settings input. Ask only for fields required for the next immediate step, defer non-essential fields to later stages, and explain why required fields are needed.
+
 ### Required environment variables
 
 ```

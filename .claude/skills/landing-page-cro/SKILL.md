@@ -27,6 +27,7 @@ CRO rules:
 - Specific copy over vague marketing terms.
 - Remove friction and ambiguity in next steps.
 - Keep copy short, direct, and evidence-aware.
+- For forms and onboarding/setup inputs, ask only for fields needed for the next immediate step; defer non-essential fields and include short "why this is needed" explanations for required fields (NNG EAS: eliminate, automate, simplify).
 
 Hard constraints:
 - No fake social proof or fake urgency.

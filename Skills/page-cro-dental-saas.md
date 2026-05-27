@@ -127,6 +127,12 @@ Simple.
 No hype.
 No fluff.
 
+Form/onboarding scope rule:
+- For any form, onboarding step, setup flow, settings screen, or user-input UI, ask only for information required for the next immediate step.
+- Do not collect fields only because they may be useful later; defer non-essential fields to later profile/settings/admin/compliance/billing steps.
+- For required fields, provide brief customer-facing "why this is needed" helper text.
+- Align with Nielsen Norman Group EAS: eliminate unnecessary fields, automate where possible, simplify what remains.
+
 For this project, page/CRO work must prioritize:
 1. Clarity
 2. Trust
