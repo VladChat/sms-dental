@@ -829,10 +829,11 @@ clinic onboarding workflow`).
 
 Verified consistent and correct:
 
-- Setup request creation: `POST /api/setup-requests` validates
-  full_name + work_email, inserts a row in `setup_requests`, then either
-  sends the Resend email or (if `OWNER_TEST_SETUP_LINK_FALLBACK=true`)
-  returns the setup link inline.
+- Setup request creation: `POST /api/setup-requests` validates work_email
+  (required) and optionally full_name (not required — public form is email-only;
+  `"Clinic owner"` is used as the fallback owner name when omitted), inserts a
+  row in `setup_requests`, then either sends the Resend email or (if
+  `OWNER_TEST_SETUP_LINK_FALLBACK=true`) returns the setup link inline.
 - Token generation: `lib/onboarding/tokens.ts` issues 32 random bytes
   hex-encoded (64-char), persists SHA-256 hash only, expires 72 h after
   issue, compares constant-time via `timingSafeEqual`.

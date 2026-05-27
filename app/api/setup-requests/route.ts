@@ -26,7 +26,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SetupRequestInputSchema = z.object({
-  full_name: z.string().trim().min(2).max(120),
+  full_name: z.string().trim().min(2).max(120).optional(),
   work_email: z.string().trim().email().max(254),
 });
 
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       const form = await req.formData();
       payload = {
-        full_name: form.get("full_name"),
+        full_name: form.get("full_name") ?? undefined,
         work_email: form.get("work_email"),
       };
     } catch {
@@ -52,9 +52,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!parsed.success) {
     return withCors(
       req,
-      jsonBadRequest("Please provide your full name and a valid work email."),
+      jsonBadRequest("Please provide a valid work email."),
     );
   }
+
+  const ownerName =
+    typeof parsed.data.full_name === "string" && parsed.data.full_name.trim().length > 0
+      ? parsed.data.full_name.trim()
+      : "Clinic owner";
 
   let appBaseUrl: string;
   let publicSiteUrl: string;
@@ -74,7 +79,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // email so a delivery failure can update email_status without losing
   // the request.
   const created = await insertSetupRequest({
-    ownerFullName: parsed.data.full_name,
+    ownerFullName: ownerName,
     ownerEmail: parsed.data.work_email.toLowerCase(),
     tokenHash: hash,
     expiresAt,
@@ -102,7 +107,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     await sendSetupLinkEmail({
       to: parsed.data.work_email,
-      ownerName: parsed.data.full_name,
+      ownerName,
       setupUrl,
     });
     await setSetupRequestStatus(created.id, "email_sent", {

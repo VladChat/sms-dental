@@ -918,7 +918,7 @@ returns 503 instead of contacting Twilio.
    ```
    curl -s -X POST http://localhost:3000/api/setup-requests \
      -H 'content-type: application/json' \
-     -d '{"full_name":"Owner Test","work_email":"owner@example.com"}'
+     -d '{"work_email":"owner@example.com"}'
    ```
    Expect a JSON response containing a `setup_url`.
 5. Open the returned setup URL in a browser. Fill out the clinic form,
