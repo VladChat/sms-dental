@@ -30,7 +30,7 @@ export class SetupEmailDeliveryError extends Error {
 export async function sendSetupLinkEmail(
   input: SetupLinkEmailInput,
 ): Promise<{ id: string | null }> {
-  const { RESEND_API_KEY, SETUP_EMAIL_FROM } = getSetupEmailEnv();
+  const { resendApiKey, setupEmailFrom } = getSetupEmailEnv();
 
   const subject = "Complete your Missed Calls Dental setup";
   const text = buildPlainBody(input.ownerName, input.setupUrl);
@@ -40,10 +40,10 @@ export async function sendSetupLinkEmail(
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${RESEND_API_KEY}`,
+      authorization: `Bearer ${resendApiKey}`,
     },
     body: JSON.stringify({
-      from: SETUP_EMAIL_FROM,
+      from: setupEmailFrom,
       to: [input.to],
       subject,
       text,

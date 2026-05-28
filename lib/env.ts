@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runtimeConfig } from "../config/runtime.config";
 
 // Per-feature env schemas. Each schema is validated lazily, at the moment a
 // specific helper is used. Nothing here runs at module import time, so
@@ -53,9 +54,12 @@ const AppDomainsSchema = z.object({
   PUBLIC_SITE_URL: z.string().url(),
 });
 
+// RESEND_API_KEY is the only required secret for setup email sending.
+// SETUP_EMAIL_FROM is an optional, non-secret override; when unset we use the
+// central default sender from runtimeConfig.email.defaultSetupFrom.
 const SetupEmailSchema = z.object({
   RESEND_API_KEY: requiredString,
-  SETUP_EMAIL_FROM: requiredString,
+  SETUP_EMAIL_FROM: z.string().trim().min(1).optional(),
 });
 
 export function getTwilioServerEnv() {
@@ -144,8 +148,17 @@ export function getAppDomainsSafe():
   };
 }
 
-export function getSetupEmailEnv() {
-  return SetupEmailSchema.parse(process.env);
+// Returns the validated Resend API key plus the resolved sender. The sender
+// is the optional SETUP_EMAIL_FROM override, otherwise the central default.
+export function getSetupEmailEnv(): {
+  resendApiKey: string;
+  setupEmailFrom: string;
+} {
+  const parsed = SetupEmailSchema.parse(process.env);
+  return {
+    resendApiKey: parsed.RESEND_API_KEY,
+    setupEmailFrom: parsed.SETUP_EMAIL_FROM ?? runtimeConfig.email.defaultSetupFrom,
+  };
 }
 
 // Twilio number purchase safety gate. Search is always allowed when the

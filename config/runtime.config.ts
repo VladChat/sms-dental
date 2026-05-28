@@ -12,6 +12,15 @@ export const runtimeConfig = {
     adminEmail: "internal-admin@missedcallsdental.local",
   },
 
+  email: {
+    // Default From for transactional setup emails sent via Resend. Sent from
+    // the Resend-verified subdomain mail.missedcallsdental.com. Override with
+    // the optional SETUP_EMAIL_FROM env var; RESEND_API_KEY is the only
+    // required secret for sending. Keep this as the single source of truth —
+    // do not hardcode the sender anywhere else.
+    defaultSetupFrom: "Missed Calls Dental <no-reply@mail.missedcallsdental.com>",
+  },
+
   supabase: {
     url: "https://qfjpvbvfvhbtebwivcdc.supabase.co",
     anonKey: "sb_publishable_Tl7_-4rLh4IiIT1lgkFGlA_Gf7ShCgC",
