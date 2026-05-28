@@ -31,7 +31,7 @@ export async function sendSetupLinkEmail(
 ): Promise<{ id: string | null }> {
   const { resendApiKey, setupEmailFrom } = getSetupEmailEnv();
 
-  const subject = "Complete your Missed Calls Dental setup";
+  const subject = "Complete your setup";
   const text = buildPlainBody(input.setupUrl);
   const html = buildHtmlBody(input.setupUrl);
 
