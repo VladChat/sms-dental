@@ -20,7 +20,7 @@ Core product:
 The app sends a professional SMS follow-up after a missed-call event reaches our system.
 
 Important product clarification:
-The app cannot automatically detect calls to an unrelated clinic phone number. The call event must reach the system through forwarding, tracking number usage, or a future direct phone-provider integration.
+The app cannot automatically detect calls to an unrelated clinic phone number. The call event must reach the system through forwarding, a prepared local-number path, or a future direct phone-provider integration.
 
 Main goal:
 Recover missed callers and help dental offices book more appointments.
@@ -38,13 +38,10 @@ Primary MVP connection modes:
    - The clinic or phone provider forwards no-answer, busy, unavailable, or after-hours calls to the assigned Twilio recovery number.
    - The forwarded call must preserve the patient's caller ID for SMS recovery to work correctly.
 
-2. Tracking number mode
-   - The clinic uses the assigned Twilio number as a dedicated tracking number.
-   - This number can be used on landing pages, Google Ads, print mailers, website CTAs, or selected campaigns.
-   - This mode is technically simpler because calls reach Twilio directly.
-
-3. Hybrid mode
-   - The clinic can forward missed calls from its main number and also use a dedicated tracking number for campaigns.
+2. Prepared local-number path (default onboarding path)
+   - The system prepares/reserves the best local number automatically from clinic context.
+   - The customer is not required to manually choose from a number catalog during default onboarding.
+   - The prepared local number can later be used for direct routing/campaign needs where appropriate.
 
 Future connection mode:
 - Direct integrations with phone providers or dental communication platforms may be added later.
@@ -52,8 +49,8 @@ Future connection mode:
 - This is not required for the first MVP.
 
 Core workflow:
-1. Patient calls the clinic's main number or a dedicated tracking number.
-2. The call reaches our system through conditional forwarding or direct tracking number usage.
+1. Patient calls the clinic's main number or prepared local number path.
+2. The call reaches our system through conditional forwarding or local direct routing.
 3. Twilio sends a signed webhook to the backend.
 4. Dental SMS records the event idempotently.
 5. The system checks opt-out and duplicate rules.
@@ -92,3 +89,6 @@ Compliance:
 
 Business requirement:
 The site must be good enough for Stripe verification, Twilio review, and real clinic customers.
+
+Current onboarding source of truth:
+Create office profile (clinic name, main office phone, ZIP code) first, then Business Profile cards for Business Information and A2P Approval Information. Billing starts only after SMS recovery is active.

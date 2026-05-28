@@ -26,7 +26,8 @@ Staging app URL: TO_FILL_AFTER_VERCEL_PROJECT_CREATED
 ## Pricing
 
 Monthly price: $99/month
-Trial wording: 14-day trial starts after setup is ready · then $99/month
+Trial baseline: 21-day free trial
+Billing activation rule: billing starts only after SMS recovery is active; do not charge while SMS approval is pending
 
 ## First test clinic
 

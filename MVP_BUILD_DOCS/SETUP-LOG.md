@@ -1050,6 +1050,29 @@ Result:
 
 ---
 
+## 2026-05-27 — Onboarding docs/rules aligned to Business Profile flow
+
+- Updated source-of-truth docs/rules to match the current onboarding decision:
+  - Step 1 collects only clinic name, main office phone, ZIP code.
+  - Business Profile is the next required stage (Business Information + A2P Approval Information).
+  - Local number preparation/reservation is the default MVP path.
+  - Customer-facing manual number catalogs are not required in default onboarding.
+  - Trial baseline set to 21 days; billing starts only after SMS recovery is active.
+- Updated `config/runtime.config.ts` billing baseline:
+  - `trialDaysAfterActivation: 21`.
+- Preserved SMS safety rules:
+  - `sms_recovery_enabled=false` until carrier/A2P approval and number readiness.
+  - owner-test mode remains separate from production live mode.
+
+Result:
+
+- Source/backend feature code changed: no.
+- Env files changed: no.
+- Live SMS enabled: no.
+- Twilio/Vercel/Stripe settings changed: no.
+
+---
+
 ## 2026-05-27 — Onboarding Step 1 simplified to U.S.-only 3-field form
 
 - Applied the project-wide Form and Onboarding Scope Rule (`AGENTS.md`)

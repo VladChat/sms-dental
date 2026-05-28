@@ -707,7 +707,7 @@ internal admin secret.
 - Public form target: `POST /api/setup-requests`
 - Setup page (token-scoped): `GET /setup/[token]`
 - Clinic form save:        `POST /api/onboarding/[token]/clinic`
-- Number search:           `GET  /api/onboarding/[token]/numbers?area_code=XXX`
+- Number preparation:      `GET  /api/onboarding/[token]/numbers?area_code=XXX` (internal/system use; not a customer-facing catalog requirement)
 - Number purchase:         `POST /api/onboarding/[token]/numbers/purchase`
 - Status deep link:        `GET  /setup/[token]/status`
 
@@ -924,8 +924,8 @@ returns 503 instead of contacting Twilio.
    ```
    Expect a JSON response containing a `setup_url`.
 5. Open the returned setup URL in a browser. Fill out the 3-field
-   Step 1 form (clinic name, main office phone, ZIP code), then watch
-   the number-search step list available Twilio numbers.
+   Step 1 form (clinic name, main office phone, ZIP code), then verify
+   the system prepares a local number for reservation.
 6. Click **Use this number**. Expect a 503 `purchase_disabled` response
    — this is the safe expected outcome with
    `TWILIO_NUMBER_PURCHASE_ENABLED=false`. No Twilio number is
@@ -936,6 +936,14 @@ Only after that dry run is clean should the owner consider flipping
 a real number purchase.
 
 ---
+
+## Onboarding source of truth (current)
+
+Current onboarding source of truth:
+
+`Create office profile (clinic name, main office phone, ZIP code) -> Business Profile (Business Information + A2P Approval Information) -> local number preparing/reserved -> SMS waiting for approval -> billing starts after SMS recovery is active`
+
+No customer-facing Review & Submit step is required in this flow.
 
 ## Onboarding scope (MVP — U.S.-only, 3-field Step 1)
 
@@ -964,30 +972,17 @@ Automated setup is currently available for U.S. clinics only.
 Expanding internationally later is a separate module decision, not a
 one-line config flip.
 
-### Local vs. toll-free number search
+### Local number default (no customer number catalog)
 
-The number-search step is a tabbed UI:
+Use local numbers as the default MVP path.
 
-- **Local number** — searched against `US` with an area code derived
-  from the clinic's main phone (and/or the explicit area code field in
-  the search UI). The saved ZIP code is passed to Twilio as
-  `inPostalCode` so the result locality is closer to the office.
-  Helper: *Looks local to patients near your office.*
-- **Toll-free number** — searched against `US`.
-  Helper: *Business-style number. SMS use may require toll-free
-  verification before live patient messaging.*
+The system should prepare/reserve the best local number automatically from the clinic's main phone + ZIP context.
 
-Both tabs show a `Local` or `Toll-free` chip on each result card so
-the operator can confirm what they're approving.
+Do not require customers to manually choose from a list of numbers during default onboarding.
 
-### Toll-free SMS verification note
+### Toll-free reference note
 
-Toll-free SMS in the U.S. requires Twilio toll-free verification before
-live patient messaging. The number can be purchased and used for voice
-immediately, but SMS recovery for that number must wait for verification
-+ the standard go-live gate.
-The submission packet lives in
-`MVP_BUILD_DOCS/TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
+Toll-free can remain an alternate/reference path for specific cases. It is not the main current onboarding path.
 
 ### Apply the country migration
 

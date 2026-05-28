@@ -26,9 +26,8 @@ Current active milestone:
 - Keep outbound SMS disabled.
 - Define and test the MVP phone event strategy:
   - conditional forwarding mode
-  - tracking number mode
-  - hybrid mode
-- Do not build the dashboard yet.
+  - local-number default path (system-prepared/reserved local number)
+- Do not build a full CRM, recovery inbox, or broad dashboard yet. Build only the narrow Business Profile setup page needed for onboarding.
 - Do not create Stripe resources yet.
 
 If this file conflicts with `PROJECT-CONTEXT.md`, `OPERATIONS-RUNBOOK.md`, `SETUP-LOG.md`, `backend-foundation-handoff.md`, or `.env.local.example`, use the newer/current source for the current implementation step.
@@ -87,7 +86,7 @@ Durable operational knowledge includes:
 - Vercel project/domain/env/deploy changes.
 - Supabase migrations, schema changes, pooler/direct connection lessons, or RLS changes.
 - Twilio webhook, phone number, Messaging Service, toll-free verification, trial limitation, or SMS/call test changes.
-- Phone event strategy changes, including forwarding mode, tracking number mode, hybrid mode, and caller ID preservation tests.
+- Phone event strategy changes, including forwarding mode, local-number default path behavior, and caller ID preservation tests.
 - Stripe product, price, webhook, billing, or subscription changes.
 - New public URLs or webhook URLs.
 - New required environment variable names.

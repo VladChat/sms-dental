@@ -30,23 +30,23 @@ For the full future onboarding vision, see `08-compliance-and-onboarding.md`.
 
 ## 1. Clinic Information to Collect
 
-Collect this before touching any system.
+Customer-facing Step 1 (Create office profile) collects only what is needed to start onboarding:
 
 Scope rule: ask only for information required for the next immediate onboarding step. Defer non-essential fields to later profile/settings/compliance steps and include a short customer-facing explanation for each required field.
 
 | Field | Notes |
 |---|---|
-| Legal/business name | For compliance records |
-| Public-facing practice name | Used in SMS and voice greeting — keep it short |
 | Main clinic phone number | The number patients currently call |
-| Preferred setup mode | Tracking number or conditional forwarding (see Section 2) |
-| IANA timezone | e.g. `America/Chicago` |
-| Owner/admin contact name | Internal escalation |
-| Owner/admin contact phone | Internal escalation |
-| Owner/admin contact email | Internal escalation |
-| Test phone number for QA | A phone the clinic controls for testing — not a patient number |
-| Emergency phone (optional now) | For future after-hours template |
-| Business hours (optional now) | For future after-hours/next-day logic |
+| Clinic name | Public-facing practice name used in SMS and voice greeting |
+| ZIP code | Used to prepare/reserve the best local office texting number |
+
+Later Business Profile cards collect details only when needed:
+
+- Business Information: legal business name, EIN/Tax ID, business type, business address, optional website.
+- A2P Approval Information: authorized representative details and authorization checkbox.
+- Representative email should be prefilled from setup/login email when available.
+- Representative phone should be prefilled from main office phone.
+- Do not require duplicate entry for fields already collected.
 
 Do not store secrets, passwords, or EHR credentials in this document.
 
@@ -85,7 +85,7 @@ Do **not** enable unconditional forwarding. That would bypass the front desk ent
 
 ---
 
-### Mode B — Tracking Number
+### Mode B — Tracking Number (alternate/historical path)
 
 **What the clinic does:**
 Publish the assigned Twilio number directly in one or more channels:
@@ -110,9 +110,9 @@ Publish the assigned Twilio number directly in one or more channels:
 
 ---
 
-### Safest MVP Recommendation
+### Current MVP Recommendation
 
-Start with **conditional forwarding on no-answer + busy** from the clinic's main number. This is the least disruptive for an existing clinic and recovers calls the front desk genuinely missed.
+Use **system-prepared local number** by default for onboarding, plus conditional forwarding where clinic phone operations require it. Do not require customer-facing manual number selection from a catalog.
 
 ---
 
@@ -386,7 +386,7 @@ Before we turn on real patient SMS, we'll run a test call together to confirm ev
 
 Please let us know:
 1. Which phone provider handles your main clinic line.
-2. A test phone number we can use for internal testing (not a patient number).
+2. The main office phone and ZIP code used during Create office profile (for local number preparation).
 3. Any questions about the setup.
 
 ---
@@ -502,18 +502,11 @@ Automated setup is currently available for U.S. clinics only.
 
 International onboarding can be added later as separate modules.
 
-### Local vs. toll-free choice
+### Local number default (no customer catalog)
 
-The number-search step is split into two tabs:
-
-- **Local number** uses the saved ZIP code (passed to Twilio as
-  `inPostalCode`) and/or the area code derived from the clinic's main
-  office phone to surface numbers that look local to patients near
-  the office.
-- **Toll-free number** lists U.S. toll-free numbers. Toll-free SMS in
-  the U.S. requires Twilio toll-free verification before live patient
-  messaging — voice works immediately once the number is assigned,
-  SMS waits for verification and the standard go-live gate.
+Current onboarding defaults to automatic local number preparation/reservation.
+The customer should not manually choose from a broad number catalog as part of default onboarding.
+Toll-free can remain an alternate/reference path for special cases, but it is not the main MVP onboarding path.
 
 ### Production safety still applies
 

@@ -29,7 +29,7 @@ export const runtimeConfig = {
 
   billing: {
     monthlyPriceUsd: 99,
-    trialDaysAfterActivation: 14,
+    trialDaysAfterActivation: 21,
   },
 
   testClinic: {
