@@ -1240,3 +1240,62 @@ Remaining launch blockers:
 1. Configure `RESEND_API_KEY` + `SETUP_EMAIL_FROM` on Vercel production (owner).
 2. After Resend is configured, set `OWNER_TEST_SETUP_LINK_FALLBACK=false`,
    redeploy, and run the owner-only real-email dry run.
+
+---
+
+## 2026-05-28 — Production setup email flow enabled (Resend)
+
+Resend production setup email is now **configured and live**.
+
+Config / code:
+
+- `RESEND_API_KEY` is the only required secret for setup email sending. Set on
+  Vercel Production as an **encrypted** env var (value never printed/committed).
+  The key is a Resend **restricted, send-only** key.
+- Default sender centralized in `config/runtime.config.ts`
+  (`email.defaultSetupFrom = "Missed Calls Dental <no-reply@mail.missedcallsdental.com>"`)
+  — single source of truth, sent from the Resend-verified subdomain
+  `mail.missedcallsdental.com`.
+- `lib/env.ts` `getSetupEmailEnv()` now returns `{ resendApiKey, setupEmailFrom }`;
+  `SETUP_EMAIL_FROM` is an optional, non-secret override and is **not** set on
+  Vercel. `lib/email/setup-link-email.ts` uses the resolved sender.
+
+Vercel Production env (no values shown):
+
+- `RESEND_API_KEY`: set (encrypted).
+- `OWNER_TEST_SETUP_LINK_FALLBACK`: **false**.
+- `SETUP_EMAIL_FROM`: not set (default from config).
+- `APP_BASE_URL=https://app.missedcallsdental.com`, `PUBLIC_SITE_URL=https://missedcallsdental.com`: confirmed present.
+
+Deploy: pushed `4c56f6a`; Vercel production auto-deployed and reached READY on
+that commit. `GET /api/health` → 200.
+
+Owner-only real-email dry run (recipient `livedealsmart@gmail.com`, used only
+for verification — not hardcoded, no allowlist added):
+
+- `POST /api/setup-requests` → `ok:true`, `confirm_url` returned, **no
+  `setup_url`** (fallback off, real email path).
+- `setup_requests` row: `status='email_sent'`, `email_status='sent'`
+  (Resend accepted the send), token hash stored, raw token not stored.
+- Setup link is built from `APP_BASE_URL` →
+  `https://app.missedcallsdental.com/setup/<token>` (token not logged).
+- Create office profile → Business Profile → Business Information → A2P →
+  `/business/{slug}` + `/privacy` + `/sms-terms`: verified end-to-end on
+  2026-05-28 (migration task) and unchanged by this email-only change. The
+  send-only Resend key cannot fetch the email body, so inbox receipt + From
+  display are confirmed by the owner opening the email.
+
+Safety confirmations:
+
+- No email allowlist or hardcoded test recipient added to production logic.
+- SMS sent: no (0 messages in window). `sms_recovery_enabled`: unchanged
+  (only pre-existing `owner-test` is true). Billing: not started; trial dates null.
+- Twilio settings/webhooks: unchanged. No number purchased/reserved.
+- Stripe: unchanged. Supabase migration: none applied. DNS: unchanged.
+- Secrets printed: no. `.env.local` / `.local-agent/` committed: no.
+
+Checks: `npm run typecheck` pass; `npm run build` pass; no `lint` script.
+
+Remaining blockers for full public launch: none for the setup email flow.
+Live patient SMS remains gated (compliance/A2P + QA + explicit go-live), and
+billing/trial start only after SMS recovery activation — both intentionally off.

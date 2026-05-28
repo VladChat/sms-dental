@@ -514,26 +514,29 @@ TWILIO_NUMBER_PURCHASE_ENABLED
 OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 ```
 
-### Production setup email — pre-launch checklist
+### Production setup email — status (configured 2026-05-28)
 
-- [ ] **Verify Resend env before public launch.** `RESEND_API_KEY` and
-      `SETUP_EMAIL_FROM` must be set on Vercel Production with a sender on a
-      Resend-verified domain. (As of 2026-05-28 these are **not** configured —
-      no real key exists locally; this is a launch blocker.)
-- [ ] **Verify the fallback is disabled** for public launch:
-      `OWNER_TEST_SETUP_LINK_FALLBACK=false`. Keep it `true` until Resend is
-      configured — flipping it off without Resend returns `502
-      email_delivery_failed` and breaks onboarding.
-- [ ] **Run one owner-only setup email dry run.** `POST /api/setup-requests`
-      with the owner-only test email; confirm the response no longer returns
-      `setup_url`, and that the email arrives with an
-      `https://app.missedcallsdental.com/setup/<token>` link. Do not paste the
-      raw token into shared logs.
-- [ ] **Confirm Business Profile onboarding opens from the emailed setup link**:
-      Create office profile → Business Profile → Business Information → A2P
-      Approval Information → `/business/{slug}` (+ `/privacy`, `/sms-terms`).
-- [ ] Confirm no SMS was sent, no Twilio number purchased/reserved, no Stripe
-      action, billing stays Not started.
+- [x] **Resend configured.** `RESEND_API_KEY` is set on Vercel Production as an
+      encrypted secret (a restricted, send-only key). It is the **only** Resend
+      secret required. Sending domain `mail.missedcallsdental.com` is verified.
+- [x] **Default sender centralized in code** — `config/runtime.config.ts`
+      `email.defaultSetupFrom` = `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`.
+      `SETUP_EMAIL_FROM` is an optional, non-secret override and is **not** set
+      on Vercel.
+- [x] **Fallback disabled** for public launch:
+      `OWNER_TEST_SETUP_LINK_FALLBACK=false`. (Only set it `true` for a short
+      owner-only API test when Resend is intentionally bypassed — with it off
+      and no Resend key, the endpoint returns `502 email_delivery_failed`.)
+- [x] **Owner-only setup email dry run passed.** `POST /api/setup-requests`
+      returned `ok:true` with **no** `setup_url`; the `setup_requests` row shows
+      `email_status='sent'`. Raw token only reaches the recipient inbox — never
+      logged. (Send-only key cannot fetch bodies; click-through is owner-verified.)
+- [x] **Business Profile onboarding from the emailed link** (Create office
+      profile → Business Profile → Business Information → A2P → `/business/{slug}`
+      + `/privacy` + `/sms-terms`) verified end-to-end 2026-05-28; unchanged by
+      the email-config commit.
+- [x] No SMS sent, no Twilio number purchased/reserved, no Stripe action,
+      billing stays Not started.
 
 ---
 

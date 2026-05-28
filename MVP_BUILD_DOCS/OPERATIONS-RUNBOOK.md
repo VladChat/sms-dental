@@ -700,42 +700,49 @@ Form scope standard: follow `AGENTS.md` ("Form and Onboarding Scope Rule (Projec
 ```
 APP_BASE_URL=https://app.missedcallsdental.com
 PUBLIC_SITE_URL=https://missedcallsdental.com
-RESEND_API_KEY=<resend api key>
-SETUP_EMAIL_FROM=Missed Calls Dental <support@missedcallsdental.com>
-TWILIO_NUMBER_PURCHASE_ENABLED=true   # only when ready to spend money
-OWNER_TEST_SETUP_LINK_FALLBACK=false  # never true in production
+RESEND_API_KEY=<resend api key>            # required secret for email sending
+# SETUP_EMAIL_FROM is OPTIONAL — default sender comes from
+# config/runtime.config.ts (Missed Calls Dental <no-reply@mail.missedcallsdental.com>).
+# Set it only to override the default; it is not a secret.
+TWILIO_NUMBER_PURCHASE_ENABLED=true        # only when ready to spend money
+OWNER_TEST_SETUP_LINK_FALLBACK=false       # never true in public production
 ```
 
 Verify presence (no values) via `GET /api/internal/health` with the
 internal admin secret.
 
-### Setup email delivery — current status (2026-05-28)
+### Setup email delivery — configured (2026-05-28)
 
-Production email is **not configured yet**. `RESEND_API_KEY` and
-`SETUP_EMAIL_FROM` are **missing on Vercel production** and **empty in
-local `.env.local`**, so no real Resend value exists to deploy.
+Production setup email is **live via Resend**.
 
-Because of that, `OWNER_TEST_SETUP_LINK_FALLBACK` is intentionally left
-**`true`** in production for now: it makes `POST /api/setup-requests`
-return the setup link in the JSON response instead of emailing it.
+- **`RESEND_API_KEY` is the only required secret.** It is set on Vercel
+  Production as an encrypted env var. The key in use is a Resend
+  *restricted, send-only* key (it cannot read/list emails).
+- **`SETUP_EMAIL_FROM` is NOT required and is not set as a secret.** The
+  default sender lives in code: `runtimeConfig.email.defaultSetupFrom` in
+  `config/runtime.config.ts` =
+  `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`
+  (single source of truth). `SETUP_EMAIL_FROM` is an optional, non-secret
+  override only — set it on Vercel only if you want a different sender.
+- Sending domain `mail.missedcallsdental.com` is verified in Resend.
+- **`OWNER_TEST_SETUP_LINK_FALLBACK=false`** in production: real emails are
+  sent and the setup link is no longer returned in the API response.
 
-> Do not flip `OWNER_TEST_SETUP_LINK_FALLBACK=false` until Resend is
-> configured. With the fallback off and no Resend key, the endpoint
-> returns `502 email_delivery_failed` and onboarding breaks.
+How it behaves: `POST /api/setup-requests` validates the work email, creates
+the request + token (hash stored), and emails the setup link
+`https://app.missedcallsdental.com/setup/<token>` via Resend. On Resend
+failure the route returns `502 email_delivery_failed` and the request stays
+recoverable (`email_status=failed:*`).
 
-To finish the production email flow (owner action — requires a real key):
+Verify safely (owner-only): `POST /api/setup-requests` with an owner test
+email, confirm the response does **not** include `setup_url`, and confirm the
+`setup_requests` row has `email_status='sent'`. The raw token only reaches the
+recipient's inbox — never paste it into shared logs. (The send-only key cannot
+retrieve message bodies, so the click-through is verified by the owner opening
+the email.)
 
-1. Create a Resend API key and verify the sending domain/sender in Resend.
-2. Set on Vercel **Production** (no values in Git):
-   `RESEND_API_KEY=<key>` and
-   `SETUP_EMAIL_FROM=Missed Calls Dental <no-reply@missedcallsdental.com>`
-   (use a sender on a Resend-verified domain).
-3. Set `OWNER_TEST_SETUP_LINK_FALLBACK=false`.
-4. Redeploy production.
-5. Verify safely: `POST /api/setup-requests` with the owner-only test email,
-   confirm the response no longer includes `setup_url`, and confirm the email
-   arrives with an `https://app.missedcallsdental.com/setup/<token>` link.
-   Never paste the raw token into shared logs.
+> Keep `OWNER_TEST_SETUP_LINK_FALLBACK=false` in public production. Only set it
+> `true` for a short owner-only API test when Resend is intentionally bypassed.
 
 ### Onboarding URL surface
 
@@ -901,15 +908,15 @@ onboarding traffic. Re-run the migration or contact the operator.
 ## Required Environment Variables Before Owner-Only Testing
 
 The onboarding code works in three modes depending on env state.
-Production env vars are not yet set; the following table is the
-authoritative reference.
+Production setup-email vars are now configured (2026-05-28); the table
+below is the authoritative reference.
 
 | Env var                          | Required for production? | Owner-only testing default       |
 |----------------------------------|--------------------------|----------------------------------|
 | APP_BASE_URL                     | yes                      | `http://localhost:3000` (local)  |
 | PUBLIC_SITE_URL                  | yes                      | `https://missedcallsdental.com`  |
-| RESEND_API_KEY                   | yes                      | unset (use fallback below)       |
-| SETUP_EMAIL_FROM                 | yes                      | unset (use fallback below)       |
+| RESEND_API_KEY                   | yes (secret)             | unset (use fallback below)       |
+| SETUP_EMAIL_FROM                 | no (optional override)   | unset → uses config default      |
 | TWILIO_NUMBER_PURCHASE_ENABLED   | yes (set to `true`)      | `false` (never purchase yet)     |
 | OWNER_TEST_SETUP_LINK_FALLBACK   | no (must stay `false`)   | `true` only during local testing |
 | TWILIO_ACCOUNT_SID               | yes (already configured) | already configured               |
@@ -918,16 +925,16 @@ authoritative reference.
 | SUPABASE_DB_URL                  | yes (already configured) | already configured               |
 | PUBLIC_WEBHOOK_BASE_URL          | yes (already configured) | already configured               |
 
-For Vercel-production rollout (do not run until owner explicitly says
-to), set these in `Project → Settings → Environment Variables`:
+Production Vercel env (set 2026-05-28):
 
 ```
 APP_BASE_URL=https://app.missedcallsdental.com
 PUBLIC_SITE_URL=https://missedcallsdental.com
-RESEND_API_KEY=<resend api key>
-SETUP_EMAIL_FROM=Missed Calls Dental <support@missedcallsdental.com>
-TWILIO_NUMBER_PURCHASE_ENABLED=false   # flip to true ONLY when ready to spend
-OWNER_TEST_SETUP_LINK_FALLBACK=false   # MUST stay false in production
+RESEND_API_KEY=<encrypted secret — set>     # the only required Resend secret
+# SETUP_EMAIL_FROM intentionally NOT set — default sender from
+# config/runtime.config.ts (Missed Calls Dental <no-reply@mail.missedcallsdental.com>)
+TWILIO_NUMBER_PURCHASE_ENABLED=false        # flip to true ONLY when ready to spend
+OWNER_TEST_SETUP_LINK_FALLBACK=false        # MUST stay false in production
 ```
 
 For owner-only local testing without configuring Resend:
