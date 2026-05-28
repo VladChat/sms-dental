@@ -32,6 +32,7 @@ export default async function BusinessPublicPage({
 
   const address = formatAddress({
     street: clinic.street_address,
+    line2: clinic.address_line2,
     city: clinic.city,
     state: clinic.state_region,
     zip: clinic.postal_code,
@@ -39,7 +40,7 @@ export default async function BusinessPublicPage({
   const websiteUrl = isSafeHttpsUrl(clinic.website) ? clinic.website! : null;
 
   return (
-    <PublicShell businessName={clinic.name}>
+    <PublicShell businessName={clinic.name} slug={slug} page="profile">
       <h1 style={h1Style}>{clinic.name}</h1>
 
       <h2 style={h2Style}>Business information</h2>

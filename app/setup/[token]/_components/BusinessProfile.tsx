@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { BUSINESS_TYPES } from "../../../../lib/validation/url";
+import { useMemo, useState } from "react";
+import {
+  BUSINESS_TYPES,
+  BUSINESS_TYPE_LABELS,
+  DEFAULT_BUSINESS_TYPE,
+} from "../../../../lib/validation/url";
 
 export type BusinessProfileData = {
   token: string;
   loginEmail: string;
-  // Absolute base URL for the public /business/{slug} pages (app domain).
+  // Absolute base URL for the public /business/{slug} pages.
   publicBaseUrl: string;
   clinic: {
     name: string;
@@ -16,6 +20,7 @@ export type BusinessProfileData = {
     einTaxId: string;
     businessType: string;
     streetAddress: string;
+    addressLine2: string;
     city: string;
     stateRegion: string;
     website: string;
@@ -24,7 +29,6 @@ export type BusinessProfileData = {
     a2p: {
       firstName: string;
       lastName: string;
-      businessTitle: string;
       email: string;
       phone: string;
       authorized: boolean;
@@ -36,14 +40,8 @@ export type BusinessProfileData = {
   };
 };
 
-function localNumberLabel(s: BusinessProfileData["clinic"]["localNumberStatus"]) {
-  return s === "preparing" ? "Preparing" : "Reserved";
-}
-function smsLabel(s: BusinessProfileData["clinic"]["smsStatus"]) {
-  if (s === "waiting_for_approval") return "Waiting for approval";
-  if (s === "active") return "Active";
-  return "Preparing";
-}
+type StepId = 1 | 2 | 3 | 4 | 5 | 6;
+type BadgeKind = "success" | "info" | "warn" | "muted";
 
 export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const c = data.clinic;
@@ -53,103 +51,162 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [a2pDone, setA2pDone] = useState(c.a2p.completed);
   const [slug, setSlug] = useState(c.slug);
 
+  const firstOpen: StepId = !businessDone ? 1 : !a2pDone ? 2 : 3;
+  const [activeStep, setActiveStep] = useState<StepId>(firstOpen);
+
+  const steps = useMemo(
+    () => buildSteps({ businessDone, a2pDone, slug, smsStatus }),
+    [businessDone, a2pDone, slug, smsStatus],
+  );
+
   return (
-    <div style={{ display: "grid", gap: 18 }}>
-      <StatusStrip
-        localNumber={localNumberLabel(c.localNumberStatus)}
-        sms={smsLabel(smsStatus)}
-        billing="Not started"
-      />
+    <main style={shellStyle}>
+      <header style={appHeaderStyle}>
+        <p style={brandStyle}>{clinicName || "Your clinic"}</p>
+        <h1 style={appTitleStyle}>Account setup</h1>
+        <p style={appSubtitleStyle}>
+          Complete each step below. Patient texting stays off until everything is approved.
+        </p>
+      </header>
 
-      <BusinessInformationCard
-        token={data.token}
-        clinic={c}
-        complete={businessDone}
-        onSaved={(next) => {
-          setClinicName(next.name);
-          setBusinessDone(true);
-          if (next.slug) setSlug(next.slug);
-        }}
-      />
+      <div style={layoutStyle}>
+        <nav aria-label="Setup steps" style={sidebarStyle}>
+          {steps.map((s) => {
+            const active = s.id === activeStep;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setActiveStep(s.id)}
+                style={{
+                  ...stepNavItem,
+                  ...(active ? stepNavItemActive : null),
+                  ...(s.muted && !active ? stepNavItemMuted : null),
+                }}
+              >
+                <span style={stepNavTop}>
+                  <span style={stepNum}>{s.id}</span>
+                  <span style={stepNavTitle}>{s.title}</span>
+                </span>
+                <Badge kind={s.badgeKind}>{s.badge}</Badge>
+              </button>
+            );
+          })}
+        </nav>
 
-      <A2pCard
-        token={data.token}
-        clinicName={clinicName}
-        loginEmail={data.loginEmail}
-        defaultRep={c.a2p}
-        defaultMainPhone={c.mainPhone}
-        complete={a2pDone}
-        onSaved={() => {
-          setA2pDone(true);
-          setSmsStatus((s) => (s === "preparing" ? "waiting_for_approval" : s));
-        }}
-      />
-
-      <PublicBusinessPageCard publicBaseUrl={data.publicBaseUrl} slug={slug} />
-
-      <BillingCard />
-      <BillingHistoryCard />
-      <LoginSecurityCard loginEmail={data.loginEmail} />
-      <SupportCard />
-    </div>
+        <section style={contentStyle}>
+          {activeStep === 1 && (
+            <BusinessInformationCard
+              token={data.token}
+              clinic={c}
+              onSaved={(next) => {
+                setClinicName(next.name);
+                setBusinessDone(true);
+                if (next.slug) setSlug(next.slug);
+                setActiveStep(2);
+              }}
+            />
+          )}
+          {activeStep === 2 && (
+            <A2pCard
+              token={data.token}
+              clinicName={clinicName}
+              loginEmail={data.loginEmail}
+              defaultRep={c.a2p}
+              defaultMainPhone={c.mainPhone}
+              onSaved={() => {
+                setA2pDone(true);
+                setSmsStatus((s) => (s === "preparing" ? "waiting_for_approval" : s));
+                setActiveStep(3);
+              }}
+            />
+          )}
+          {activeStep === 3 && (
+            <CompliancePagesCard publicBaseUrl={data.publicBaseUrl} slug={slug} />
+          )}
+          {activeStep === 4 && (
+            <PhoneNumberSetupCard status={c.localNumberStatus} />
+          )}
+          {activeStep === 5 && <SmsActivationCard status={smsStatus} a2pDone={a2pDone} />}
+          {activeStep === 6 && <BillingCard />}
+        </section>
+      </div>
+    </main>
   );
 }
 
-/* ---------------------------------------------------------------- status */
-
-function StatusStrip({
-  localNumber,
-  sms,
-  billing,
-}: {
-  localNumber: string;
-  sms: string;
-  billing: string;
-}) {
-  return (
-    <section
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-        gap: 12,
-        padding: 16,
-        borderRadius: 14,
-        border: "1px solid #e5e7eb",
-        background: "#ffffff",
-      }}
-    >
-      <StatusPill label="Local number" value={localNumber} />
-      <StatusPill label="SMS" value={sms} />
-      <StatusPill label="Billing" value={billing} />
-    </section>
-  );
+function buildSteps(s: {
+  businessDone: boolean;
+  a2pDone: boolean;
+  slug: string | null;
+  smsStatus: BusinessProfileData["clinic"]["smsStatus"];
+}): {
+  id: StepId;
+  title: string;
+  badge: string;
+  badgeKind: BadgeKind;
+  muted: boolean;
+}[] {
+  return [
+    {
+      id: 1,
+      title: "Business Information",
+      badge: s.businessDone ? "Saved" : "Needs attention",
+      badgeKind: s.businessDone ? "success" : "warn",
+      muted: false,
+    },
+    {
+      id: 2,
+      title: "A2P Approval Information",
+      badge: s.a2pDone ? "Ready for review" : "Needs attention",
+      badgeKind: s.a2pDone ? "info" : "warn",
+      muted: !s.businessDone,
+    },
+    {
+      id: 3,
+      title: "Compliance Pages",
+      badge: s.slug ? "Generated" : "Pending",
+      badgeKind: s.slug ? "success" : "muted",
+      muted: !s.slug,
+    },
+    {
+      id: 4,
+      title: "Phone Number Setup",
+      badge: "Preparing",
+      badgeKind: "muted",
+      muted: true,
+    },
+    {
+      id: 5,
+      title: "SMS Activation",
+      badge: s.smsStatus === "waiting_for_approval" ? "Waiting for approval" : "Not started",
+      badgeKind: s.smsStatus === "waiting_for_approval" ? "info" : "muted",
+      muted: true,
+    },
+    {
+      id: 6,
+      title: "Billing",
+      badge: "Later",
+      badgeKind: "muted",
+      muted: true,
+    },
+  ];
 }
 
-function StatusPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p style={statusLabelStyle}>{label}</p>
-      <p style={statusValueStyle}>{value}</p>
-    </div>
-  );
-}
-
-/* -------------------------------------------------- Card 1: Business Info */
+/* -------------------------------------------------- Step 1: Business Info */
 
 function BusinessInformationCard({
   token,
   clinic,
-  complete,
   onSaved,
 }: {
   token: string;
   clinic: BusinessProfileData["clinic"];
-  complete: boolean;
   onSaved: (next: { name: string; slug: string | null }) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -172,7 +229,7 @@ function BusinessInformationCard({
         setError(json?.error?.message ?? "Could not save business information.");
         return;
       }
-      setSaved(true);
+      setSavedAt(nowLabel());
       onSaved({ name: String(payload.name ?? clinic.name), slug: json.slug ?? null });
     } catch {
       setError("Something went wrong. Please try again.");
@@ -181,39 +238,39 @@ function BusinessInformationCard({
     }
   }
 
+  const businessTypeInitial =
+    clinic.businessType && (BUSINESS_TYPES as readonly string[]).includes(clinic.businessType)
+      ? clinic.businessType
+      : DEFAULT_BUSINESS_TYPE;
+
   return (
-    <Card title="Business Information" badge={complete ? "Complete" : undefined}>
+    <Card title="Business Information" subtitle="Tell us about your practice.">
       <form onSubmit={onSubmit} noValidate>
         <Field label="Clinic name" name="name" defaultValue={clinic.name} required />
-        <Field label="Main office phone" name="main_phone" defaultValue={clinic.mainPhone} required inputMode="tel" />
-        <Field label="ZIP code" name="postal_code" defaultValue={clinic.postalCode} required inputMode="numeric" />
         <Field label="Legal business name" name="legal_business_name" defaultValue={clinic.legalBusinessName} required />
-        <Field label="EIN / Tax ID" name="ein_tax_id" defaultValue={clinic.einTaxId} required />
         <SelectField
-          label="Business type"
+          label="Business Type"
           name="business_type"
-          defaultValue={clinic.businessType}
+          defaultValue={businessTypeInitial}
           options={BUSINESS_TYPES}
-          placeholder="Select…"
+          labelFor={(v) => BUSINESS_TYPE_LABELS[v as keyof typeof BUSINESS_TYPE_LABELS] ?? v}
         />
+        <Field label="EIN" name="ein_tax_id" defaultValue={clinic.einTaxId} required helper="Your business EIN (employer identification number)." />
+        <Field label="Main office phone" name="main_phone" defaultValue={clinic.mainPhone} required inputMode="tel" />
         <Field label="Street address" name="street_address" defaultValue={clinic.streetAddress} required />
+        <Field label="Address line 2" name="address_line2" defaultValue={clinic.addressLine2} placeholder="Suite, unit, floor (optional)" />
         <Field label="City" name="city" defaultValue={clinic.city} required />
         <Field label="State" name="state_region" defaultValue={clinic.stateRegion} placeholder="IL" required />
-        <Field label="Website (optional)" name="website" defaultValue={clinic.website} placeholder="https://yourpractice.com" inputMode="text" />
+        <Field label="ZIP code" name="postal_code" defaultValue={clinic.postalCode} required inputMode="numeric" />
+        <Field label="Website" name="website" defaultValue={clinic.website} placeholder="https://yourpractice.com" helper="Optional." />
 
-        <FormFooter
-          error={error}
-          saved={saved}
-          saving={saving}
-          label="Save business information"
-          savingLabel="Saving…"
-        />
+        <FormFooter error={error} savedAt={savedAt} saving={saving} label="Save business information" />
       </form>
     </Card>
   );
 }
 
-/* ------------------------------------------------ Card 2: A2P Approval */
+/* ------------------------------------------------ Step 2: A2P Approval */
 
 function A2pCard({
   token,
@@ -221,7 +278,6 @@ function A2pCard({
   loginEmail,
   defaultRep,
   defaultMainPhone,
-  complete,
   onSaved,
 }: {
   token: string;
@@ -229,15 +285,14 @@ function A2pCard({
   loginEmail: string;
   defaultRep: BusinessProfileData["clinic"]["a2p"];
   defaultMainPhone: string;
-  complete: boolean;
   onSaved: () => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [authorized, setAuthorized] = useState(defaultRep.authorized);
 
-  const sample = `Hi, this is ${clinicName || "{{clinic_name}}"}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.`;
+  const sample = `Hi, this is ${clinicName || "your clinic"}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.`;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -252,7 +307,6 @@ function A2pCard({
       const payload = {
         rep_first_name: fd.get("rep_first_name"),
         rep_last_name: fd.get("rep_last_name"),
-        business_title: fd.get("business_title"),
         rep_email: fd.get("rep_email"),
         rep_phone: fd.get("rep_phone"),
         authorized,
@@ -264,10 +318,10 @@ function A2pCard({
       });
       const json = (await res.json()) as { ok?: boolean; error?: { message?: string } };
       if (!res.ok || !json.ok) {
-        setError(json?.error?.message ?? "Could not save A2P information.");
+        setError(json?.error?.message ?? "Could not save approval information.");
         return;
       }
-      setSaved(true);
+      setSavedAt(nowLabel());
       onSaved();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -279,33 +333,23 @@ function A2pCard({
   return (
     <Card
       title="A2P Approval Information"
-      subtitle="Required for carrier approval before patient SMS can be activated."
-      badge={complete ? "Complete" : undefined}
+      subtitle="The authorized contact for this business. Required before texting can be approved."
     >
       <form onSubmit={onSubmit} noValidate>
-        <Field label="Representative first name" name="rep_first_name" defaultValue={defaultRep.firstName} required />
-        <Field label="Representative last name" name="rep_last_name" defaultValue={defaultRep.lastName} required />
-        <Field label="Business title" name="business_title" defaultValue={defaultRep.businessTitle} required />
-        <Field
-          label="Representative email"
-          name="rep_email"
-          type="email"
-          defaultValue={defaultRep.email || loginEmail}
-          required
-        />
-        <Field
-          label="Representative phone"
-          name="rep_phone"
-          defaultValue={defaultRep.phone || defaultMainPhone}
-          inputMode="tel"
-          required
-        />
+        <Field label="First name" name="rep_first_name" defaultValue={defaultRep.firstName} required />
+        <Field label="Last name" name="rep_last_name" defaultValue={defaultRep.lastName} required />
+        <Field label="Email" name="rep_email" type="email" defaultValue={defaultRep.email || loginEmail} required />
+        <Field label="Phone" name="rep_phone" defaultValue={defaultRep.phone || defaultMainPhone} inputMode="tel" required />
 
         <div style={previewBox}>
-          <p style={previewLabel}>Use case</p>
-          <p style={previewText}>Missed-call follow-up for patients who called the office.</p>
-          <p style={{ ...previewLabel, marginTop: 10 }}>Sample message</p>
-          <p style={previewText}>{sample}</p>
+          <p style={previewLabel}>Prepared for you automatically</p>
+          <p style={previewText}>
+            We generate the texting use case and a sample message from your business details, so you
+            don’t have to write them.
+          </p>
+          <p style={{ ...previewText, marginTop: 8, color: "#475569" }}>
+            <em>Sample:</em> {sample}
+          </p>
         </div>
 
         <label style={checkboxRow}>
@@ -318,21 +362,15 @@ function A2pCard({
           <span>I am authorized to approve SMS setup for this business.</span>
         </label>
 
-        <FormFooter
-          error={error}
-          saved={saved}
-          saving={saving}
-          label="Save A2P information"
-          savingLabel="Saving…"
-        />
+        <FormFooter error={error} savedAt={savedAt} saving={saving} label="Save A2P information" />
       </form>
     </Card>
   );
 }
 
-/* ----------------------------------------- Card 3: Public Business Page */
+/* ----------------------------------------- Step 3: Compliance Pages */
 
-function PublicBusinessPageCard({
+function CompliancePagesCard({
   publicBaseUrl,
   slug,
 }: {
@@ -341,86 +379,104 @@ function PublicBusinessPageCard({
 }) {
   if (!slug) {
     return (
-      <Card title="Public Business Page">
+      <Card title="Compliance Pages">
         <p style={mutedText}>
-          Your public business page will appear here once your business information is saved.
+          Your compliance pages are generated automatically after you save your business
+          information.
         </p>
       </Card>
     );
   }
   const base = `${publicBaseUrl}/business/${slug}`;
   return (
-    <Card title="Public Business Page">
-      <ul style={linkList}>
-        <li><code style={codePill}>/business/{slug}</code></li>
-        <li><code style={codePill}>/business/{slug}/privacy</code></li>
-        <li><code style={codePill}>/business/{slug}/sms-terms</code></li>
-      </ul>
-      <div style={buttonRow}>
-        <LinkButton href={base}>View business page</LinkButton>
-        <LinkButton href={`${base}/privacy`}>View privacy policy</LinkButton>
-        <LinkButton href={`${base}/sms-terms`}>View SMS terms</LinkButton>
+    <Card
+      title="Generated compliance pages"
+      subtitle="These public pages are created for you and used for messaging approval."
+    >
+      <div style={{ display: "grid", gap: 10 }}>
+        <ComplianceRow label="Business profile" url={base} />
+        <ComplianceRow label="Privacy policy" url={`${base}/privacy`} />
+        <ComplianceRow label="SMS terms" url={`${base}/sms-terms`} />
       </div>
     </Card>
   );
 }
 
-/* ---------------------------------------------------- Card 4: Billing */
+function ComplianceRow({ label, url }: { label: string; url: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable; View still works */
+    }
+  }
+  return (
+    <div style={complianceRowStyle}>
+      <span style={{ fontWeight: 600, color: "#111827", fontSize: 14 }}>{label}</span>
+      <span style={{ display: "flex", gap: 8 }}>
+        <a href={url} target="_blank" rel="noopener noreferrer" style={secondaryBtnStyle}>
+          View
+        </a>
+        <button type="button" onClick={copy} style={secondaryBtnStyle}>
+          {copied ? "Copied" : "Copy link"}
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/* ----------------------------------- Steps 4-6: status-only (muted) */
+
+function PhoneNumberSetupCard({
+  status,
+}: {
+  status: BusinessProfileData["clinic"]["localNumberStatus"];
+}) {
+  const label = status === "reserved" || status === "assigned" ? "Reserved" : "Preparing";
+  return (
+    <Card title="Phone Number Setup" subtitle="We prepare a local number for your office automatically.">
+      <KeyVal k="Status" v={label} />
+      <p style={mutedText}>
+        You don’t need to pick a number. We select and prepare a suitable local number for you.
+      </p>
+    </Card>
+  );
+}
+
+function SmsActivationCard({
+  status,
+  a2pDone,
+}: {
+  status: BusinessProfileData["clinic"]["smsStatus"];
+  a2pDone: boolean;
+}) {
+  const label =
+    status === "active"
+      ? "Active"
+      : status === "waiting_for_approval" || a2pDone
+        ? "Waiting for approval"
+        : "Not started";
+  return (
+    <Card title="SMS Activation" subtitle="Patient texting turns on only after approval is complete.">
+      <KeyVal k="Status" v={label} />
+      <p style={mutedText}>
+        Texting stays off until your details are reviewed and approved. We’ll handle the approval
+        steps for you.
+      </p>
+    </Card>
+  );
+}
 
 function BillingCard() {
   return (
     <Card title="Billing">
-      <dl style={defList}>
-        <Row k="Trial" v="21 days after SMS activation" />
-        <Row k="Billing status" v="Not started" />
-        <Row k="Plan" v="Missed-call SMS recovery" />
-      </dl>
-      <div style={buttonRow}>
-        <GhostButton disabled title="Available after SMS activation">View billing</GhostButton>
-      </div>
-    </Card>
-  );
-}
-
-function BillingHistoryCard() {
-  return (
-    <Card title="Billing History">
-      <p style={mutedText}>No payments yet</p>
-      <div style={buttonRow}>
-        <GhostButton disabled title="Available after your first payment">View invoices</GhostButton>
-      </div>
-    </Card>
-  );
-}
-
-/* ---------------------------------------------- Card 6: Login & Security */
-
-function LoginSecurityCard({ loginEmail }: { loginEmail: string }) {
-  return (
-    <Card title="Login & Security">
-      <dl style={defList}>
-        <Row k="Login method" v="Email link" />
-        <Row k="Login email" v={loginEmail} />
-        <Row k="Password" v="Not created" />
-        <Row k="Two-factor authentication" v="Off" />
-      </dl>
-      <div style={buttonRow}>
-        <GhostButton disabled title="Coming soon">Create password</GhostButton>
-        <GhostButton disabled title="Coming soon">Set up 2FA</GhostButton>
-      </div>
-    </Card>
-  );
-}
-
-/* ---------------------------------------------------- Card 7: Support */
-
-function SupportCard() {
-  return (
-    <Card title="Support">
-      <p style={mutedText}>Need help?</p>
-      <div style={buttonRow}>
-        <LinkButton href="mailto:support@missedcallsdental.com">Contact support</LinkButton>
-      </div>
+      <KeyVal k="Plan" v="Missed-call text follow-up" />
+      <KeyVal k="Trial" v="21 days, starting after SMS activation" />
+      <p style={mutedTextStrong}>Billing starts after SMS activation.</p>
+      <p style={mutedText}>Billing will be available after SMS activation.</p>
     </Card>
   );
 }
@@ -430,22 +486,17 @@ function SupportCard() {
 function Card({
   title,
   subtitle,
-  badge,
   children,
 }: {
   title: string;
   subtitle?: string;
-  badge?: string;
   children: React.ReactNode;
 }) {
   return (
     <section style={cardStyle}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <h3 style={cardTitleStyle}>{title}</h3>
-        {badge && <span style={completeBadge}>{badge}</span>}
-      </div>
+      <h2 style={cardTitleStyle}>{title}</h2>
       {subtitle && <p style={cardSubtitleStyle}>{subtitle}</p>}
-      <div style={{ marginTop: 14 }}>{children}</div>
+      <div style={{ marginTop: 16 }}>{children}</div>
     </section>
   );
 }
@@ -458,6 +509,7 @@ function Field({
   placeholder,
   defaultValue,
   inputMode,
+  helper,
 }: {
   label: string;
   name: string;
@@ -466,9 +518,11 @@ function Field({
   placeholder?: string;
   defaultValue?: string;
   inputMode?: "text" | "tel" | "email" | "numeric";
+  helper?: string;
 }) {
+  const helperId = helper ? `${name}-help` : undefined;
   return (
-    <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
+    <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
       <label htmlFor={name} style={labelStyle}>{label}</label>
       <input
         id={name}
@@ -478,10 +532,12 @@ function Field({
         placeholder={placeholder}
         defaultValue={defaultValue}
         inputMode={inputMode}
+        aria-describedby={helperId}
         autoComplete="off"
         spellCheck={false}
         style={inputStyle}
       />
+      {helper && <p id={helperId} style={helperLineStyle}>{helper}</p>}
     </div>
   );
 }
@@ -491,24 +547,20 @@ function SelectField({
   name,
   options,
   defaultValue,
-  placeholder,
+  labelFor,
 }: {
   label: string;
   name: string;
   options: readonly string[];
-  defaultValue?: string;
-  placeholder?: string;
+  defaultValue: string;
+  labelFor?: (v: string) => string;
 }) {
-  const initial = defaultValue && options.includes(defaultValue) ? defaultValue : "";
   return (
-    <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
+    <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
       <label htmlFor={name} style={labelStyle}>{label}</label>
-      <select id={name} name={name} defaultValue={initial} required style={inputStyle}>
-        <option value="" disabled>
-          {placeholder ?? "Select…"}
-        </option>
+      <select id={name} name={name} defaultValue={defaultValue} required style={inputStyle}>
         {options.map((o) => (
-          <option key={o} value={o}>{o}</option>
+          <option key={o} value={o}>{labelFor ? labelFor(o) : o}</option>
         ))}
       </select>
     </div>
@@ -517,104 +569,132 @@ function SelectField({
 
 function FormFooter({
   error,
-  saved,
+  savedAt,
   saving,
   label,
-  savingLabel,
 }: {
   error: string | null;
-  saved: boolean;
+  savedAt: string | null;
   saving: boolean;
   label: string;
-  savingLabel: string;
 }) {
   return (
     <>
-      {error && (
-        <p role="alert" aria-live="polite" style={errorBox}>{error}</p>
-      )}
-      {saved && !error && (
-        <p role="status" aria-live="polite" style={savedBox}>Saved.</p>
-      )}
-      <button type="submit" disabled={saving} style={primaryBtnStyle}>
-        {saving ? savingLabel : label}
-      </button>
+      {error && <p role="alert" aria-live="polite" style={errorBox}>{error}</p>}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 4 }}>
+        <button type="submit" disabled={saving} style={primaryBtnStyle}>
+          {saving ? "Saving…" : label}
+        </button>
+        {savedAt && !error && (
+          <span role="status" aria-live="polite" style={lastSavedStyle}>
+            Saved · {savedAt}
+          </span>
+        )}
+      </div>
     </>
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Badge({ kind, children }: { kind: BadgeKind; children: React.ReactNode }) {
+  return <span style={{ ...badgeBase, ...badgeKinds[kind] }}>{children}</span>;
+}
+
+function KeyVal({ k, v }: { k: string; v: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0" }}>
-      <dt style={{ color: "#6b7280", fontSize: 14 }}>{k}</dt>
-      <dd style={{ margin: 0, color: "#111827", fontSize: 14, fontWeight: 600, textAlign: "right" }}>{v}</dd>
+      <span style={{ color: "#6b7280", fontSize: 14 }}>{k}</span>
+      <span style={{ color: "#111827", fontSize: 14, fontWeight: 600, textAlign: "right" }}>{v}</span>
     </div>
   );
 }
 
-function LinkButton({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer" style={secondaryBtnStyle}>
-      {children}
-    </a>
-  );
-}
-
-function GhostButton({
-  children,
-  disabled,
-  title,
-}: {
-  children: React.ReactNode;
-  disabled?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      title={title}
-      style={{ ...secondaryBtnStyle, ...(disabled ? disabledBtn : {}) }}
-    >
-      {children}
-    </button>
-  );
+function nowLabel(): string {
+  return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 /* ---------------------------------------------------------------- styles */
 
+const shellStyle: React.CSSProperties = {
+  maxWidth: 1040,
+  margin: "0 auto",
+  padding: "40px 24px 80px",
+};
+const appHeaderStyle: React.CSSProperties = { marginBottom: 24 };
+const brandStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#0d9488",
+  fontSize: 12,
+  letterSpacing: ".14em",
+  textTransform: "uppercase",
+  fontWeight: 700,
+};
+const appTitleStyle: React.CSSProperties = {
+  margin: "6px 0 4px",
+  fontSize: 26,
+  color: "#111827",
+  letterSpacing: "-.02em",
+};
+const appSubtitleStyle: React.CSSProperties = { margin: 0, color: "#6b7280", fontSize: 14 };
+const layoutStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(220px, 280px) 1fr",
+  gap: 24,
+  alignItems: "start",
+};
+const sidebarStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+  position: "sticky",
+  top: 24,
+};
+const stepNavItem: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+  textAlign: "left",
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#ffffff",
+  cursor: "pointer",
+  font: "inherit",
+};
+const stepNavItemActive: React.CSSProperties = {
+  border: "1px solid #0d9488",
+  boxShadow: "0 1px 2px rgba(13,148,136,.12)",
+  background: "#f0fdfa",
+};
+const stepNavItemMuted: React.CSSProperties = { opacity: 0.6 };
+const stepNavTop: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10 };
+const stepNum: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 22,
+  height: 22,
+  borderRadius: 999,
+  background: "#f1f5f9",
+  color: "#475569",
+  fontSize: 12,
+  fontWeight: 700,
+  flex: "0 0 auto",
+};
+const stepNavTitle: React.CSSProperties = { fontSize: 14, fontWeight: 600, color: "#111827" };
+const contentStyle: React.CSSProperties = { minWidth: 0 };
 const cardStyle: React.CSSProperties = {
-  padding: 22,
+  padding: 24,
   borderRadius: 14,
   border: "1px solid #e5e7eb",
   background: "#ffffff",
 };
 const cardTitleStyle: React.CSSProperties = {
   margin: 0,
-  fontSize: 17,
+  fontSize: 19,
   color: "#111827",
   letterSpacing: "-.01em",
 };
-const cardSubtitleStyle: React.CSSProperties = {
-  margin: "6px 0 0",
-  color: "#6b7280",
-  fontSize: 13,
-};
-const statusLabelStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#6b7280",
-  fontSize: 12,
-  letterSpacing: ".08em",
-  textTransform: "uppercase",
-  fontWeight: 700,
-};
-const statusValueStyle: React.CSSProperties = {
-  margin: "4px 0 0",
-  color: "#111827",
-  fontSize: 15,
-  fontWeight: 600,
-};
+const cardSubtitleStyle: React.CSSProperties = { margin: "6px 0 0", color: "#6b7280", fontSize: 14 };
 const labelStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: "#111827" };
+const helperLineStyle: React.CSSProperties = { margin: 0, color: "#6b7280", fontSize: 12 };
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px 12px",
@@ -629,7 +709,6 @@ const primaryBtnStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  marginTop: 8,
   padding: "11px 18px",
   borderRadius: 999,
   border: "1px solid transparent",
@@ -643,59 +722,31 @@ const secondaryBtnStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: "9px 14px",
+  padding: "8px 14px",
   borderRadius: 999,
   border: "1px solid #d1d5db",
   background: "#ffffff",
   color: "#111827",
   fontWeight: 600,
-  fontSize: 14,
+  fontSize: 13,
   cursor: "pointer",
   textDecoration: "none",
 };
-const disabledBtn: React.CSSProperties = {
-  color: "#9ca3af",
-  borderColor: "#e5e7eb",
-  background: "#f9fafb",
-  cursor: "not-allowed",
-};
-const completeBadge: React.CSSProperties = {
-  fontSize: 11,
-  letterSpacing: ".08em",
-  textTransform: "uppercase",
-  fontWeight: 700,
-  color: "#0d9488",
-  background: "#ccfbf1",
-  border: "1px solid #99f6e4",
-  padding: "3px 9px",
-  borderRadius: 999,
-  whiteSpace: "nowrap",
-};
-const buttonRow: React.CSSProperties = {
+const lastSavedStyle: React.CSSProperties = { color: "#0f766e", fontSize: 13 };
+const complianceRowStyle: React.CSSProperties = {
   display: "flex",
-  flexWrap: "wrap",
-  gap: 8,
-  marginTop: 12,
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#f9fafb",
 };
-const linkList: React.CSSProperties = {
-  margin: 0,
-  padding: 0,
-  listStyle: "none",
-  display: "grid",
-  gap: 6,
-};
-const codePill: React.CSSProperties = {
-  fontSize: 13,
-  color: "#0f172a",
-  background: "#f1f5f9",
-  border: "1px solid #e2e8f0",
-  borderRadius: 8,
-  padding: "3px 8px",
-};
-const defList: React.CSSProperties = { margin: 0 };
-const mutedText: React.CSSProperties = { margin: 0, color: "#6b7280", fontSize: 14 };
+const mutedText: React.CSSProperties = { margin: "10px 0 0", color: "#6b7280", fontSize: 14 };
+const mutedTextStrong: React.CSSProperties = { margin: "12px 0 0", color: "#334155", fontSize: 14, fontWeight: 600 };
 const previewBox: React.CSSProperties = {
-  margin: "6px 0 14px",
+  margin: "2px 0 16px",
   padding: "12px 14px",
   borderRadius: 10,
   background: "#f8fafc",
@@ -709,18 +760,18 @@ const previewLabel: React.CSSProperties = {
   textTransform: "uppercase",
   fontWeight: 700,
 };
-const previewText: React.CSSProperties = { margin: "4px 0 0", color: "#334155", fontSize: 14 };
+const previewText: React.CSSProperties = { margin: "6px 0 0", color: "#334155", fontSize: 14 };
 const checkboxRow: React.CSSProperties = {
   display: "flex",
   gap: 10,
   alignItems: "flex-start",
-  margin: "4px 0 4px",
+  margin: "4px 0 18px",
   color: "#111827",
   fontSize: 14,
   cursor: "pointer",
 };
 const errorBox: React.CSSProperties = {
-  margin: "12px 0",
+  margin: "0 0 14px",
   padding: "10px 12px",
   borderRadius: 10,
   background: "#fef2f2",
@@ -728,12 +779,18 @@ const errorBox: React.CSSProperties = {
   color: "#991b1b",
   fontSize: 14,
 };
-const savedBox: React.CSSProperties = {
-  margin: "12px 0",
-  padding: "10px 12px",
-  borderRadius: 10,
-  background: "#f0fdfa",
-  border: "1px solid #99f6e4",
-  color: "#0f766e",
-  fontSize: 14,
+const badgeBase: React.CSSProperties = {
+  fontSize: 11,
+  letterSpacing: ".04em",
+  fontWeight: 700,
+  padding: "3px 8px",
+  borderRadius: 999,
+  whiteSpace: "nowrap",
+  justifySelf: "start",
+};
+const badgeKinds: Record<BadgeKind, React.CSSProperties> = {
+  success: { color: "#0d9488", background: "#ccfbf1", border: "1px solid #99f6e4" },
+  info: { color: "#1e40af", background: "#dbeafe", border: "1px solid #bfdbfe" },
+  warn: { color: "#9a3412", background: "#ffedd5", border: "1px solid #fed7aa" },
+  muted: { color: "#64748b", background: "#f1f5f9", border: "1px solid #e2e8f0" },
 };

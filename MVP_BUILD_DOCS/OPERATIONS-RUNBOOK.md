@@ -997,18 +997,36 @@ The flow above is implemented:
   candidate search; status **Preparing**). No purchase/reservation occurs unless
   `TWILIO_NUMBER_PURCHASE_ENABLED=true` and the owner approves via the existing
   purchase route.
-- Screen 2 `BusinessProfile` component: status strip + Business Information,
-  A2P Approval Information, Public Business Page, Billing, Billing History,
-  Login & Security, Support.
+- Screen 2 `BusinessProfile` component: an app-style activation checklist with a
+  left step nav (status badges) and one open step at a time. Steps: Business
+  Information → A2P Approval Information → Compliance Pages → Phone Number Setup →
+  SMS Activation → Billing. Customer-facing status text only (`Saved`,
+  `Needs attention`, `Ready for review`, `Generated`, `Waiting for approval`,
+  `Billing starts after SMS activation`). No false `Complete` badges; saves show
+  a subtle `Saved · <time>`, not a large banner.
+- Business Information collects: clinic name, legal business name, Business Type
+  (exact enum), EIN, main office phone, street address, address line 2, city,
+  state, ZIP, optional website. **Business Type enum** is `PRIVATE_PROFIT`
+  (default), `PUBLIC_PROFIT`, `NON_PROFIT`, `SOLE_PROPRIETOR`, `GOVERNMENT` —
+  stored/submitted letter-for-letter, never `LLC`/`Corporation`/etc.
+- A2P Approval Information collects only first name, last name, email, phone,
+  and the authorization checkbox. Business title, use case, and sample message
+  are **system-generated** (see `SMS-APPROVAL-FIELD-MAPPING.md`), not customer
+  input.
 - `POST /api/onboarding/[token]/business-info` and `POST /api/onboarding/[token]/a2p`
   store data locally only. A2P save sets displayed SMS status to **Waiting for
   approval**; `sms_recovery_enabled` stays false and nothing is submitted to Twilio.
-- Public pages: `/business/{slug}`, `/business/{slug}/privacy`, `/business/{slug}/sms-terms`.
+- Compliance Pages step shows a "Generated compliance pages" card with
+  View / Copy-link actions (not raw path pills): `/business/{slug}`,
+  `/business/{slug}/privacy`, `/business/{slug}/sms-terms`. All three render from
+  one source of truth (the `clinics` row) with shared header/footer nav and a
+  "← Back to business profile" link; the single public service name is
+  "Missed Calls Dental" (no double naming).
 - Billing stays **Not started**; the 21-day trial starts only after SMS recovery
   activation and does not count down while approval is pending.
 - Schema: `supabase/migrations/20260528000100_business_profile_onboarding.sql`
-  (EIN/Tax ID, business type, street address, website, A2P rep fields, status/
-  lifecycle fields). **Apply with owner approval before the live flow works.**
+  + `20260528000200_clinic_address_line2.sql` (adds `address_line2`). Both are
+  applied. Field mapping: `SMS-APPROVAL-FIELD-MAPPING.md`.
 
 ## Onboarding scope (MVP — U.S.-only, 3-field Step 1)
 

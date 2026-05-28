@@ -25,7 +25,6 @@ export const dynamic = "force-dynamic";
 const A2pSchema = z.object({
   rep_first_name: z.string().trim().min(1).max(80),
   rep_last_name: z.string().trim().min(1).max(80),
-  business_title: z.string().trim().min(1).max(120),
   rep_email: z.string().trim().email().max(254),
   rep_phone: z.string().trim().min(7).max(40),
   authorized: z.boolean(),
@@ -73,7 +72,6 @@ export async function POST(
   const clinic = await updateA2pInformation(setupRequest.clinic_id, {
     repFirstName: parsed.data.rep_first_name,
     repLastName: parsed.data.rep_last_name,
-    businessTitle: parsed.data.business_title,
     repEmail: parsed.data.rep_email,
     repPhone,
     authorized: parsed.data.authorized,

@@ -7,10 +7,18 @@ Last updated: 2026-05-26
 This document covers what must be done before sending live SMS to real patients in the United States, the current compliance state of the system, and the recommended campaign registration approach.
 
 **Cross-references:**
+- `SMS-APPROVAL-FIELD-MAPPING.md` — **canonical** mapping of customer UI fields ↔ internal fields ↔ approval fields, the exact `Business Type` enum, and which values are system-generated vs. customer-entered.
 - `FIRST-CLINIC-ONBOARDING.md` — Step 7 requires A2P status confirmed before enabling live SMS.
 - `OPERATIONS-RUNBOOK.md` Section 11 — Step 5 (enable SMS) is blocked until A2P is resolved.
 - `08-compliance-and-onboarding.md` — full compliance and consent design.
 - `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md` — copy-ready Toll-Free Verification submission packet.
+
+> Note (2026-05-28): The customer-facing "A2P Approval Information" step now
+> collects only first name, last name, email, phone, and an authorization
+> checkbox. Business Type uses the exact enum (`PRIVATE_PROFIT`, `PUBLIC_PROFIT`,
+> `NON_PROFIT`, `SOLE_PROPRIETOR`, `GOVERNMENT`). Use case, sample message,
+> representative title, opt-in keywords, policy URLs, and the other registration
+> fields are system-generated — see `SMS-APPROVAL-FIELD-MAPPING.md`.
 
 ---
 

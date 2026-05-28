@@ -3,123 +3,112 @@
 Status: Source of truth  
 Audience: AI coding agent / implementation agent  
 Project: Missed Calls Dental  
-Last updated: 2026-05-26  
-Purpose: Build the automated onboarding workflow for new dental clinics.
+Last updated: 2026-05-28  
+Purpose: Build the current customer onboarding flow around a simple Business Profile setup.
 
-This document defines the final onboarding workflow. It is not a brainstorming note, not a prompt, and not a list of optional approaches. Implement the workflow exactly as specified here unless a hard technical blocker is found. If a blocker is found, stop and report it before changing the product direction.
+This file describes the current onboarding direction. It replaces the older flow where customers manually chose a Twilio number from a catalog.
 
 ---
 
 ## 1. Final Product Outcome
 
-The finished workflow must let a dental clinic complete setup without a human operator manually buying a number or manually inserting clinic phone mappings.
+The finished workflow must let a dental clinic start setup with minimal input, then complete only the missing business/A2P information needed to prepare SMS activation.
 
-Final production flow:
+Final customer flow:
 
-1. Clinic owner enters their work email on the public website (email-only form;
-   owner name is collected later during onboarding).
-2. Backend creates a setup request.
-3. Backend generates a secure one-time setup token.
-4. Backend sends a setup email containing a unique setup link.
-5. Clinic owner opens the setup link.
-6. Clinic owner completes the clinic setup form.
-7. Backend searches available Twilio local numbers with Voice + SMS capability.
-8. Clinic owner chooses an office texting number from the available numbers.
-9. Backend purchases the selected Twilio number after the owner clicks `Use this number`.
-10. Backend configures Twilio webhooks on the purchased number.
-11. Backend creates or updates the clinic record.
-12. Backend creates the clinic phone mapping.
-13. SMS remains disabled by default.
-14. The app shows forwarding and QA instructions.
-15. QA is completed.
-16. Live SMS is enabled only after compliance approval, QA pass, and explicit owner approval.
+1. Clinic owner starts setup from the public site or setup email.
+2. Clinic owner opens a secure setup link.
+3. Clinic owner creates an office profile with:
+   - Clinic name
+   - Main office phone
+   - ZIP code
+4. Backend creates/updates the business profile.
+5. Backend prepares/reserves the best local number automatically from the clinic context.
+6. Clinic owner lands on the Business Profile page.
+7. Clinic owner completes Business Information.
+8. Clinic owner completes A2P Approval Information.
+9. Backend generates public business pages:
+   - `/business/{slug}`
+   - `/business/{slug}/privacy`
+   - `/business/{slug}/sms-terms`
+10. SMS remains inactive while carrier/A2P approval is pending.
+11. Billing does not start until SMS recovery is active.
 
-The clinic must not manually buy a Twilio number.  
-The operator must not manually insert phone mappings for standard onboarding.  
-The system must automate number search, number purchase, webhook setup, clinic creation, and phone mapping.
+The customer must not manually buy a Twilio number.  
+The customer must not manually choose from a number catalog in the default flow.  
+The operator must not manually insert phone mappings for standard onboarding when the automated path is complete.  
+The system should automate local number preparation/reservation, webhook setup where allowed, clinic creation, and phone mapping behind safety gates.
 
 ---
 
 ## 2. Domain and URL Rules
 
-There are two production domains:
+Public marketing site:
 
 ```text
-Public marketing site:
 https://missedcallsdental.com
+```
 
-App / backend / onboarding:
+App / onboarding / backend domain:
+
+```text
 https://app.missedcallsdental.com
 ```
 
-The public marketing site hosts the landing page and public legal pages.
-
-The onboarding workflow must run on the app domain because it validates setup tokens, writes to the database, searches Twilio numbers, purchases Twilio numbers, and creates clinic records.
-
-The setup link sent by email must have this format:
+Setup links must use:
 
 ```text
 https://app.missedcallsdental.com/setup/<setup-token>
 ```
 
-`<setup-token>` is the raw secure token shown only in the emailed setup URL. Store only the token hash in the database.
-
-Do not place the onboarding page under the static GitHub Pages site.  
-Do not generate setup links from request `Host` headers. Use the configured trusted app base URL.  
-Do not send links using `https://missedcallsdental.com/setup/<token>`. That is the wrong domain.
-
-Required production env var:
+Generated business pages must use neutral route naming:
 
 ```text
-APP_BASE_URL=https://app.missedcallsdental.com
-PUBLIC_SITE_URL=https://missedcallsdental.com
+https://app.missedcallsdental.com/business/{slug}
+https://app.missedcallsdental.com/business/{slug}/privacy
+https://app.missedcallsdental.com/business/{slug}/sms-terms
 ```
 
-Each setup request receives its own unique setup link.
+Do not use `/clinic/{slug}` for generated public pages.
+
+Use `APP_BASE_URL` for setup links.  
+Use `PUBLIC_SITE_URL` for links back to the marketing site.  
+Do not build setup links from request host headers.
 
 ---
 
 ## 3. Customer-Facing Terminology
 
-Do not use `recovery number` in customer-facing UI.
+Use short, calm labels.
 
-Use:
-
-```text
-office texting number
-```
-
-The number selection page title must be:
+Preferred UI terms:
 
 ```text
-Choose your office texting number
+Local number
+SMS
+Billing
+Business Information
+A2P Approval Information
+Public Business Page
+Login & Security
+Billing History
 ```
 
-The subtitle must be:
+Avoid customer-facing terms that sound internal or scary:
 
 ```text
-This is an additional number for missed-call text follow-ups. It will not replace your existing office phone number.
+Twilio number
+carrier campaign submission
+manual number catalog
+Review & Submit
+Submit for SMS approval
 ```
 
-The selection button must be:
+A2P card subtitle:
 
 ```text
-Use this number
+Required for carrier approval before patient SMS can be activated.
 ```
-
-After successful number purchase, show:
-
-```text
-Your office texting number is ready
-```
-
-The explanation must be:
-
-```text
-Use this number for missed-call forwarding or tracking. Your existing office phone number does not change.
-```
-
-Internal code and internal docs may use technical names such as Twilio number, assigned number, recovery number, or tracking number. Public UI must use “office texting number.”
 
 ---
 
@@ -127,36 +116,28 @@ Internal code and internal docs may use technical names such as Twilio number, a
 
 ### Screen 1 — Public Setup Request
 
-The existing public website form is the entry point.
+Public site form may collect only the work email or the currently approved lightweight setup request fields.
 
-Required fields:
-
-- Work email (the only field on the public form)
-
-Optional fields (backward-compatible; `"Clinic owner"` fallback used when omitted):
-
-- Full name
-
-On submit:
-
-1. Send request to backend endpoint `POST /api/setup-requests`.
-2. Create setup request in the database.
-3. Generate a secure raw setup token.
-4. Store only the token hash in the database.
-5. Create setup link using `APP_BASE_URL`.
-6. Send setup email to the clinic owner.
-7. Redirect to confirmation page.
-
-Confirmation page message:
+Current direction:
 
 ```text
-Check your email for your secure setup link. Your office texting number will be selected during setup. Your existing office phone number will not be replaced.
+Work email
 ```
 
-The setup request must not search Twilio numbers.  
-The setup request must not buy a Twilio number.  
-The setup request must not create a live clinic.  
-The setup request must not enable SMS.
+Button:
+
+```text
+Continue setup
+```
+
+The public setup request must not search Twilio numbers.  
+The public setup request must not buy a Twilio number.  
+The public setup request must not create a live clinic.  
+The public setup request must not enable SMS.
+
+Future entry points may include Google and Apple login. These entry points must lead into the same onboarding flow.
+
+---
 
 ### Screen 2 — Setup Link Page
 
@@ -180,177 +161,327 @@ If the token is invalid, expired, or already completed, show:
 This setup link is invalid or expired. Please request a new setup link.
 ```
 
-If the token is valid, show the clinic setup form.
+If the token is valid and no office profile exists yet, show Create office profile.
 
-### Screen 3 — Clinic Setup Form
+---
 
-Required fields:
-
-- Public-facing clinic name
-- Legal/business name
-- Main office phone number
-- Timezone
-- Owner/admin contact name
-- Owner/admin email
-- Owner/admin phone
-- Test patient phone for QA
-- Setup mode
-
-Setup mode values:
-
-```text
-conditional_forwarding
-tracking_number
-google_voice_forwarding_test
-```
-
-Required helper text:
-
-```text
-Your main office number stays the same. We will help you choose an additional office texting number for missed-call follow-ups.
-```
-
-On submit:
-
-1. Validate all required fields.
-2. Normalize phone numbers to E.164.
-3. Save clinic setup data.
-4. Create or update the clinic record.
-5. Set setup request status to `clinic_details_completed`.
-6. Continue to the office texting number search step.
-
-### Screen 4 — Office Texting Number Search
+### Screen 3 — Create Office Profile
 
 Title:
 
 ```text
-Choose your office texting number
+Create office profile
+```
+
+Required fields:
+
+```text
+Clinic name
+Main office phone
+ZIP code
+```
+
+Field helper text:
+
+```text
+Clinic name
+Enter the public name patients know your office by.
+
+Main office phone
+Enter the phone number patients currently call.
+
+ZIP code
+We’ll use this ZIP code to prepare a local number for your office.
+```
+
+Button:
+
+```text
+Create office profile
+```
+
+On submit:
+
+1. Validate the setup token.
+2. Validate required fields.
+3. Normalize the main office phone number to E.164 internally.
+4. Keep MVP onboarding U.S.-only.
+5. Save clinic name, main office phone, and ZIP code.
+6. Create or update the business/clinic profile.
+7. Trigger automatic local number preparation using existing safe Twilio logic.
+8. Open the Business Profile page.
+
+Do not ask for legal business name, EIN, owner phone, timezone, test phone, setup mode, or billing information on this screen.
+
+---
+
+### Screen 4 — Business Profile Page
+
+This is the main customer setup/account page.
+
+Top status strip:
+
+```text
+Local number: Preparing / Reserved
+SMS: Preparing / Waiting for approval
+Billing: Free trial ends in 21 days
+```
+
+Cards:
+
+```text
+Business Information
+A2P Approval Information
+Public Business Page
+Billing
+Billing History
+Login & Security
+Support
+```
+
+Do not create a customer-facing Review & Submit step.
+
+---
+
+## 5. Business Information Card
+
+Purpose:
+
+```text
+One place for business details.
+```
+
+Fields:
+
+```text
+Clinic name
+Main office phone
+ZIP code
+Legal business name
+EIN / Tax ID
+Business type
+Business address
+Website
+```
+
+Address fields:
+
+```text
+Street address
+City
+State
+ZIP code
+```
+
+Prefill:
+
+- Clinic name from Create office profile.
+- Main office phone from Create office profile.
+- ZIP code from Create office profile.
+
+Website is optional.
+
+Button:
+
+```text
+Save business information
+```
+
+After save:
+
+1. Save/update the business profile.
+2. Mark Business Information complete when required fields are filled.
+3. Generate or update the business slug.
+4. Generate or update public business pages when enough data exists.
+
+Do not split clinic name, main office phone, and ZIP code into a separate Office Profile card.
+
+---
+
+## 6. A2P Approval Information Card
+
+Title:
+
+```text
+A2P Approval Information
 ```
 
 Subtitle:
 
 ```text
-This is an additional number for missed-call text follow-ups. It will not replace your existing office phone number.
+Required for carrier approval before patient SMS can be activated.
 ```
 
-Search behavior:
-
-1. Extract area code from the clinic main office phone number.
-2. Search available Twilio local US numbers.
-3. Require both Voice and SMS capability.
-4. Exclude numbers with address requirements when possible.
-5. Return 5–10 available numbers.
-6. Mark the best matching number as `Recommended`.
-7. Allow the clinic owner to search a different area code.
-8. Do not purchase any number during search.
-
-Each number card must show:
-
-- Phone number
-- Area code / region label when available
-- `Recommended` badge for the highest-ranked number
-- `Use this number` button
-
-Recommended number ranking:
-
-1. Exact same area code as clinic main office phone
-2. Voice + SMS capable
-3. No address requirement
-4. Same state or nearby region
-5. Cleaner/simple-looking number pattern
-
-The system must not show numbers that cannot support both Voice and SMS.
-
-### Screen 5 — Number Purchase and Configuration
-
-When the clinic owner clicks `Use this number`, the backend must:
-
-1. Confirm the setup token is valid.
-2. Confirm the clinic has no active assigned office texting number.
-3. Confirm `TWILIO_NUMBER_PURCHASE_ENABLED=true`.
-4. Attempt to purchase the selected Twilio number.
-5. Configure voice incoming webhook.
-6. Configure voice status callback.
-7. Configure inbound SMS webhook.
-8. Configure SMS status callback.
-9. Add the number to the Messaging Service when required by current architecture.
-10. Store the Twilio Phone Number SID.
-11. Create or update `clinic_phone_numbers`.
-12. Set clinic setup status to `number_assigned`.
-13. Set setup request status to `number_assigned`.
-14. Keep `sms_recovery_enabled=false`.
-
-Webhook URLs:
+Purpose:
 
 ```text
-Voice incoming:
-https://app.missedcallsdental.com/api/webhooks/twilio/voice/incoming
-
-Voice status:
-https://app.missedcallsdental.com/api/webhooks/twilio/voice/status
-
-Inbound SMS:
-https://app.missedcallsdental.com/api/webhooks/twilio/messaging/incoming
-
-SMS status:
-https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status
+Collect only the missing representative data required for A2P approval.
 ```
 
-If selected number purchase fails because the number is no longer available, show:
+Business data from Business Information must be reused. Do not make the customer type the same business data twice.
+
+Fields:
 
 ```text
-That number is no longer available. Please choose another number.
+Representative first name
+Representative last name
+Business title
+Representative email
+Representative phone
 ```
 
-Then return to number search.
+Prefill:
 
-The purchase function must be idempotent at clinic level:
+- Representative email from setup/login email when available.
+- Representative phone from main office phone.
+- Business details from Business Information.
 
-- If the clinic already has an active office texting number, do not purchase a second number.
-- Return the existing assigned number.
-- Show the setup status page.
+No long helper text under representative phone. Prefill it and allow editing.
 
-### Screen 6 — Setup Status Page
-
-After successful number purchase and configuration, show:
+Generated SMS preview:
 
 ```text
-Your office texting number is ready
+Use case
+Missed-call follow-up for patients who called the office.
+
+Sample message
+Hi, this is {{clinic_name}}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.
 ```
 
-Required content:
-
-- Selected office texting number
-- Reminder that the main office number is not replaced
-- SMS status: off by default
-- Forwarding instructions
-- QA checklist
-
-Required message:
+Checkbox:
 
 ```text
-Your existing office phone number does not change. To recover missed calls, forward unanswered or busy calls from your main office number to your office texting number.
+I am authorized to approve SMS setup for this business.
 ```
 
-Next steps shown to clinic:
+Button:
 
-1. Configure no-answer and busy forwarding from the main office phone number to the office texting number.
-2. Make a test call.
-3. Confirm caller ID is preserved.
-4. Confirm the call is recorded.
-5. Complete SMS QA before go-live.
+```text
+Save A2P information
+```
+
+After save:
+
+1. Save/update A2P representative information.
+2. Mark A2P Approval Information complete when required fields are filled.
+3. Keep `sms_recovery_enabled=false`.
+4. Do not submit or modify live Twilio A2P/campaign resources in this task unless explicitly approved.
 
 ---
 
-## 5. Email Setup Link Requirements
+## 7. Public Business Page Card
 
-Implement real setup email delivery.
+This is not a customer input form.
 
-Required file:
+Show generated links:
 
 ```text
-lib/email/setup-link-email.ts
+/business/{slug}
+/business/{slug}/privacy
+/business/{slug}/sms-terms
 ```
+
+Buttons:
+
+```text
+View business page
+View privacy policy
+View SMS terms
+```
+
+Generated page requirements:
+
+- Public business name.
+- Legal business name.
+- Business address/contact.
+- Missed-call SMS use case.
+- STOP / HELP language.
+- Privacy policy.
+- SMS terms.
+- Missed Calls Dental / Dental SMS identified as the technology/service provider.
+
+Use the generated business page as the primary supporting URL for SMS/A2P review.  
+The clinic’s own website remains optional supporting information.
+
+---
+
+## 8. Billing and Billing History Cards
+
+Billing card shows:
+
+```text
+Free trial ends in 21 days
+Billing status: Not started
+Plan: Missed-call SMS recovery
+```
+
+Button:
+
+```text
+View billing
+```
+
+Billing History before payments:
+
+```text
+No payments yet
+```
+
+Future billing history table shape:
+
+```text
+Date
+Amount
+Status
+Invoice
+```
+
+Do not create live Stripe resources in this task.  
+Do not start billing before SMS recovery is active.
+
+---
+
+## 9. Login & Security Card
+
+For current email-link flow:
+
+```text
+Login method: Email link
+Login email: prefilled
+Password: Not created
+Two-factor authentication: Off
+```
+
+Buttons:
+
+```text
+Create password
+Set up 2FA
+```
+
+Future Google/Apple states may be supported later, but do not implement provider auth unless explicitly scoped.
+
+---
+
+## 10. Support Card
+
+Show:
+
+```text
+Need help?
+```
+
+Button:
+
+```text
+Contact support
+```
+
+---
+
+## 11. Setup Email Requirements
+
+Implement real setup email delivery when email flow is used.
 
 Required env vars:
 
@@ -369,22 +500,21 @@ Complete your Missed Calls Dental setup
 
 Email body must include:
 
-- Clinic owner name
-- Setup link
-- Statement that the existing office phone number will not be replaced
-- Statement that the office texting number will be selected during setup
-- Support email
+- Setup link.
+- Statement that setup is secure.
+- Statement that the existing office phone number is not replaced.
+- Support email.
 
-Required email copy:
+Suggested email copy:
 
 ```text
-Hi {owner_name},
+Hi,
 
-Use the secure link below to complete your Missed Calls Dental setup:
+Use the secure link below to continue your Missed Calls Dental setup:
 
 {setup_link}
 
-During setup, you will choose an office texting number for missed-call follow-up texts. This is an additional number and will not replace your existing office phone number.
+Your existing office phone number will not be replaced. We’ll use your office details to prepare your missed-call setup.
 
 If you did not request this setup link, you can ignore this email.
 
@@ -392,11 +522,11 @@ Missed Calls Dental
 support@missedcallsdental.com
 ```
 
-Production must not pretend that email was sent. If email delivery fails, show a clear error and keep the setup request in `requested` status.
+Production must not pretend that email was sent. If email delivery fails, show a clear error and keep the setup request in a safe pending/requested status.
 
 ---
 
-## 6. Setup Token Security
+## 12. Setup Token Security
 
 Setup tokens must follow these rules:
 
@@ -426,18 +556,26 @@ Recommended token byte length:
 
 ---
 
-## 7. Database Requirements
+## 13. Database Requirements
 
 Add migrations only when a required table or field is missing.
 
-### setup_requests
+Data model must support future super-admin listing of:
 
-Required fields:
+- all business profiles
+- local number status
+- SMS/A2P status
+- billing status
+- generated business page status
+- Twilio identifiers
+- Stripe identifiers
+- activity/history
+
+Suggested setup request fields:
 
 ```text
 id
-owner_full_name
-owner_email
+work_email / owner_email
 setup_token_hash
 status
 created_at
@@ -449,57 +587,44 @@ last_email_sent_at
 email_status
 ```
 
-Statuses:
-
-```text
-requested
-email_sent
-clinic_details_completed
-number_selected
-number_assigned
-qa_pending
-qa_passed
-ready_for_approval
-active
-cancelled
-expired
-```
-
-Store only token hash in the database. Do not store raw setup tokens.
-
-### clinics
-
-Required fields must support:
+Suggested clinic/business profile fields:
 
 ```text
 id
 name
 slug
-legal_business_name
 main_phone
-timezone
-owner_contact_name
-owner_contact_email
-owner_contact_phone
-test_patient_phone
+office_zip
+legal_business_name
+ein_tax_id
+business_type
+business_address_street
+business_address_city
+business_address_state
+business_address_zip
+website
 setup_status
+local_number_status
+a2p_status
+billing_status
 is_active
 sms_recovery_enabled
 created_at
 updated_at
 ```
 
-Required defaults:
+Suggested A2P representative fields:
 
 ```text
-is_active = true
-sms_recovery_enabled = false
-setup_status = setup_pending
+representative_first_name
+representative_last_name
+representative_business_title
+representative_email
+representative_phone
+representative_authorized_at
 ```
 
-### clinic_phone_numbers
-
-Required fields must support:
+Suggested phone number fields:
 
 ```text
 id
@@ -512,100 +637,90 @@ created_at
 updated_at
 ```
 
-Role for assigned office texting number:
+Default values:
 
 ```text
-office_texting
+is_active = true
+sms_recovery_enabled = false
+billing_status = not_started
+local_number_status = preparing
+a2p_status = not_submitted or waiting_for_information
 ```
-
-The backend may internally treat this as the Twilio recovery/tracking number, but the UI must display “office texting number.”
 
 ---
 
-## 8. Twilio Number Search
+## 14. Twilio Local Number Preparation
 
-Create a server-side Twilio number search function.
+Create or reuse a server-side Twilio local number search/preparation function.
 
-Input:
+Input should come from clinic context, not manual customer selection:
 
 ```text
-area_code
+main_office_phone
+ZIP code
 country = US
-limit = 10
-```
-
-Output:
-
-```text
-phone_number
-friendly_name
-locality
-region
-postal_code
-capabilities.voice
-capabilities.sms
-address_requirements
-recommended
 ```
 
 Rules:
 
-- Search only local US numbers.
-- Return only numbers with Voice + SMS capability.
-- Prefer numbers with `address_requirements=none`.
-- Mark the highest-ranked number as recommended.
-- Do not purchase numbers in the search function.
+- Search only local US numbers for the default MVP path.
+- Require Voice + SMS capability where applicable.
+- Prefer numbers near the office ZIP / local area.
+- Prefer no address requirements when possible.
+- Automatically select/prep the best suitable number.
 - Do not expose Twilio credentials to the browser.
+- Do not expose a manual number catalog by default.
+- Keep actual purchase/reservation behind existing safety gates.
+
+Failure behavior:
+
+```text
+Local number: Preparing
+```
+
+If automated preparation fails, keep the setup usable and surface the issue to operator/admin handling later. Do not ask the customer to troubleshoot Twilio.
 
 ---
 
-## 9. Twilio Number Purchase
+## 15. Twilio Number Purchase / Reservation Safety
 
-Create a server-side purchase function.
-
-Input:
-
-```text
-clinic_id
-selected_phone_number
-setup_token
-```
+Purchase/reservation must be server-side only.
 
 The function must:
 
-1. Validate setup token.
-2. Validate clinic ownership through the setup request.
-3. Verify `TWILIO_NUMBER_PURCHASE_ENABLED=true`.
-4. Purchase selected phone number through Twilio.
-5. Configure voice and SMS webhook URLs.
+1. Validate setup token or authenticated session.
+2. Validate clinic ownership through the setup request/session.
+3. Verify purchase/reservation is allowed by the current safety flag.
+4. Purchase/reserve the selected best local number only when allowed.
+5. Configure voice/SMS webhook URLs where allowed.
 6. Persist Twilio Phone Number SID.
 7. Create or update `clinic_phone_numbers`.
-8. Set clinic setup status to `number_assigned`.
-9. Set setup request status to `number_assigned`.
+8. Set local number status to `reserved` when successful.
+9. Keep `sms_recovery_enabled=false`.
 
 The function must be idempotent at clinic level:
 
-- If the clinic already has an active office texting number, do not purchase a second number.
-- Return the existing assigned number.
+- If the clinic already has an active local number, do not purchase/reserve a second number.
+- Return the existing assigned number/status.
 - Show current status to the user.
 
 ---
 
-## 10. SMS Safety Rules
+## 16. SMS Safety Rules
 
-Number assignment must not enable live SMS.
+Number preparation/reservation must not enable live SMS.
 
 After onboarding:
 
 ```text
 clinic.is_active = true
 clinic.sms_recovery_enabled = false
-clinic.setup_status = number_assigned
+billing_status = not_started
 ```
 
 Live patient SMS remains blocked until all conditions are met:
 
-1. Twilio Toll-Free / A2P compliance status is approved.
+1. Carrier/A2P approval is complete.
 2. QA test passes.
 3. Owner approves go-live.
 4. `SMS_RECOVERY_MODE=live` is intentionally set.
@@ -615,91 +730,52 @@ Owner-test mode must continue to send SMS only to `SMS_TEST_ALLOWED_TO`.
 
 ---
 
-## 11. Test Clinic Rule
-
-Use this test clinic main phone for the controlled Google Voice test:
-
-```text
-+12245329257
-```
-
-This is the clinic’s main phone number for testing.
-
-It is not a Twilio number.
-
-The assigned Twilio office texting number is separate.
-
-For the controlled test, Google Voice must forward missed/unanswered calls from the test clinic number to the assigned Twilio office texting number.
-
-First QA test must verify caller ID preservation:
-
-- Pass: Twilio receives `From` as the test patient phone.
-- Fail: Twilio receives `From` as the Google Voice clinic number.
-
-The system must not enable SMS for a clinic that fails caller ID validation.
-
----
-
-## 12. QA Workflow
-
-After number assignment, setup status is:
-
-```text
-qa_pending
-```
+## 17. QA Workflow
 
 QA steps:
 
-1. Call the clinic main phone from the test patient phone.
-2. Let the call forward to the office texting number.
-3. Confirm `voice/incoming` webhook is hit.
-4. Confirm `voice/status` webhook is hit after call completion.
-5. Confirm `call_events` row is created.
-6. Confirm caller ID is preserved.
-7. Confirm no SMS is sent while `sms_recovery_enabled=false`.
-8. Approve owner-test SMS QA for the test patient phone.
-9. Confirm owner-test SMS sends only to allowlisted test patient phone.
-10. Confirm SMS sends after call completion.
-11. Confirm duplicate suppression.
-12. Confirm STOP blocks future recovery SMS.
-13. Confirm START clears opt-out.
-14. Mark QA as passed.
-
-When QA passes:
-
-```text
-clinic.setup_status = qa_passed
-```
+1. Confirm Create office profile saves clinic name, main office phone, and ZIP code.
+2. Confirm local number status shows Preparing or Reserved.
+3. Confirm Business Information saves and reuses prefilled fields.
+4. Confirm A2P Approval Information pre-fills representative email and phone when available.
+5. Confirm generated `/business/{slug}` pages render.
+6. Confirm no live SMS is sent while `sms_recovery_enabled=false`.
+7. Confirm owner-test SMS sends only to allowlisted test numbers.
+8. Confirm SMS sends after call completion in owner-test mode.
+9. Confirm duplicate suppression.
+10. Confirm STOP blocks future recovery SMS.
+11. Confirm START clears opt-out.
 
 Do not enable live SMS at QA pass.
 
 ---
 
-## 13. Production Go-Live Gate
+## 18. Production Go-Live Gate
 
 The system must not automatically move any clinic to live SMS.
 
 Required state before live activation:
 
 ```text
-setup_status = qa_passed
 sms_recovery_enabled = false
+billing_status = not_started
 ```
 
 Activation requires explicit operator action:
 
-1. Confirm Twilio compliance approval.
-2. Confirm owner approval.
-3. Confirm rollback command is ready.
-4. Set `SMS_RECOVERY_MODE=live`.
-5. Set `clinics.sms_recovery_enabled=true` for that clinic only.
-6. Redeploy if required.
-7. Run one controlled live test.
-8. Monitor logs and delivery status.
+1. Confirm carrier/A2P approval.
+2. Confirm QA pass.
+3. Confirm owner approval.
+4. Confirm rollback command is ready.
+5. Set `SMS_RECOVERY_MODE=live`.
+6. Set `clinics.sms_recovery_enabled=true` for that clinic only.
+7. Start billing only after SMS recovery is active.
+8. Run one controlled live test.
+9. Monitor logs and delivery status.
 
 ---
 
-## 14. Required Environment Variables
+## 19. Required Environment Variables
 
 Required production variables:
 
@@ -720,34 +796,39 @@ Behavior:
 TWILIO_NUMBER_PURCHASE_ENABLED=false
 ```
 
-Number search is allowed. Number purchase is blocked.
+Number search/preparation may run only in safe mode; purchase/reservation is blocked.
 
 ```text
 TWILIO_NUMBER_PURCHASE_ENABLED=true
 ```
 
-Number purchase is allowed.
+Purchase/reservation is allowed.
 
-Production purchase must only run when this variable is true.
+Production purchase/reservation must only run when this variable is true.
 
 ---
 
-## 15. Required API / Route Structure
+## 20. Required API / Route Structure
 
 Implement these routes or the closest equivalent required by the framework:
 
 ```text
 POST /api/setup-requests
 GET  /setup/[token]
-POST /api/onboarding/[token]/clinic
-GET  /api/onboarding/[token]/numbers?area_code=XXX
-POST /api/onboarding/[token]/numbers/purchase
-GET  /setup/[token]/status
+POST /api/onboarding/[token]/office-profile
+GET  /business-profile or /setup/[token]/business-profile
+POST /api/onboarding/[token]/business-information
+POST /api/onboarding/[token]/a2p-information
+GET  /business/{slug}
+GET  /business/{slug}/privacy
+GET  /business/{slug}/sms-terms
 ```
+
+Internal APIs for local number preparation may exist, but must not expose a customer-facing number catalog by default.
 
 All mutation routes must:
 
-- Validate setup token.
+- Validate setup token or authenticated session.
 - Validate token expiration.
 - Use server-side credentials only.
 - Return safe errors.
@@ -756,9 +837,9 @@ All mutation routes must:
 
 ---
 
-## 16. Documentation Updates Required
+## 21. Documentation Updates Required
 
-Update these files in the same implementation task:
+Update these files in the same implementation task when behavior changes:
 
 ```text
 MVP_BUILD_DOCS/SETUP-LOG.md
@@ -766,47 +847,42 @@ MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
 MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md
 MVP_BUILD_DOCS/FIRST-CLINIC-ONBOARDING.md
 MVP_BUILD_DOCS/MANIFEST.md
-```
-
-Create or update this file:
-
-```text
 MVP_BUILD_DOCS/ONBOARDING-WORKFLOW-BUILD-GUIDE.md
 ```
 
 Documentation must state:
 
 - Setup links use `https://app.missedcallsdental.com/setup/<setup-token>`.
-- Customer-facing term is “office texting number.”
-- The office texting number does not replace the clinic’s existing phone number.
-- Clinic owner chooses from available Twilio numbers.
-- System purchases and configures the selected number automatically.
-- SMS remains off after number assignment.
-- QA and compliance approval are required before live SMS.
-- The test clinic main phone is `+12245329257`.
-- Google Voice forwarding test must verify caller ID preservation.
+- Create office profile asks only for clinic name, main office phone, and ZIP code.
+- Business Information and A2P Approval Information are Business Profile cards.
+- Local number preparation/reservation is automatic by default.
+- Customer does not manually choose from a number catalog.
+- Generated business pages use `/business/{slug}`.
+- SMS remains inactive before carrier/A2P approval.
+- Billing starts only after SMS recovery is active.
+- Trial baseline is 21 days.
 
 ---
 
-## 17. Implementation Boundaries
+## 22. Implementation Boundaries
 
 Do not:
 
 - Enable live SMS.
+- Submit or change live Twilio A2P/campaign resources without explicit approval.
 - Change existing Twilio toll-free verification status.
 - Delete or release existing Twilio numbers.
-- Change Stripe.
+- Change Stripe live resources.
 - Print secrets.
 - Commit `.env.local`.
 - Add manual operator-only steps as the standard onboarding flow.
-- Use “recovery number” in public UI.
 - Claim HIPAA compliance.
 - Send live patient SMS automatically.
-- Purchase a Twilio number when `TWILIO_NUMBER_PURCHASE_ENABLED` is not true.
+- Purchase/reserve a Twilio number when the required safety flag is not true.
 
 ---
 
-## 18. Required Checks
+## 23. Required Checks
 
 Run:
 
@@ -814,6 +890,8 @@ Run:
 npm run typecheck
 npm run build
 ```
+
+Run lint/tests when present.
 
 If migrations are added, document:
 
@@ -826,46 +904,43 @@ No live SMS test may run without owner approval.
 
 ---
 
-## 19. Commit
+## 24. Commit
 
 Commit only relevant source, migration, and documentation files.
 
-Commit message:
+Suggested commit message:
 
 ```text
-feat: add automated clinic onboarding workflow
+feat: simplify onboarding around business profile setup
 ```
 
 ---
 
-## 20. Final Report Format
+## 25. Final Report Format
 
 The final report must include:
 
 ```text
 Files changed:
 Migration added: yes/no
-Setup request flow added: yes/no
-Setup token/link flow added: yes/no
+Create office profile added: yes/no
+Business Profile page added: yes/no
+Business Information card added: yes/no
+A2P Approval Information card added: yes/no
+Public business pages added: yes/no
 Setup links use https://app.missedcallsdental.com/setup/<token>: yes/no
 Email delivery implemented: yes/no
-Clinic onboarding form added: yes/no
-Office texting number wording used in UI: yes/no
-“Does not replace existing office phone number” wording included: yes/no
-Twilio number search added: yes/no
-Number selection UI added: yes/no
-Number purchase implemented: yes/no
-Purchase safety flag added: yes/no
-Twilio webhook auto-configuration implemented: yes/no
-Clinic creation/update implemented: yes/no
-clinic_phone_numbers mapping implemented: yes/no
+Known values are prefilled: yes/no
+Manual number catalog removed from default flow: yes/no
+Automatic local number preparation implemented: yes/no
+Purchase safety flag preserved: yes/no
+Twilio webhook auto-configuration changed: yes/no
 SMS remains off by default: yes/no
-Test clinic main phone documented: yes/no
-Google Voice forwarding caller ID test documented: yes/no
+Billing starts only after SMS active: yes/no
 Live SMS enabled: no
-Twilio verification changed: no
+Twilio A2P/campaign changed: no
 Existing Twilio numbers deleted/released: no
-Stripe changed: no
+Stripe live resources changed: no
 Typecheck: pass/fail
 Build: pass/fail
 Docs updated:
@@ -879,3 +954,41 @@ Commit hash:
 Pushed: yes/no
 Blockers:
 ```
+
+---
+
+## Update 2026-05-28 — Activation checklist + approval field cleanup
+
+The Business Profile page is now an **app-style activation checklist**: a left
+step nav with small status badges and one open step at a time. Steps:
+
+1. Business Information
+2. A2P Approval Information
+3. Compliance Pages
+4. Phone Number Setup
+5. SMS Activation
+6. Billing
+
+Customer-facing status text only: `Saved`, `Needs attention`, `Ready for review`,
+`Generated`, `Waiting for approval`, `Billing starts after SMS activation`. No
+false `Complete` status; saves show a subtle `Saved · <time>` instead of a large
+green banner.
+
+Field changes:
+
+- **Business Type** uses the exact enum `PRIVATE_PROFIT` (default), `PUBLIC_PROFIT`,
+  `NON_PROFIT`, `SOLE_PROPRIETOR`, `GOVERNMENT` — stored/submitted letter-for-letter.
+- Business Information adds **Address line 2** and uses the label **EIN** (not
+  "EIN / Tax ID").
+- **A2P Approval Information** collects only first name, last name, email, phone,
+  and the authorization checkbox. Business title, use case, and sample message are
+  system-generated.
+- **Compliance Pages** are shown as a clean card with View / Copy-link actions,
+  not raw path pills.
+
+Generated mini-site (`/business/{slug}`, `/privacy`, `/sms-terms`) shares one
+source of truth, has consistent header/footer nav + a back link, includes a
+mobile-information non-sharing statement on Privacy, calmer SMS consent wording,
+and a single public service name ("Missed Calls Dental").
+
+Canonical field mapping: **`SMS-APPROVAL-FIELD-MAPPING.md`**.
