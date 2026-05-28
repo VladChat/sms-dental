@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BUSINESS_TYPES } from "../../../../lib/validation/url";
 
 export type BusinessProfileData = {
   token: string;
@@ -188,11 +189,17 @@ function BusinessInformationCard({
         <Field label="ZIP code" name="postal_code" defaultValue={clinic.postalCode} required inputMode="numeric" />
         <Field label="Legal business name" name="legal_business_name" defaultValue={clinic.legalBusinessName} required />
         <Field label="EIN / Tax ID" name="ein_tax_id" defaultValue={clinic.einTaxId} required />
-        <Field label="Business type" name="business_type" defaultValue={clinic.businessType} placeholder="e.g. Dental practice" required />
+        <SelectField
+          label="Business type"
+          name="business_type"
+          defaultValue={clinic.businessType}
+          options={BUSINESS_TYPES}
+          placeholder="Select…"
+        />
         <Field label="Street address" name="street_address" defaultValue={clinic.streetAddress} required />
         <Field label="City" name="city" defaultValue={clinic.city} required />
         <Field label="State" name="state_region" defaultValue={clinic.stateRegion} placeholder="IL" required />
-        <Field label="Website (optional)" name="website" defaultValue={clinic.website} placeholder="https://" inputMode="text" />
+        <Field label="Website (optional)" name="website" defaultValue={clinic.website} placeholder="https://yourpractice.com" inputMode="text" />
 
         <FormFooter
           error={error}
@@ -475,6 +482,35 @@ function Field({
         spellCheck={false}
         style={inputStyle}
       />
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  name,
+  options,
+  defaultValue,
+  placeholder,
+}: {
+  label: string;
+  name: string;
+  options: readonly string[];
+  defaultValue?: string;
+  placeholder?: string;
+}) {
+  const initial = defaultValue && options.includes(defaultValue) ? defaultValue : "";
+  return (
+    <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
+      <label htmlFor={name} style={labelStyle}>{label}</label>
+      <select id={name} name={name} defaultValue={initial} required style={inputStyle}>
+        <option value="" disabled>
+          {placeholder ?? "Select…"}
+        </option>
+        {options.map((o) => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+      </select>
     </div>
   );
 }

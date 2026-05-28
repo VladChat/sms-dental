@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { findClinicBySlug } from "../../../lib/db/clinics";
+import { isSafeHttpsUrl } from "../../../lib/validation/url";
 import { PublicShell, formatAddress, h1Style, h2Style, pStyle, linkStyle } from "./_components/Shell";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export default async function BusinessPublicPage({
     state: clinic.state_region,
     zip: clinic.postal_code,
   });
+  const websiteUrl = isSafeHttpsUrl(clinic.website) ? clinic.website! : null;
 
   return (
     <PublicShell businessName={clinic.name}>
@@ -61,12 +63,12 @@ export default async function BusinessPublicPage({
             Phone: {clinic.main_phone}
           </>
         ) : null}
-        {clinic.website ? (
+        {websiteUrl ? (
           <>
             <br />
             Website:{" "}
-            <a href={clinic.website} style={linkStyle} rel="noopener noreferrer">
-              {clinic.website}
+            <a href={websiteUrl} style={linkStyle} rel="noopener noreferrer">
+              {websiteUrl}
             </a>
           </>
         ) : null}
