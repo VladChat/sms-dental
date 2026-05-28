@@ -1126,3 +1126,63 @@ Result:
 - Twilio/Vercel/Stripe settings changed: no.
 - Secrets printed: no.
 - Env files committed: no.
+
+---
+
+## 2026-05-28 — Business Profile onboarding implemented
+
+Rebuilt the customer onboarding around a simple Business Profile setup.
+
+Flow:
+
+- Screen 1 **Create office profile** — clinic name, main office phone, ZIP code.
+  Button: **Create office profile**. After save the backend generates the public
+  business `slug` and runs automatic local-number preparation (read-only Twilio
+  candidate search; customer-facing status **Preparing**). No Review & Submit step.
+- Screen 2 **Business Profile** page — top status strip (Local number / SMS /
+  Billing) plus cards: Business Information, A2P Approval Information, Public
+  Business Page, Billing, Billing History, Login & Security, Support.
+
+Key behaviors:
+
+- Business Information reuses the office-profile values (prefilled, no duplicate
+  entry) and adds legal name, EIN/Tax ID, business type, address, optional website.
+- A2P Approval Information prefills representative email from the setup/login email
+  and representative phone from the main office phone. Saving stores data locally
+  only, advances displayed SMS status to **Waiting for approval**, and never sets
+  `sms_recovery_enabled=true` or submits to Twilio.
+- Public pages render at `/business/{slug}`, `/business/{slug}/privacy`,
+  `/business/{slug}/sms-terms`, stating Missed Calls Dental / Dental SMS is the
+  technology/service provider.
+- Billing stays **Not started**. The 21-day trial baseline starts only after SMS
+  recovery activation; the trial countdown does not start while approval is pending.
+- New status/lifecycle + business/A2P columns let a future super-admin list all
+  business profiles, local number status, SMS/A2P status, billing status, slug,
+  and provider identifiers — without building the admin UI now.
+
+Files changed:
+
+- `app/setup/[token]/page.tsx` — route to Create office profile, then Business Profile.
+- `app/setup/[token]/_components/ClinicForm.tsx` — "Create office profile" screen.
+- `app/setup/[token]/_components/BusinessProfile.tsx` — new Business Profile page (7 cards).
+- `app/api/onboarding/[token]/clinic/route.ts` — slug + local-number prep on save.
+- `app/api/onboarding/[token]/business-info/route.ts` — new.
+- `app/api/onboarding/[token]/a2p/route.ts` — new.
+- `app/business/[slug]/{page,privacy/page,sms-terms/page}.tsx` + `_components/Shell.tsx` — new public pages.
+- `lib/db/clinics.ts` — business-info / A2P / slug / status helpers, full column list.
+- `lib/onboarding/slug.ts`, `lib/onboarding/local-number.ts` — new helpers.
+- `supabase/migrations/20260528000100_business_profile_onboarding.sql` — new (NOT yet applied).
+
+Result:
+
+- Typecheck: pass.
+- Build: pass (new routes present).
+- Live SMS enabled: no. `sms_recovery_enabled`: unchanged (false).
+- `TWILIO_NUMBER_PURCHASE_ENABLED`: unchanged (false). No number purchased.
+- Stripe: unchanged. Twilio A2P: not submitted. Webhooks/signature/idempotency: unchanged.
+- Secrets printed: no. Env files committed: no.
+
+Remaining manual step:
+
+- Apply `20260528000100_business_profile_onboarding.sql` to Supabase (owner approval
+  required) before the live Business Profile flow works end-to-end.

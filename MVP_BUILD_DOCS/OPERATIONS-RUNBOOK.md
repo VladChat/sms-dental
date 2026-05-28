@@ -58,12 +58,12 @@ A call event reaches the system by one of these supported MVP paths:
    - Clinic/provider forwards no-answer, busy, unavailable, or after-hours calls to the assigned Twilio recovery number.
    - The forwarded call should preserve original caller ID.
 
-2. Tracking number mode
-   - Clinic publishes the assigned Twilio number directly as a campaign/tracking number.
-   - Common uses: website CTA, Google Ads, landing pages, print mailers, promotions.
+2. System-prepared local-number path
+   - The system prepares/reserves the best local number automatically from the clinic context.
+   - The customer is not required to manually choose from a number catalog during default onboarding.
+   - The prepared local number can later be used for direct routing or campaign needs where appropriate.
 
-3. Hybrid mode
-   - Clinic uses conditional forwarding for the main number and tracking numbers for selected channels.
+Tracking-number usage may remain an alternate operational use case, but it is not the default customer onboarding path.
 
 Future versions may add direct integrations with phone providers or dental communication platforms.
 
@@ -306,11 +306,18 @@ To re-verify after any change:
 
 ## 7. Clinic Onboarding Phone Questions
 
-Before promising setup to a clinic, ask:
+Customer-facing onboarding starts with only:
+
+- Clinic name
+- Main office phone
+- ZIP code
+
+Later Business Profile cards collect Business Information and A2P Approval Information only when needed.
+
+Operator/admin questions may be used when configuring forwarding or troubleshooting:
 
 - What phone provider/system do you use?
 - Do you want to keep your main number and forward missed/no-answer calls?
-- Do you want a dedicated tracking number for website/ads/campaigns?
 - Can your phone system forward no-answer, busy, unavailable, or after-hours calls?
 - Can it preserve the original caller ID when forwarding?
 - How many rings or seconds before voicemail answers?
@@ -319,10 +326,10 @@ Before promising setup to a clinic, ask:
 
 Compatibility test:
 
-1. Configure forwarding or publish the tracking number.
+1. Configure forwarding or use the prepared local number path.
 2. Make a real inbound test call.
 3. Verify Twilio receives the event.
-4. Verify `From` is the patient caller ID.
+4. Verify `From` is the patient caller ID when forwarding is used.
 5. Verify no outbound SMS is sent until approved/configured.
 
 ---
@@ -383,7 +390,7 @@ Default behavior (`SMS_RECOVERY_MODE` unset or `disabled`): **no SMS is ever sen
 - Caller is not opted out (`opt_outs` table)
 - No outbound SMS was sent to this (clinic, caller) pair in the past 24 hours
 
-`live` mode: implemented — requires `SMS_RECOVERY_MODE=live` in Vercel AND `clinics.sms_recovery_enabled=true` per clinic. A2P/toll-free registration must be approved before enabling. See `A2P-10DLC-COMPLIANCE-READINESS.md`.
+`live` mode: implemented — requires `SMS_RECOVERY_MODE=live` in Vercel AND `clinics.sms_recovery_enabled=true` per clinic. Carrier/A2P approval must be complete before enabling. See `A2P-10DLC-COMPLIANCE-READINESS.md`.
 
 ### SMS message template
 
@@ -474,7 +481,7 @@ Use this procedure to safely add a real clinic to the system.
 
 ### Prerequisites
 
-- Clinic has chosen a phone event strategy (conditional forwarding or tracking number — see Section 1).
+- Clinic has a phone event strategy (conditional forwarding or system-prepared local-number path — see Section 1).
 - Twilio number for the clinic is provisioned and webhook URLs are set.
 - `SMS_RECOVERY_MODE` is still `owner_test` or `disabled` until live mode is approved.
 
@@ -526,9 +533,9 @@ will block SMS because `sms_recovery_enabled=false`.
 
 ### Step 5 — Enable SMS for the clinic (requires A2P approval + owner approval)
 
-**A2P/toll-free compliance prerequisite:** before enabling live SMS for any real clinic, Twilio Toll-Free Verification (for `+1 844 723 4944`) or 10DLC campaign registration must be approved. Do not set `SMS_RECOVERY_MODE=live` until carrier compliance is confirmed. See `A2P-10DLC-COMPLIANCE-READINESS.md`.
+**Carrier/A2P compliance prerequisite:** before enabling live SMS for any real clinic, the required carrier/A2P approval for the assigned local-number path must be complete. Do not set `SMS_RECOVERY_MODE=live` until carrier compliance is confirmed. See `A2P-10DLC-COMPLIANCE-READINESS.md`.
 
-Only after A2P/toll-free is approved, live testing confirms call recording works, and owner approves:
+Only after carrier/A2P approval is complete, live testing confirms call recording works, and owner approves:
 
 ```sql
 UPDATE public.clinics
@@ -582,15 +589,15 @@ Owner-only SMS recovery: **complete and verified (2026-05-26).**
 Current next step:
 
 ```txt
-1. Submit Twilio Toll-Free Verification using
-   MVP_BUILD_DOCS/TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md.
-2. Complete A2P/toll-free registration approval before enabling live SMS.
+1. Prepare and submit the required carrier/A2P approval package for the assigned local-number path.
+   Use toll-free verification documents only when the toll-free alternate path is intentionally selected.
+2. Complete carrier/A2P approval before enabling live SMS.
    See MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md for required steps.
 3. Once registration is approved, onboard first real clinic using Section 11 procedure.
    SMS_RECOVERY_MODE must be changed to live and sms_recovery_enabled set true
    per clinic before any real patient SMS fires.
    Do not enable live SMS mode until clinic phone strategy is tested,
-   A2P/toll-free is approved, and owner explicitly approves.
+   carrier/A2P approval is complete, and owner explicitly approves.
 ```
 
 ---
@@ -748,7 +755,7 @@ clinic.setup_status          = 'number_assigned'
 
 Live SMS still requires all four conditions:
 
-1. Twilio Toll-Free / A2P compliance approval.
+1. Carrier/A2P compliance approval.
 2. QA passes (see Section 12 of the build guide).
 3. Owner approval.
 4. Explicit `SMS_RECOVERY_MODE=live` and per-clinic
@@ -944,6 +951,29 @@ Current onboarding source of truth:
 `Create office profile (clinic name, main office phone, ZIP code) -> Business Profile (Business Information + A2P Approval Information) -> local number preparing/reserved -> SMS waiting for approval -> billing starts after SMS recovery is active`
 
 No customer-facing Review & Submit step is required in this flow.
+
+### Business Profile implementation (2026-05-28)
+
+The flow above is implemented:
+
+- Screen 1 `app/setup/[token]` → `ClinicForm` ("Create office profile").
+- `POST /api/onboarding/[token]/clinic` saves the office profile, generates the
+  public `slug`, and runs automatic local-number preparation (read-only Twilio
+  candidate search; status **Preparing**). No purchase/reservation occurs unless
+  `TWILIO_NUMBER_PURCHASE_ENABLED=true` and the owner approves via the existing
+  purchase route.
+- Screen 2 `BusinessProfile` component: status strip + Business Information,
+  A2P Approval Information, Public Business Page, Billing, Billing History,
+  Login & Security, Support.
+- `POST /api/onboarding/[token]/business-info` and `POST /api/onboarding/[token]/a2p`
+  store data locally only. A2P save sets displayed SMS status to **Waiting for
+  approval**; `sms_recovery_enabled` stays false and nothing is submitted to Twilio.
+- Public pages: `/business/{slug}`, `/business/{slug}/privacy`, `/business/{slug}/sms-terms`.
+- Billing stays **Not started**; the 21-day trial starts only after SMS recovery
+  activation and does not count down while approval is pending.
+- Schema: `supabase/migrations/20260528000100_business_profile_onboarding.sql`
+  (EIN/Tax ID, business type, street address, website, A2P rep fields, status/
+  lifecycle fields). **Apply with owner approval before the live flow works.**
 
 ## Onboarding scope (MVP — U.S.-only, 3-field Step 1)
 

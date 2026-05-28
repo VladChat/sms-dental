@@ -50,6 +50,32 @@ Later Business Profile cards collect details only when needed:
 
 Do not store secrets, passwords, or EHR credentials in this document.
 
+### Implementation status (2026-05-28)
+
+The Business Profile onboarding is implemented:
+
+- Screen 1 **Create office profile** (`app/setup/[token]` → `ClinicForm`): three fields only —
+  clinic name, main office phone (normalized to E.164), ZIP code. Button: **Create office profile**.
+- On save, the backend (`POST /api/onboarding/[token]/clinic`) generates the public business
+  `slug` and runs **automatic local-number preparation** (read-only Twilio candidate search; status
+  shows **Preparing**). No number is purchased/reserved unless `TWILIO_NUMBER_PURCHASE_ENABLED=true`
+  and the owner explicitly approves via the existing purchase route.
+- Screen 2 **Business Profile** page (`BusinessProfile` component) shows a top status strip
+  (Local number / SMS / Billing) and cards: Business Information, A2P Approval Information,
+  Public Business Page, Billing, Billing History, Login & Security, Support. There is **no**
+  Review & Submit step and no customer "submit for SMS approval" step.
+- Business Information (`POST /api/onboarding/[token]/business-info`) and A2P Approval Information
+  (`POST /api/onboarding/[token]/a2p`) save locally only. Saving A2P advances the displayed SMS
+  status to **Waiting for approval** but never sets `sms_recovery_enabled=true` and never submits
+  to Twilio.
+- Public pages render at `/business/{slug}`, `/business/{slug}/privacy`, `/business/{slug}/sms-terms`
+  and state that Missed Calls Dental / Dental SMS acts as the technology/service provider.
+- Billing stays **Not started**; the 21-day trial baseline begins only after SMS recovery is
+  activated, and the trial countdown does not start while approval is pending.
+- New columns added by `supabase/migrations/20260528000100_business_profile_onboarding.sql`
+  (EIN/Tax ID, business type, street address, website, A2P rep fields, status/lifecycle fields).
+  This migration must be applied with owner approval before the live flow works.
+
 ---
 
 ## 2. Onboarding Modes
