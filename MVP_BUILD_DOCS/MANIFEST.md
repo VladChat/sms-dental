@@ -26,8 +26,9 @@ Operational documentation:
 Onboarding workflow scope (MVP):
 
 - Automated onboarding is currently **United States only**. Other countries are not offered in the UI; submitted non-US payloads are rejected with a clear message.
-- Step 1 collects only **clinic name, main office phone, ZIP code** — the three fields needed to advance to number search. Everything else (legal name, owner contact details, timezone, test patient phone, setup mode, etc.) is deferred to later steps. See `AGENTS.md` → "Form and Onboarding Scope Rule".
-- Number search is split into separate Local and Toll-free choices; toll-free SMS requires Twilio toll-free verification before live patient messaging.
+- Step 1 collects only **clinic name, main office phone, ZIP code** — the three fields needed to create the office profile. Everything else is deferred to Business Profile cards (Business Information + A2P Approval Information). See `AGENTS.md` → "Form and Onboarding Scope Rule".
+- Local number preparation/reservation is the default MVP path; do not require customers to manually choose from a broad number catalog.
+- Toll-free can remain as alternate/reference material, not the main current onboarding path.
 - Number purchase remains gated by `TWILIO_NUMBER_PURCHASE_ENABLED=true`; onboarding never enables live SMS automatically.
 - Schema migrations under `supabase/migrations/`:
   - `20260526000300_onboarding_setup_requests.sql` — `setup_requests` table + clinic onboarding fields.

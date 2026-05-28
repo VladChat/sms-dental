@@ -108,7 +108,8 @@ Never write secrets, passwords, full database URLs with passwords, API keys, tok
 - Domain: `https://missedcallsdental.com/`
 - Public support email: `support@missedcallsdental.com`
 - Public price: `$99/month`
-- Trial wording: `14-day trial starts after setup is ready · then $99/month`
+- Trial baseline: `21-day free trial`
+- Billing activation rule: `billing starts only after SMS recovery is active; do not charge while SMS approval is pending`
 
 ## Security Rules
 

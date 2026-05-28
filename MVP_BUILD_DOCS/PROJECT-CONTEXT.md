@@ -109,7 +109,7 @@ This is not required for the first MVP.
 The MVP should include:
 
 - call event ingestion through Twilio webhooks
-- support for conditional forwarding and tracking number modes
+- support for conditional forwarding mode and local-number onboarding for direct call routing
 - automatic or controlled SMS recovery flow
 - inbound SMS handling
 - STOP / START / HELP handling
@@ -338,11 +338,14 @@ Always follow these rules:
 
 ## 16. Current Immediate Next Step
 
-The immediate next product/technical step is to finish Twilio voice verification and then define the clinic onboarding flow for the two MVP connection modes.
+The immediate next product/technical step is to align onboarding around the current source-of-truth flow:
+
+`Create office profile (clinic name, main office phone, ZIP code) -> Business Profile (Business Information + A2P Approval Information) -> local number prepared/reserved -> SMS approval readiness -> billing starts only after SMS recovery is active`
 
 Current blockers/notes:
 
 - Inbound SMS webhook has been verified.
 - Inbound voice webhook is configured but real calls from unverified caller IDs are blocked by Twilio Trial account restrictions.
 - To fully test inbound voice, upgrade Twilio to a paid account or test from a verified caller ID.
-- After voice is verified, test the real MVP phone path: conditional forwarding or tracking number mode.
+- Local phone numbers are the default MVP path; the system should prepare/reserve the best local number automatically.
+- Do not require a customer-facing manual number catalog as a default onboarding step.

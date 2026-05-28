@@ -32,8 +32,7 @@ The app does not automatically detect calls to an unrelated clinic phone number.
 
 ```txt
 conditional forwarding mode
-tracking number mode
-hybrid mode
+local number path (system-prepared local number for direct routing)
 ```
 
 Conditional forwarding mode:
@@ -42,13 +41,11 @@ Conditional forwarding mode:
 clinic main number -> no-answer/busy/after-hours forwarding -> assigned Twilio recovery number -> backend webhook
 ```
 
-Tracking number mode:
+Local number path:
 
 ```txt
-clinic publishes assigned Twilio number on website/ads/campaign -> backend webhook
+system prepares/reserves the best local number -> clinic can route/publish that number where needed -> backend webhook
 ```
-
-Hybrid mode uses both.
 
 Future versions may add direct provider integrations.
 
@@ -149,5 +146,5 @@ Sending real patient SMS
 If the AI agent gets confused, reset it with this:
 
 ```txt
-Build the MVP exactly as scoped: a call event reaches the system through conditional forwarding, a dedicated tracking number, or later provider integrations. The backend validates the event, records it, sends safe SMS recovery only after approval/configuration, handles replies, shows a recovery inbox, and later supports billing. No AI receptionist, no PMS sync, no phone-system replacement, no Fly.io. Use Vercel, Supabase, Twilio, Stripe. Work locally/staging first. Production actions require owner approval.
+Build the MVP exactly as scoped: a call event reaches the system through conditional forwarding, a system-prepared local number path, or later provider integrations. The backend validates the event, records it, sends safe SMS recovery only after approval/configuration, handles replies, shows a recovery inbox, and later supports billing. No AI receptionist, no PMS sync, no phone-system replacement, no Fly.io. Use Vercel, Supabase, Twilio, Stripe. Work locally/staging first. Production actions require owner approval.
 ```

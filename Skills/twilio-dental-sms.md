@@ -42,6 +42,9 @@ Core rules:
 - Do not imply diagnosis or medical advice.
 - Respect opt-out behavior.
 - Make the product trustworthy for Twilio review and real dental clinics.
+- Keep live patient SMS inactive until carrier/A2P approval and number readiness are complete.
+- Keep owner-only test mode separate from production live mode.
+- Treat local number preparation/reservation as the default MVP onboarding path; do not require customers to choose from a manual number catalog.
 
 Default missed call SMS style:
 

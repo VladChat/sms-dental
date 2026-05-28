@@ -375,8 +375,9 @@ Use OPERATIONS-RUNBOOK.md Section 11 for the step-by-step procedure.
 
 **A2P/toll-free registration is a hard prerequisite before enabling live SMS.** Complete Phase 8E before setting `SMS_RECOVERY_MODE=live`.
 
-- [ ] A2P/toll-free compliance approved (see Phase 8E — must be done before enabling live SMS).
-- [ ] Choose phone event strategy (conditional forwarding or tracking number).
+- [ ] A2P/carrier compliance approved (see Phase 8E — must be done before enabling live SMS).
+- [ ] Start with Create office profile (clinic name, main office phone, ZIP code) only.
+- [ ] Confirm Business Profile flow is used for later required fields (Business Information + A2P Approval Information).
 - [ ] Insert clinic row (`sms_recovery_enabled = false` by default).
 - [ ] Map Twilio number.
 - [ ] Verify inbound call recording works with SMS off.
@@ -393,7 +394,7 @@ Current project status: not started.
 
 ---
 
-## Phase 8E — A2P/10DLC compliance readiness
+## Phase 8E — A2P/Carrier compliance readiness
 
 See `A2P-10DLC-COMPLIANCE-READINESS.md` for full detail, wording, and checklists.
 Use `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md` as the copy-ready submission packet before opening Twilio Console.
@@ -402,14 +403,9 @@ Use `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md` as the copy-ready submission p
 - [ ] Add Privacy Policy page to `missedcallsdental.com`.
 - [ ] Add SMS opt-out disclosure to website.
 - [ ] Prepare and review all Twilio form wording from `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
-- [ ] Submit Toll-Free Verification in Twilio Console for `+1 844 723 4944`.
+- [ ] Submit required carrier/A2P approval package for the assigned local number path.
 - [ ] Wait for Twilio approval (typically 3–7 business days).
 - [ ] Confirm approved status before proceeding to Phase 8D SMS enablement.
-
-If using local 10DLC number instead of toll-free:
-- [ ] Register Brand with TCR (EIN, business name, website, vertical).
-- [ ] Register Campaign with TCR (use case, message flow, sample messages, opt-in method).
-- [ ] Link approved Campaign to Twilio number.
 
 Current project status: not started.
 
@@ -532,13 +528,9 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       No legal name, owner phone, timezone, test patient phone, or
       setup mode is asked here. See `AGENTS.md` →
       "Form and Onboarding Scope Rule".
-- [ ] On the number-search step, decide between **Local** and **Toll-free**:
-  - Local: looks local to patients near the office. Use when the clinic
-    has a strong local identity or you want caller ID to match the
-    region.
-  - Toll-free: business-style number. **Voice works immediately. SMS
-    requires Twilio toll-free verification before live patient
-    messaging.** See `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
+- [ ] Use local number preparation/reservation as the default MVP path.
+      The customer should not manually choose from a broad number list.
+      Toll-free may remain an alternate/reference option, not the main onboarding path.
 - [ ] Number purchase remains gated by `TWILIO_NUMBER_PURCHASE_ENABLED`.
       Keep it `false` for dry runs; flip to `true` only when the owner
       explicitly approves a real purchase.
