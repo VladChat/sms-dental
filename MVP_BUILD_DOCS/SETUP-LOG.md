@@ -1299,3 +1299,51 @@ Checks: `npm run typecheck` pass; `npm run build` pass; no `lint` script.
 Remaining blockers for full public launch: none for the setup email flow.
 Live patient SMS remains gated (compliance/A2P + QA + explicit go-live), and
 billing/trial start only after SMS recovery activation — both intentionally off.
+
+---
+
+## 2026-05-28 — Setup email copy updated (short, no number-selection wording)
+
+Updated the production setup email body. It no longer mentions choosing or
+preparing a texting number and no longer uses a per-name greeting.
+
+New copy (subject unchanged: "Complete your Missed Calls Dental setup"):
+
+```
+Hello,
+
+Use this secure link to continue your Missed Calls Dental setup:
+
+<setup link>
+
+You’ll add your office details on the next step.
+
+If you did not request this setup link, you can ignore this email.
+
+Missed Calls Dental
+support@missedcallsdental.com
+```
+
+Code: `lib/email/setup-link-email.ts` rewrites `buildPlainBody`/`buildHtmlBody`
+(no `ownerName` param); `app/api/setup-requests/route.ts` no longer passes
+`ownerName` to the email (still stored as `owner_full_name` for the DB). Sender
+unchanged — centralized config default
+`Missed Calls Dental <no-reply@mail.missedcallsdental.com>`.
+
+Deploy: pushed `effe543`; Vercel production auto-deployed to READY. Health 200.
+
+Owner-only real-email dry run (recipient `livedealsmart@gmail.com`, verification
+only — not hardcoded, no allowlist):
+
+- `POST /api/setup-requests` → `ok:true`, `confirm_url` returned, **no
+  `setup_url`** (fallback off).
+- `setup_requests` row: `status=email_sent`, `email_status='sent'` (Resend
+  accepted/dispatched the new-copy email). Raw token not stored/logged.
+- Source confirms new copy deployed: greeting "Hello," present; old "choose an
+  office texting number" wording absent; no "Clinic owner"; no A2P/carrier/
+  billing/trial mentions. (Send-only Resend key cannot fetch the body; owner
+  confirms the rendered email/From visually in the inbox.)
+
+Safety: SMS sent 0; no clinic `sms_recovery_enabled` flipped (only pre-existing
+owner-test); no Stripe ids; billing not started; no Twilio number purchase; no
+Twilio/Stripe/Supabase/DNS change; no env change; no secrets printed.
