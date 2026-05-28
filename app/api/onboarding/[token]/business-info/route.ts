@@ -12,6 +12,7 @@ import {
   updateBusinessInformation,
 } from "../../../../../lib/db/clinics";
 import { isValidE164, normalizePhone } from "../../../../../lib/phone/normalize";
+import { BUSINESS_TYPES, isSafeHttpsUrl } from "../../../../../lib/validation/url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ const BusinessInfoSchema = z.object({
   main_phone: z.string().trim().min(7).max(40),
   legal_business_name: z.string().trim().min(2).max(200),
   ein_tax_id: z.string().trim().min(2).max(40),
-  business_type: z.string().trim().min(2).max(80),
+  business_type: z.enum(BUSINESS_TYPES),
   street_address: z.string().trim().min(2).max(200),
   city: z.string().trim().min(1).max(120),
   state_region: z.string().trim().min(2).max(60),
@@ -67,6 +68,12 @@ export async function POST(
   if (!parsed.success) {
     const zipIssue = parsed.error.issues.find((i) => i.path.includes("postal_code"));
     if (zipIssue) return jsonBadRequest("Please enter a 5-digit ZIP code.");
+    const typeIssue = parsed.error.issues.find((i) => i.path.includes("business_type"));
+    if (typeIssue) {
+      return jsonBadRequest(
+        "Please choose a business type: LLC, Corporation, Sole proprietor, Partnership, or Other.",
+      );
+    }
     return jsonBadRequest("Please complete all required business information fields.");
   }
 
@@ -75,9 +82,15 @@ export async function POST(
     return jsonBadRequest("Please enter a valid U.S. phone number for your main office phone.");
   }
 
-  const website = parsed.data.website && parsed.data.website.length > 0
-    ? parsed.data.website
-    : null;
+  // Website is optional. When provided, require a safe https:// URL before storing.
+  let website: string | null = null;
+  const websiteRaw = parsed.data.website?.trim() ?? "";
+  if (websiteRaw.length > 0) {
+    if (!isSafeHttpsUrl(websiteRaw)) {
+      return jsonBadRequest("Please enter a valid website URL that starts with https://");
+    }
+    website = websiteRaw;
+  }
 
   const clinic = await updateBusinessInformation(setupRequest.clinic_id, {
     name: parsed.data.name,
