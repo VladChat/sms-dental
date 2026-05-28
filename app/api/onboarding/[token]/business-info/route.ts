@@ -31,6 +31,7 @@ const BusinessInfoSchema = z.object({
   ein_tax_id: z.string().trim().min(2).max(40),
   business_type: z.enum(BUSINESS_TYPES),
   street_address: z.string().trim().min(2).max(200),
+  address_line2: z.string().trim().max(200).optional().or(z.literal("")),
   city: z.string().trim().min(1).max(120),
   state_region: z.string().trim().min(2).max(60),
   postal_code: z
@@ -70,9 +71,7 @@ export async function POST(
     if (zipIssue) return jsonBadRequest("Please enter a 5-digit ZIP code.");
     const typeIssue = parsed.error.issues.find((i) => i.path.includes("business_type"));
     if (typeIssue) {
-      return jsonBadRequest(
-        "Please choose a business type: LLC, Corporation, Sole proprietor, Partnership, or Other.",
-      );
+      return jsonBadRequest("Please choose a business type.");
     }
     return jsonBadRequest("Please complete all required business information fields.");
   }
@@ -92,6 +91,8 @@ export async function POST(
     website = websiteRaw;
   }
 
+  const addressLine2Raw = parsed.data.address_line2?.trim() ?? "";
+
   const clinic = await updateBusinessInformation(setupRequest.clinic_id, {
     name: parsed.data.name,
     mainPhone,
@@ -100,6 +101,7 @@ export async function POST(
     einTaxId: parsed.data.ein_tax_id,
     businessType: parsed.data.business_type,
     streetAddress: parsed.data.street_address,
+    addressLine2: addressLine2Raw.length > 0 ? addressLine2Raw : null,
     city: parsed.data.city,
     stateRegion: parsed.data.state_region,
     website,

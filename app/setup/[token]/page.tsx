@@ -70,6 +70,7 @@ export default async function SetupTokenPage({
       einTaxId: clinic.ein_tax_id ?? "",
       businessType: clinic.business_type ?? "",
       streetAddress: clinic.street_address ?? "",
+      addressLine2: clinic.address_line2 ?? "",
       city: clinic.city ?? "",
       stateRegion: clinic.state_region ?? "",
       website: clinic.website ?? "",
@@ -78,7 +79,6 @@ export default async function SetupTokenPage({
       a2p: {
         firstName: clinic.a2p_rep_first_name ?? "",
         lastName: clinic.a2p_rep_last_name ?? "",
-        businessTitle: clinic.a2p_rep_business_title ?? "",
         email: clinic.a2p_rep_email ?? "",
         phone: clinic.a2p_rep_phone ?? "",
         authorized: clinic.a2p_authorized,
@@ -90,9 +90,7 @@ export default async function SetupTokenPage({
     },
   };
 
-  return (
-    <PageShell>
-      <BusinessProfile data={data} />
-    </PageShell>
-  );
+  // BusinessProfile renders its own wide app shell (sidebar + content), so it
+  // is not wrapped in the narrow PageShell used by the earlier steps.
+  return <BusinessProfile data={data} />;
 }

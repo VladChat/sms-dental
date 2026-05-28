@@ -27,19 +27,18 @@ export default async function BusinessPrivacyPage({
   if (!clinic) notFound();
 
   return (
-    <PublicShell businessName={clinic.name}>
+    <PublicShell businessName={clinic.name} slug={slug} page="privacy">
       <h1 style={h1Style}>Privacy Policy</h1>
       <p style={pStyle}>
         This policy explains how {clinic.name} (&ldquo;we&rdquo;) handles information in connection
-        with our missed-call text follow-up program. Missed Calls Dental (Dental SMS) acts as our
-        technology and service provider.
+        with our missed-call text follow-up program. Missed Calls Dental is our technology and
+        service provider.
       </p>
 
       <h2 style={h2Style}>Information we collect</h2>
       <p style={pStyle}>
         When you call our office and we miss your call, we collect your phone number and the
-        content of any text messages you exchange with us so our team can follow up. We do not
-        sell your information.
+        content of any text messages you exchange with us so our team can follow up.
       </p>
 
       <h2 style={h2Style}>How we use information</h2>
@@ -49,11 +48,12 @@ export default async function BusinessPrivacyPage({
         marketing.
       </p>
 
-      <h2 style={h2Style}>Sharing</h2>
+      <h2 style={h2Style}>Mobile information sharing</h2>
       <p style={pStyle}>
-        We share information with our technology and service provider (Missed Calls Dental /
-        Dental SMS) and with the messaging carriers needed to deliver texts. We may disclose
-        information where required by law.
+        We do not sell, rent, or share mobile phone numbers or SMS consent information with third
+        parties for their own marketing or promotional purposes. We share information only with our
+        technology and service provider and the messaging carriers needed to deliver texts, or where
+        required by law.
       </p>
 
       <h2 style={h2Style}>Your choices</h2>

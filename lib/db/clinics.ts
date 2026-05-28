@@ -75,6 +75,7 @@ export type ClinicOnboardingRow = ClinicRow & {
   ein_tax_id: string | null;
   business_type: string | null;
   street_address: string | null;
+  address_line2: string | null;
   website: string | null;
   business_info_completed: boolean;
   // A2P representative (stored locally for future submission)
@@ -103,7 +104,7 @@ const CLINIC_COLS = [
   "owner_contact_name", "owner_contact_email", "owner_contact_phone",
   "test_patient_phone", "setup_status",
   "country", "city", "state_region", "postal_code", "preferred_area_code",
-  "ein_tax_id", "business_type", "street_address", "website", "business_info_completed",
+  "ein_tax_id", "business_type", "street_address", "address_line2", "website", "business_info_completed",
   "a2p_rep_first_name", "a2p_rep_last_name", "a2p_rep_business_title",
   "a2p_rep_email", "a2p_rep_phone", "a2p_authorized", "a2p_info_completed",
   "local_number_status", "sms_status", "billing_status",
@@ -197,6 +198,7 @@ export type BusinessInformationInput = {
   einTaxId: string;
   businessType: string;
   streetAddress: string;
+  addressLine2?: string | null;
   city: string;
   stateRegion: string;
   website?: string | null;
@@ -221,6 +223,7 @@ export async function updateBusinessInformation(
       ein_tax_id = ${input.einTaxId},
       business_type = ${input.businessType},
       street_address = ${input.streetAddress},
+      address_line2 = ${input.addressLine2 ?? null},
       city = ${input.city},
       state_region = ${input.stateRegion},
       website = ${input.website ?? null},
@@ -236,7 +239,6 @@ export async function updateBusinessInformation(
 export type A2pInformationInput = {
   repFirstName: string;
   repLastName: string;
-  businessTitle: string;
   repEmail: string;
   repPhone: string;
   authorized: boolean;
@@ -257,7 +259,8 @@ export async function updateA2pInformation(
     set
       a2p_rep_first_name = ${input.repFirstName},
       a2p_rep_last_name = ${input.repLastName},
-      a2p_rep_business_title = ${input.businessTitle},
+      -- Representative title is system-generated, not customer-entered.
+      a2p_rep_business_title = 'Owner',
       a2p_rep_email = ${input.repEmail},
       a2p_rep_phone = ${input.repPhone},
       a2p_authorized = ${input.authorized},

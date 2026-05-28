@@ -27,25 +27,23 @@ export default async function BusinessSmsTermsPage({
   if (!clinic) notFound();
 
   return (
-    <PublicShell businessName={clinic.name}>
+    <PublicShell businessName={clinic.name} slug={slug} page="terms">
       <h1 style={h1Style}>SMS Terms</h1>
       <p style={pStyle}>
-        These terms describe the missed-call text follow-up program operated by {clinic.name},
-        with Missed Calls Dental (Dental SMS) acting as the technology and service provider.
+        These terms describe the missed-call text follow-up program operated by {clinic.name}.
+        Missed Calls Dental is our technology and service provider.
       </p>
 
       <h2 style={h2Style}>Program description</h2>
       <p style={pStyle}>
-        If you call {clinic.name} and we are unable to answer, we may send you a text message so
-        our team can follow up about your call and help you. Messages relate only to your contact
-        with our office.
+        If you call our office and we are unable to answer, we may send a text message related to
+        your call so our team can follow up. You can reply STOP at any time to opt out.
       </p>
 
       <h2 style={h2Style}>Consent</h2>
       <p style={pStyle}>
-        By texting our office or continuing a conversation after our follow-up message, you agree
-        to receive text messages related to your inquiry. Consent is not a condition of any
-        purchase.
+        Replying to our follow-up message means you agree to receive text messages related to your
+        inquiry. Consent is not a condition of any purchase.
       </p>
 
       <h2 style={h2Style}>Message frequency &amp; cost</h2>
