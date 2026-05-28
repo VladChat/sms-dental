@@ -46,7 +46,18 @@ export type ClinicOnboardingInput = {
   preferredAreaCode?: string | null;
 };
 
+// Customer-facing status values surfaced on the Business Profile page.
+export type LocalNumberStatus = "preparing" | "reserved" | "assigned";
+export type SmsStatus = "preparing" | "waiting_for_approval" | "active";
+export type BillingStatus =
+  | "not_started"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled";
+
 export type ClinicOnboardingRow = ClinicRow & {
+  slug: string | null;
   legal_business_name: string | null;
   main_phone: string | null;
   timezone: string;
@@ -60,7 +71,44 @@ export type ClinicOnboardingRow = ClinicRow & {
   state_region: string | null;
   postal_code: string | null;
   preferred_area_code: string | null;
+  // Business Information
+  ein_tax_id: string | null;
+  business_type: string | null;
+  street_address: string | null;
+  website: string | null;
+  business_info_completed: boolean;
+  // A2P representative (stored locally for future submission)
+  a2p_rep_first_name: string | null;
+  a2p_rep_last_name: string | null;
+  a2p_rep_business_title: string | null;
+  a2p_rep_email: string | null;
+  a2p_rep_phone: string | null;
+  a2p_authorized: boolean;
+  a2p_info_completed: boolean;
+  // Lifecycle status
+  local_number_status: LocalNumberStatus;
+  sms_status: SmsStatus;
+  billing_status: BillingStatus;
+  trial_started_at: Date | null;
+  trial_ends_at: Date | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
 };
+
+// Column list shared by every SELECT/RETURNING that builds a
+// ClinicOnboardingRow. Passed to postgres.js as an identifier array.
+const CLINIC_COLS = [
+  "id", "name", "slug", "is_active", "sms_recovery_enabled",
+  "legal_business_name", "main_phone", "timezone",
+  "owner_contact_name", "owner_contact_email", "owner_contact_phone",
+  "test_patient_phone", "setup_status",
+  "country", "city", "state_region", "postal_code", "preferred_area_code",
+  "ein_tax_id", "business_type", "street_address", "website", "business_info_completed",
+  "a2p_rep_first_name", "a2p_rep_last_name", "a2p_rep_business_title",
+  "a2p_rep_email", "a2p_rep_phone", "a2p_authorized", "a2p_info_completed",
+  "local_number_status", "sms_status", "billing_status",
+  "trial_started_at", "trial_ends_at", "stripe_customer_id", "stripe_subscription_id",
+] as const;
 
 // Look up the active clinic that owns a given E.164 phone number.
 // Returns null if the number has no mapping or the clinic/mapping is inactive.
@@ -86,17 +134,156 @@ export async function findClinicById(
 ): Promise<ClinicOnboardingRow | null> {
   const sql = getDb();
   const rows = await sql<ClinicOnboardingRow[]>`
-    select
-      id, name, is_active, sms_recovery_enabled,
-      legal_business_name, main_phone, timezone,
-      owner_contact_name, owner_contact_email, owner_contact_phone,
-      test_patient_phone, setup_status,
-      country, city, state_region, postal_code, preferred_area_code
+    select ${sql(CLINIC_COLS as unknown as string[])}
     from public.clinics
     where id = ${id}
     limit 1
   `;
   return rows[0] ?? null;
+}
+
+// Public lookup for the /business/{slug} pages. Returns the full row; the
+// page is responsible for exposing only public-safe fields.
+export async function findClinicBySlug(
+  slug: string,
+): Promise<ClinicOnboardingRow | null> {
+  const sql = getDb();
+  const rows = await sql<ClinicOnboardingRow[]>`
+    select ${sql(CLINIC_COLS as unknown as string[])}
+    from public.clinics
+    where slug = ${slug}
+    limit 1
+  `;
+  return rows[0] ?? null;
+}
+
+async function slugExists(slug: string, exceptClinicId?: string): Promise<boolean> {
+  const sql = getDb();
+  const rows = await sql<{ id: string }[]>`
+    select id from public.clinics
+    where slug = ${slug}
+      and (${exceptClinicId ?? null}::uuid is null or id <> ${exceptClinicId ?? null}::uuid)
+    limit 1
+  `;
+  return rows.length > 0;
+}
+
+/**
+ * Ensure the clinic has a slug derived from its name. If it already has one,
+ * it is kept. Returns the resolved slug.
+ */
+export async function ensureClinicSlug(
+  clinicId: string,
+  name: string,
+): Promise<string> {
+  const sql = getDb();
+  const current = await sql<{ slug: string | null }[]>`
+    select slug from public.clinics where id = ${clinicId} limit 1
+  `;
+  const existing = current[0]?.slug;
+  if (existing) return existing;
+
+  const { ensureUniqueSlug } = await import("../onboarding/slug");
+  const slug = await ensureUniqueSlug(name, (s) => slugExists(s, clinicId));
+  await sql`update public.clinics set slug = ${slug} where id = ${clinicId}`;
+  return slug;
+}
+
+export type BusinessInformationInput = {
+  name: string;
+  mainPhone: string;
+  postalCode: string;
+  legalBusinessName: string;
+  einTaxId: string;
+  businessType: string;
+  streetAddress: string;
+  city: string;
+  stateRegion: string;
+  website?: string | null;
+};
+
+/**
+ * Save the Business Information card. Marks business_info_completed=true.
+ * Does not touch SMS or billing state.
+ */
+export async function updateBusinessInformation(
+  clinicId: string,
+  input: BusinessInformationInput,
+): Promise<ClinicOnboardingRow> {
+  const sql = getDb();
+  const rows = await sql<ClinicOnboardingRow[]>`
+    update public.clinics
+    set
+      name = ${input.name},
+      main_phone = ${input.mainPhone},
+      postal_code = ${input.postalCode},
+      legal_business_name = ${input.legalBusinessName},
+      ein_tax_id = ${input.einTaxId},
+      business_type = ${input.businessType},
+      street_address = ${input.streetAddress},
+      city = ${input.city},
+      state_region = ${input.stateRegion},
+      website = ${input.website ?? null},
+      business_info_completed = true
+    where id = ${clinicId}
+    returning ${sql(CLINIC_COLS as unknown as string[])}
+  `;
+  const row = rows[0];
+  if (!row) throw new Error("business information update returned no row");
+  return row;
+}
+
+export type A2pInformationInput = {
+  repFirstName: string;
+  repLastName: string;
+  businessTitle: string;
+  repEmail: string;
+  repPhone: string;
+  authorized: boolean;
+};
+
+/**
+ * Save the A2P Approval Information card. Marks a2p_info_completed=true and
+ * advances sms_status to 'waiting_for_approval'. Never enables live SMS:
+ * sms_recovery_enabled stays false.
+ */
+export async function updateA2pInformation(
+  clinicId: string,
+  input: A2pInformationInput,
+): Promise<ClinicOnboardingRow> {
+  const sql = getDb();
+  const rows = await sql<ClinicOnboardingRow[]>`
+    update public.clinics
+    set
+      a2p_rep_first_name = ${input.repFirstName},
+      a2p_rep_last_name = ${input.repLastName},
+      a2p_rep_business_title = ${input.businessTitle},
+      a2p_rep_email = ${input.repEmail},
+      a2p_rep_phone = ${input.repPhone},
+      a2p_authorized = ${input.authorized},
+      a2p_info_completed = true,
+      sms_status = case when sms_status = 'preparing'
+        then 'waiting_for_approval' else sms_status end
+    where id = ${clinicId}
+    returning ${sql(CLINIC_COLS as unknown as string[])}
+  `;
+  const row = rows[0];
+  if (!row) throw new Error("a2p information update returned no row");
+  return row;
+}
+
+/**
+ * Set the customer-facing local number status (preparing/reserved/assigned).
+ * Used by the automatic local-number preparation step.
+ */
+export async function setLocalNumberStatus(
+  clinicId: string,
+  status: LocalNumberStatus,
+): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.clinics set local_number_status = ${status} where id = ${clinicId}
+  `;
 }
 
 /**
@@ -146,12 +333,7 @@ export async function upsertClinicForOnboarding(params: {
           else setup_status
         end
       where id = ${params.existingClinicId}
-      returning
-        id, name, is_active, sms_recovery_enabled,
-        legal_business_name, main_phone, timezone,
-        owner_contact_name, owner_contact_email, owner_contact_phone,
-        test_patient_phone, setup_status,
-        country, city, state_region, postal_code, preferred_area_code
+      returning ${sql(CLINIC_COLS as unknown as string[])}
     `;
     const row = rows[0];
     if (!row) throw new Error("clinic update returned no row");
@@ -172,12 +354,7 @@ export async function upsertClinicForOnboarding(params: {
        ${testPatientPhone}, ${i.country}, ${city}, ${stateRegion},
        ${i.postalCode}, ${preferredAreaCode}, true, false,
        'clinic_details_completed')
-    returning
-      id, name, is_active, sms_recovery_enabled,
-      legal_business_name, main_phone, timezone,
-      owner_contact_name, owner_contact_email, owner_contact_phone,
-      test_patient_phone, setup_status,
-      country, city, state_region, postal_code, preferred_area_code
+    returning ${sql(CLINIC_COLS as unknown as string[])}
   `;
   const row = rows[0];
   if (!row) throw new Error("clinic insert returned no row");

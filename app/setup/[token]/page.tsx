@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { lookupSetupRequestByRawToken } from "../../../lib/onboarding/verify";
 import { findClinicById } from "../../../lib/db/clinics";
-import { findActiveOfficeTextingNumber } from "../../../lib/db/clinic-phone-numbers";
+import { getAppDomainsSafe } from "../../../lib/env";
 import { SetupInvalid } from "./_components/SetupInvalid";
 import { ClinicForm } from "./_components/ClinicForm";
-import { NumberSearch } from "./_components/NumberSearch";
-import { SetupStatusReady } from "./_components/SetupStatusReady";
+import { BusinessProfile, type BusinessProfileData } from "./_components/BusinessProfile";
 import { PageShell } from "./_components/PageShell";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +13,7 @@ export const runtime = "nodejs";
 export const metadata: Metadata = {
   title: "Set up your office — Missed Calls Dental",
   description:
-    "Complete your Missed Calls Dental setup. Choose an office texting number for missed-call follow-ups.",
+    "Complete your Missed Calls Dental setup: create your office profile and business profile.",
   robots: { index: false, follow: false },
 };
 
@@ -35,10 +34,11 @@ export default async function SetupTokenPage({
   }
   const setupRequest = lookup.setupRequest;
 
-  // Branch by current step.
+  // Screen 1 — Create office profile (no clinic yet).
   if (
     setupRequest.status === "requested" ||
-    setupRequest.status === "email_sent"
+    setupRequest.status === "email_sent" ||
+    !setupRequest.clinic_id
   ) {
     return (
       <PageShell>
@@ -47,65 +47,52 @@ export default async function SetupTokenPage({
     );
   }
 
-  // After clinic_details_completed but before number_assigned, search.
-  if (
-    setupRequest.status === "clinic_details_completed" ||
-    setupRequest.status === "number_selected"
-  ) {
-    if (!setupRequest.clinic_id) {
-      return (
-        <PageShell>
-          <SetupInvalid reason="not_found" />
-        </PageShell>
-      );
-    }
-    const clinic = await findClinicById(setupRequest.clinic_id);
+  // Screen 2 — Business Profile (clinic exists).
+  const clinic = await findClinicById(setupRequest.clinic_id);
+  if (!clinic) {
     return (
       <PageShell>
-        <NumberSearch
-          token={token}
-          mainPhone={clinic?.main_phone ?? null}
-          clinicName={clinic?.name ?? "Your clinic"}
-          country={clinic?.country ?? "US"}
-          preferredAreaCode={clinic?.preferred_area_code ?? null}
-        />
+        <SetupInvalid reason="not_found" />
       </PageShell>
     );
   }
 
-  // Number assigned or later — show status page.
-  if (
-    setupRequest.status === "number_assigned" ||
-    setupRequest.status === "qa_pending" ||
-    setupRequest.status === "qa_passed" ||
-    setupRequest.status === "ready_for_approval" ||
-    setupRequest.status === "active"
-  ) {
-    if (!setupRequest.clinic_id) {
-      return (
-        <PageShell>
-          <SetupInvalid reason="not_found" />
-        </PageShell>
-      );
-    }
-    const [clinic, mapping] = await Promise.all([
-      findClinicById(setupRequest.clinic_id),
-      findActiveOfficeTextingNumber(setupRequest.clinic_id),
-    ]);
-    return (
-      <PageShell>
-        <SetupStatusReady
-          clinicName={clinic?.name ?? "Your clinic"}
-          mainPhone={clinic?.main_phone ?? null}
-          officeTextingNumber={mapping?.phone_number ?? null}
-        />
-      </PageShell>
-    );
-  }
+  const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
+  const data: BusinessProfileData = {
+    token,
+    loginEmail: setupRequest.owner_email,
+    publicBaseUrl,
+    clinic: {
+      name: clinic.name,
+      mainPhone: clinic.main_phone ?? "",
+      postalCode: clinic.postal_code ?? "",
+      legalBusinessName: clinic.legal_business_name ?? "",
+      einTaxId: clinic.ein_tax_id ?? "",
+      businessType: clinic.business_type ?? "",
+      streetAddress: clinic.street_address ?? "",
+      city: clinic.city ?? "",
+      stateRegion: clinic.state_region ?? "",
+      website: clinic.website ?? "",
+      slug: clinic.slug,
+      businessInfoCompleted: clinic.business_info_completed,
+      a2p: {
+        firstName: clinic.a2p_rep_first_name ?? "",
+        lastName: clinic.a2p_rep_last_name ?? "",
+        businessTitle: clinic.a2p_rep_business_title ?? "",
+        email: clinic.a2p_rep_email ?? "",
+        phone: clinic.a2p_rep_phone ?? "",
+        authorized: clinic.a2p_authorized,
+        completed: clinic.a2p_info_completed,
+      },
+      localNumberStatus: clinic.local_number_status,
+      smsStatus: clinic.sms_status,
+      billingStatus: clinic.billing_status,
+    },
+  };
 
   return (
     <PageShell>
-      <SetupInvalid reason="completed" />
+      <BusinessProfile data={data} />
     </PageShell>
   );
 }

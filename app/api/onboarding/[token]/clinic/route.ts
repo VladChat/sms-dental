@@ -8,6 +8,7 @@ import {
 } from "../../../../../lib/http/responses";
 import { lookupSetupRequestByRawToken } from "../../../../../lib/onboarding/verify";
 import {
+  ensureClinicSlug,
   upsertClinicForOnboarding,
   type ClinicOnboardingInput,
 } from "../../../../../lib/db/clinics";
@@ -16,6 +17,7 @@ import {
   setSetupRequestStatus,
 } from "../../../../../lib/db/setup-requests";
 import { isValidE164, normalizePhone } from "../../../../../lib/phone/normalize";
+import { prepareLocalNumber } from "../../../../../lib/onboarding/local-number";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -108,10 +110,25 @@ export async function POST(
   }
   await setSetupRequestStatus(setupRequest.id, "clinic_details_completed");
 
+  // Generate the public business slug and trigger automatic local-number
+  // preparation. Both are best-effort and must not fail office creation.
+  let slug: string | null = null;
+  try {
+    slug = await ensureClinicSlug(clinic.id, clinic.name);
+  } catch {
+    slug = null;
+  }
+  try {
+    await prepareLocalNumber(clinic);
+  } catch {
+    // status stays "preparing"; non-blocking.
+  }
+
   return jsonOk({
     ok: true,
     clinic_id: clinic.id,
     main_phone: clinic.main_phone,
     country: clinic.country,
+    slug,
   });
 }

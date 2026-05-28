@@ -537,3 +537,25 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 - [ ] Onboarding never enables live SMS automatically. Live SMS still
       requires the standard go-live gate (compliance approval, QA pass,
       explicit `sms_recovery_enabled=true` for that clinic only).
+
+## Business Profile onboarding (added 2026-05-28)
+
+- [ ] Apply `supabase/migrations/20260528000100_business_profile_onboarding.sql`
+      to Supabase (owner approval required) before the live flow works.
+- [ ] Screen 1 **Create office profile** shows only clinic name, main office
+      phone, ZIP code; button reads **Create office profile**.
+- [ ] After save, the Business Profile page opens (no Review & Submit step) with
+      a status strip (Local number / SMS / Billing) and cards: Business
+      Information, A2P Approval Information, Public Business Page, Billing,
+      Billing History, Login & Security, Support.
+- [ ] Business Information prefills clinic name / main office phone / ZIP from
+      Create office profile (no duplicate entry).
+- [ ] A2P Approval Information prefills representative email (setup/login email)
+      and representative phone (main office phone). Saving stores data locally
+      only and shows SMS status **Waiting for approval** — it never enables live
+      SMS or submits to Twilio.
+- [ ] Public pages render at `/business/{slug}`, `/business/{slug}/privacy`,
+      `/business/{slug}/sms-terms` and name Missed Calls Dental / Dental SMS as
+      the technology/service provider.
+- [ ] Billing stays **Not started**; the 21-day trial baseline starts only after
+      SMS recovery activation and does not count down while approval is pending.

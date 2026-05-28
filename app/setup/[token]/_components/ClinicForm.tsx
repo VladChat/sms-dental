@@ -38,11 +38,9 @@ export function ClinicForm({ token }: Props) {
 
   return (
     <section style={cardStyle}>
-      <p style={eyebrowStyle}>Step 1 of 2</p>
-      <h2 style={h2Style}>Tell us about your clinic</h2>
+      <h2 style={h2Style}>Create office profile</h2>
       <p style={helperStyle}>
-        Just three quick details so we can set up your office texting number. Your main office
-        number stays the same.
+        Three quick details to get your office set up. Your main office number stays the same.
       </p>
 
       <form onSubmit={onSubmit} style={{ marginTop: 20 }} noValidate>
@@ -50,14 +48,14 @@ export function ClinicForm({ token }: Props) {
           label="Clinic name"
           name="name"
           required
-          helper="Shown to patients in your follow-up messages."
+          helper="Enter the public name patients know your office by."
           placeholder="Bright Smile Dental"
         />
         <Field
           label="Main office phone"
           name="main_phone"
           required
-          helper="The number patients currently call."
+          helper="Enter the phone number patients currently call."
           placeholder="(224) 555-1234"
           inputMode="tel"
           autoComplete="tel"
@@ -66,7 +64,7 @@ export function ClinicForm({ token }: Props) {
           label="ZIP code"
           name="postal_code"
           required
-          helper="Used to find local numbers near your office."
+          helper="We’ll use this ZIP code to prepare a local number for your office."
           placeholder="60010"
           inputMode="numeric"
           autoComplete="postal-code"
@@ -91,7 +89,7 @@ export function ClinicForm({ token }: Props) {
         )}
 
         <button type="submit" disabled={submitting} style={primaryBtnStyle}>
-          {submitting ? "Saving…" : "Continue"}
+          {submitting ? "Creating…" : "Create office profile"}
         </button>
 
         <p style={footnoteStyle}>
