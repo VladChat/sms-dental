@@ -514,6 +514,27 @@ TWILIO_NUMBER_PURCHASE_ENABLED
 OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 ```
 
+### Production setup email — pre-launch checklist
+
+- [ ] **Verify Resend env before public launch.** `RESEND_API_KEY` and
+      `SETUP_EMAIL_FROM` must be set on Vercel Production with a sender on a
+      Resend-verified domain. (As of 2026-05-28 these are **not** configured —
+      no real key exists locally; this is a launch blocker.)
+- [ ] **Verify the fallback is disabled** for public launch:
+      `OWNER_TEST_SETUP_LINK_FALLBACK=false`. Keep it `true` until Resend is
+      configured — flipping it off without Resend returns `502
+      email_delivery_failed` and breaks onboarding.
+- [ ] **Run one owner-only setup email dry run.** `POST /api/setup-requests`
+      with the owner-only test email; confirm the response no longer returns
+      `setup_url`, and that the email arrives with an
+      `https://app.missedcallsdental.com/setup/<token>` link. Do not paste the
+      raw token into shared logs.
+- [ ] **Confirm Business Profile onboarding opens from the emailed setup link**:
+      Create office profile → Business Profile → Business Information → A2P
+      Approval Information → `/business/{slug}` (+ `/privacy`, `/sms-terms`).
+- [ ] Confirm no SMS was sent, no Twilio number purchased/reserved, no Stripe
+      action, billing stays Not started.
+
 ---
 
 ## U.S.-only onboarding, 3-field Step 1 (updated 2026-05-27)

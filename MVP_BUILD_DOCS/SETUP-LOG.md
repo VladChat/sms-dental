@@ -1186,3 +1186,57 @@ Remaining manual step:
 
 - Apply `20260528000100_business_profile_onboarding.sql` to Supabase (owner approval
   required) before the live Business Profile flow works end-to-end.
+
+---
+
+## 2026-05-28 — Production setup email flow: verification attempt (blocked on Resend)
+
+Goal: make the production setup-link email flow ready for real use (configure
+Resend, disable owner-test fallback, send a real setup email, confirm the
+emailed link reaches the live Business Profile onboarding).
+
+Resend production email status: **NOT configured (launch blocker).**
+
+- `RESEND_API_KEY`: missing on Vercel production, empty in local `.env.local`.
+- `SETUP_EMAIL_FROM`: missing on Vercel production, empty in local `.env.local`.
+- A safe presence-only scan of local env files found no real Resend value
+  anywhere. Per task rules, no value was invented and nothing was set on Vercel.
+- Owner action required: create a Resend API key + verify a sending domain,
+  then set `RESEND_API_KEY` and `SETUP_EMAIL_FROM` on Vercel Production.
+
+OWNER_TEST_SETUP_LINK_FALLBACK status: **left `true`** in production
+(unchanged). Intentionally NOT flipped to `false`: with the fallback off and no
+Resend key, `POST /api/setup-requests` would return `502 email_delivery_failed`
+and break onboarding. It must stay `true` until Resend is configured, then be
+set to `false` for public launch.
+
+Production setup email dry-run result: **could not run the real-email path**
+(no Resend key). The fallback path was confirmed still working:
+`POST /api/setup-requests` returns `ok:true`, `confirm_url`, and a `setup_url`
+(fallback ON). No setup token was printed to shared logs. The full emailed-link
+dry run (create office profile → Business Profile → Business Information → A2P →
+`/business/{slug}` + `/privacy` + `/sms-terms`) was already verified end-to-end
+on 2026-05-28 via the fallback link; only real email delivery remains unverified.
+
+Health check result: `GET /api/health` → 200
+`{"ok":true,"service":"missed-calls-dental","version":"foundation-v1"}`.
+Production is on latest `origin/main` (`75529ab`); no redeploy needed.
+
+Checks: `npm run typecheck` pass; `npm run build` pass; no `lint` script; no tests.
+
+Safety confirmation:
+
+- SMS sent: no. `sms_recovery_enabled`: unchanged (false).
+- Twilio number purchased/reserved: no. Twilio settings/webhooks: unchanged.
+- Stripe: unchanged. Billing: not started. No trial dates set.
+- Supabase migration applied this task: none.
+- Secrets printed: no. Env files committed: no. Vercel env values: unchanged.
+
+Docs updated: this entry, `OPERATIONS-RUNBOOK.md` (setup email current status +
+finish procedure), `REPEATABLE-SETUP-CHECKLIST.md` (pre-launch email checklist).
+
+Remaining launch blockers:
+
+1. Configure `RESEND_API_KEY` + `SETUP_EMAIL_FROM` on Vercel production (owner).
+2. After Resend is configured, set `OWNER_TEST_SETUP_LINK_FALLBACK=false`,
+   redeploy, and run the owner-only real-email dry run.

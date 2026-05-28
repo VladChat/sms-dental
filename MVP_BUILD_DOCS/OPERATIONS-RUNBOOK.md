@@ -709,6 +709,34 @@ OWNER_TEST_SETUP_LINK_FALLBACK=false  # never true in production
 Verify presence (no values) via `GET /api/internal/health` with the
 internal admin secret.
 
+### Setup email delivery — current status (2026-05-28)
+
+Production email is **not configured yet**. `RESEND_API_KEY` and
+`SETUP_EMAIL_FROM` are **missing on Vercel production** and **empty in
+local `.env.local`**, so no real Resend value exists to deploy.
+
+Because of that, `OWNER_TEST_SETUP_LINK_FALLBACK` is intentionally left
+**`true`** in production for now: it makes `POST /api/setup-requests`
+return the setup link in the JSON response instead of emailing it.
+
+> Do not flip `OWNER_TEST_SETUP_LINK_FALLBACK=false` until Resend is
+> configured. With the fallback off and no Resend key, the endpoint
+> returns `502 email_delivery_failed` and onboarding breaks.
+
+To finish the production email flow (owner action — requires a real key):
+
+1. Create a Resend API key and verify the sending domain/sender in Resend.
+2. Set on Vercel **Production** (no values in Git):
+   `RESEND_API_KEY=<key>` and
+   `SETUP_EMAIL_FROM=Missed Calls Dental <no-reply@missedcallsdental.com>`
+   (use a sender on a Resend-verified domain).
+3. Set `OWNER_TEST_SETUP_LINK_FALLBACK=false`.
+4. Redeploy production.
+5. Verify safely: `POST /api/setup-requests` with the owner-only test email,
+   confirm the response no longer includes `setup_url`, and confirm the email
+   arrives with an `https://app.missedcallsdental.com/setup/<token>` link.
+   Never paste the raw token into shared logs.
+
 ### Onboarding URL surface
 
 - Public form target: `POST /api/setup-requests`
