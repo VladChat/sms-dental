@@ -107,7 +107,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     await sendSetupLinkEmail({
       to: parsed.data.work_email,
-      ownerName,
       setupUrl,
     });
     await setSetupRequestStatus(created.id, "email_sent", {
