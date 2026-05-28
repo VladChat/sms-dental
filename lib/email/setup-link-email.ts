@@ -12,7 +12,6 @@ import { getSetupEmailEnv } from "../env";
 
 export type SetupLinkEmailInput = {
   to: string;
-  ownerName: string;
   setupUrl: string;
 };
 
@@ -33,8 +32,8 @@ export async function sendSetupLinkEmail(
   const { resendApiKey, setupEmailFrom } = getSetupEmailEnv();
 
   const subject = "Complete your Missed Calls Dental setup";
-  const text = buildPlainBody(input.ownerName, input.setupUrl);
-  const html = buildHtmlBody(input.ownerName, input.setupUrl);
+  const text = buildPlainBody(input.setupUrl);
+  const html = buildHtmlBody(input.setupUrl);
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -69,15 +68,15 @@ export async function sendSetupLinkEmail(
   }
 }
 
-function buildPlainBody(ownerName: string, setupUrl: string): string {
+function buildPlainBody(setupUrl: string): string {
   return [
-    `Hi ${ownerName},`,
+    "Hello,",
     "",
-    "Use the secure link below to complete your Missed Calls Dental setup:",
+    "Use this secure link to continue your Missed Calls Dental setup:",
     "",
     setupUrl,
     "",
-    "During setup, you will choose an office texting number for missed-call follow-up texts. This is an additional number and will not replace your existing office phone number.",
+    "You’ll add your office details on the next step.",
     "",
     "If you did not request this setup link, you can ignore this email.",
     "",
@@ -86,19 +85,18 @@ function buildPlainBody(ownerName: string, setupUrl: string): string {
   ].join("\n");
 }
 
-function buildHtmlBody(ownerName: string, setupUrl: string): string {
+function buildHtmlBody(setupUrl: string): string {
   // Inline-styled HTML. Avoid loading external assets. Mirrors the plain
   // body wording exactly so tracking-stripped clients still see the same
   // information.
-  const safeName = escapeHtml(ownerName);
   const safeUrl = escapeHtml(setupUrl);
   return [
     "<!doctype html>",
     '<html><body style="font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#111827; line-height:1.55;">',
-    `<p>Hi ${safeName},</p>`,
-    "<p>Use the secure link below to complete your Missed Calls Dental setup:</p>",
+    "<p>Hello,</p>",
+    "<p>Use this secure link to continue your Missed Calls Dental setup:</p>",
     `<p><a href="${safeUrl}" style="color:#0d9488; word-break:break-all;">${safeUrl}</a></p>`,
-    "<p>During setup, you will choose an office texting number for missed-call follow-up texts. This is an additional number and will not replace your existing office phone number.</p>",
+    "<p>You’ll add your office details on the next step.</p>",
     "<p>If you did not request this setup link, you can ignore this email.</p>",
     '<p style="color:#6b7280; font-size:14px;">Missed Calls Dental<br>support@missedcallsdental.com</p>',
     "</body></html>",
