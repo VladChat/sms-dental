@@ -28,3 +28,8 @@ out/
 Thumbs.db
 
 .vercel
+
+# Local temporary artifacts
+missed-calls-design-export/
+MVP_BUILD_DOCS/env/
+skills-lock.json

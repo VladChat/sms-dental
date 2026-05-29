@@ -46,7 +46,7 @@ call event reaches system -> Twilio webhook -> safe SMS recovery -> inbound repl
 
 Important:
 
-The app cannot automatically detect calls to an unrelated clinic phone number. For MVP, the call must reach the system through conditional forwarding, a dedicated tracking number, or hybrid usage. Future versions may add direct phone-provider integrations.
+The app cannot automatically detect calls to an unrelated clinic phone number. For MVP, the call must reach the system through conditional forwarding, the system-prepared local-number path, or a future approved provider integration. Future versions may add direct phone-provider integrations.
 
 Do not build:
 
