@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How it works &mdash; Missed Calls Dental</title>
-  <meta name="description" content="A polite SMS bridges the missed call. Key details are collected. The front desk gets info to follow up.">
+  <meta name="description" content="A polite SMS bridges the missed call. Key details are collected. The front desk follows up.">
   <link rel="canonical" href="https://missedcallsdental.com/how-it-works.html">
   <meta property="og:type" content="website">
   <meta property="og:title" content="How it works &mdash; Missed Calls Dental">
@@ -15,11 +15,10 @@
   <meta name="twitter:title" content="How it works &mdash; Missed Calls Dental">
   <meta name="twitter:description" content="A polite SMS bridges the missed call.">
   <meta name="twitter:image" content="https://missedcallsdental.com/images/marketing/og-image.png">
-  <meta name="theme-color" content="#071527">
+  <meta name="theme-color" content="#0B6F67">
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="site.webmanifest">
-  <script>(function(){try{var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -29,29 +28,19 @@
     <div class="container header-inner">
       <a class="brand" href="index.html" aria-label="Missed Calls Dental home">
         <img src="brand/logo-mark.webp" alt="" width="1254" height="1254">
-        <span class="brand-text">
-          <span class="brand-name">Missed Calls Dental</span>
-          <span class="brand-tag">SMS recovery for missed patient calls</span>
-        </span>
+        <span class="brand-text"><span class="brand-name">Missed Calls Dental</span></span>
       </a>
-
       <div class="header-end">
-        <button class="theme-toggle" type="button" aria-label="Switch theme" title="Switch theme">
-          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
-          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z"></path></svg>
-        </button>
-
         <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Open menu">
-          <span class="menu-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
-          <span>Menu</span>
+          <span class="menu-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span><span>Menu</span>
         </button>
-
         <nav class="site-nav" id="primary-nav" aria-label="Main navigation">
-          <a class="nav-link" href="index.html#how-it-works" aria-current="page">How it works</a>
-          <a class="nav-link" href="index.html#start-trial">Pricing</a>
+          <a class="nav-link" href="how-it-works.html" aria-current="page">How it works</a>
+          <a class="nav-link" href="pricing.html">Pricing</a>
+          <a class="nav-link" href="index.html#faq">FAQ</a>
           <div class="auth-group">
             <a class="auth-link" href="sign-in.html">Sign in</a>
-            <a class="auth-link auth-link--primary" href="index.html#start-trial">Start trial</a>
+            <a class="auth-link auth-link--primary" href="pricing.html#start-trial">Start trial</a>
           </div>
         </nav>
       </div>
@@ -59,28 +48,35 @@
   </header>
 
   <main id="main">
-    <section class="section" aria-labelledby="how-h1">
+    <section class="section">
       <div class="container">
         <div class="section-head">
-          <h1 id="how-h1">How it works</h1>
-          <p>A simple flow from missed call to front-desk-ready patient details.</p>
+          <p class="t-eyebrow">How it works</p>
+          <h1 class="t-h1">From missed call to ready-to-book, automatically.</h1>
+          <p class="t-body-lg">A simple flow that runs in the background. No app to open. No script to write.</p>
         </div>
 
-        <ol class="steps">
-          <li>Missed call detected.</li>
-          <li>Key details collected.</li>
-          <li>Front desk gets info to follow up.</li>
-        </ol>
-
-        <div class="thread thread--top-spaced" aria-label="Example SMS conversation">
-          <div class="bubble clinic"><small>Clinic</small>Hi, this is Bright Smile Dental. Sorry we missed your call. How can we help? Reply STOP to opt out.</div>
-          <div class="bubble patient"><small>Patient</small>Hi, I&rsquo;d like to schedule a cleaning.</div>
-          <div class="bubble clinic"><small>Clinic</small>Thanks. Our front desk will follow up to help find a time.</div>
+        <div class="step-grid">
+          <div class="step">
+            <div class="num" aria-hidden="true">1</div>
+            <h3 class="t-h3">A call is missed</h3>
+            <p class="t-small">Unanswered or busy calls to your office are detected. Your main number never changes.</p>
+          </div>
+          <div class="step">
+            <div class="num" aria-hidden="true">2</div>
+            <h3 class="t-h3">The caller gets a text</h3>
+            <p class="t-small">An automatic, on-brand SMS invites them to reply with what they need.</p>
+          </div>
+          <div class="step">
+            <div class="num" aria-hidden="true">3</div>
+            <h3 class="t-h3">Your team follows up</h3>
+            <p class="t-small">The front desk sees the caller, their request, and preferred time &mdash; ready to book.</p>
+          </div>
         </div>
 
-        <div class="actions actions--top-spaced">
-          <a class="btn btn-primary" href="index.html#start-trial">Start trial</a>
-          <a class="btn btn-ghost" href="index.html#start-trial">View pricing</a>
+        <div class="hero-ctas" style="justify-content: center; margin-top: var(--space-10)">
+          <a class="btn btn-primary btn-lg" href="pricing.html#start-trial">Start free trial</a>
+          <a class="btn btn-secondary btn-lg" href="pricing.html">View pricing</a>
         </div>
       </div>
     </section>
