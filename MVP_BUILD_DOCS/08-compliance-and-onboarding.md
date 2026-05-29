@@ -67,7 +67,7 @@ A clinic becomes live only after:
 
 ### Principle 3 — Trial starts on activation, not signup
 
-The 14-day free trial should start only when the clinic is `activation_ready`, not when the owner creates an account.
+The 21-day free trial should start only when the clinic is `activation_ready`, not when the owner creates an account.
 
 Reason: messaging setup and A2P review may take time. A clinic should not lose trial days while waiting for operational activation.
 

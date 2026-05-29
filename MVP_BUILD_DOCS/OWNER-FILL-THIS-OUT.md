@@ -53,7 +53,7 @@ Pricing:
 ```txt
 Monthly price:
 Annual price, if any:
-Trial length: 14 days after live activation
+Trial length: 21 days after live activation
 ```
 
 Scope confirmation:
