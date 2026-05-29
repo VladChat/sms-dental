@@ -1,30 +1,12 @@
 (function () {
   'use strict';
 
-  /* ---------- Theme toggle ---------- */
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    try { localStorage.setItem('theme', theme); } catch (e) {}
-    document.querySelectorAll('.theme-toggle').forEach(function (btn) {
-      var next = theme === 'dark' ? 'light' : 'dark';
-      var label = 'Switch to ' + next + ' theme';
-      btn.setAttribute('aria-label', label);
-      btn.setAttribute('title', label);
-    });
-  }
-
-  function currentTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  }
-
-  document.querySelectorAll('.theme-toggle').forEach(function (btn) {
-    var label = 'Switch to ' + (currentTheme() === 'dark' ? 'light' : 'dark') + ' theme';
-    btn.setAttribute('aria-label', label);
-    btn.setAttribute('title', label);
-    btn.addEventListener('click', function () {
-      applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
-    });
-  });
+  /* Clear any legacy dark-theme attribute set by earlier sessions. The site
+     is light-only now; any leftover localStorage value is ignored. */
+  try {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.removeItem('theme');
+  } catch (e) {}
 
   /* ---------- Mobile menu toggle ---------- */
   var toggle = document.querySelector('.menu-toggle');
