@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Missed Calls Dental — Recover missed patient calls</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="../components.css">
+<style>
+  .mk-header { position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,.82); backdrop-filter: saturate(160%) blur(12px); border-bottom: 1px solid var(--border); }
+  .mk-header .inner { height: var(--header-h); display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+  .mk-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .mk-brand b { font: 700 1.0625rem/1 var(--font-display); color: var(--text); letter-spacing: -.01em; }
+  .mk-nav { display: flex; align-items: center; gap: 4px; }
+  .mk-nav a { padding: 8px 12px; border-radius: var(--r-sm); color: var(--text-secondary); font: 600 .9375rem/1 var(--font-sans); text-decoration: none; }
+  .mk-nav a:hover { background: var(--surface-2); color: var(--text); }
+  .hero { padding: var(--space-20) 0 var(--space-12); }
+  .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: var(--space-12); align-items: center; }
+  .eyebrow-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--r-pill); background: var(--primary-soft); border: 1px solid var(--primary-soft-border); color: var(--teal-700); font: 600 .8125rem/1 var(--font-sans); }
+  .trust-line { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font: var(--body-sm); }
+  .trust-line svg { color: var(--success); }
+  /* hero product mock */
+  .mock { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); box-shadow: var(--shadow-xl); overflow: hidden; }
+  .mock-bar { display: flex; align-items: center; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .mock-bar i { width: 10px; height: 10px; border-radius: 999px; background: var(--n-300); }
+  .mock-body { padding: var(--space-5); display: grid; gap: var(--space-3); }
+  .bubble { max-width: 84%; padding: 12px 14px; border-radius: 16px; font: var(--body-sm); line-height: 1.5; }
+  .bubble small { display: block; font: 600 .625rem/1 var(--font-sans); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px; opacity: .8; }
+  .bubble.clinic { background: var(--surface-2); color: var(--text-body); border: 1px solid var(--border); border-bottom-left-radius: 5px; }
+  .bubble.clinic small { color: var(--teal-700); }
+  .bubble.patient { justify-self: end; background: var(--teal-600); color: #fff; border-bottom-right-radius: 5px; }
+  .bubble.patient small { color: var(--teal-100); }
+  .section { padding: var(--space-20) 0; }
+  .section + .section { border-top: 1px solid var(--border); }
+  .section-head { max-width: 640px; margin: 0 auto var(--space-12); text-align: center; }
+  .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
+  .step-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); counter-reset: s; }
+  .step { position: relative; padding-top: var(--space-6); }
+  .step .num { width: 36px; height: 36px; border-radius: var(--r-md); background: var(--primary); color: #fff; display: inline-flex; align-items: center; justify-content: center; font: 700 1rem/1 var(--font-display); margin-bottom: 12px; }
+  .pricing-card { max-width: 480px; margin: 0 auto; }
+  .price-row { display: flex; align-items: baseline; gap: 6px; }
+  .price-amount { font: 700 3.25rem/1 var(--font-display); letter-spacing: -.03em; color: var(--text); }
+  .incl { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .incl li { display: flex; align-items: center; gap: 10px; color: var(--text-body); font: var(--body-sm); }
+  .incl li svg { color: var(--success); flex: 0 0 auto; }
+  .cta-band { background: var(--ink-900); border-radius: var(--r-2xl); padding: var(--space-16) var(--space-12); text-align: center; color: #fff; }
+  .cta-band h2 { color: #fff; }
+  .mk-footer { border-top: 1px solid var(--border); padding: var(--space-12) 0; color: var(--text-muted); }
+  .mk-footer .inner { display: flex; justify-content: space-between; gap: var(--space-6); flex-wrap: wrap; align-items: center; }
+  .mk-footer a { color: var(--text-secondary); text-decoration: none; font: var(--body-sm); margin-left: var(--space-5); }
+  .mk-footer a:hover { color: var(--text); }
+  @media (max-width: 860px){ .hero-grid,.feat-grid,.step-grid{grid-template-columns:1fr} .mk-nav .hide{display:none} }
+</style>
+</head>
+<body>
+<header class="mk-header"><div class="container inner">
+  <a class="mk-brand" href="#"><span id="logo"></span><b>Missed Calls Dental</b></a>
+  <nav class="mk-nav">
+    <a class="hide" href="#how">How it works</a>
+    <a class="hide" href="#pricing">Pricing</a>
+    <a href="auth.html">Sign in</a>
+    <a class="btn btn-primary btn-sm" href="#pricing" style="margin-left:8px;color:#fff">Start trial</a>
+  </nav>
+</div></header>
+
+<main>
+  <!-- HERO -->
+  <section class="hero"><div class="container hero-grid">
+    <div>
+      <span class="eyebrow-pill">Missed-call SMS recovery for dental offices</span>
+      <h1 class="t-display-l" style="margin:18px 0 16px">Every missed call is a patient you can still win back.</h1>
+      <p class="t-body-lg" style="margin:0 0 28px;max-width:50ch">When your office can’t pick up, the caller gets a professional text in seconds — so your front desk can reconnect and book the appointment.</p>
+      <div class="row-wrap" style="gap:12px;margin-bottom:20px">
+        <a class="btn btn-primary btn-lg" href="#pricing">Start 21-day free trial</a>
+        <a class="btn btn-secondary btn-lg" href="#how">See how it works</a>
+      </div>
+      <div class="trust-line"><span data-icon="shield-check" data-size="18"></span> No charge until your SMS recovery is live · Cancel anytime</div>
+    </div>
+    <div class="mock" aria-hidden="true">
+      <div class="mock-bar"><i></i><i></i><i></i><span class="t-helper" style="margin-left:8px">Bright Smile Dental · texting</span></div>
+      <div class="mock-body">
+        <div class="bubble clinic"><small>Clinic</small>Hi, this is Bright Smile Dental. Sorry we missed your call. How can we help? Reply STOP to opt out.</div>
+        <div class="bubble patient"><small>Patient</small>Hi! I’d like to book a cleaning.</div>
+        <div class="bubble clinic"><small>Clinic</small>Happy to help. What day or time usually works best?</div>
+        <div class="bubble patient"><small>Patient</small>Tuesday morning if possible.</div>
+        <div class="card" style="box-shadow:none;border-color:var(--success-border);background:var(--success-bg);padding:12px 14px;display:flex;align-items:center;gap:10px;margin-top:4px">
+          <span style="color:var(--success-text)" data-icon="calendar-check"></span>
+          <span class="t-small" style="color:var(--success-text);font-weight:600">Front desk notified — ready to book</span>
+        </div>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- PROBLEM / SOLUTION -->
+  <section class="section"><div class="container">
+    <div class="section-head">
+      <span class="t-eyebrow">The quiet leak</span>
+      <h2 class="t-h2" style="margin:10px 0 12px">A missed call usually means a missed patient.</h2>
+      <p class="t-body-lg">Callers rarely leave a voicemail and rarely call twice. They move to the next office. Missed Calls Dental closes the gap automatically — without adding work for your team.</p>
+    </div>
+    <div class="feat-grid">
+      <div class="card card-pad"><span class="tile" data-icon="phone-missed"></span><h3 class="t-h3" style="margin:14px 0 6px">Respond in seconds</h3><p class="t-small">A prompt, professional text goes out the moment a call is missed — no app, no manual step.</p></div>
+      <div class="card card-pad"><span class="tile" data-icon="message-check"></span><h3 class="t-h3" style="margin:14px 0 6px">Recover more callers</h3><p class="t-small">Give every missed caller an easy way back into a conversation with your office.</p></div>
+      <div class="card card-pad"><span class="tile" data-icon="users"></span><h3 class="t-h3" style="margin:14px 0 6px">Less manual follow-up</h3><p class="t-small">Your front desk gets the caller’s details and intent, ready to book — and only handles replies that matter.</p></div>
+    </div>
+  </div></section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section" id="how"><div class="container">
+    <div class="section-head"><span class="t-eyebrow">How it works</span><h2 class="t-h2" style="margin:10px 0">From missed call to booked chair, automatically.</h2></div>
+    <div class="step-grid">
+      <div class="step"><div class="num">1</div><h3 class="t-h3" style="margin-bottom:6px">A call is missed</h3><p class="t-small">Unanswered or busy calls to your office are detected — your main number never changes.</p></div>
+      <div class="step"><div class="num">2</div><h3 class="t-h3" style="margin-bottom:6px">The caller gets a text</h3><p class="t-small">An automatic, on-brand SMS invites them to reply with what they need.</p></div>
+      <div class="step"><div class="num">3</div><h3 class="t-h3" style="margin-bottom:6px">Your team follows up</h3><p class="t-small">The front desk sees the caller, their request, and preferred time — ready to book.</p></div>
+    </div>
+  </div></section>
+
+  <!-- PRICING -->
+  <section class="section" id="pricing"><div class="container">
+    <div class="section-head"><span class="t-eyebrow">Pricing</span><h2 class="t-h2" style="margin:10px 0">One simple plan for your office.</h2></div>
+    <div class="card pricing-card" style="overflow:hidden">
+      <div style="padding:var(--space-8);background:var(--primary-soft);border-bottom:1px solid var(--border)">
+        <span class="badge badge-success" style="margin-bottom:14px">21-day free trial</span>
+        <div class="price-row"><span class="price-amount">$99</span><span class="t-body-lg" style="color:var(--text-secondary)">/month</span></div>
+        <p class="t-small" style="margin-top:8px">Billing starts only after your SMS recovery is live. No charge while approval is pending.</p>
+      </div>
+      <div style="padding:var(--space-8)">
+        <ul class="incl">
+          <li><span data-icon="check" data-size="18"></span> Automatic missed-call SMS recovery</li>
+          <li><span data-icon="check" data-size="18"></span> Dedicated office texting number</li>
+          <li><span data-icon="check" data-size="18"></span> Front-desk caller summaries</li>
+          <li><span data-icon="check" data-size="18"></span> Compliance-ready consent pages</li>
+        </ul>
+        <a class="btn btn-primary btn-lg btn-block" href="#" style="margin-top:24px">Start free trial</a>
+        <p class="t-helper center" style="margin-top:12px">Setup takes minutes. Cancel anytime.</p>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- TRUST / COMPLIANCE -->
+  <section class="section"><div class="container">
+    <div class="hero-grid">
+      <div>
+        <span class="t-eyebrow">Built to be trusted</span>
+        <h2 class="t-h2" style="margin:10px 0 14px">Compliance handled, plainly.</h2>
+        <p class="t-body-lg" style="margin-bottom:20px">Patient messaging carries real responsibility. We keep it clear and safe — for your office and your callers.</p>
+        <div style="display:grid;gap:14px">
+          <div class="row" style="gap:12px"><span data-icon="check-circle" style="color:var(--success)"></span><span class="t-small">STOP and HELP are always honored in automated texts.</span></div>
+          <div class="row" style="gap:12px"><span data-icon="check-circle" style="color:var(--success)"></span><span class="t-small">A public consent &amp; SMS terms page is generated for your office.</span></div>
+          <div class="row" style="gap:12px"><span data-icon="check-circle" style="color:var(--success)"></span><span class="t-small">No medical advice in automated messages — ever.</span></div>
+        </div>
+      </div>
+      <div class="card card-pad" style="background:var(--surface)">
+        <div class="alert alert-info" style="margin-bottom:14px"><span class="alert-ico" data-icon="shield-check"></span><div><strong>SMS stays off until you’re approved.</strong><span class="alert-body">Live texting activates only after carrier approval and a quick QA — and you’re never billed before then.</span></div></div>
+        <div class="list" style="box-shadow:none">
+          <div class="list-row"><span class="t-small" style="flex:1">Carrier registration (A2P / toll-free)</span><span class="badge badge-success"><span class="dot"></span>Guided</span></div>
+          <div class="list-row"><span class="t-small" style="flex:1">Opt-out handling</span><span class="badge badge-success"><span class="dot"></span>Automatic</span></div>
+          <div class="list-row"><span class="t-small" style="flex:1">Consent page</span><span class="badge badge-success"><span class="dot"></span>Generated</span></div>
+        </div>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- CTA -->
+  <section class="section"><div class="container">
+    <div class="cta-band">
+      <h2 class="t-h2" style="margin-bottom:12px">Stop losing patients to voicemail.</h2>
+      <p class="t-body-lg" style="color:var(--text-on-dark);max-width:48ch;margin:0 auto 24px">Set up your office in minutes and start recovering missed callers this week.</p>
+      <a class="btn btn-primary btn-lg" href="#pricing">Start 21-day free trial</a>
+    </div>
+  </div></section>
+</main>
+
+<footer class="mk-footer"><div class="container inner">
+  <span class="t-small">© <span id="yr"></span> Missed Calls Dental · support@missedcallsdental.com</span>
+  <nav><a href="compliance.html">Business profile</a><a href="compliance.html">Privacy</a><a href="compliance.html">SMS terms</a></nav>
+</div></footer>
+
+<script src="../icons.js"></script>
+<script>
+  document.getElementById('logo').innerHTML = '<svg width="30" height="30" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="11" fill="#0B6F67"/><path d="M27.5 22.5a8 8 0 1 1-2.2-7.7" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M26 11.5l.4 4.4-4.4.5" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="20" r="3" fill="#5DC3BA"/></svg>';
+  document.getElementById('yr').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>

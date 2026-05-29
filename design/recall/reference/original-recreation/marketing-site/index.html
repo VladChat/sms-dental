@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Missed Calls Dental — Marketing site UI kit</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+function App() {
+  const [theme, setTheme] = useState("dark");
+  const [view, setView] = useState("home");      // home | signin | confirm
+  const [email, setEmail] = useState(null);
+
+  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
+
+  function nav(target, anchor) {
+    setView(target);
+    if (target === "home" && anchor) {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(anchor);
+        if (el) {
+          const top = el.getBoundingClientRect().top + window.pageYOffset - 86;
+          window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        }
+      });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function handleTrial(value, goSignin) {
+    if (goSignin) { setView("signin"); window.scrollTo({top:0}); return; }
+    setEmail(value); setView("confirm"); window.scrollTo({top:0});
+  }
+
+  return (
+    <React.Fragment>
+      <Header theme={theme} current={view}
+              onToggleTheme={() => setTheme(t => t === "dark" ? "light" : "dark")}
+              onNav={nav} />
+      <main>
+        {view === "home" && <React.Fragment>
+          <Hero />
+          <HowItWorks />
+          <Pricing onSubmit={handleTrial} />
+        </React.Fragment>}
+        {view === "signin" && <SignIn onBack={() => nav("home", "start-trial")} />}
+        {view === "confirm" && <Confirm email={email} onBack={() => nav("home")} />}
+      </main>
+      <Footer />
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

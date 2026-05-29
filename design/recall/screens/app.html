@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Missed Calls Dental — Dashboard</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="../components.css">
+<style>
+  body { display: grid; grid-template-columns: var(--sidebar-w) 1fr; min-height: 100vh; background: var(--bg); }
+  /* sidebar */
+  .sb { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+  .sb-brand { display: flex; align-items: center; gap: 10px; padding: var(--space-5) var(--space-5) var(--space-4); }
+  .sb-brand b { font: 700 1rem/1 var(--font-display); color: var(--text); letter-spacing: -.01em; }
+  .sb-nav { padding: var(--space-3); display: grid; gap: 2px; }
+  .sb-nav button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: none; background: none; border-radius: var(--r-md); color: var(--text-secondary); font: 600 .9375rem/1 var(--font-sans); cursor: pointer; text-align: left; }
+  .sb-nav button:hover { background: var(--surface-2); color: var(--text); }
+  .sb-nav button.active { background: var(--primary-soft); color: var(--teal-700); }
+  .sb-nav button svg { width: 19px; height: 19px; flex: 0 0 auto; }
+  .sb-nav .count { margin-left: auto; font: 700 .75rem/1 var(--font-sans); background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border); border-radius: var(--r-pill); padding: 3px 8px; }
+  .sb-foot { margin-top: auto; padding: var(--space-3); border-top: 1px solid var(--border); }
+  .sb-clinic { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: var(--r-md); }
+  .sb-clinic:hover { background: var(--surface-2); }
+  /* topbar */
+  .tb { height: var(--topbar-h); display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: 0 var(--space-8); border-bottom: 1px solid var(--border); background: rgba(255,255,255,.85); backdrop-filter: blur(8px); position: sticky; top: 0; z-index: 20; }
+  .tb-search { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--text-muted); width: 280px; }
+  .tb-search input { border: none; background: none; outline: none; font: var(--body-sm); color: var(--text); width: 100%; }
+  .icon-btn { width: 38px; height: 38px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .icon-btn .ping { position: absolute; top: 7px; right: 8px; width: 8px; height: 8px; border-radius: 999px; background: var(--error); border: 2px solid var(--surface); }
+  .content { padding: var(--space-8); max-width: var(--app-max); }
+  .view { display: none; } .view.active { display: block; }
+  .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-6); flex-wrap: wrap; }
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-6); }
+  .metric-card .metric-cap { font: var(--helper); color: var(--text-muted); }
+  .cols { display: grid; grid-template-columns: 1.7fr 1fr; gap: var(--space-5); }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border); }
+  .filters { display: flex; gap: 8px; align-items: center; margin-bottom: var(--space-4); flex-wrap: wrap; }
+  /* request cards */
+  .req-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
+  .req-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-sm); padding: var(--space-5); display: grid; gap: var(--space-4); transition: box-shadow .18s ease, border-color .18s ease; }
+  .req-card.is-new { border-left: 3px solid var(--info); }
+  .req-card:hover { box-shadow: var(--shadow-md); }
+  .req-top { display: flex; align-items: flex-start; gap: 12px; }
+  .req-top .who { flex: 1; min-width: 0; }
+  .req-fields { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; }
+  .req-fields dt { font: var(--helper); color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin: 0; align-self: center; }
+  .req-fields dd { margin: 0; font: var(--label); color: var(--text); }
+  .req-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: var(--space-3); border-top: 1px solid var(--border); }
+  .req-meta { display: flex; gap: 14px; flex-wrap: wrap; color: var(--text-muted); font: var(--helper); }
+  .req-meta span { display: inline-flex; align-items: center; gap: 5px; }
+  /* drawer */
+  .drawer-scrim { position: fixed; inset: 0; background: rgba(12,43,42,.38); opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 60; }
+  .drawer-scrim.open { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 440px; max-width: 92vw; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow-xl); transform: translateX(100%); transition: transform .24s ease; z-index: 61; display: flex; flex-direction: column; }
+  .drawer.open { transform: none; }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-5); border-bottom: 1px solid var(--border); }
+  .drawer-body { padding: var(--space-5); overflow-y: auto; display: grid; gap: var(--space-5); }
+  .audit { display: grid; gap: 10px; }
+  .audit .ev { display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
+  .audit .ev .ic { width: 22px; height: 22px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; }
+  .audit .ev .ic svg { width: 13px; height: 13px; }
+  .sms-quote { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 14px; font: var(--body-sm); color: var(--text-body); }
+  @media (max-width: 1080px){ .metric-grid{grid-template-columns:repeat(2,1fr)} .cols{grid-template-columns:1fr} .req-grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<!-- SIDEBAR -->
+<aside class="sb">
+  <div class="sb-brand"><span id="logo"></span><b>Missed Calls Dental</b></div>
+  <nav class="sb-nav" id="nav">
+    <button data-view="overview" class="active"><span data-icon="home"></span>Overview</button>
+    <button data-view="missed"><span data-icon="phone-missed"></span>Missed calls</button>
+    <button data-view="requests"><span data-icon="inbox"></span>Patient requests<span class="count">4</span></button>
+    <button data-view="settings"><span data-icon="settings"></span>Settings</button>
+  </nav>
+  <div class="sb-foot">
+    <div class="sb-clinic">
+      <span class="avatar" style="width:34px;height:34px;font-size:.8125rem">BS</span>
+      <div style="min-width:0"><div class="t-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Bright Smile Dental</div><div class="t-helper">Crystal Lake, IL</div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div>
+  <div class="tb">
+    <div class="tb-search"><span data-icon="search" data-size="18"></span><input placeholder="Search patient requests…"></div>
+    <div class="row" style="gap:10px">
+      <button class="icon-btn"><span class="ping"></span><span data-icon="bell" data-size="19"></span></button>
+      <span class="avatar" style="width:38px;height:38px;font-size:.8125rem">DR</span>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- OVERVIEW -->
+    <section class="view active" id="overview">
+      <div class="page-head">
+        <div><h1 class="t-h2">Overview</h1><p class="t-small">A snapshot of your missed-call recovery this week.</p></div>
+        <span class="badge badge-success"><span class="dot"></span>SMS recovery active</span>
+      </div>
+      <div class="metric-grid" id="metrics"></div>
+      <div class="cols">
+        <div class="list">
+          <div class="panel-head"><h3 class="t-h4">New patient requests</h3><a class="link" data-goto="requests">View all</a></div>
+          <div id="recent-req"></div>
+        </div>
+        <div style="display:grid;gap:var(--space-5);align-content:start">
+          <div class="card card-pad">
+            <div class="row between" style="margin-bottom:14px"><h3 class="t-h4">Office texting number</h3><span class="badge badge-success"><span class="dot"></span>Live</span></div>
+            <div style="display:grid;gap:12px">
+              <div class="row between"><span class="t-small">Number</span><span class="t-mono t-small" style="color:var(--text)">(224) 555-0148</span></div>
+              <div class="row between"><span class="t-small">Forwarding</span><span class="badge badge-success"><span class="dot"></span>Configured</span></div>
+              <div class="row between"><span class="t-small">SMS approval</span><span class="badge badge-success"><span class="dot"></span>Approved</span></div>
+              <div class="row between"><span class="t-small">Opt-outs honored</span><span class="badge badge-info"><span class="dot"></span>Automatic</span></div>
+            </div>
+          </div>
+          <div class="card card-pad">
+            <div class="row between" style="margin-bottom:6px"><h3 class="t-h4">Needs callback</h3><span class="badge badge-warning"><span class="dot"></span>2 open</span></div>
+            <p class="t-small" style="margin-bottom:12px">Requests waiting on your front desk.</p>
+            <a class="btn btn-secondary btn-sm btn-block" data-goto="requests">Review requests</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MISSED CALLS -->
+    <section class="view" id="missed">
+      <div class="page-head"><div><h1 class="t-h2">Missed calls</h1><p class="t-small">Every unanswered call and what happened next.</p></div></div>
+      <div class="filters">
+        <span class="segment"><button aria-selected="true">All</button><button>Reply received</button><button>Awaiting reply</button><button>Opted out</button></span>
+        <button class="btn btn-secondary btn-sm" style="margin-left:auto"><span data-icon="filter" data-size="16"></span>Filter</button>
+      </div>
+      <div class="list">
+        <div class="list-head"><span style="flex:1">Caller</span><span style="width:160px">Follow-up</span><span style="width:90px">Missed</span></div>
+        <div id="missed-list"></div>
+      </div>
+    </section>
+
+    <!-- PATIENT REQUESTS -->
+    <section class="view" id="requests">
+      <div class="page-head">
+        <div><h1 class="t-h2">Patient requests</h1><p class="t-small">Office-ready requests built from patient replies — handle each as a quick task.</p></div>
+        <div class="row" style="gap:8px"><span class="t-helper">Demo:</span><span class="segment" id="state-toggle"><button aria-selected="true" data-state="full">With requests</button><button data-state="empty">Empty</button></span></div>
+      </div>
+      <div id="requests-full">
+        <div class="filters">
+          <span class="segment"><button aria-selected="true">All</button><button>New</button><button>Needs callback</button><button>Scheduled</button><button>Completed</button></span>
+        </div>
+        <div class="req-grid" id="req-grid"></div>
+      </div>
+      <div id="requests-empty" hidden>
+        <div class="card"><div class="empty">
+          <span class="empty-ico" data-icon="inbox" data-size="28"></span>
+          <h3 class="t-h4">No patient requests yet</h3>
+          <p class="t-small" style="max-width:42ch">When a missed caller replies to your follow-up text, we’ll turn it into a ready-to-action request here — with their name, what they need, and a preferred time.</p>
+          <span class="badge badge-success" style="margin-top:6px"><span class="dot"></span>SMS recovery active — you’re all set</span>
+        </div></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" id="settings">
+      <div class="page-head"><div><h1 class="t-h2">Settings</h1><p class="t-small">Manage your office, security, and billing.</p></div></div>
+      <div class="tabs" id="settabs" style="margin-bottom:var(--space-6)">
+        <button class="tab" aria-selected="true" data-tab="profile">Clinic profile</button>
+        <button class="tab" data-tab="security">Login &amp; security</button>
+        <button class="tab" data-tab="billing">Billing</button>
+      </div>
+      <div class="settab" id="tab-profile">
+        <div class="card card-pad" style="max-width:620px;display:grid;gap:var(--space-5)">
+          <div class="field"><label>Clinic name</label><input class="input" value="Bright Smile Dental"></div>
+          <div class="field"><label>Main office phone</label><div class="input-group"><span class="input-icon" data-icon="phone"></span><input class="input" value="(224) 555-1234"></div><span class="helper-text">Patients keep calling this number — it never changes.</span></div>
+          <div class="field"><label>Office texting number</label><div class="row between" style="padding:11px 14px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-2)"><span class="t-mono" style="color:var(--text)">(224) 555-0148</span><span class="badge badge-success"><span class="dot"></span>Active</span></div></div>
+          <div class="row" style="gap:10px"><button class="btn btn-primary">Save changes</button><button class="btn btn-ghost">Cancel</button></div>
+        </div>
+      </div>
+      <div class="settab" id="tab-security" hidden>
+        <div class="card card-pad" style="max-width:620px;display:grid;gap:var(--space-5)">
+          <div class="row between"><div><div class="t-label">Password</div><div class="t-helper">Last changed 3 months ago</div></div><button class="btn btn-secondary btn-sm">Change password</button></div>
+          <hr class="divider">
+          <div><div class="t-label" style="margin-bottom:10px">Connected sign-in methods</div>
+            <div style="display:grid;gap:10px">
+              <div class="row between" style="padding:12px 14px;border:1px solid var(--border);border-radius:var(--r-md)"><span class="row" style="gap:10px"><span data-icon="mail"></span><span class="t-small" style="color:var(--text)">Email &amp; password</span></span><span class="badge badge-success"><span class="dot"></span>Connected</span></div>
+              <div class="row between" style="padding:12px 14px;border:1px solid var(--border);border-radius:var(--r-md)"><span class="row" style="gap:10px"><span id="g"></span><span class="t-small" style="color:var(--text)">Google</span></span><button class="btn btn-ghost btn-sm">Connect</button></div>
+              <div class="row between" style="padding:12px 14px;border:1px solid var(--border);border-radius:var(--r-md)"><span class="row" style="gap:10px"><span id="a"></span><span class="t-small" style="color:var(--text)">Apple</span></span><button class="btn btn-ghost btn-sm">Connect</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="settab" id="tab-billing" hidden>
+        <div class="card card-pad" style="max-width:620px;display:grid;gap:var(--space-5)">
+          <div class="alert alert-success"><span class="alert-ico" data-icon="check-circle"></span><div><strong>Trial active — 16 days left.</strong><span class="alert-body">You won’t be charged until your trial ends. $99/month after.</span></div></div>
+          <div class="row between"><div><div class="t-label">Plan</div><div class="t-helper">Missed-call SMS recovery · $99/mo</div></div><span class="badge badge-brand">Current</span></div>
+          <hr class="divider">
+          <div class="row between"><div><div class="t-label">Payment method</div><div class="t-helper">Add a card before your trial ends to stay active.</div></div><button class="btn btn-secondary btn-sm"><span data-icon="credit-card" data-size="16"></span>Add card</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- REQUEST DETAIL DRAWER -->
+<div class="drawer-scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div><h3 class="t-h4" id="d-name">—</h3><div class="t-helper" id="d-phone">—</div></div>
+    <button class="icon-btn" id="d-close" aria-label="Close"><span data-icon="x" data-size="18"></span></button>
+  </div>
+  <div class="drawer-body" id="d-body"></div>
+</aside>
+
+<script src="../icons.js"></script>
+<script>
+  document.getElementById('logo').innerHTML = '<svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="11" fill="#0B6F67"/><path d="M27.5 22.5a8 8 0 1 1-2.2-7.7" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M26 11.5l.4 4.4-4.4.5" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="20" r="3" fill="#5DC3BA"/></svg>';
+
+  // MVP-safe metrics — counts only, no derived business-result rates
+  const metrics=[
+    ['Missed calls recorded','phone-missed','38'],
+    ['Recovery texts sent','message-check','36'],
+    ['Patient replies received','reply','21'],
+    ['New patient requests','inbox','14'],
+  ];
+  document.getElementById('metrics').innerHTML = metrics.map(([l,ic,v])=>(
+    '<div class="metric-card"><div class="metric-head"><span class="metric-label">'+l+'</span><span class="metric-ico">'+svgIcon(ic,{size:20})+'</span></div><div class="metric-value">'+v+'</div><span class="metric-cap">This week</span></div>'
+  )).join('');
+
+  // Missed calls — follow-up status only (no business-result claims)
+  const calls=[
+    ['JD','John Doe','(555) 012-3134','success','Reply received','2:14 PM'],
+    ['MR','Maria Reyes','(555) 088-2201','warning','Awaiting reply','1:02 PM'],
+    ['AL','Amir Lateef','(555) 332-7781','success','Reply received','12:30 PM'],
+    ['TP','Tom Park','(555) 771-9043','neutral','Opted out','11:48 AM'],
+    ['SG','Sara Gomez','(555) 210-4456','success','Reply received','10:05 AM'],
+  ];
+  document.getElementById('missed-list').innerHTML = calls.map(c=>(
+    '<div class="list-row"><span class="avatar">'+c[0]+'</span>'+
+    '<span style="flex:1"><b style="color:var(--text)">'+c[1]+'</b><div class="t-helper t-mono">'+c[2]+'</div></span>'+
+    '<span style="width:160px"><span class="badge badge-'+c[3]+'"><span class="dot"></span>'+c[4]+'</span></span>'+
+    '<span style="width:90px" class="t-small">'+c[5]+'</span></div>'
+  )).join('');
+
+  // PATIENT REQUESTS — the core object: an office-ready request card
+  const requests=[
+    {id:0,initials:'MR',name:'Maria Reyes',phone:'(555) 088-2201',request:'New patient — cleaning & exam',preferred:'Friday morning',priority:'Routine',status:'New',source:'Missed call',received:'Today, 1:02 PM',missedAt:'Today, 12:58 PM',summary:'Caller is a new patient asking about availability for a cleaning and exam. Prefers Friday morning.',lastReply:'“Do you have anything Friday?”'},
+    {id:1,initials:'JD',name:'John Doe',phone:'(555) 012-3134',request:'Schedule cleaning',preferred:'Tuesday morning',priority:'Routine',status:'Needs callback',source:'Missed call',received:'Today, 9:40 AM',missedAt:'Today, 9:36 AM',summary:'Existing patient wants to schedule a routine cleaning. Tuesday morning works best.',lastReply:'“Tuesday morning works.”'},
+    {id:2,initials:'SG',name:'Sara Gomez',phone:'(555) 210-4456',request:'Tooth pain — possible emergency',preferred:'As soon as possible',priority:'Urgent',status:'Needs callback',source:'Missed call',received:'Today, 10:05 AM',missedAt:'Today, 10:01 AM',summary:'Caller reports tooth pain and is asking to be seen as soon as possible. Flag for urgent callback.',lastReply:'“I’ve had bad tooth pain since last night.”'},
+    {id:3,initials:'AL',name:'Amir Lateef',phone:'(555) 332-7781',request:'Reschedule appointment',preferred:'Next week, afternoons',priority:'Routine',status:'Scheduled',source:'Missed call',received:'Yesterday, 4:12 PM',missedAt:'Yesterday, 4:08 PM',summary:'Patient needs to move an existing appointment to next week, afternoons preferred.',lastReply:'“Thanks, see you then!”'},
+  ];
+  const statusBadge={'New':'info','Needs callback':'warning','Scheduled':'success','Completed':'neutral'};
+  const prBadge={'Routine':'neutral','Urgent':'error'};
+
+  function card(r){
+    return '<article class="req-card'+(r.status==='New'?' is-new':'')+'">'+
+      '<div class="req-top"><span class="avatar">'+r.initials+'</span>'+
+        '<div class="who"><div class="row between" style="gap:8px"><b style="color:var(--text)">'+r.name+'</b>'+
+          '<span class="badge badge-'+statusBadge[r.status]+'"><span class="dot"></span>'+r.status+'</span></div>'+
+          '<div class="t-helper t-mono">'+r.phone+'</div></div></div>'+
+      '<dl class="req-fields">'+
+        '<dt>Request</dt><dd>'+r.request+'</dd>'+
+        '<dt>Preferred</dt><dd>'+r.preferred+'</dd>'+
+        '<dt>Priority</dt><dd><span class="badge badge-'+prBadge[r.priority]+'">'+(r.priority==='Urgent'?'<span class="dot"></span>':'')+r.priority+'</span></dd>'+
+      '</dl>'+
+      '<div class="req-meta"><span>'+svgIcon('phone-missed',{size:14})+r.source+'</span><span>'+svgIcon('clock',{size:14})+r.received+'</span></div>'+
+      '<div class="req-actions">'+
+        (r.status==='Scheduled'
+          ? '<button class="btn btn-secondary btn-sm" data-done="'+r.id+'">'+svgIcon('check',{size:16})+'Mark completed</button>'
+          : '<button class="btn btn-primary btn-sm" data-sched="'+r.id+'">'+svgIcon('calendar-check',{size:16})+'Mark scheduled</button>')+
+        (r.status==='Needs callback' || r.status==='New'
+          ? '<button class="btn btn-secondary btn-sm" data-call="'+r.id+'">'+svgIcon('phone',{size:16})+'Needs callback</button>' : '')+
+        '<button class="btn btn-ghost btn-sm" data-open="'+r.id+'">Details</button>'+
+      '</div>'+
+    '</article>';
+  }
+  function renderRequests(){ document.getElementById('req-grid').innerHTML = requests.map(card).join(''); }
+  renderRequests();
+
+  // Overview preview: top 3 new/needs-callback requests as compact rows
+  document.getElementById('recent-req').innerHTML = requests.slice(0,4).map(r=>(
+    '<div class="list-row" style="cursor:pointer" data-open="'+r.id+'"><span class="avatar">'+r.initials+'</span>'+
+    '<span style="flex:1;min-width:0"><b style="color:var(--text)">'+r.name+'</b><div class="t-helper" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.request+' · '+r.preferred+'</div></span>'+
+    '<span class="badge badge-'+statusBadge[r.status]+'"><span class="dot"></span>'+r.status+'</span></div>'
+  )).join('');
+
+  document.getElementById('g').innerHTML = svgIcon('google',{size:18});
+  document.getElementById('a').innerHTML = svgIcon('apple',{size:18});
+
+  // status changes (demo)
+  function setStatus(id,s){ const r=requests.find(x=>x.id===id); if(r){r.status=s; renderRequests();} }
+  document.addEventListener('click',e=>{
+    const s=e.target.closest('[data-sched]'); if(s){setStatus(+s.dataset.sched,'Scheduled');return;}
+    const d=e.target.closest('[data-done]'); if(d){setStatus(+d.dataset.done,'Completed');return;}
+    const c=e.target.closest('[data-call]'); if(c){setStatus(+c.dataset.call,'Needs callback');return;}
+    const o=e.target.closest('[data-open]'); if(o){openDrawer(+o.dataset.open);return;}
+  });
+
+  // DETAIL DRAWER — raw SMS lives here as a secondary audit trail, not the main UI
+  function openDrawer(id){
+    const r=requests.find(x=>x.id===id); if(!r)return;
+    document.getElementById('d-name').textContent=r.name;
+    document.getElementById('d-phone').textContent=r.phone+' · '+r.source;
+    document.getElementById('d-body').innerHTML=
+      '<dl class="req-fields">'+
+        '<dt>Request</dt><dd>'+r.request+'</dd>'+
+        '<dt>Preferred</dt><dd>'+r.preferred+'</dd>'+
+        '<dt>Priority</dt><dd><span class="badge badge-'+prBadge[r.priority]+'">'+(r.priority==='Urgent'?'<span class="dot"></span>':'')+r.priority+'</span></dd>'+
+        '<dt>Status</dt><dd><span class="badge badge-'+statusBadge[r.status]+'"><span class="dot"></span>'+r.status+'</span></dd>'+
+      '</dl>'+
+      '<div><div class="t-label" style="margin-bottom:8px">Summary</div><div class="sms-quote">'+r.summary+'</div></div>'+
+      '<div><div class="t-label" style="margin-bottom:8px">Internal note</div><textarea class="textarea" placeholder="Add a note for your team…"></textarea></div>'+
+      '<div><div class="t-label" style="margin-bottom:10px">Activity &amp; SMS audit trail</div>'+
+        '<div class="audit">'+
+          '<div class="ev"><span class="ic">'+svgIcon('phone-missed',{size:13})+'</span><div><div class="t-small" style="color:var(--text)">Missed call</div><div class="t-helper">'+r.missedAt+'</div></div></div>'+
+          '<div class="ev"><span class="ic">'+svgIcon('message-check',{size:13})+'</span><div><div class="t-small" style="color:var(--text)">Recovery text sent</div><div class="t-helper">Automatic · STOP/HELP included</div></div></div>'+
+          '<div class="ev"><span class="ic">'+svgIcon('reply',{size:13})+'</span><div><div class="t-small" style="color:var(--text)">Patient replied</div><div class="sms-quote" style="margin-top:6px">'+r.lastReply+'</div></div></div>'+
+          '<div class="ev"><span class="ic">'+svgIcon('inbox',{size:13})+'</span><div><div class="t-small" style="color:var(--text)">Request created</div><div class="t-helper">'+r.received+'</div></div></div>'+
+        '</div></div>'+
+      '<div class="row" style="gap:8px"><button class="btn btn-primary btn-sm" id="d-sched">'+svgIcon('calendar-check',{size:16})+'Mark scheduled</button><button class="btn btn-secondary btn-sm">Call patient</button></div>';
+    document.getElementById('drawer').classList.add('open');
+    document.getElementById('drawer').setAttribute('aria-hidden','false');
+    document.getElementById('scrim').classList.add('open');
+    const ds=document.getElementById('d-sched'); if(ds) ds.addEventListener('click',()=>{setStatus(id,'Scheduled');closeDrawer();});
+  }
+  function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('drawer').setAttribute('aria-hidden','true'); document.getElementById('scrim').classList.remove('open'); }
+  document.getElementById('d-close').addEventListener('click',closeDrawer);
+  document.getElementById('scrim').addEventListener('click',closeDrawer);
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeDrawer(); });
+
+  // empty-state toggle (demo only)
+  document.getElementById('state-toggle').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    document.querySelectorAll('#state-toggle button').forEach(x=>x.setAttribute('aria-selected',x===b));
+    const empty=b.dataset.state==='empty';
+    document.getElementById('requests-empty').hidden=!empty;
+    document.getElementById('requests-full').hidden=empty;
+  });
+
+  // segmented filter toggles (visual only)
+  document.querySelectorAll('.filters .segment').forEach(seg=>seg.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;seg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected',x===b));}));
+
+  // view switching
+  function show(v){
+    document.querySelectorAll('.view').forEach(s=>s.classList.toggle('active', s.id===v));
+    document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+    window.scrollTo(0,0);
+  }
+  document.getElementById('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)show(b.dataset.view);});
+  document.querySelectorAll('[data-goto]').forEach(a=>a.addEventListener('click',()=>show(a.dataset.goto)));
+
+  // settings tabs
+  document.getElementById('settabs').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    document.querySelectorAll('#settabs .tab').forEach(t=>t.setAttribute('aria-selected', t===b));
+    document.querySelectorAll('.settab').forEach(s=>s.hidden = s.id!=='tab-'+b.dataset.tab);
+  });
+</script>
+</body>
+</html>

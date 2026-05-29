@@ -1,0 +1,225 @@
+/* ==========================================================================
+   MISSED CALLS DENTAL — "RECALL" DESIGN SYSTEM  (internal codename)
+   Color & Type foundations (single source of truth for all tokens)
+   --------------------------------------------------------------------------
+   "Recall" is the INTERNAL design-system name only. The public product name is
+   "Missed Calls Dental" — never expose "Recall" in customer-facing UI.
+   Scope: LIGHT THEME ONLY. Trial length: 21 days.
+   Direction: light-first, high-trust healthcare operations. One unified system
+   across marketing, onboarding, and the product app (the previous draft split
+   into a dark marketing site + a separate gray onboarding tool — unified here).
+   Primary = a calm clinical TEAL. Neutrals are warm-cool slate. Semantic colors
+   are distinct from brand. Accent (apricot) is used sparingly for warmth.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ---------------------------------------------------------------- FONTS */
+  --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+  --font-sans:    "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ============================================================== PALETTE */
+  /* Brand — Teal (primary). 600 is the action color (AA on white). */
+  --teal-50:  #E9F7F5;
+  --teal-100: #C8ECE8;
+  --teal-200: #97DBD4;
+  --teal-300: #5DC3BA;
+  --teal-400: #2BA69B;
+  --teal-500: #0E8A80;
+  --teal-600: #0B6F67;   /* primary action */
+  --teal-700: #095852;   /* primary hover  */
+  --teal-800: #07433F;
+  --teal-900: #063531;
+
+  /* Ink — deep teal-charcoal (headings, brand depth, dark surfaces) */
+  --ink-900: #0C2B2A;
+  --ink-800: #143A38;
+  --ink-700: #1E4A47;
+
+  /* Accent — apricot (warmth; marketing highlights / illustration only) */
+  --accent-300: #F8C794;
+  --accent-400: #F2A65A;
+  --accent-500: #E08A2B;
+
+  /* Neutrals — warm-cool slate with a faint green undertone */
+  --n-0:   #FFFFFF;
+  --n-25:  #FBFCFC;
+  --n-50:  #F6F8F7;
+  --n-100: #F1F4F3;
+  --n-200: #E2E8E6;
+  --n-300: #CDD6D3;
+  --n-400: #A7B2AF;
+  --n-500: #7C8784;
+  --n-600: #586462;
+  --n-700: #3D4845;
+  --n-800: #2A3331;
+  --n-900: #18201F;
+
+  /* ============================================================ SEMANTIC */
+  /* Surfaces & text (light theme — default) */
+  --bg:            var(--n-50);    /* app / page background */
+  --surface:       var(--n-0);     /* cards, panels        */
+  --surface-2:     var(--n-100);   /* insets, hover rows   */
+  --surface-sunken:var(--n-50);
+  --border:        var(--n-200);   /* default hairline     */
+  --border-strong: var(--n-300);   /* inputs, dividers     */
+
+  --text:          var(--ink-900); /* headings / primary   */
+  --text-body:     #2E3B39;        /* paragraph body       */
+  --text-secondary:var(--n-600);   /* secondary            */
+  --text-muted:    var(--n-500);   /* helper / meta        */
+  --text-on-brand: #FFFFFF;
+  --text-on-dark:  #EAF7F4;
+
+  --primary:       var(--teal-600);
+  --primary-hover: var(--teal-700);
+  --primary-soft:  var(--teal-50);
+  --primary-soft-border: var(--teal-200);
+  --link:          var(--teal-700);
+
+  /* Status — success (true green, distinct from brand teal) */
+  --success:       #1E9E54;
+  --success-text:  #15803D;
+  --success-bg:    #EAF7EF;
+  --success-border:#BBE6CB;
+  /* warning */
+  --warning:       #E08A2B;
+  --warning-text:  #B45309;
+  --warning-bg:    #FDF3E5;
+  --warning-border:#F6D9AC;
+  /* error / destructive */
+  --error:         #D9483B;
+  --error-text:    #C13B30;
+  --error-bg:      #FBEDEB;
+  --error-border:  #F3C7C1;
+  /* info */
+  --info:          #1488C2;
+  --info-text:     #0E6FA3;
+  --info-bg:       #E9F4FB;
+  --info-border:   #BFE0F1;
+
+  /* States */
+  --focus-ring:    0 0 0 3px rgba(43,166,155,.40);
+  --focus-border:  var(--teal-500);
+  --disabled-bg:   var(--n-100);
+  --disabled-text: var(--n-400);
+  --disabled-border: var(--n-200);
+
+  /* ============================================================== RADIUS */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 10px;   /* buttons, inputs */
+  --r-lg: 14px;   /* cards           */
+  --r-xl: 20px;   /* large panels    */
+  --r-2xl:28px;   /* hero media      */
+  --r-pill:999px; /* badges, chips   */
+
+  /* ============================================================ ELEVATION */
+  /* Neutral, layered — NO colored glows. Borders do most of the work. */
+  --shadow-xs: 0 1px 2px rgba(12,43,42,.06);
+  --shadow-sm: 0 1px 3px rgba(12,43,42,.08), 0 1px 2px rgba(12,43,42,.05);
+  --shadow-md: 0 4px 12px rgba(12,43,42,.08);
+  --shadow-lg: 0 12px 28px rgba(12,43,42,.10);
+  --shadow-xl: 0 24px 48px rgba(12,43,42,.12);
+  --shadow-focus-primary: 0 1px 2px rgba(12,43,42,.10), 0 6px 16px rgba(11,111,103,.20);
+
+  /* =============================================================== SPACE */
+  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
+  --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;
+  --space-12: 48px; --space-16: 64px; --space-20: 80px; --space-24: 96px;
+  --space-32: 128px;
+
+  /* ============================================================== LAYOUT */
+  --container:    1120px;  /* marketing width  */
+  --content:      720px;   /* reading width    */
+  --app-max:      1160px;  /* dashboard content */
+  --sidebar-w:    248px;
+  --topbar-h:     64px;
+  --header-h:     68px;
+
+  /* breakpoints (reference): sm 640 · md 768 · lg 1024 · xl 1280 */
+}
+
+/* ==========================================================================
+   DARK THEME — FUTURE EXPLORATION ONLY · DO NOT SHIP IN CURRENT SCOPE
+   Current implementation is LIGHT-THEME ONLY (approved owner decision,
+   2026-05-29). This block is parked for a possible future dark app theme.
+   Do not wire a theme toggle or ship [data-theme="dark"] in Phase 1.
+   ========================================================================== */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:            #0B1716;
+  --surface:       #102220;
+  --surface-2:     #16302D;
+  --surface-sunken:#0B1716;
+  --border:        rgba(255,255,255,.09);
+  --border-strong: rgba(255,255,255,.16);
+  --text:          #EAF4F2;
+  --text-body:     #CBD8D5;
+  --text-secondary:#9DB0AC;
+  --text-muted:    #7C8E8A;
+  --primary:       var(--teal-400);
+  --primary-hover: var(--teal-300);
+  --primary-soft:  rgba(43,166,155,.12);
+  --primary-soft-border: rgba(43,166,155,.30);
+  --link:          var(--teal-300);
+  --text-on-brand: #03201D;
+  --success-bg:#10291C; --success-border:rgba(30,158,84,.35);
+  --warning-bg:#2A2110; --warning-border:rgba(224,138,43,.35);
+  --error-bg:#2C1714;   --error-border:rgba(217,72,59,.35);
+  --info-bg:#0E2230;    --info-border:rgba(20,136,194,.35);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+  --shadow-md: 0 6px 16px rgba(0,0,0,.45);
+  --shadow-lg: 0 16px 36px rgba(0,0,0,.55);
+}
+
+/* ==========================================================================
+   TYPE SCALE  (use the classes, or read the vars)
+   Headings → Schibsted Grotesk. Body/UI → Hanken Grotesk. Numbers → tabular.
+   ========================================================================== */
+:root {
+  --display-xl: 700 clamp(2.75rem, 5vw, 3.75rem)/1.04 var(--font-display);
+  --display-l:  700 clamp(2.25rem, 4vw, 3rem)/1.06 var(--font-display);
+  --h1: 700 clamp(2rem, 3vw, 2.5rem)/1.1 var(--font-display);
+  --h2: 700 clamp(1.625rem, 2.4vw, 2rem)/1.15 var(--font-display);
+  --h3: 650 1.375rem/1.25 var(--font-display);
+  --h4: 600 1.125rem/1.35 var(--font-display);
+  --body-lg: 400 1.125rem/1.6 var(--font-sans);
+  --body:    400 1rem/1.6 var(--font-sans);
+  --body-sm: 400 .9375rem/1.55 var(--font-sans);
+  --label:   600 .875rem/1.4 var(--font-sans);
+  --helper:  400 .8125rem/1.5 var(--font-sans);
+}
+
+.t-eyebrow {
+  font: 600 .75rem/1 var(--font-sans);
+  letter-spacing: .10em; text-transform: uppercase; color: var(--primary);
+}
+.t-display-xl { font: var(--display-xl); letter-spacing: -.022em; color: var(--text); margin: 0; }
+.t-display-l  { font: var(--display-l);  letter-spacing: -.02em;  color: var(--text); margin: 0; }
+.t-h1 { font: var(--h1); letter-spacing: -.02em;  color: var(--text); margin: 0; }
+.t-h2 { font: var(--h2); letter-spacing: -.016em; color: var(--text); margin: 0; }
+.t-h3 { font: var(--h3); letter-spacing: -.01em;  color: var(--text); margin: 0; }
+.t-h4 { font: var(--h4); color: var(--text); margin: 0; }
+.t-body-lg { font: var(--body-lg); color: var(--text-body); }
+.t-body    { font: var(--body);    color: var(--text-body); }
+.t-small   { font: var(--body-sm); color: var(--text-secondary); }
+.t-label   { font: var(--label);   color: var(--text); }
+.t-helper  { font: var(--helper);  color: var(--text-muted); }
+.t-metric  {
+  font: 700 clamp(2rem, 3vw, 2.5rem)/1 var(--font-display);
+  letter-spacing: -.02em; color: var(--text);
+  font-variant-numeric: tabular-nums; margin: 0;
+}
+.t-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Base reset shared by all design-system pages */
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text-body);
+  font: var(--body); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+a { color: var(--link); }
+:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--r-sm); }

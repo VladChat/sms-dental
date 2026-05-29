@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Missed Calls Dental — Sign in</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="../components.css">
+<style>
+  body { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
+  .auth-aside { background: var(--ink-900); color: #fff; padding: var(--space-12); display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
+  .auth-aside .brand { display: flex; align-items: center; gap: 10px; }
+  .auth-aside .brand b { font: 700 1.0625rem/1 var(--font-display); color: #fff; }
+  .auth-aside .pitch h2 { color: #fff; max-width: 16ch; }
+  .auth-aside .pitch p { color: var(--text-on-dark); max-width: 36ch; margin-top: 12px; }
+  .auth-aside .quote { border-top: 1px solid rgba(255,255,255,.12); padding-top: var(--space-5); }
+  .glow { position: absolute; width: 380px; height: 380px; border-radius: 999px; background: radial-gradient(circle, rgba(43,166,155,.30), transparent 70%); top: -80px; right: -100px; }
+  .auth-main { display: flex; align-items: center; justify-content: center; padding: var(--space-12); }
+  .auth-card { width: 100%; max-width: 400px; }
+  .auth-view { display: none; } .auth-view.active { display: block; }
+  .social-row { display: grid; gap: 10px; }
+  .or { display: flex; align-items: center; gap: 12px; color: var(--text-muted); font: var(--helper); margin: var(--space-5) 0; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .pw-row { display: flex; align-items: center; justify-content: space-between; }
+  @media (max-width: 820px){ body{grid-template-columns:1fr} .auth-aside{display:none} }
+</style>
+</head>
+<body>
+<aside class="auth-aside">
+  <div class="glow"></div>
+  <div class="brand"><span id="logo"></span><b>Missed Calls Dental</b></div>
+  <div class="pitch" style="position:relative">
+    <h2 class="t-h1">Welcome back to a fuller schedule.</h2>
+    <p class="t-body-lg">Sign in to see which callers came back — and who’s still waiting to hear from your front desk.</p>
+  </div>
+  <div class="quote">
+    <p class="t-small" style="color:#fff">“We stopped losing new patients to voicemail. Setup took an afternoon.”</p>
+    <p class="t-helper" style="color:var(--text-on-dark);margin-top:8px">— Office manager, general dentistry</p>
+  </div>
+</aside>
+
+<main class="auth-main">
+  <div class="auth-card">
+    <!-- SIGN IN -->
+    <section class="auth-view active" id="signin">
+      <h1 class="t-h2" style="margin-bottom:6px">Sign in</h1>
+      <p class="t-small" style="margin-bottom:var(--space-6)">Welcome back. Sign in to your office account.</p>
+      <div class="social-row">
+        <button class="btn btn-secondary btn-block"><span id="g1"></span>Continue with Google</button>
+        <button class="btn btn-secondary btn-block"><span id="a1"></span>Continue with Apple</button>
+      </div>
+      <div class="or">or</div>
+      <form style="display:grid;gap:var(--space-4)" onsubmit="return false">
+        <div class="field"><label>Email</label><div class="input-group"><span class="input-icon" data-icon="mail"></span><input class="input" type="email" placeholder="you@youroffice.com"></div></div>
+        <div class="field">
+          <div class="pw-row"><label>Password</label><a class="link t-small" data-go="forgot">Forgot password?</a></div>
+          <div class="input-group"><span class="input-icon" data-icon="lock"></span><input class="input" type="password" placeholder="Your password"></div>
+        </div>
+        <button class="btn btn-primary btn-block btn-lg" data-go="app">Sign in</button>
+      </form>
+      <p class="t-small center" style="margin-top:var(--space-5)">New to Missed Calls Dental? <a class="link" href="onboarding.html">Start your trial</a></p>
+    </section>
+
+    <!-- FORGOT -->
+    <section class="auth-view" id="forgot">
+      <button class="btn btn-ghost btn-sm" data-go="signin" style="margin-bottom:14px;padding-left:0">← Back to sign in</button>
+      <h1 class="t-h2" style="margin-bottom:6px">Reset your password</h1>
+      <p class="t-small" style="margin-bottom:var(--space-6)">Enter your email and we’ll send a secure reset link.</p>
+      <form style="display:grid;gap:var(--space-4)" onsubmit="return false">
+        <div class="field"><label>Email</label><div class="input-group"><span class="input-icon" data-icon="mail"></span><input class="input" type="email" placeholder="you@youroffice.com"></div></div>
+        <button class="btn btn-primary btn-block btn-lg" data-go="sent">Send reset link</button>
+      </form>
+    </section>
+
+    <!-- SENT -->
+    <section class="auth-view" id="sent">
+      <div class="center" style="display:grid;justify-items:center;gap:14px">
+        <span class="empty-ico" data-icon="mail" data-size="28"></span>
+        <h1 class="t-h2">Check your inbox</h1>
+        <p class="t-small" style="max-width:34ch">We sent a reset link to your email. It expires in 30 minutes for your security.</p>
+        <button class="btn btn-secondary" data-go="reset">I’ve opened the link →</button>
+        <p class="t-helper">Didn’t get it? <a class="link" data-go="forgot">Resend</a></p>
+      </div>
+    </section>
+
+    <!-- RESET / CREATE PASSWORD -->
+    <section class="auth-view" id="reset">
+      <h1 class="t-h2" style="margin-bottom:6px">Create a new password</h1>
+      <p class="t-small" style="margin-bottom:var(--space-6)">Choose a strong password you don’t use elsewhere.</p>
+      <form style="display:grid;gap:var(--space-4)" onsubmit="return false">
+        <div class="field"><label>New password</label><div class="input-group"><span class="input-icon" data-icon="lock"></span><input class="input" type="password" placeholder="At least 8 characters"></div>
+          <div class="progress" style="margin-top:8px"><span style="width:75%;background:var(--success)"></span></div>
+          <span class="helper-text" style="color:var(--success-text)">Strong password</span>
+        </div>
+        <div class="field"><label>Confirm password</label><div class="input-group"><span class="input-icon" data-icon="key"></span><input class="input" type="password" placeholder="Re-enter password"></div></div>
+        <button class="btn btn-primary btn-block btn-lg" data-go="done">Update password</button>
+      </form>
+    </section>
+
+    <!-- DONE -->
+    <section class="auth-view" id="done">
+      <div class="center" style="display:grid;justify-items:center;gap:14px">
+        <span class="empty-ico" style="background:var(--success-bg);color:var(--success-text)" data-icon="check-circle" data-size="28"></span>
+        <h1 class="t-h2">Password updated</h1>
+        <p class="t-small" style="max-width:34ch">You’re all set. Sign in with your new password to continue.</p>
+        <a class="btn btn-primary btn-lg" href="app.html">Go to dashboard</a>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="../icons.js"></script>
+<script>
+  document.getElementById('logo').innerHTML = '<svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="11" fill="#102220"/><path d="M27.5 22.5a8 8 0 1 1-2.2-7.7" stroke="#5DC3BA" stroke-width="2.6" stroke-linecap="round"/><path d="M26 11.5l.4 4.4-4.4.5" stroke="#5DC3BA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="20" r="3" fill="#fff"/></svg>';
+  document.getElementById('g1').innerHTML = svgIcon('google',{size:18});
+  document.getElementById('a1').innerHTML = svgIcon('apple',{size:18});
+  function go(v){ if(v==='app'){location.href='app.html';return;} document.querySelectorAll('.auth-view').forEach(s=>s.classList.toggle('active',s.id===v)); }
+  document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+</script>
+</body>
+</html>

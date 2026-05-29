@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recall — Missed Calls Dental Design System</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<link rel="stylesheet" href="components.css">
+<style>
+  body { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  .ds-nav { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+            border-right: 1px solid var(--border); background: var(--surface); padding: var(--space-6) var(--space-4); }
+  .ds-nav .brand { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-6); }
+  .ds-nav .brand b { font: 700 1.0625rem/1 var(--font-display); color: var(--text); letter-spacing: -.01em; }
+  .ds-nav a { display: block; padding: 8px 12px; border-radius: var(--r-sm); color: var(--text-secondary);
+              font: var(--body-sm); font-weight: 500; text-decoration: none; }
+  .ds-nav a:hover { background: var(--surface-2); color: var(--text); }
+  .ds-nav .grp { font: 600 .6875rem/1 var(--font-sans); letter-spacing: .1em; text-transform: uppercase;
+                 color: var(--text-muted); margin: var(--space-5) 0 var(--space-2); padding: 0 12px; }
+  main { padding: var(--space-12) var(--space-12) var(--space-24); max-width: 1080px; }
+  section { margin-bottom: var(--space-16); scroll-margin-top: var(--space-6); }
+  .sec-head { margin-bottom: var(--space-6); }
+  .sec-head h2 { margin: 0 0 6px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-5); }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); }
+  .swatch { border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--border); }
+  .swatch .chip { height: 64px; }
+  .swatch .meta { padding: 8px 10px; background: var(--surface); }
+  .swatch .n { font: 600 .8125rem/1.2 var(--font-sans); color: var(--text); }
+  .swatch .h { font: var(--font-mono); font-size: .75rem; color: var(--text-muted); }
+  .scale-row { display: flex; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--border); }
+  .scale-row .step { flex: 1; height: 56px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px;
+                     font: var(--font-mono); font-size: .625rem; }
+  .demo { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+          padding: var(--space-6); box-shadow: var(--shadow-sm); }
+  .demo + .demo { margin-top: var(--space-4); }
+  .row-wrap { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+  .spec { display: flex; align-items: baseline; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px dashed var(--border); }
+  .spec:last-child { border: none; }
+  .spec .tag { font: var(--font-mono); font-size: .75rem; color: var(--text-muted); width: 120px; flex: 0 0 auto; }
+  .radii-box { height: 72px; background: var(--primary-soft); border: 1px solid var(--primary-soft-border); display: flex; align-items: center; justify-content: center; font: var(--font-mono); font-size: .75rem; color: var(--teal-700); }
+  .elev-box { height: 76px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); display: flex; align-items: center; justify-content: center; font: var(--font-mono); font-size: .72rem; color: var(--text-muted); }
+  .space-bar { background: var(--teal-400); height: 16px; border-radius: 3px; }
+  .lede { font: var(--body-lg); color: var(--text-secondary); max-width: 60ch; }
+</style>
+</head>
+<body>
+<nav class="ds-nav">
+  <div class="brand">
+    <span id="logo"></span><b>Recall</b>
+  </div>
+  <div class="grp">Foundations</div>
+  <a href="#brand">Brand &amp; logo</a>
+  <a href="#color">Color</a>
+  <a href="#type">Typography</a>
+  <a href="#space">Spacing</a>
+  <a href="#radius">Radius</a>
+  <a href="#elevation">Elevation</a>
+  <div class="grp">Components</div>
+  <a href="#buttons">Buttons &amp; links</a>
+  <a href="#forms">Form controls</a>
+  <a href="#badges">Badges</a>
+  <a href="#alerts">Alerts</a>
+  <a href="#cards">Cards &amp; metrics</a>
+  <a href="#requests">Patient request card</a>
+  <a href="#lists">Lists &amp; tables</a>
+  <a href="#states">States</a>
+  <a href="#nav-tabs">Tabs &amp; nav</a>
+  <div class="grp">Screens</div>
+  <a href="screens/marketing.html">Marketing site →</a>
+  <a href="screens/app.html">Product app →</a>
+  <a href="screens/onboarding.html">Onboarding →</a>
+  <a href="screens/auth.html">Auth →</a>
+  <a href="screens/compliance.html">Compliance →</a>
+</nav>
+
+<main>
+  <header style="margin-bottom:var(--space-12)">
+    <p class="t-eyebrow">Missed Calls Dental · Design System v2</p>
+    <h1 class="t-display-l" style="margin:10px 0 14px">Recall</h1>
+    <p class="lede">A calm, high-trust operations system for dental front desks. One unified visual language across the marketing site, onboarding, and the product — light-first, accessible, and conversion-aware without the pressure.</p>
+  </header>
+
+  <!-- BRAND -->
+  <section id="brand">
+    <div class="sec-head"><h2 class="t-h2">Brand &amp; logo</h2><p class="t-small">Proposed identity — a wordmark plus a “returning call” mark. Swap in a finalized mark when ready.</p></div>
+    <div class="grid-2">
+      <div class="demo" style="display:flex;align-items:center;gap:16px">
+        <span id="logo-lg"></span>
+        <div><div style="font:700 1.5rem/1 var(--font-display);color:var(--text);letter-spacing:-.02em">Missed Calls Dental</div>
+        <div class="t-helper" style="margin-top:4px">Missed-call SMS recovery for dental offices</div></div>
+      </div>
+      <div class="demo" style="background:var(--ink-900);display:flex;align-items:center;gap:16px">
+        <span id="logo-dark"></span>
+        <div style="font:700 1.5rem/1 var(--font-display);color:#fff;letter-spacing:-.02em">Missed Calls Dental</div>
+      </div>
+    </div>
+    <div class="demo" style="margin-top:var(--space-4)">
+      <p class="t-label" style="margin-bottom:10px">Brand principles</p>
+      <div class="grid-3">
+        <div><b style="color:var(--text)">Calm by default</b><p class="t-small">Space, soft contrast, no glow or hype. The product lowers a busy desk’s blood pressure.</p></div>
+        <div><b style="color:var(--text)">Earn trust visibly</b><p class="t-small">Clear status, plain language, honest compliance. Nothing hidden, nothing overstated.</p></div>
+        <div><b style="color:var(--text)">One system everywhere</b><p class="t-small">Marketing, setup, and dashboard share tokens, type, and components.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLOR -->
+  <section id="color">
+    <div class="sec-head"><h2 class="t-h2">Color</h2><p class="t-small">Teal primary for action &amp; brand. Warm-cool neutrals. Semantic colors held distinct from the brand so status always reads.</p></div>
+    <p class="t-label" style="margin:0 0 10px">Brand · Teal</p>
+    <div class="scale-row" id="teal-scale" style="margin-bottom:var(--space-5)"></div>
+    <p class="t-label" style="margin:0 0 10px">Neutrals</p>
+    <div class="scale-row" id="n-scale" style="margin-bottom:var(--space-5)"></div>
+    <p class="t-label" style="margin:0 0 10px">Semantic &amp; accent</p>
+    <div class="grid-4" id="semantic"></div>
+  </section>
+
+  <!-- TYPE -->
+  <section id="type">
+    <div class="sec-head"><h2 class="t-h2">Typography</h2><p class="t-small">Schibsted Grotesk for headings, Hanken Grotesk for body &amp; UI, IBM Plex Mono for numbers and codes.</p></div>
+    <div class="demo">
+      <p class="t-eyebrow">Eyebrow / overline</p>
+      <p class="t-display-xl" style="margin:6px 0">Recover every caller</p>
+      <p class="t-h1" style="margin:0 0 4px">Heading 1 — section title</p>
+      <p class="t-h2" style="margin:0 0 4px">Heading 2 — subsection</p>
+      <p class="t-h3" style="margin:0 0 14px">Heading 3 — card title</p>
+      <p class="t-body-lg" style="margin:0 0 8px">Body large — used for intros and hero subheads. Calm, readable, generous line height.</p>
+      <p class="t-body" style="margin:0 0 8px">Body — the workhorse size at 16px / 1.6 for paragraphs and most UI copy across the product.</p>
+      <p class="t-small" style="margin:0 0 8px">Small / secondary — meta, table cells, captions.</p>
+      <p class="t-helper">Helper — field hints and the quiet fine print.</p>
+      <p class="t-metric" style="margin-top:14px">$99<span style="font-size:1rem;color:var(--text-secondary)">/mo</span> · 14 <span style="font-size:1rem;color:var(--text-secondary)">new requests</span></p>
+    </div>
+    <div class="demo">
+      <div class="spec"><span class="tag">display-xl</span><span class="t-small">Schibsted 700 · clamp 44–60px · −.022em · marketing hero</span></div>
+      <div class="spec"><span class="tag">h1 / h2 / h3</span><span class="t-small">Schibsted 700/650 · −.02→−.01em · 1.1–1.25 line height</span></div>
+      <div class="spec"><span class="tag">body</span><span class="t-small">Hanken 400 · 16px · 1.6 · body color #2E3B39</span></div>
+      <div class="spec"><span class="tag">label</span><span class="t-small">Hanken 600 · 14px · field labels, table headers</span></div>
+      <div class="spec"><span class="tag">metric</span><span class="t-small">Schibsted 700 · tabular-nums · dashboard numbers</span></div>
+    </div>
+  </section>
+
+  <!-- SPACING -->
+  <section id="space">
+    <div class="sec-head"><h2 class="t-h2">Spacing</h2><p class="t-small">4px base scale. Use tokens, not arbitrary values.</p></div>
+    <div class="demo" id="space-demo"></div>
+  </section>
+
+  <!-- RADIUS -->
+  <section id="radius">
+    <div class="sec-head"><h2 class="t-h2">Radius</h2><p class="t-small">Restrained — rounded-rect, not pills, for chrome. Pills reserved for badges &amp; chips.</p></div>
+    <div class="grid-4">
+      <div class="radii-box" style="border-radius:var(--r-xs)">6 · xs</div>
+      <div class="radii-box" style="border-radius:var(--r-sm)">8 · sm</div>
+      <div class="radii-box" style="border-radius:var(--r-md)">10 · md · buttons</div>
+      <div class="radii-box" style="border-radius:var(--r-lg)">14 · lg · cards</div>
+      <div class="radii-box" style="border-radius:var(--r-xl)">20 · xl</div>
+      <div class="radii-box" style="border-radius:var(--r-2xl)">28 · 2xl · media</div>
+      <div class="radii-box" style="border-radius:var(--r-pill)">pill · badges</div>
+    </div>
+  </section>
+
+  <!-- ELEVATION -->
+  <section id="elevation">
+    <div class="sec-head"><h2 class="t-h2">Elevation</h2><p class="t-small">Neutral, layered shadows — no colored glows. Borders carry most of the structure.</p></div>
+    <div class="grid-3">
+      <div class="elev-box" style="box-shadow:var(--shadow-xs)">xs</div>
+      <div class="elev-box" style="box-shadow:var(--shadow-sm)">sm · cards</div>
+      <div class="elev-box" style="box-shadow:var(--shadow-md)">md · hover</div>
+      <div class="elev-box" style="box-shadow:var(--shadow-lg)">lg · popover</div>
+      <div class="elev-box" style="box-shadow:var(--shadow-xl)">xl · modal</div>
+      <div class="elev-box" style="box-shadow:var(--shadow-focus-primary)">primary focus</div>
+    </div>
+  </section>
+
+  <!-- BUTTONS -->
+  <section id="buttons">
+    <div class="sec-head"><h2 class="t-h2">Buttons &amp; links</h2></div>
+    <div class="demo">
+      <div class="row-wrap" style="margin-bottom:14px">
+        <button class="btn btn-primary"><span data-icon="phone-incoming"></span>Primary</button>
+        <button class="btn btn-secondary">Secondary</button>
+        <button class="btn btn-ghost">Ghost</button>
+        <button class="btn btn-destructive">Delete number</button>
+        <button class="btn btn-primary" disabled>Disabled</button>
+        <a class="link">A text link →</a>
+      </div>
+      <div class="row-wrap">
+        <button class="btn btn-primary btn-lg">Large</button>
+        <button class="btn btn-primary">Default</button>
+        <button class="btn btn-primary btn-sm">Small</button>
+        <button class="btn btn-secondary btn-sm"><span data-icon="plus" data-size="16"></span>Add</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FORMS -->
+  <section id="forms">
+    <div class="sec-head"><h2 class="t-h2">Form controls</h2></div>
+    <div class="demo grid-2">
+      <div class="field"><label>Clinic name</label><input class="input" placeholder="Bright Smile Dental"><span class="helper-text">The name patients know your office by.</span></div>
+      <div class="field"><label>Main office phone</label>
+        <div class="input-group"><span class="input-icon" data-icon="phone"></span><input class="input" placeholder="(224) 555-1234"></div></div>
+      <div class="field"><label>Number type</label><select class="select"><option>Local number</option><option>Toll-free number</option></select></div>
+      <div class="field"><label>Work email <span class="req">*</span></label><input class="input is-error" value="invalid@"><span class="helper-text" style="color:var(--error-text)">Enter a valid work email address.</span></div>
+      <div class="field" style="grid-column:1/-1"><label>Notes for the front desk</label><textarea class="textarea" placeholder="Optional context…"></textarea></div>
+      <div style="display:grid;gap:14px">
+        <label class="check"><input type="checkbox" checked> Send a daily recap email</label>
+        <label class="check"><input type="radio" name="r" checked> Local number</label>
+        <label class="check"><input type="radio" name="r"> Toll-free number</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px"><span class="switch"><input type="checkbox" checked></span><span class="t-small">SMS recovery active</span></div>
+    </div>
+  </section>
+
+  <!-- BADGES -->
+  <section id="badges">
+    <div class="sec-head"><h2 class="t-h2">Status badges</h2><p class="t-small">Always pair color with a label (and a dot) — never color alone.</p></div>
+    <div class="demo row-wrap">
+      <span class="badge badge-info"><span class="dot"></span>New request</span>
+      <span class="badge badge-warning"><span class="dot"></span>Needs callback</span>
+      <span class="badge badge-success"><span class="dot"></span>Scheduled</span>
+      <span class="badge badge-error"><span class="dot"></span>Opted out</span>
+      <span class="badge badge-neutral"><span class="dot"></span>Completed</span>
+      <span class="badge badge-brand">Recommended</span>
+      <span class="badge badge-success">21-day trial</span>
+    </div>
+  </section>
+
+  <!-- ALERTS -->
+  <section id="alerts">
+    <div class="sec-head"><h2 class="t-h2">Alerts &amp; notices</h2></div>
+    <div class="demo" style="display:grid;gap:12px">
+      <div class="alert alert-success"><span class="alert-ico" data-icon="check-circle"></span><div><strong>Your texting number is live.</strong><span class="alert-body">Missed calls now receive an automatic follow-up text.</span></div></div>
+      <div class="alert alert-warning"><span class="alert-ico" data-icon="alert-triangle"></span><div><strong>SMS approval pending.</strong><span class="alert-body">We’ll turn on live texting once carrier approval completes. No charge until then.</span></div></div>
+      <div class="alert alert-info"><span class="alert-ico" data-icon="info"></span><div><strong>Toll-free verification needed.</strong><span class="alert-body">Toll-free SMS requires carrier verification before go-live. We’ll handle it with you.</span></div></div>
+      <div class="alert alert-error"><span class="alert-ico" data-icon="alert-circle"></span><div><strong>We couldn’t reach the server.</strong><span class="alert-body">Please try again in a moment.</span></div></div>
+    </div>
+  </section>
+
+  <!-- CARDS -->
+  <section id="cards">
+    <div class="sec-head"><h2 class="t-h2">Cards &amp; metric cards</h2></div>
+    <div class="grid-3" id="metrics"></div>
+    <div class="grid-2" style="margin-top:var(--space-4)">
+      <div class="card card-pad card-hover">
+        <span class="tile" data-icon="message-check"></span>
+        <h3 class="t-h3" style="margin:14px 0 6px">Automatic SMS follow-up</h3>
+        <p class="t-small">The moment a call is missed, the caller gets a professional text so your team can reconnect.</p>
+      </div>
+      <div class="card card-pad card-hover">
+        <span class="tile" data-icon="shield-check"></span>
+        <h3 class="t-h3" style="margin:14px 0 6px">Compliance-aware by design</h3>
+        <p class="t-small">STOP/HELP handled, opt-outs respected, and a public consent page generated for your office.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PATIENT REQUEST CARD -->
+  <section id="requests">
+    <div class="sec-head"><h2 class="t-h2">Patient request card</h2><p class="t-small">The product's primary object. A patient's reply is distilled into an office-ready task — not a raw chat. The full SMS lives in a secondary audit trail.</p></div>
+    <div class="grid-2">
+      <article class="card card-pad" style="border-left:3px solid var(--info);display:grid;gap:16px">
+        <div class="row" style="gap:12px;align-items:flex-start"><span class="avatar">MR</span>
+          <div style="flex:1"><div class="row between" style="gap:8px"><b style="color:var(--text)">Maria Reyes</b><span class="badge badge-info"><span class="dot"></span>New</span></div><div class="t-helper t-mono">(555) 088-2201</div></div></div>
+        <dl style="display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:0">
+          <dt class="t-helper" style="text-transform:uppercase;letter-spacing:.06em;align-self:center">Request</dt><dd style="margin:0" class="t-label">New patient — cleaning &amp; exam</dd>
+          <dt class="t-helper" style="text-transform:uppercase;letter-spacing:.06em;align-self:center">Preferred</dt><dd style="margin:0" class="t-label">Friday morning</dd>
+          <dt class="t-helper" style="text-transform:uppercase;letter-spacing:.06em;align-self:center">Priority</dt><dd style="margin:0"><span class="badge badge-neutral">Routine</span></dd>
+        </dl>
+        <div class="row" style="gap:14px;color:var(--text-muted)"><span class="t-helper">Missed call</span><span class="t-helper">Today, 1:02 PM</span></div>
+        <div class="row wrap" style="gap:8px;padding-top:12px;border-top:1px solid var(--border)"><button class="btn btn-primary btn-sm"><span data-icon="calendar-check" data-size="16"></span>Mark scheduled</button><button class="btn btn-secondary btn-sm">Needs callback</button><button class="btn btn-ghost btn-sm">Details</button></div>
+      </article>
+      <div style="display:grid;gap:12px;align-content:start">
+        <p class="t-label">Status lifecycle</p>
+        <div class="row wrap" style="gap:8px"><span class="badge badge-info"><span class="dot"></span>New</span><span data-icon="chevron-right" style="color:var(--text-muted)"></span><span class="badge badge-warning"><span class="dot"></span>Needs callback</span><span data-icon="chevron-right" style="color:var(--text-muted)"></span><span class="badge badge-success"><span class="dot"></span>Scheduled</span><span data-icon="chevron-right" style="color:var(--text-muted)"></span><span class="badge badge-neutral"><span class="dot"></span>Completed</span></div>
+        <p class="t-small" style="margin-top:8px">Fields: name · phone · request · preferred time · priority · status · source · received. Secondary (drawer): summary, internal note, assigned staff, and the SMS audit trail.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- LISTS -->
+  <section id="lists">
+    <div class="sec-head"><h2 class="t-h2">Lists &amp; tables</h2><p class="t-small">Used for the missed-calls log — follow-up status only.</p></div>
+    <div class="list">
+      <div class="list-head"><span style="flex:1">Caller</span><span style="width:150px">Follow-up</span><span style="width:90px">Missed</span></div>
+      <div class="list-row"><span class="avatar">JD</span><span style="flex:1"><b style="color:var(--text)">John Doe</b><div class="t-helper t-mono">(555) 012-3134</div></span><span style="width:150px"><span class="badge badge-success"><span class="dot"></span>Reply received</span></span><span style="width:90px" class="t-small">2:14 PM</span></div>
+      <div class="list-row"><span class="avatar">MR</span><span style="flex:1"><b style="color:var(--text)">Maria Reyes</b><div class="t-helper t-mono">(555) 088-2201</div></span><span style="width:150px"><span class="badge badge-warning"><span class="dot"></span>Awaiting reply</span></span><span style="width:90px" class="t-small">1:02 PM</span></div>
+      <div class="list-row"><span class="avatar">TP</span><span style="flex:1"><b style="color:var(--text)">Tom Park</b><div class="t-helper t-mono">(555) 771-9043</div></span><span style="width:150px"><span class="badge badge-neutral"><span class="dot"></span>Opted out</span></span><span style="width:90px" class="t-small">11:48 AM</span></div>
+    </div>
+  </section>
+
+  <!-- STATES -->
+  <section id="states">
+    <div class="sec-head"><h2 class="t-h2">Empty, loading &amp; success states</h2></div>
+    <div class="grid-3">
+      <div class="card"><div class="empty"><span class="empty-ico" data-icon="phone-incoming" data-size="28"></span><h3 class="t-h4">No missed calls yet</h3><p class="t-small">When a patient call goes unanswered, it’ll show up here with its follow-up status.</p></div></div>
+      <div class="card card-pad" style="display:grid;gap:12px;align-content:start">
+        <div class="skeleton" style="height:14px;width:60%"></div>
+        <div class="skeleton" style="height:40px"></div>
+        <div class="skeleton" style="height:40px"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span class="spinner"></span><span class="t-small">Searching numbers…</span></div>
+      </div>
+      <div class="card"><div class="empty"><span class="empty-ico" style="background:var(--success-bg);color:var(--success-text)" data-icon="check-circle" data-size="28"></span><h3 class="t-h4">All caught up</h3><p class="t-small">Every missed caller has a follow-up. Nice work.</p></div></div>
+    </div>
+  </section>
+
+  <!-- TABS -->
+  <section id="nav-tabs">
+    <div class="sec-head"><h2 class="t-h2">Tabs, segments &amp; progress</h2></div>
+    <div class="demo" style="display:grid;gap:20px">
+      <div class="tabs"><button class="tab" aria-selected="true">Overview</button><button class="tab">Missed calls</button><button class="tab">Patient requests</button><button class="tab">Settings</button></div>
+      <div class="segment"><button aria-selected="true">Local</button><button>Toll-free</button></div>
+      <div><div class="progress"><span style="width:66%"></span></div><p class="t-helper" style="margin-top:8px">Setup 66% complete · 2 of 3 steps</p></div>
+    </div>
+  </section>
+</main>
+
+<script src="icons.js"></script>
+<script>
+  // Logo mark
+  function mark(size, bg, fg, dot){
+    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 40 40" fill="none" aria-hidden="true">'+
+      '<rect width="40" height="40" rx="11" fill="'+bg+'"/>'+
+      '<path d="M27.5 22.5a8 8 0 1 1-2.2-7.7" stroke="'+fg+'" stroke-width="2.6" stroke-linecap="round"/>'+
+      '<path d="M26 11.5l.4 4.4-4.4.5" stroke="'+fg+'" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'+
+      '<circle cx="20" cy="20" r="3" fill="'+dot+'"/></svg>';
+  }
+  document.getElementById('logo').innerHTML = mark(30, '#0B6F67', '#fff', '#5DC3BA');
+  document.getElementById('logo-lg').innerHTML = mark(52, '#0B6F67', '#fff', '#5DC3BA');
+  document.getElementById('logo-dark').innerHTML = mark(52, '#102220', '#5DC3BA', '#fff');
+
+  // Color scales
+  const teal = {50:'#E9F7F5',100:'#C8ECE8',200:'#97DBD4',300:'#5DC3BA',400:'#2BA69B',500:'#0E8A80',600:'#0B6F67',700:'#095852',800:'#07433F',900:'#063531'};
+  const neutral = {0:'#FFFFFF',50:'#F6F8F7',100:'#F1F4F3',200:'#E2E8E6',300:'#CDD6D3',400:'#A7B2AF',500:'#7C8784',600:'#586462',700:'#3D4845',800:'#2A3331',900:'#18201F'};
+  function fillScale(id, obj){
+    document.getElementById(id).innerHTML = Object.entries(obj).map(([k,v])=>{
+      const dark = (id==='teal-scale' ? +k>=400 : +k>=400);
+      return '<div class="step" style="background:'+v+';color:'+(dark?'#fff':'#3D4845')+'">'+k+'</div>';
+    }).join('');
+  }
+  fillScale('teal-scale', teal); fillScale('n-scale', neutral);
+
+  const sem = [['Success','#1E9E54','#fff'],['Warning','#E08A2B','#fff'],['Error','#D9483B','#fff'],['Info','#1488C2','#fff'],['Primary 600','#0B6F67','#fff'],['Ink 900','#0C2B2A','#fff'],['Accent 400','#F2A65A','#3D4845'],['Focus 400','#2BA69B','#fff']];
+  document.getElementById('semantic').innerHTML = sem.map(([n,h,t])=>(
+    '<div class="swatch"><div class="chip" style="background:'+h+'"></div><div class="meta"><div class="n">'+n+'</div><div class="h">'+h+'</div></div></div>'
+  )).join('');
+
+  // Spacing
+  const spaces = [['1',4],['2',8],['3',12],['4',16],['5',20],['6',24],['8',32],['10',40],['12',48],['16',64]];
+  document.getElementById('space-demo').innerHTML = spaces.map(([n,px])=>(
+    '<div style="display:flex;align-items:center;gap:16px;margin:7px 0"><span class="t-mono" style="width:90px;font-size:.75rem;color:var(--text-muted)">space-'+n+' · '+px+'</span><span class="space-bar" style="width:'+px+'px"></span></div>'
+  )).join('');
+
+  // Metric cards
+  const metrics = [['Missed calls recorded','phone-missed','38','This week'],['Recovery texts sent','message-check','36','This week'],['New patient requests','inbox','14','This week']];
+  document.getElementById('metrics').innerHTML = metrics.map(([label,ic,val,cap])=>(
+    '<div class="metric-card"><div class="metric-head"><span class="metric-label">'+label+'</span><span class="metric-ico">'+svgIcon(ic,{size:20})+'</span></div><div class="metric-value">'+val+'</div><span class="t-helper">'+cap+'</span></div>'
+  )).join('');
+</script>
+</body>
+</html>
