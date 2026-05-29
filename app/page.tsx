@@ -2,24 +2,24 @@ export default function HomePage() {
   return (
     <main
       style={{
-        maxWidth: 720,
+        maxWidth: "var(--content)",
         margin: "0 auto",
-        padding: "64px 24px",
-        lineHeight: 1.6,
+        padding: "var(--space-16) var(--space-6)",
       }}
     >
-      <h1 style={{ fontSize: 28, marginBottom: 8 }}>Missed Calls Dental</h1>
-      <p style={{ color: "#4b5563", marginTop: 0 }}>
-        Backend foundation — placeholder. The clinic dashboard will be built
-        here in future milestones.
+      <p className="t-eyebrow" style={{ marginBottom: "var(--space-3)" }}>
+        Missed Calls Dental
       </p>
-      <p style={{ color: "#4b5563" }}>
-        The public marketing website is served separately at{" "}
-        <a
-          href="https://missedcallsdental.com"
-          style={{ color: "#1d4ed8" }}
-          rel="noreferrer"
-        >
+      <h1 className="t-h1" style={{ marginBottom: "var(--space-3)" }}>
+        Bring missed callers back to book appointments.
+      </h1>
+      <p className="t-body-lg" style={{ marginTop: 0 }}>
+        This is the application surface for Missed Calls Dental. Office setup opens from the
+        secure link we email you.
+      </p>
+      <p className="t-body">
+        The public website is served at{" "}
+        <a className="link" href="https://missedcallsdental.com" rel="noreferrer">
           missedcallsdental.com
         </a>
         .

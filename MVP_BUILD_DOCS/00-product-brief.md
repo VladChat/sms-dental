@@ -303,7 +303,7 @@ Initial pricing assumption for product design:
 
 ```text
 $99–199/month per clinic
-14-day free trial starts after live activation
+21-day free trial starts after live activation
 ```
 
 Do not hard-code this pricing. The billing system should support configurable Stripe prices.

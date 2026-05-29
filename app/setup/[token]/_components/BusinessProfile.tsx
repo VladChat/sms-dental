@@ -347,7 +347,7 @@ function A2pCard({
             We generate the texting use case and a sample message from your business details, so you
             don’t have to write them.
           </p>
-          <p style={{ ...previewText, marginTop: 8, color: "#475569" }}>
+          <p style={{ ...previewText, marginTop: 8, color: "var(--text-secondary)" }}>
             <em>Sample:</em> {sample}
           </p>
         </div>
@@ -415,7 +415,7 @@ function ComplianceRow({ label, url }: { label: string; url: string }) {
   }
   return (
     <div style={complianceRowStyle}>
-      <span style={{ fontWeight: 600, color: "#111827", fontSize: 14 }}>{label}</span>
+      <span style={{ fontWeight: 600, color: "var(--text)", fontSize: 14 }}>{label}</span>
       <span style={{ display: "flex", gap: 8 }}>
         <a href={url} target="_blank" rel="noopener noreferrer" style={secondaryBtnStyle}>
           View
@@ -602,8 +602,8 @@ function Badge({ kind, children }: { kind: BadgeKind; children: React.ReactNode 
 function KeyVal({ k, v }: { k: string; v: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0" }}>
-      <span style={{ color: "#6b7280", fontSize: 14 }}>{k}</span>
-      <span style={{ color: "#111827", fontSize: 14, fontWeight: 600, textAlign: "right" }}>{v}</span>
+      <span style={{ color: "var(--text-muted)", fontSize: 14 }}>{k}</span>
+      <span style={{ color: "var(--text)", fontSize: 14, fontWeight: 600, textAlign: "right" }}>{v}</span>
     </div>
   );
 }
@@ -622,7 +622,7 @@ const shellStyle: React.CSSProperties = {
 const appHeaderStyle: React.CSSProperties = { marginBottom: 24 };
 const brandStyle: React.CSSProperties = {
   margin: 0,
-  color: "#0d9488",
+  color: "var(--primary)",
   fontSize: 12,
   letterSpacing: ".14em",
   textTransform: "uppercase",
@@ -631,10 +631,10 @@ const brandStyle: React.CSSProperties = {
 const appTitleStyle: React.CSSProperties = {
   margin: "6px 0 4px",
   fontSize: 26,
-  color: "#111827",
+  color: "var(--text)",
   letterSpacing: "-.02em",
 };
-const appSubtitleStyle: React.CSSProperties = { margin: 0, color: "#6b7280", fontSize: 14 };
+const appSubtitleStyle: React.CSSProperties = { margin: 0, color: "var(--text-muted)", fontSize: 14 };
 const layoutStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "minmax(220px, 280px) 1fr",
@@ -653,15 +653,15 @@ const stepNavItem: React.CSSProperties = {
   textAlign: "left",
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: "#ffffff",
+  border: "1px solid var(--border)",
+  background: "var(--surface)",
   cursor: "pointer",
   font: "inherit",
 };
 const stepNavItemActive: React.CSSProperties = {
-  border: "1px solid #0d9488",
+  border: "1px solid var(--primary)",
   boxShadow: "0 1px 2px rgba(13,148,136,.12)",
-  background: "#f0fdfa",
+  background: "var(--primary-soft)",
 };
 const stepNavItemMuted: React.CSSProperties = { opacity: 0.6 };
 const stepNavTop: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10 };
@@ -672,36 +672,36 @@ const stepNum: React.CSSProperties = {
   width: 22,
   height: 22,
   borderRadius: 999,
-  background: "#f1f5f9",
-  color: "#475569",
+  background: "var(--surface-2)",
+  color: "var(--text-secondary)",
   fontSize: 12,
   fontWeight: 700,
   flex: "0 0 auto",
 };
-const stepNavTitle: React.CSSProperties = { fontSize: 14, fontWeight: 600, color: "#111827" };
+const stepNavTitle: React.CSSProperties = { fontSize: 14, fontWeight: 600, color: "var(--text)" };
 const contentStyle: React.CSSProperties = { minWidth: 0 };
 const cardStyle: React.CSSProperties = {
   padding: 24,
   borderRadius: 14,
-  border: "1px solid #e5e7eb",
-  background: "#ffffff",
+  border: "1px solid var(--border)",
+  background: "var(--surface)",
 };
 const cardTitleStyle: React.CSSProperties = {
   margin: 0,
   fontSize: 19,
-  color: "#111827",
+  color: "var(--text)",
   letterSpacing: "-.01em",
 };
-const cardSubtitleStyle: React.CSSProperties = { margin: "6px 0 0", color: "#6b7280", fontSize: 14 };
-const labelStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: "#111827" };
-const helperLineStyle: React.CSSProperties = { margin: 0, color: "#6b7280", fontSize: 12 };
+const cardSubtitleStyle: React.CSSProperties = { margin: "6px 0 0", color: "var(--text-muted)", fontSize: 14 };
+const labelStyle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: "var(--text)" };
+const helperLineStyle: React.CSSProperties = { margin: 0, color: "var(--text-muted)", fontSize: 12 };
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px 12px",
   borderRadius: 10,
-  border: "1px solid #d1d5db",
-  background: "#ffffff",
-  color: "#111827",
+  border: "1px solid var(--border-strong)",
+  background: "var(--surface)",
+  color: "var(--text)",
   font: "inherit",
   fontSize: 15,
 };
@@ -712,8 +712,8 @@ const primaryBtnStyle: React.CSSProperties = {
   padding: "11px 18px",
   borderRadius: 999,
   border: "1px solid transparent",
-  background: "#0d9488",
-  color: "#ffffff",
+  background: "var(--primary)",
+  color: "var(--surface)",
   fontWeight: 700,
   fontSize: 14,
   cursor: "pointer",
@@ -724,15 +724,15 @@ const secondaryBtnStyle: React.CSSProperties = {
   justifyContent: "center",
   padding: "8px 14px",
   borderRadius: 999,
-  border: "1px solid #d1d5db",
-  background: "#ffffff",
-  color: "#111827",
+  border: "1px solid var(--border-strong)",
+  background: "var(--surface)",
+  color: "var(--text)",
   fontWeight: 600,
   fontSize: 13,
   cursor: "pointer",
   textDecoration: "none",
 };
-const lastSavedStyle: React.CSSProperties = { color: "#0f766e", fontSize: 13 };
+const lastSavedStyle: React.CSSProperties = { color: "var(--primary)", fontSize: 13 };
 const complianceRowStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -740,43 +740,43 @@ const complianceRowStyle: React.CSSProperties = {
   gap: 12,
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: "#f9fafb",
+  border: "1px solid var(--border)",
+  background: "var(--surface-2)",
 };
-const mutedText: React.CSSProperties = { margin: "10px 0 0", color: "#6b7280", fontSize: 14 };
-const mutedTextStrong: React.CSSProperties = { margin: "12px 0 0", color: "#334155", fontSize: 14, fontWeight: 600 };
+const mutedText: React.CSSProperties = { margin: "10px 0 0", color: "var(--text-muted)", fontSize: 14 };
+const mutedTextStrong: React.CSSProperties = { margin: "12px 0 0", color: "var(--text-secondary)", fontSize: 14, fontWeight: 600 };
 const previewBox: React.CSSProperties = {
   margin: "2px 0 16px",
   padding: "12px 14px",
   borderRadius: 10,
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
+  background: "var(--surface-2)",
+  border: "1px solid var(--border)",
 };
 const previewLabel: React.CSSProperties = {
   margin: 0,
-  color: "#6b7280",
+  color: "var(--text-muted)",
   fontSize: 12,
   letterSpacing: ".06em",
   textTransform: "uppercase",
   fontWeight: 700,
 };
-const previewText: React.CSSProperties = { margin: "6px 0 0", color: "#334155", fontSize: 14 };
+const previewText: React.CSSProperties = { margin: "6px 0 0", color: "var(--text-secondary)", fontSize: 14 };
 const checkboxRow: React.CSSProperties = {
   display: "flex",
   gap: 10,
   alignItems: "flex-start",
   margin: "4px 0 18px",
-  color: "#111827",
+  color: "var(--text)",
   fontSize: 14,
   cursor: "pointer",
 };
 const errorBox: React.CSSProperties = {
   margin: "0 0 14px",
   padding: "10px 12px",
-  borderRadius: 10,
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  color: "#991b1b",
+  borderRadius: "var(--r-md)",
+  background: "var(--error-bg)",
+  border: "1px solid var(--error-border)",
+  color: "var(--error-text)",
   fontSize: 14,
 };
 const badgeBase: React.CSSProperties = {
@@ -789,8 +789,8 @@ const badgeBase: React.CSSProperties = {
   justifySelf: "start",
 };
 const badgeKinds: Record<BadgeKind, React.CSSProperties> = {
-  success: { color: "#0d9488", background: "#ccfbf1", border: "1px solid #99f6e4" },
-  info: { color: "#1e40af", background: "#dbeafe", border: "1px solid #bfdbfe" },
-  warn: { color: "#9a3412", background: "#ffedd5", border: "1px solid #fed7aa" },
-  muted: { color: "#64748b", background: "#f1f5f9", border: "1px solid #e2e8f0" },
+  success: { color: "var(--success-text)", background: "var(--success-bg)", border: "1px solid var(--success-border)" },
+  info: { color: "var(--info-text)", background: "var(--info-bg)", border: "1px solid var(--info-border)" },
+  warn: { color: "var(--warning-text)", background: "var(--warning-bg)", border: "1px solid var(--warning-border)" },
+  muted: { color: "var(--text-secondary)", background: "var(--surface-2)", border: "1px solid var(--border)" },
 };

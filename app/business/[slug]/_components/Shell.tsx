@@ -26,11 +26,11 @@ export function PublicShell({
   return (
     <main
       style={{
-        maxWidth: 760,
+        maxWidth: "var(--content)",
         margin: "0 auto",
-        padding: "40px 24px 80px",
+        padding: "var(--space-10) var(--space-6) var(--space-20)",
         lineHeight: 1.6,
-        color: "#1f2937",
+        color: "var(--text-body)",
       }}
     >
       <header style={{ marginBottom: 24 }}>
@@ -59,7 +59,7 @@ export function PublicShell({
 
       {children}
 
-      <footer style={{ marginTop: 40, paddingTop: 20, borderTop: "1px solid #e5e7eb" }}>
+      <footer style={{ marginTop: "var(--space-10)", paddingTop: "var(--space-5)", borderTop: "1px solid var(--border)" }}>
         <p style={{ margin: "0 0 8px" }}>
           <a href={base} style={footerLinkStyle}>Business Profile</a>
           <span style={footerSep}> · </span>
@@ -67,7 +67,7 @@ export function PublicShell({
           <span style={footerSep}> · </span>
           <a href={`${base}/sms-terms`} style={footerLinkStyle}>SMS Terms</a>
         </p>
-        <p style={{ margin: 0, color: "#6b7280", fontSize: 13 }}>
+        <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>
           This messaging program is operated for {businessName} by {SERVICE_NAME}, its technology and
           service provider.
         </p>
@@ -90,7 +90,8 @@ export function formatAddress(parts: {
 
 const businessNameStyle: React.CSSProperties = {
   display: "inline-block",
-  color: "#111827",
+  fontFamily: "var(--font-display)",
+  color: "var(--text)",
   fontSize: 18,
   fontWeight: 700,
   letterSpacing: "-.01em",
@@ -102,24 +103,26 @@ const navStyle: React.CSSProperties = {
   gap: 16,
   marginTop: 10,
   paddingBottom: 12,
-  borderBottom: "1px solid #e5e7eb",
+  borderBottom: "1px solid var(--border)",
 };
-const navLinkStyle: React.CSSProperties = { color: "#6b7280", fontSize: 14, textDecoration: "none" };
-const navLinkActiveStyle: React.CSSProperties = { color: "#0d9488", fontWeight: 600 };
-const backLinkStyle: React.CSSProperties = { color: "#0d9488", fontWeight: 600, textDecoration: "none" };
-const footerLinkStyle: React.CSSProperties = { color: "#0d9488", fontSize: 13, textDecoration: "none" };
-const footerSep: React.CSSProperties = { color: "#9ca3af", fontSize: 13 };
+const navLinkStyle: React.CSSProperties = { color: "var(--text-secondary)", fontSize: 14, textDecoration: "none" };
+const navLinkActiveStyle: React.CSSProperties = { color: "var(--primary)", fontWeight: 600 };
+const backLinkStyle: React.CSSProperties = { color: "var(--link)", fontWeight: 600, textDecoration: "none" };
+const footerLinkStyle: React.CSSProperties = { color: "var(--link)", fontSize: 13, textDecoration: "none" };
+const footerSep: React.CSSProperties = { color: "var(--text-muted)", fontSize: 13 };
 
 export const h1Style: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
   margin: "0 0 12px",
-  fontSize: 26,
-  color: "#111827",
+  fontSize: 28,
+  color: "var(--text)",
   letterSpacing: "-.02em",
 };
 export const h2Style: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
   margin: "28px 0 8px",
-  fontSize: 18,
-  color: "#111827",
+  fontSize: 19,
+  color: "var(--text)",
 };
-export const pStyle: React.CSSProperties = { margin: "0 0 12px", color: "#374151" };
-export const linkStyle: React.CSSProperties = { color: "#0d9488", fontWeight: 600 };
+export const pStyle: React.CSSProperties = { margin: "0 0 12px", color: "var(--text-body)" };
+export const linkStyle: React.CSSProperties = { color: "var(--link)", fontWeight: 600 };
