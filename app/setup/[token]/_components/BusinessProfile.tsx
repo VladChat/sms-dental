@@ -69,8 +69,8 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
         </p>
       </header>
 
-      <div style={layoutStyle}>
-        <nav aria-label="Setup steps" style={sidebarStyle}>
+      <div className="bp-layout">
+        <nav aria-label="Setup steps" className="bp-sidebar">
           {steps.map((s) => {
             const active = s.id === activeStep;
             return (
@@ -635,18 +635,6 @@ const appTitleStyle: React.CSSProperties = {
   letterSpacing: "-.02em",
 };
 const appSubtitleStyle: React.CSSProperties = { margin: 0, color: "var(--text-muted)", fontSize: 14 };
-const layoutStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(220px, 280px) 1fr",
-  gap: 24,
-  alignItems: "start",
-};
-const sidebarStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-  position: "sticky",
-  top: 24,
-};
 const stepNavItem: React.CSSProperties = {
   display: "grid",
   gap: 8,
@@ -738,6 +726,7 @@ const complianceRowStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 12,
+  flexWrap: "wrap",
   padding: "12px 14px",
   borderRadius: 12,
   border: "1px solid var(--border)",

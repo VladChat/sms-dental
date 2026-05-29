@@ -181,6 +181,16 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .alert-error { background:var(--error-bg); border-color:var(--error-border); color:var(--error-text); }
 .alert-info { background:var(--info-bg); border-color:var(--info-border); color:var(--info-text); }
 
+/* -------------------------------------------- business-profile checklist */
+/* Sidebar + content. Collapses to a single column on small screens so the
+   step nav stacks above the content instead of crushing the form column. */
+.bp-layout { display:grid; grid-template-columns:minmax(220px,280px) 1fr; gap:var(--space-6); align-items:start; }
+.bp-sidebar { display:grid; gap:var(--space-2); position:sticky; top:var(--space-6); }
+@media (max-width: 860px) {
+  .bp-layout { grid-template-columns:1fr; }
+  .bp-sidebar { position:static; grid-auto-flow:row; }
+}
+
 /* ---------------------------------------------------------------- misc */
 .tile { width:44px; height:44px; border-radius:var(--r-md); display:inline-flex; align-items:center; justify-content:center; background:var(--primary-soft); color:var(--primary); flex:0 0 auto; }
 .divider { height:1px; background:var(--border); border:none; margin:0; }
