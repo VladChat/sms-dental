@@ -648,7 +648,7 @@ https://app.missedcallsdental.com
 Current safe health state:
 
 - `/api/health`: pass.
-- `/api/internal/health`: pass.
+- `/api/internal/health`: removed intentionally for MVP (2026-05-29).
 - `db.ok`: true.
 - Inbound SMS webhook: verified.
 - Inbound voice webhook: verified end-to-end.
@@ -1365,7 +1365,7 @@ What changed:
   - setup email sender
   - onboarding safety flags
 - Updated `lib/env.ts` to read those non-secret settings from committed runtime config instead of direct `process.env`.
-- Preserved internal health endpoint auth using `INTERNAL_ADMIN_SECRET` (active operational requirement).
+- Removed internal health endpoint auth exception (`INTERNAL_ADMIN_SECRET`) for MVP.
 - Updated agent-facing docs (`AGENTS.md`, `MVP_BUILD_DOCS/backend-foundation-handoff.md`, `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`, `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`) with explicit secret-vs-config ownership and fake-placeholder prohibition.
 
 Validation:
@@ -1374,3 +1374,30 @@ Validation:
 - `npm run typecheck`: pass.
 - `npm run build`: pass.
 - No secret values printed.
+
+---
+
+## 2026-05-29 — Remove unused internal admin secret and internal health endpoint
+
+Purpose: remove dead internal-secret exception and keep only the public health endpoint for MVP.
+
+What changed:
+
+- Removed `app/api/internal/health/route.ts`.
+- Removed `INTERNAL_ADMIN_SECRET` schema/helper/presence reporting from `lib/env.ts`.
+- Kept `/api/health` as the only active MVP health endpoint.
+- Removed active docs/setup requirements that instructed operators to configure or use `INTERNAL_ADMIN_SECRET` and `/api/internal/health`.
+- Updated agent-facing rules to explicitly forbid reintroducing internal header-secret health endpoints unless a real admin/internal auth design is explicitly requested and documented.
+
+Validation:
+
+- Repository search confirms no active code references to:
+  - `INTERNAL_ADMIN_SECRET`
+  - `getInternalAdminEnv`
+  - `InternalAdminSchema`
+  - `internalAdminSecret`
+  - `x-internal-admin-secret`
+  - `api/internal/health`
+- `npm run typecheck`: pass.
+- `npm run build`: pass.
+- `.env.local` was not committed and no secret values were printed.

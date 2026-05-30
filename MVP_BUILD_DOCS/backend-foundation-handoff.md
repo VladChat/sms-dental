@@ -32,9 +32,9 @@ Secret/credential variables:
 - `VERCEL_TOKEN`
 - `RESEND_API_KEY`
 
-Operational exception currently still required by active code:
+Intentionally removed from MVP:
 
-- `INTERNAL_ADMIN_SECRET` (protects internal health endpoint auth in `app/api/internal/health/route.ts`)
+- `INTERNAL_ADMIN_SECRET` (the protected `/api/internal/health` endpoint was removed)
 
 Removed variables:
 
@@ -57,6 +57,8 @@ Before adding a new variable, classify it first:
 1. secret/credential -> `.env.local` or Vercel env
 2. non-secret runtime config -> committed `config/`
 3. dead/test placeholder -> do not add
+
+Do not reintroduce header-secret internal health endpoints unless a real admin/internal auth design is explicitly requested and documented.
 
 ## Future First Backend Tasks for Claude
 

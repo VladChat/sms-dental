@@ -124,6 +124,7 @@ Never write secrets, passwords, full database URLs with passwords, API keys, tok
 - `.env.local` is secret-only. Keep only actual secrets/credentials in it, such as API keys, auth tokens, webhook signing secrets, service-role keys, database URLs containing passwords, and documented credential pairs such as Twilio Account SID + Auth Token.
 - Do not place public URLs, feature flags, product constants, onboarding rules, sender email config, Twilio resource SIDs, Stripe account IDs, or other non-secret settings in `.env.local`; put those in committed config files under `config/`.
 - Never add fake placeholder secrets such as `local-dev-secret-change-later`.
+- `INTERNAL_ADMIN_SECRET` is intentionally removed from MVP and must not be reintroduced unless a real internal/admin auth design is explicitly requested and documented.
 
 ## Project Structure Rules
 

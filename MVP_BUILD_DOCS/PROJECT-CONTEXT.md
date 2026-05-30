@@ -210,7 +210,6 @@ The project uses or plans to use:
 - `STRIPE_WEBHOOK_SECRET`
 - `VERCEL_TOKEN`
 - `RESEND_API_KEY`
-- `INTERNAL_ADMIN_SECRET`
 - `PUBLIC_WEBHOOK_BASE_URL`
 
 Non-secret runtime settings belong in committed config under `config/runtime.config.ts`:
@@ -242,7 +241,7 @@ Current live backend:
 Verified:
 
 - `/api/health` passes.
-- `/api/internal/health` passes.
+- `/api/internal/health` was intentionally removed for MVP cleanup (2026-05-29).
 - deployed `db.ok` is true.
 - Supabase foundation migration has been applied.
 - Twilio inbound SMS webhook has been verified.
@@ -338,6 +337,7 @@ Always follow these rules:
 - Do not create live Stripe resources without approval.
 - Do not make DNS changes without approval.
 - Do not make fake medical claims.
+- Do not reintroduce `/api/internal/health` or `INTERNAL_ADMIN_SECRET` unless a real internal/admin auth design is explicitly requested and documented.
 
 ---
 
