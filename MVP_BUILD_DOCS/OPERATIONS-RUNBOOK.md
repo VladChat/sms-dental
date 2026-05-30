@@ -25,6 +25,34 @@ Good updates:
 
 Do not add secrets, raw long logs, temporary failed commands, duplicate facts, or speculation.
 
+## 0A. Env and Config Ownership (2026-05-29)
+
+Use this ownership rule before adding any new variable:
+
+1. secret/credential -> `.env.local` and Vercel env
+2. non-secret runtime config -> committed `config/runtime.config.ts`
+3. dead/test placeholder -> do not add
+
+`.env.local` and `.env.local.example` now keep secret/credential names only:
+
+- `SUPABASE_DB_URL`
+- `SUPABASE_DB_DIRECT_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `VERCEL_TOKEN`
+- `RESEND_API_KEY`
+
+Removed placeholder variable:
+
+- `JOB_RUNNER_SECRET`
+
+Operational exception still required by active endpoint auth:
+
+- `INTERNAL_ADMIN_SECRET` for `GET /api/internal/health`
+
 ---
 
 ## 1. Current Architecture
@@ -204,15 +232,19 @@ Required Vercel env names:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
-- `TWILIO_PHONE_NUMBER`
-- `TWILIO_PHONE_NUMBER_SID`
-- `TWILIO_MESSAGING_SERVICE_SID`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_ACCOUNT_ID`
-- `JOB_RUNNER_SECRET`
 - `INTERNAL_ADMIN_SECRET`
+- `VERCEL_TOKEN`
+- `RESEND_API_KEY`
 - `PUBLIC_WEBHOOK_BASE_URL`
+
+Non-secret runtime settings do not belong in `.env.local` and are owned by committed config:
+
+- `config/runtime.config.ts` for app/public URLs
+- `config/runtime.config.ts` for Twilio resource IDs (`TWILIO_PHONE_NUMBER`, `TWILIO_PHONE_NUMBER_SID`, `TWILIO_MESSAGING_SERVICE_SID`)
+- `config/runtime.config.ts` for Stripe account ID (`STRIPE_ACCOUNT_ID`)
+- `config/runtime.config.ts` for setup sender + onboarding safety flags
 
 After env changes, redeploy before testing.
 

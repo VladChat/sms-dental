@@ -170,8 +170,6 @@ TWILIO_AUTH_TOKEN
 TWILIO_API_KEY_SECRET
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
-JOB_RUNNER_SECRET
-INTERNAL_ADMIN_SECRET
 ```
 
 Real values go into:
@@ -289,7 +287,6 @@ Option B: Supabase scheduled job / pg_cron calls secured endpoint
 Job endpoint must require:
 
 ```txt
-JOB_RUNNER_SECRET
 ```
 
 Job must process:

@@ -121,6 +121,9 @@ Never write secrets, passwords, full database URLs with passwords, API keys, tok
 - Keep secrets only in local ignored files.
 - Public website copy must not expose private/admin email addresses.
 - Do not paste or print full secret values in reports or documentation.
+- `.env.local` is secret-only. Keep only actual secrets/credentials in it, such as API keys, auth tokens, webhook signing secrets, service-role keys, database URLs containing passwords, and documented credential pairs such as Twilio Account SID + Auth Token.
+- Do not place public URLs, feature flags, product constants, onboarding rules, sender email config, Twilio resource SIDs, Stripe account IDs, or other non-secret settings in `.env.local`; put those in committed config files under `config/`.
+- Never add fake placeholder secrets such as `local-dev-secret-change-later`.
 
 ## Project Structure Rules
 

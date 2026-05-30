@@ -19,8 +19,8 @@ import {
 // request, generate the setup token, persist its hash, and send the setup
 // link email. We never include the raw token in any log line.
 //
-// CORS: the public site is served from PUBLIC_SITE_URL. We respond with
-// an explicit ACAO for that exact origin only.
+// CORS: the public site origin comes from committed runtime config.
+// We respond with an explicit ACAO for that exact origin only.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,9 +85,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     expiresAt,
   });
 
-  // Owner-test fallback: when explicitly enabled, return the link in the
-  // response so the owner can complete onboarding before real email is
-  // configured. Production must not enable this flag.
+  // Owner-test fallback: when enabled in committed runtime config, return the
+  // link in the response so the owner can complete onboarding before real
+  // email is configured. Production must not enable this flag.
   if (isOwnerTestSetupLinkFallbackEnabled()) {
     await setSetupRequestStatus(created.id, "email_sent", {
       emailStatus: "owner_test_fallback",

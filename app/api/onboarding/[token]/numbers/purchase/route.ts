@@ -32,9 +32,10 @@ export const dynamic = "force-dynamic";
 // Purchases the user-selected Twilio number after validating:
 //   1. Setup token validity.
 //   2. Clinic exists and has no active office texting number (idempotent).
-//   3. TWILIO_NUMBER_PURCHASE_ENABLED is explicitly "true".
+//   3. runtime config purchase gate is enabled.
 //
-// On success, configures Voice + SMS webhooks pointing at APP_BASE_URL and
+// On success, configures Voice + SMS webhooks pointing at the configured app
+// base URL and
 // stores the mapping. SMS recovery remains DISABLED — onboarding never
 // enables live SMS.
 
