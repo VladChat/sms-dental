@@ -992,3 +992,54 @@ mobile-information non-sharing statement on Privacy, calmer SMS consent wording,
 and a single public service name ("Missed Calls Dental").
 
 Canonical field mapping: **`SMS-APPROVAL-FIELD-MAPPING.md`**.
+
+---
+
+## Update 2026-05-30 — Account setup redesign (4 sections, not a checklist)
+
+The Screen 4 page was redesigned from the app-style 6-step activation checklist
+into a single, calm **account setup page**. It supersedes the "Update
+2026-05-28" checklist layout above. Product logic is unchanged; only the
+experience and field grouping changed.
+
+The page now has four stacked sections — two editable forms, then two read-only
+status cards:
+
+1. **Business Profile** (form) — clinic name, **read-only login email**, main
+   office phone, full address (street, line 2, city, state, ZIP), website.
+   Saving marks `business_info_completed=true`.
+2. **SMS Approval Information** (form) — legal business name, business type, EIN,
+   and the authorized representative (first/last/email/phone). Contains the
+   generated **Approval documents** subsection (View + Copy link), a read-only
+   **"What we'll submit"** review summary, and the authorization checkbox.
+   Saving advances `sms_status` to `waiting_for_approval`.
+3. **Assigned Phone Number** (read-only status card) — merges the former "Phone
+   Number Setup" + "SMS Activation" into one number card with **Voice / Calls**
+   and **SMS / Texting** sub-statuses.
+4. **Billing & Payment Method** (read-only status card) — Stripe-shaped
+   placeholder: no card added yet, trial starts after activation, billing starts
+   only after SMS recovery is active. No live Stripe calls.
+
+Key changes from the 2026-05-28 layout:
+
+- **Field ownership moved.** Legal business name, EIN, and business type are now
+  saved by the **SMS Approval** form (`/a2p`), not the Business Profile form.
+  They are only needed for carrier approval. The business address is edited once
+  in Business Profile and reused for approval (never duplicated).
+- **No silent business-type default.** An unsaved record shows a neutral
+  "Select business type…" placeholder instead of pre-selecting `PRIVATE_PROFIT`,
+  so the form never looks complete before the owner chooses.
+- **Persistence hardened.** Both save endpoints return the **persisted** values
+  from the DB (`businessProfile` / `smsApproval` objects); the client reconciles
+  its state to the response, never to optimistic input. A DB write failure
+  returns a structured `save_failed` error and the UI shows it instead of a
+  false success. The page reads fresh from the DB on every load
+  (`force-dynamic`), so values survive reload.
+- **Component structure.** `BusinessProfile.tsx` is now a thin orchestrator;
+  sections live in `BusinessProfileForm.tsx`, `SmsApprovalForm.tsx`,
+  `AssignedNumberCard.tsx`, `BillingCard.tsx`, with shared primitives in
+  `AccountUI.tsx` and shared types in `account-types.ts`. Styling uses the
+  global design-system classes plus new `.acct-*` rules (the old `.bp-*`
+  sidebar/checklist classes were removed).
+
+Canonical field mapping: **`SMS-APPROVAL-FIELD-MAPPING.md`**.

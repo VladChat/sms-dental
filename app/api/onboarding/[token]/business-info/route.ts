@@ -12,24 +12,23 @@ import {
   updateBusinessInformation,
 } from "../../../../../lib/db/clinics";
 import { isValidE164, normalizePhone } from "../../../../../lib/phone/normalize";
-import { BUSINESS_TYPES, isSafeHttpsUrl } from "../../../../../lib/validation/url";
+import { isSafeHttpsUrl } from "../../../../../lib/validation/url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/onboarding/[token]/business-info
 //
-// Saves the Business Information card on the Business Profile page. Reuses the
-// office-profile fields (name, main phone, ZIP) and adds legal name, EIN/Tax
-// ID, business type, and business address. Marks business_info_completed and
-// (re)generates the public business slug. U.S.-only.
+// Saves the Business Profile section: the clinic's public-facing identity and
+// business address. Legal business name, EIN, and business type are NOT saved
+// here — they belong to the SMS Approval section (see ../a2p). Marks
+// business_info_completed and (re)generates the public business slug.
+// Returns the persisted values so the UI reflects DB-confirmed state, never
+// just optimistic input. U.S.-only.
 
 const BusinessInfoSchema = z.object({
   name: z.string().trim().min(2).max(160),
   main_phone: z.string().trim().min(7).max(40),
-  legal_business_name: z.string().trim().min(2).max(200),
-  ein_tax_id: z.string().trim().min(2).max(40),
-  business_type: z.enum(BUSINESS_TYPES),
   street_address: z.string().trim().min(2).max(200),
   address_line2: z.string().trim().max(200).optional().or(z.literal("")),
   city: z.string().trim().min(1).max(120),
@@ -69,11 +68,7 @@ export async function POST(
   if (!parsed.success) {
     const zipIssue = parsed.error.issues.find((i) => i.path.includes("postal_code"));
     if (zipIssue) return jsonBadRequest("Please enter a 5-digit ZIP code.");
-    const typeIssue = parsed.error.issues.find((i) => i.path.includes("business_type"));
-    if (typeIssue) {
-      return jsonBadRequest("Please choose a business type.");
-    }
-    return jsonBadRequest("Please complete all required business information fields.");
+    return jsonBadRequest("Please complete all required business profile fields.");
   }
 
   const mainPhone = normalizePhone(parsed.data.main_phone);
@@ -93,19 +88,27 @@ export async function POST(
 
   const addressLine2Raw = parsed.data.address_line2?.trim() ?? "";
 
-  const clinic = await updateBusinessInformation(setupRequest.clinic_id, {
-    name: parsed.data.name,
-    mainPhone,
-    postalCode: parsed.data.postal_code,
-    legalBusinessName: parsed.data.legal_business_name,
-    einTaxId: parsed.data.ein_tax_id,
-    businessType: parsed.data.business_type,
-    streetAddress: parsed.data.street_address,
-    addressLine2: addressLine2Raw.length > 0 ? addressLine2Raw : null,
-    city: parsed.data.city,
-    stateRegion: parsed.data.state_region,
-    website,
-  });
+  // Persist. A DB failure must surface as a structured error, never a silent
+  // "success" that disappears on reload.
+  let clinic;
+  try {
+    clinic = await updateBusinessInformation(setupRequest.clinic_id, {
+      name: parsed.data.name,
+      mainPhone,
+      streetAddress: parsed.data.street_address,
+      addressLine2: addressLine2Raw.length > 0 ? addressLine2Raw : null,
+      city: parsed.data.city,
+      stateRegion: parsed.data.state_region,
+      postalCode: parsed.data.postal_code,
+      website,
+    });
+  } catch {
+    return jsonError(
+      500,
+      "save_failed",
+      "We couldn't save your business profile. Please try again.",
+    );
+  }
 
   // Generate or keep the public business slug now that we have full data.
   let slug = clinic.slug;
@@ -117,5 +120,21 @@ export async function POST(
     }
   }
 
-  return jsonOk({ ok: true, clinic_id: clinic.id, slug });
+  // Echo persisted values so the client reconciles its state to the DB.
+  return jsonOk({
+    ok: true,
+    clinic_id: clinic.id,
+    slug,
+    businessProfile: {
+      name: clinic.name,
+      mainPhone: clinic.main_phone ?? "",
+      streetAddress: clinic.street_address ?? "",
+      addressLine2: clinic.address_line2 ?? "",
+      city: clinic.city ?? "",
+      stateRegion: clinic.state_region ?? "",
+      postalCode: clinic.postal_code ?? "",
+      website: clinic.website ?? "",
+      completed: clinic.business_info_completed,
+    },
+  });
 }

@@ -58,39 +58,46 @@ export default async function SetupTokenPage({
   }
 
   const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
+  // This data is read fresh from the DB on every load (force-dynamic), so the
+  // account page always reflects persisted state after any save + reload.
   const data: BusinessProfileData = {
     token,
     loginEmail: setupRequest.owner_email,
     publicBaseUrl,
-    clinic: {
+    slug: clinic.slug,
+    businessProfile: {
       name: clinic.name,
       mainPhone: clinic.main_phone ?? "",
-      postalCode: clinic.postal_code ?? "",
-      legalBusinessName: clinic.legal_business_name ?? "",
-      einTaxId: clinic.ein_tax_id ?? "",
-      businessType: clinic.business_type ?? "",
       streetAddress: clinic.street_address ?? "",
       addressLine2: clinic.address_line2 ?? "",
       city: clinic.city ?? "",
       stateRegion: clinic.state_region ?? "",
+      postalCode: clinic.postal_code ?? "",
       website: clinic.website ?? "",
-      slug: clinic.slug,
-      businessInfoCompleted: clinic.business_info_completed,
-      a2p: {
-        firstName: clinic.a2p_rep_first_name ?? "",
-        lastName: clinic.a2p_rep_last_name ?? "",
-        email: clinic.a2p_rep_email ?? "",
-        phone: clinic.a2p_rep_phone ?? "",
-        authorized: clinic.a2p_authorized,
-        completed: clinic.a2p_info_completed,
-      },
+      completed: clinic.business_info_completed,
+    },
+    smsApproval: {
+      legalBusinessName: clinic.legal_business_name ?? "",
+      einTaxId: clinic.ein_tax_id ?? "",
+      businessType: clinic.business_type ?? "",
+      repFirstName: clinic.a2p_rep_first_name ?? "",
+      repLastName: clinic.a2p_rep_last_name ?? "",
+      repEmail: clinic.a2p_rep_email ?? "",
+      repPhone: clinic.a2p_rep_phone ?? "",
+      authorized: clinic.a2p_authorized,
+      completed: clinic.a2p_info_completed,
+    },
+    number: {
       localNumberStatus: clinic.local_number_status,
       smsStatus: clinic.sms_status,
+    },
+    billing: {
       billingStatus: clinic.billing_status,
+      trialDays: 21,
     },
   };
 
-  // BusinessProfile renders its own wide app shell (sidebar + content), so it
-  // is not wrapped in the narrow PageShell used by the earlier steps.
+  // BusinessProfile renders its own wide account shell, so it is not wrapped in
+  // the narrow PageShell used by the earlier office-creation step.
   return <BusinessProfile data={data} />;
 }

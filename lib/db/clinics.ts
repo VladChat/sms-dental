@@ -190,23 +190,24 @@ export async function ensureClinicSlug(
   return slug;
 }
 
+// Business Profile section — public-facing identity + address only. Legal
+// name, EIN, and business type were moved to the SMS Approval section (they are
+// only needed for carrier/A2P approval), so they are intentionally NOT here.
 export type BusinessInformationInput = {
   name: string;
   mainPhone: string;
-  postalCode: string;
-  legalBusinessName: string;
-  einTaxId: string;
-  businessType: string;
   streetAddress: string;
   addressLine2?: string | null;
   city: string;
   stateRegion: string;
+  postalCode: string;
   website?: string | null;
 };
 
 /**
- * Save the Business Information card. Marks business_info_completed=true.
- * Does not touch SMS or billing state.
+ * Save the Business Profile section. Marks business_info_completed=true.
+ * Does not touch legal/EIN/business-type, SMS, or billing state.
+ * Returns the persisted row so callers can echo DB-confirmed values to the UI.
  */
 export async function updateBusinessInformation(
   clinicId: string,
@@ -218,14 +219,11 @@ export async function updateBusinessInformation(
     set
       name = ${input.name},
       main_phone = ${input.mainPhone},
-      postal_code = ${input.postalCode},
-      legal_business_name = ${input.legalBusinessName},
-      ein_tax_id = ${input.einTaxId},
-      business_type = ${input.businessType},
       street_address = ${input.streetAddress},
       address_line2 = ${input.addressLine2 ?? null},
       city = ${input.city},
       state_region = ${input.stateRegion},
+      postal_code = ${input.postalCode},
       website = ${input.website ?? null},
       business_info_completed = true
     where id = ${clinicId}
@@ -236,7 +234,13 @@ export async function updateBusinessInformation(
   return row;
 }
 
+// SMS Approval section — the legal/registration fields plus the authorized
+// representative. These are the values needed specifically for carrier/A2P
+// approval submission.
 export type A2pInformationInput = {
+  legalBusinessName: string;
+  einTaxId: string;
+  businessType: string;
   repFirstName: string;
   repLastName: string;
   repEmail: string;
@@ -245,9 +249,9 @@ export type A2pInformationInput = {
 };
 
 /**
- * Save the A2P Approval Information card. Marks a2p_info_completed=true and
+ * Save the SMS Approval Information card. Marks a2p_info_completed=true and
  * advances sms_status to 'waiting_for_approval'. Never enables live SMS:
- * sms_recovery_enabled stays false.
+ * sms_recovery_enabled stays false. Returns the persisted row.
  */
 export async function updateA2pInformation(
   clinicId: string,
@@ -257,6 +261,9 @@ export async function updateA2pInformation(
   const rows = await sql<ClinicOnboardingRow[]>`
     update public.clinics
     set
+      legal_business_name = ${input.legalBusinessName},
+      ein_tax_id = ${input.einTaxId},
+      business_type = ${input.businessType},
       a2p_rep_first_name = ${input.repFirstName},
       a2p_rep_last_name = ${input.repLastName},
       -- Representative title is system-generated, not customer-entered.
