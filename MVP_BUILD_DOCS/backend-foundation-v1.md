@@ -18,7 +18,7 @@ https://app.missedcallsdental.com
 Verified:
 
 - `/api/health` passes.
-- `/api/internal/health` passes with `db.ok: true`.
+- `/api/internal/health` was part of earlier foundation work but is intentionally removed from MVP as of 2026-05-29.
 - Supabase foundation migration has been applied.
 - Twilio account: Active / Full (upgraded from Trial on 2026-05-26).
 - Twilio webhooks have been configured through Twilio API.
@@ -66,7 +66,6 @@ App Router files:
 API routes:
 
 - `GET /api/health`
-- `GET /api/internal/health`
 - `POST /api/webhooks/twilio/voice/incoming`
 - `POST /api/webhooks/twilio/messaging/incoming`
 - `POST /api/webhooks/twilio/messaging/status`

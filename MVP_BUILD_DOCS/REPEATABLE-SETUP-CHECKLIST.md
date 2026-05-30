@@ -48,7 +48,6 @@ Current project status: complete.
 - [ ] Build Next.js App Router foundation from repo root.
 - [ ] Keep existing marketing site untouched.
 - [ ] Add `/api/health`.
-- [ ] Add `/api/internal/health`.
 - [ ] Add lazy env validation.
 - [ ] Add DB helper.
 - [ ] Add Twilio signature validation helper.
@@ -61,6 +60,8 @@ Current project status: complete.
 - [ ] Commit and push safe source files only.
 
 Current project status: complete.
+
+MVP note (2026-05-29): do not add a separate header-secret internal health endpoint. Keep `/api/health` as the only MVP health endpoint unless a real admin/internal auth design is explicitly requested and documented.
 
 Known commit:
 
@@ -103,7 +104,6 @@ supabase/migrations/20260525000100_backend_foundation.sql
 - [ ] Use transaction pooler for `SUPABASE_DB_URL`.
 - [ ] Deploy.
 - [ ] Test `/api/health`.
-- [ ] Test `/api/internal/health`.
 - [ ] Confirm deployed `db.ok: true`.
 
 Current project status: complete.
@@ -156,7 +156,6 @@ aa4eeb9 fix: support Supabase transaction pooler
 - [ ] Set `PUBLIC_WEBHOOK_BASE_URL` to custom backend domain.
 - [ ] Redeploy.
 - [ ] Test `/api/health` on custom domain.
-- [ ] Test `/api/internal/health` on custom domain.
 - [ ] Confirm `db.ok: true`.
 
 Current project status: complete.

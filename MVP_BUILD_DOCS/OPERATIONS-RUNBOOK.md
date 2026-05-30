@@ -49,9 +49,9 @@ Removed placeholder variable:
 
 - `JOB_RUNNER_SECRET`
 
-Operational exception still required by active endpoint auth:
+Also intentionally removed from MVP:
 
-- `INTERNAL_ADMIN_SECRET` for `GET /api/internal/health`
+- `INTERNAL_ADMIN_SECRET` (protected internal health endpoint removed)
 
 ---
 
@@ -138,26 +138,11 @@ Public backend health:
 https://app.missedcallsdental.com/api/health
 ```
 
-Internal backend health:
-
-```txt
-https://app.missedcallsdental.com/api/internal/health
-```
-
-Requires header:
-
-```txt
-x-internal-admin-secret: value from local .env.local
-```
-
 Expected result:
 
 - `ok: true`
-- env presence confirmed
-- `db.configured: true`
-- `db.ok: true`
-
-Never print `INTERNAL_ADMIN_SECRET`.
+- `service: missed-calls-dental`
+- `version: foundation-v1`
 
 Local checks:
 
@@ -234,7 +219,6 @@ Required Vercel env names:
 - `TWILIO_AUTH_TOKEN`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `INTERNAL_ADMIN_SECRET`
 - `VERCEL_TOKEN`
 - `RESEND_API_KEY`
 - `PUBLIC_WEBHOOK_BASE_URL`
@@ -740,8 +724,8 @@ TWILIO_NUMBER_PURCHASE_ENABLED=true        # only when ready to spend money
 OWNER_TEST_SETUP_LINK_FALLBACK=false       # never true in public production
 ```
 
-Verify presence (no values) via `GET /api/internal/health` with the
-internal admin secret.
+Verify liveness via `GET /api/health`. For environment-variable presence,
+use Vercel Project Settings (do not expose secret presence in a public endpoint).
 
 ### Setup email delivery — configured (2026-05-28)
 

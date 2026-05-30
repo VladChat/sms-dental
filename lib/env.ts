@@ -30,10 +30,6 @@ const SupabaseServiceRoleSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: requiredString,
 });
 
-const InternalAdminSchema = z.object({
-  INTERNAL_ADMIN_SECRET: requiredString,
-});
-
 const PublicWebhookBaseSchema = z.object({
   PUBLIC_WEBHOOK_BASE_URL: z.string().url(),
 });
@@ -77,10 +73,6 @@ export function getSupabaseDbEnv() {
 
 export function getSupabaseServiceRoleEnv() {
   return SupabaseServiceRoleSchema.parse(process.env);
-}
-
-export function getInternalAdminEnv() {
-  return InternalAdminSchema.parse(process.env);
 }
 
 // SMS recovery mode. Never throws — defaults to "disabled" if unset or unknown.
@@ -161,7 +153,7 @@ export function isOwnerTestSetupLinkFallbackEnabled(): boolean {
   return runtimeConfig.onboarding.ownerTestSetupLinkFallback;
 }
 
-// Safe presence check for the internal health route. Returns booleans only,
+// Safe presence check for health and runtime wiring. Returns booleans only,
 // never values. Used to report which feature areas are configured.
 export type EnvPresenceReport = {
   supabaseDbUrl: boolean;
@@ -174,7 +166,6 @@ export type EnvPresenceReport = {
   stripeSecretKey: boolean;
   stripeWebhookSecret: boolean;
   stripeAccountId: boolean;
-  internalAdminSecret: boolean;
   publicWebhookBaseUrl: boolean;
   smsRecoveryMode: boolean;
   smsTestAllowedTo: boolean;
@@ -203,7 +194,6 @@ export function getEnvPresenceReport(): EnvPresenceReport {
     stripeSecretKey: present("STRIPE_SECRET_KEY"),
     stripeWebhookSecret: present("STRIPE_WEBHOOK_SECRET"),
     stripeAccountId: runtimeConfig.stripe.accountId.trim().length > 0,
-    internalAdminSecret: present("INTERNAL_ADMIN_SECRET"),
     publicWebhookBaseUrl: present("PUBLIC_WEBHOOK_BASE_URL"),
     smsRecoveryMode: present("SMS_RECOVERY_MODE"),
     smsTestAllowedTo: present("SMS_TEST_ALLOWED_TO"),
