@@ -115,6 +115,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   } catch (err) {
     const status = err instanceof SetupEmailDeliveryError ? err.status : 0;
+    // Surface the failure in Vercel runtime logs so future regressions are
+    // visible immediately. No secrets, no recipient email, no setup token —
+    // only HTTP status and the upstream error body excerpt (Resend returns
+    // structured JSON like {"name":"...","message":"..."}).
+    const bodyExcerpt =
+      err instanceof SetupEmailDeliveryError
+        ? err.body.slice(0, 200)
+        : err instanceof Error
+          ? err.message.slice(0, 200)
+          : "unknown_error";
+    console.error("[setup-requests] email_delivery_failed", {
+      setupRequestId: created.id,
+      resendStatus: status || "unknown",
+      bodyExcerpt,
+    });
     await setSetupRequestStatus(created.id, "requested", {
       emailStatus: `failed:${status || "unknown"}`,
     });
