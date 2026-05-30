@@ -80,13 +80,21 @@
             <div class="thread">
               <div class="bubble clinic"><small>Clinic</small>Hi, this is Bright Smile Dental. Sorry we missed your call. How can we help? Reply STOP to opt out.</div>
               <div class="bubble patient"><small>Patient</small>Hi! I&rsquo;d like to book a cleaning.</div>
-              <div class="bubble clinic"><small>Clinic</small>Happy to help. What day or time usually works best?</div>
-              <div class="bubble patient"><small>Patient</small>Tuesday morning if possible.</div>
+              <div class="bubble clinic"><small>Clinic</small>Happy to help. What name should we use, and what time works best?</div>
+              <div class="bubble patient"><small>Patient</small>John Smith. Tuesday morning if possible.</div>
             </div>
-            <div class="mock-success" role="status">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg>
-              Front desk notified &mdash; ready to book
-            </div>
+            <aside class="request-card" role="status" aria-label="Front-desk request ready">
+              <header class="request-card__head">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path><path d="m9 16 2 2 4-4"></path></svg>
+                <span>Request ready for front desk</span>
+              </header>
+              <dl class="request-card__list">
+                <div class="rc-row"><dt>Name</dt><dd>John Smith</dd></div>
+                <div class="rc-row"><dt>Phone</dt><dd class="t-mono">(555) 012-1234</dd></div>
+                <div class="rc-row"><dt>Request</dt><dd>Cleaning appointment</dd></div>
+                <div class="rc-row"><dt>Preferred time</dt><dd>Tuesday morning</dd></div>
+              </dl>
+            </aside>
           </div>
         </figure>
       </div>
