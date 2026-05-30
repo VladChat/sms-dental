@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-05-26 (opt-out enforcement)
+Last updated: 2026-05-30 (account setup redesign)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
