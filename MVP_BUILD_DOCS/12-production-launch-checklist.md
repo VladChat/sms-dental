@@ -164,7 +164,6 @@ POST /api/webhooks/stripe
 [ ] Supabase production public config + private secrets set
 [ ] Twilio production identifiers + private secrets set
 [ ] Stripe live identifiers + private secrets set
-[ ] JOB_RUNNER_SECRET set
 [ ] ADMIN_EMAIL_ALLOWLIST set
 [ ] Error monitoring DSN set if used
 [ ] Logs available to AI agent/founder

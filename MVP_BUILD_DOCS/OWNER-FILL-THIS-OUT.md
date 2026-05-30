@@ -221,8 +221,6 @@ Local `.env.local`:
 [ ] TWILIO_API_KEY_SECRET configured, preferred for app runtime
 [ ] STRIPE_SECRET_KEY configured, test mode first
 [ ] STRIPE_WEBHOOK_SECRET configured, test mode first
-[ ] JOB_RUNNER_SECRET configured
-[ ] INTERNAL_ADMIN_SECRET configured
 ```
 
 Vercel staging:

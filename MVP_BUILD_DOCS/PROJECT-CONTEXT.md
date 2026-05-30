@@ -197,24 +197,29 @@ The project uses or plans to use:
 
 ---
 
-## 10. Required Environment Variable Names
+## 10. Required Secret Environment Variable Names
 
-The repository currently uses these environment variable names. Never print values. Never commit real values.
+`.env.local` is secret-only. Never print values. Never commit real values.
 
 - `SUPABASE_DB_URL`
 - `SUPABASE_DB_DIRECT_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
-- `TWILIO_PHONE_NUMBER`
-- `TWILIO_PHONE_NUMBER_SID`
-- `TWILIO_MESSAGING_SERVICE_SID`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_ACCOUNT_ID`
-- `JOB_RUNNER_SECRET`
+- `VERCEL_TOKEN`
+- `RESEND_API_KEY`
 - `INTERNAL_ADMIN_SECRET`
 - `PUBLIC_WEBHOOK_BASE_URL`
+
+Non-secret runtime settings belong in committed config under `config/runtime.config.ts`:
+
+- app/public domains
+- Twilio resource IDs (`TWILIO_PHONE_NUMBER`, `TWILIO_PHONE_NUMBER_SID`, `TWILIO_MESSAGING_SERVICE_SID`)
+- Stripe account ID (`STRIPE_ACCOUNT_ID`)
+- setup email sender config
+- onboarding safety feature flags
 
 Local development values belong in `.env.local`.
 

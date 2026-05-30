@@ -5,6 +5,8 @@ export const runtimeConfig = {
   app: {
     name: "Missed Calls Dental",
     url: "https://missedcallsdental.com/",
+    appBaseUrl: "https://app.missedcallsdental.com",
+    publicSiteUrl: "https://missedcallsdental.com",
     environment: "local",
     defaultTimezone: "America/Chicago",
     supportEmail: "support@missedcallsdental.com",
@@ -13,11 +15,7 @@ export const runtimeConfig = {
   },
 
   email: {
-    // Default From for transactional setup emails sent via Resend. Sent from
-    // the Resend-verified subdomain mail.missedcallsdental.com. Override with
-    // the optional SETUP_EMAIL_FROM env var; RESEND_API_KEY is the only
-    // required secret for sending. Keep this as the single source of truth —
-    // do not hardcode the sender anywhere else.
+    // Default From for transactional setup emails sent via Resend.
     defaultSetupFrom: "Missed Calls Dental <no-reply@mail.missedcallsdental.com>",
   },
 
@@ -27,13 +25,23 @@ export const runtimeConfig = {
   },
 
   twilio: {
-    accountSid: "TO_FILL_AFTER_TWILIO_ACCOUNT_CREATED",
-    defaultMessagingServiceSid: "TO_FILL_AFTER_TWILIO_MESSAGING_SERVICE_CREATED",
+    // Non-secret Twilio resource configuration.
+    phoneNumber: "+18447234944",
+    phoneNumberSid: "PN3d6d4c7f327b299a4b04e4bd7e05a402",
+    messagingServiceSid: "MG83239dc7dfdf8aa6c9b397e8258f7d93",
   },
 
   stripe: {
+    // Non-secret Stripe account identifier used for metadata/ops context.
+    accountId: "acct_1TVG3U4ZSHLicmej",
     monthlyPriceId: "TO_FILL_AFTER_STRIPE_PRICE_CREATED",
     annualPriceId: "TO_FILL_AFTER_STRIPE_ANNUAL_PRICE_CREATED_IF_USED",
+  },
+
+  onboarding: {
+    // Non-secret runtime flags.
+    twilioNumberPurchaseEnabled: false,
+    ownerTestSetupLinkFallback: true,
   },
 
   billing: {

@@ -1347,3 +1347,30 @@ only — not hardcoded, no allowlist):
 Safety: SMS sent 0; no clinic `sms_recovery_enabled` flipped (only pre-existing
 owner-test); no Stripe ids; billing not started; no Twilio number purchase; no
 Twilio/Stripe/Supabase/DNS change; no env change; no secrets printed.
+
+---
+
+## 2026-05-29 — Secret-only local env cleanup and config ownership
+
+Purpose: enforce `.env.local` as secrets-only and move non-secret runtime settings to committed config.
+
+What changed:
+
+- Updated `.env.local.example` to a secret-only template with variable names only.
+- Updated local `.env.local` to keep only secret/credential variables; removed non-secret settings and removed `JOB_RUNNER_SECRET`.
+- Centralized non-secret runtime settings in `config/runtime.config.ts`:
+  - app/public URLs
+  - Twilio phone number + Twilio resource SIDs
+  - Stripe account ID
+  - setup email sender
+  - onboarding safety flags
+- Updated `lib/env.ts` to read those non-secret settings from committed runtime config instead of direct `process.env`.
+- Preserved internal health endpoint auth using `INTERNAL_ADMIN_SECRET` (active operational requirement).
+- Updated agent-facing docs (`AGENTS.md`, `MVP_BUILD_DOCS/backend-foundation-handoff.md`, `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`, `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`) with explicit secret-vs-config ownership and fake-placeholder prohibition.
+
+Validation:
+
+- `.env.local` remained untracked and unstaged.
+- `npm run typecheck`: pass.
+- `npm run build`: pass.
+- No secret values printed.

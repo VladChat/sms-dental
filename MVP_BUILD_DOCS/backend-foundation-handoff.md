@@ -17,18 +17,46 @@
 
 ## Required Environment Variable Names
 
+- `.env.local` purpose: local secret/credential values only. Never commit.
+- `.env.local.example` purpose: secret-only template with variable names only. No real values.
+
+Secret/credential variables:
+
 - `SUPABASE_DB_URL`
+- `SUPABASE_DB_DIRECT_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
-- `TWILIO_PHONE_NUMBER`
-- `TWILIO_PHONE_NUMBER_SID`
-- `TWILIO_MESSAGING_SERVICE_SID`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_ACCOUNT_ID`
-- `JOB_RUNNER_SECRET`
-- `INTERNAL_ADMIN_SECRET`
+- `VERCEL_TOKEN`
+- `RESEND_API_KEY`
+
+Operational exception currently still required by active code:
+
+- `INTERNAL_ADMIN_SECRET` (protects internal health endpoint auth in `app/api/internal/health/route.ts`)
+
+Removed variables:
+
+- `JOB_RUNNER_SECRET` (placeholder/dead in current app code; do not reintroduce unless a real production requirement is designed and documented)
+
+## Committed Runtime Config Ownership
+
+Non-secret application/runtime settings live in committed config under `config/runtime.config.ts`:
+
+- public app/site URLs
+- Twilio phone number / Twilio phone number SID / Twilio messaging service SID
+- Stripe account ID
+- setup email sender config
+- onboarding safety flags (`twilioNumberPurchaseEnabled`, `ownerTestSetupLinkFallback`)
+
+Future agent rule:
+
+Before adding a new variable, classify it first:
+
+1. secret/credential -> `.env.local` or Vercel env
+2. non-secret runtime config -> committed `config/`
+3. dead/test placeholder -> do not add
 
 ## Future First Backend Tasks for Claude
 
