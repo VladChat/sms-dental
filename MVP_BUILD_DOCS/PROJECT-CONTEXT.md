@@ -210,7 +210,6 @@ The project uses or plans to use:
 - `STRIPE_WEBHOOK_SECRET`
 - `VERCEL_TOKEN`
 - `RESEND_API_KEY`
-- `PUBLIC_WEBHOOK_BASE_URL`
 
 Non-secret runtime settings belong in committed config under `config/runtime.config.ts`:
 
@@ -219,6 +218,7 @@ Non-secret runtime settings belong in committed config under `config/runtime.con
 - Stripe account ID (`STRIPE_ACCOUNT_ID`)
 - setup email sender config
 - onboarding safety feature flags
+- deployment/runtime webhook base URL (`PUBLIC_WEBHOOK_BASE_URL`) when needed for Twilio signature URL reconstruction
 
 Local development values belong in `.env.local`.
 
