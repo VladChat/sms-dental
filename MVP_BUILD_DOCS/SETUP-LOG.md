@@ -1401,3 +1401,57 @@ Validation:
 - `npm run typecheck`: pass.
 - `npm run build`: pass.
 - `.env.local` was not committed and no secret values were printed.
+
+---
+
+## 2026-05-30 — Setup email regression: owner-test fallback shipped as `true`
+
+Symptom: setup links were still being created and the old links still
+worked, but no setup email arrived after the env refactor.
+
+Root cause: commit `02bf03a` ("chore: keep local env secret-only") moved
+the owner-test setup-link fallback flag from the env var
+`OWNER_TEST_SETUP_LINK_FALLBACK` into committed runtime config under
+`runtimeConfig.onboarding.ownerTestSetupLinkFallback`. The new committed
+default was **`true`**. The `/api/setup-requests` handler short-circuits
+to the fallback branch when that helper returns `true`, which skips
+`sendSetupLinkEmail` entirely, marks `email_status='owner_test_fallback'`,
+and returns success (with `setup_url` in the JSON body). The browser
+script doesn't display `setup_url` — it just redirects to `confirm.html`
+on `ok:true`, so the form appeared to succeed and no email was sent.
+
+Evidence:
+
+- Controlled production POST to `/api/setup-requests` returned
+  `{ ok:true, confirm_url, setup_url }`. The presence of `setup_url`
+  proves the fallback branch fired.
+- `setup_requests` rows for the owner test email confirm the timeline:
+  the last `email_status='sent'` row is at 2026-05-28 22:32 (before the
+  refactor); every row after 2026-05-29 21:33 (when commit `02bf03a`
+  auto-deployed) is `email_status='owner_test_fallback'`.
+- `RESEND_API_KEY` is present on Vercel production (encrypted), so the
+  email path would have worked if the route reached it.
+
+Fix:
+
+- `config/runtime.config.ts`:
+  `onboarding.ownerTestSetupLinkFallback: true` -> `false`, with a comment
+  documenting that production must keep this `false`.
+- `app/api/setup-requests/route.ts`: added `console.error` of the Resend
+  delivery failure (HTTP status + first 200 chars of upstream body
+  excerpt; no secrets, no recipient email, no setup token) so future
+  Resend regressions surface in Vercel runtime logs instead of being
+  hidden behind the DB `email_status` column.
+
+Validation:
+
+- `npm run typecheck`: pass.
+- `npm run build`: pass.
+- Owner-only controlled POST after the auto-deploy: response no longer
+  includes `setup_url`; latest `setup_requests` row for the owner test
+  email shows `email_status='sent'`. (Owner verifies receipt visually in
+  inbox.)
+
+Side note: the legacy `OWNER_TEST_SETUP_LINK_FALLBACK` env var is still
+present on Vercel but is ignored by the new code path; it can be deleted
+at the owner's leisure (no behavior depends on it).

@@ -41,7 +41,11 @@ export const runtimeConfig = {
   onboarding: {
     // Non-secret runtime flags.
     twilioNumberPurchaseEnabled: false,
-    ownerTestSetupLinkFallback: true,
+    // Production must keep this false so /api/setup-requests actually sends the
+    // Resend email instead of short-circuiting to a fallback link. Only flip
+    // to true for short, controlled owner-only API tests when Resend is
+    // intentionally bypassed.
+    ownerTestSetupLinkFallback: false,
   },
 
   billing: {
