@@ -36,9 +36,13 @@ export function AssignedNumberCard({
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
       <div className="acct-number">
         <span className="t-eyebrow">Assigned phone number</span>
-        <p className={`t-h3${assignedPhone ? " t-mono" : ""}`} style={{ margin: "var(--space-1) 0 0" }}>
-          {assignedPhone ?? "Not assigned yet"}
-        </p>
+        {assignedPhone ? (
+          <p className="t-h3 t-mono" style={{ margin: "var(--space-1) 0 0" }}>{assignedPhone}</p>
+        ) : (
+          <p className="t-body" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
+            Not assigned yet
+          </p>
+        )}
       </div>
 
       <div>

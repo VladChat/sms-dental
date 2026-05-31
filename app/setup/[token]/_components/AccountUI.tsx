@@ -17,6 +17,7 @@ export type StatusKind =
   | "active"
   | "waiting"
   | "pending"
+  | "needs_setup"
   | "needs_action"
   | "not_started"
   | "not_active"
@@ -24,11 +25,16 @@ export type StatusKind =
 
 type StatusIconName = "check" | "clock" | "alert" | "dot";
 
+// Calm, professional vocabulary. `needs_setup` (amber dot) is the default for
+// "not finished yet" setup states — it is intentionally softer than
+// `needs_action` (amber alert), which is reserved for states that genuinely ask
+// the owner to act now (e.g. trial ended). Red (`error`) is for real errors only.
 const STATUS_META: Record<StatusKind, { label: string; tone: BadgeTone; icon: StatusIconName }> = {
   complete: { label: "Complete", tone: "success", icon: "check" },
   active: { label: "Active", tone: "success", icon: "check" },
   waiting: { label: "Waiting for approval", tone: "info", icon: "clock" },
   pending: { label: "Pending", tone: "neutral", icon: "clock" },
+  needs_setup: { label: "Needs setup", tone: "warning", icon: "dot" },
   needs_action: { label: "Needs action", tone: "warning", icon: "alert" },
   not_started: { label: "Not started", tone: "neutral", icon: "dot" },
   not_active: { label: "Not active", tone: "neutral", icon: "dot" },
