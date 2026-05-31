@@ -6,6 +6,7 @@ import { BusinessProfileForm } from "./BusinessProfileForm";
 import { SmsApprovalForm } from "./SmsApprovalForm";
 import { AssignedNumberCard } from "./AssignedNumberCard";
 import { BillingCard } from "./BillingCard";
+import { SecurityCard } from "./SecurityCard";
 import type {
   BusinessProfileData,
   BusinessProfileFields,
@@ -16,6 +17,7 @@ import type {
 export type { BusinessProfileData } from "./account-types";
 
 type SectionId = "phone" | "business" | "sms" | "billing";
+type ExtendedSectionId = SectionId | "security";
 
 export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [biz, setBiz] = useState<BusinessProfileFields>(stripCompleted(data.businessProfile));
@@ -30,18 +32,19 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
 
   // Phone number is the customer's primary resource, so it is first and opens by
   // default. We do NOT auto-jump to the first incomplete section.
-  const [active, setActive] = useState<SectionId>("phone");
+  const [active, setActive] = useState<ExtendedSectionId>("phone");
 
   const phoneStatus = phoneSectionStatus(data.number.localNumberStatus, smsStatus, hasPaymentMethod);
   const bizStatus: StatusKind = bizDone ? "complete" : "needs_setup";
   const smsSectionStatus: StatusKind = smsDone ? "complete" : "needs_setup";
   const billingStatus: StatusKind = hasPaymentMethod ? "complete" : "needs_setup";
 
-  const navItems: { id: SectionId; label: string; status: StatusKind }[] = [
+  const navItems: { id: ExtendedSectionId; label: string; status: StatusKind }[] = [
     { id: "phone", label: "Phone number", status: phoneStatus },
     { id: "business", label: "Business profile", status: bizStatus },
     { id: "sms", label: "SMS approval", status: smsSectionStatus },
     { id: "billing", label: "Billing", status: billingStatus },
+    { id: "security", label: "Security", status: "complete" },
   ];
 
   return (
@@ -145,6 +148,19 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 hasPaymentMethod={hasPaymentMethod}
                 trialDaysRemaining={data.billing.trialDaysRemaining}
                 trialEnded={data.billing.trialEnded}
+              />
+            </Section>
+          )}
+
+          {active === "security" && (
+            <Section
+              id="security"
+              title="Security"
+              description="Sign-in access for your owner account."
+            >
+              <SecurityCard
+                loginEmail={data.loginEmail}
+                passwordEnabled={data.security.passwordEnabled}
               />
             </Section>
           )}

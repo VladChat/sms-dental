@@ -13,6 +13,8 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.106.2",
     "next": "^15.1.6",
     "postgres": "^3.4.5",
     "react": "^19.0.0",

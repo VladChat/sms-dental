@@ -60,6 +60,20 @@ export async function findSetupRequestByTokenHash(
   return rows[0] ?? null;
 }
 
+export async function findMostRecentSetupRequestByClinicId(
+  clinicId: string,
+): Promise<SetupRequestRow | null> {
+  const sql = getDb();
+  const rows = await sql<SetupRequestRow[]>`
+    select *
+    from public.setup_requests
+    where clinic_id = ${clinicId}::uuid
+    order by created_at desc
+    limit 1
+  `;
+  return rows[0] ?? null;
+}
+
 export async function setSetupRequestStatus(
   id: string,
   status: SetupRequestStatus,

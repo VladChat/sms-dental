@@ -1,13 +1,10 @@
 import { cookies } from "next/headers";
 
-// Minimal account-context session for the clean `/account` dashboard URL.
+// Legacy setup-token account-context session.
 //
-// After "Continue setup" creates the clinic, the server sets this httpOnly
-// cookie holding the raw setup token. `/account` reads it server-side to resolve
-// the clinic, so the long `/setup/{token}` URL no longer needs to stay in the
-// address bar. The token is NOT exposed in any URL, is httpOnly (not readable by
-// client JS), and is never logged. Token expiry is still enforced by the
-// setup-request lookup, independent of cookie lifetime.
+// Real auth session + clinic membership is now the primary access path. This
+// token-cookie path is intentionally kept as a temporary fallback so existing
+// setup-link users are not locked out during rollout.
 
 const ACCOUNT_COOKIE = "mcd_account";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days

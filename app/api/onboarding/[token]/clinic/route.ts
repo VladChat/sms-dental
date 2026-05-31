@@ -19,6 +19,12 @@ import {
 import { isValidE164, normalizePhone } from "../../../../../lib/phone/normalize";
 import { prepareLocalNumber } from "../../../../../lib/onboarding/local-number";
 import { setAccountSessionCookie } from "../../../../../lib/onboarding/account-session";
+import { getPasswordValidationError } from "../../../../../lib/auth/password";
+import { createSupabaseAdminClient } from "../../../../../lib/supabase/admin";
+import { createSupabaseServerClient } from "../../../../../lib/supabase/server";
+import { findAuthUserByEmail } from "../../../../../lib/db/auth-users";
+import { upsertProfile } from "../../../../../lib/db/profiles";
+import { upsertClinicMembership } from "../../../../../lib/db/clinic-memberships";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +50,8 @@ const ClinicFormSchema = z
       .regex(/^\d{5}(-\d{4})?$/u, "Please enter a 5-digit ZIP code."),
     // Accepted but optional / ignored for behavior. Helps stale clients.
     country: z.string().trim().optional(),
+    password: z.string().min(1).max(128),
+    confirm_password: z.string().min(1).max(128),
   })
   .passthrough();
 
@@ -71,6 +79,14 @@ export async function POST(
       return jsonBadRequest("Please enter a 5-digit ZIP code.");
     }
     return jsonBadRequest("Please complete all required fields.");
+  }
+
+  if (parsed.data.password !== parsed.data.confirm_password) {
+    return jsonBadRequest("Passwords do not match.");
+  }
+  const passwordError = getPasswordValidationError(parsed.data.password);
+  if (passwordError) {
+    return jsonBadRequest(passwordError);
   }
 
   // U.S.-only automated onboarding: reject any non-US country if a stale
@@ -125,9 +141,77 @@ export async function POST(
     // status stays "preparing"; non-blocking.
   }
 
+  // Create the owner auth account when needed. If one already exists for this
+  // setup email, do not create a duplicate.
+  let existingAuth = await findAuthUserByEmail(setupRequest.owner_email);
+  let authUserId = existingAuth?.id ?? null;
+  let authExistedBefore = Boolean(existingAuth);
+
+  if (!authUserId) {
+    const admin = createSupabaseAdminClient();
+    const createRes = await admin.auth.admin.createUser({
+      email: setupRequest.owner_email,
+      password: parsed.data.password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: setupRequest.owner_full_name,
+      },
+    });
+
+    if (createRes.error || !createRes.data.user) {
+      // Handle race/duplicate safely: check once more by email before failing.
+      existingAuth = await findAuthUserByEmail(setupRequest.owner_email);
+      if (!existingAuth?.id) {
+        return jsonError(
+          502,
+          "account_create_failed",
+          "We couldn't finish account setup right now. Please try again.",
+        );
+      }
+      authUserId = existingAuth.id;
+      authExistedBefore = true;
+    } else {
+      authUserId = createRes.data.user.id;
+    }
+  }
+
+  await upsertProfile({
+    id: authUserId,
+    email: setupRequest.owner_email,
+    fullName: setupRequest.owner_full_name,
+  });
+  await upsertClinicMembership({
+    clinicId: clinic.id,
+    profileId: authUserId,
+    role: "owner",
+    status: "active",
+  });
+
   // Establish account context (httpOnly cookie) so the customer can move to the
   // clean /account URL instead of keeping the long token in the address bar.
   await setAccountSessionCookie(token);
+
+  // Establish real authenticated session. If an account already existed and the
+  // entered password is wrong, keep the flow safe and direct to /login.
+  const supabase = await createSupabaseServerClient();
+  const signIn = await supabase.auth.signInWithPassword({
+    email: setupRequest.owner_email,
+    password: parsed.data.password,
+  });
+  if (signIn.error) {
+    if (authExistedBefore) {
+      return jsonError(
+        409,
+        "owner_user_exists_login_required",
+        "An account for this email already exists. Please sign in at /login to continue.",
+      );
+    }
+    return jsonError(
+      502,
+      "session_create_failed",
+      "Your account was created, but we couldn't sign you in. Please use /login.",
+    );
+  }
 
   return jsonOk({
     ok: true,

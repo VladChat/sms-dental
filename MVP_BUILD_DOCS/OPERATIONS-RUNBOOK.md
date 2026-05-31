@@ -1166,3 +1166,45 @@ panel-header badge (emphasis stays in the Voice / SMS service rows).
 Future (owner/admin, not built): owner-only `SMS & conversation settings`
 (message templates, follow-up questions, reply-handling, handoff rules,
 notification routing, what is passed to the front desk).
+
+---
+
+## Owner auth foundation (Phase 1) — 2026-05-31
+
+Real owner authentication is now implemented while keeping setup-token fallback
+for rollout safety.
+
+What changed:
+
+- Added `/login` for normal returning owner sign-in (email + password).
+- Updated `/setup/{token}` first-entry form to include password creation
+  (read-only login email + clinic name + main phone + ZIP + password/confirm).
+- `POST /api/onboarding/[token]/clinic` now:
+  - creates/updates clinic
+  - creates owner auth user when needed
+  - upserts `profiles` + `clinic_memberships` (`owner` role)
+  - establishes authenticated session
+  - redirects to `/account`
+- `/account` and `/workspace` now use authenticated session + membership as
+  primary guard path.
+- Legacy `mcd_account` setup-token cookie remains a temporary fallback to avoid
+  locking out existing setup-link users.
+
+Operational notes:
+
+- Existing setup-link users can reopen their setup links and create a password.
+- If setup email already has an auth user, onboarding does not create a
+  duplicate; user is directed to `/login` safely.
+- Staff invite flow is intentionally not in this phase.
+- Google/Apple auth is intentionally not in this phase.
+
+Migration:
+
+- `supabase/migrations/20260531000100_auth_profiles_memberships.sql`
+  - adds `public.profiles`
+  - adds `public.clinic_memberships`
+  - enables RLS + minimal policies on these new tables only
+
+Full auth/access model:
+
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`

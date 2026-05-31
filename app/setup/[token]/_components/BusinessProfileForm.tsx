@@ -13,7 +13,7 @@ export function BusinessProfileForm({
   onChange,
   onSaved,
 }: {
-  token: string;
+  token: string | null;
   loginEmail: string;
   value: BusinessProfileFields;
   onChange: (patch: Partial<BusinessProfileFields>) => void;
@@ -47,7 +47,10 @@ export function BusinessProfileForm({
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/onboarding/${encodeURIComponent(token)}/business-info`, {
+      const endpoint = token
+        ? `/api/onboarding/${encodeURIComponent(token)}/business-info`
+        : "/api/account/business-info";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

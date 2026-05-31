@@ -13,12 +13,10 @@ export const dynamic = "force-dynamic";
 
 // POST /api/account/session
 //
-// Establishes account context for the clean `/account` dashboard URL. Takes a
-// valid raw setup token (in the JSON body, never a URL/query) and stores it in
-// an httpOnly session cookie. Used when a returning customer re-opens an email
-// setup link whose clinic already exists, so they land on `/account` instead of
-// the long token URL. The token is validated before the cookie is set and is
-// never logged.
+// Legacy setup-token fallback for account context (`mcd_account` cookie). This
+// remains during the owner-auth rollout so existing setup-link sessions are not
+// locked out. Real auth session + clinic membership is now the primary guard
+// path for `/account` and `/workspace`.
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: unknown;

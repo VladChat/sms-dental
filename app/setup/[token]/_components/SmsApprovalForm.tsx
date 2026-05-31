@@ -24,7 +24,7 @@ export function SmsApprovalForm({
   onChange,
   onSaved,
 }: {
-  token: string;
+  token: string | null;
   publicBaseUrl: string;
   slug: string | null;
   smsStatus: SmsStatus;
@@ -72,7 +72,10 @@ export function SmsApprovalForm({
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/onboarding/${encodeURIComponent(token)}/a2p`, {
+      const endpoint = token
+        ? `/api/onboarding/${encodeURIComponent(token)}/a2p`
+        : "/api/account/a2p";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
