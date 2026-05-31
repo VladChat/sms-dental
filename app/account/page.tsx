@@ -7,6 +7,8 @@ import { findActiveOfficeTextingNumber } from "../../lib/db/clinic-phone-numbers
 import { findMostRecentSetupRequestByClinicId } from "../../lib/db/setup-requests";
 import { getAppDomainsSafe } from "../../lib/env";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
+import { listActiveMembershipsForClinic } from "../../lib/db/clinic-memberships";
+import { listProfilesByIds } from "../../lib/db/profiles";
 import { SetupInvalid } from "../setup/[token]/_components/SetupInvalid";
 import { ClinicForm } from "../setup/[token]/_components/ClinicForm";
 import { BusinessProfile, type BusinessProfileData } from "../setup/[token]/_components/BusinessProfile";
@@ -39,6 +41,29 @@ export default async function AccountPage() {
     const assignedPhone = await findActiveOfficeTextingNumber(clinic.id)
       .then((row) => row?.phone_number ?? null)
       .catch(() => null);
+    const memberships = await listActiveMembershipsForClinic(clinic.id).catch(() => []);
+    const profileIds = memberships.map((m) => m.profile_id);
+    const profiles = await listProfilesByIds(profileIds).catch(() => []);
+    const profileById = new Map(profiles.map((p) => [p.id, p]));
+    const teamMembers = memberships
+      .map((m) => {
+        const profile = profileById.get(m.profile_id);
+        const fallbackEmail =
+          m.profile_id === access.userId ? (access.userEmail ?? clinic.owner_contact_email ?? "") : "";
+        return {
+          email: (profile?.email ?? fallbackEmail).trim().toLowerCase(),
+          role: m.role,
+          status: "active" as const,
+        };
+      })
+      .filter((m) => m.email.length > 0);
+    if (!teamMembers.some((m) => m.role === "owner")) {
+      teamMembers.unshift({
+        email: (access.userEmail ?? clinic.owner_contact_email ?? "").trim().toLowerCase(),
+        role: "owner",
+        status: "active",
+      });
+    }
 
     // Keep trial countdown aligned to the original setup creation when
     // available, otherwise fall back to now.
@@ -88,6 +113,9 @@ export default async function AccountPage() {
       },
       security: {
         passwordEnabled: true,
+      },
+      teamAccess: {
+        members: teamMembers,
       },
     };
 
@@ -186,6 +214,15 @@ export default async function AccountPage() {
     },
     security: {
       passwordEnabled: true,
+    },
+    teamAccess: {
+      members: [
+        {
+          email: setupRequest.owner_email.trim().toLowerCase(),
+          role: "owner",
+          status: "active",
+        },
+      ],
     },
   };
 

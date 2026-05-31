@@ -1183,3 +1183,57 @@ don't shift horizontally between sections, and dropped the redundant Phone-numbe
 panel-header badge (emphasis stays in the service rows).
 
 Canonical field mapping: **`SMS-APPROVAL-FIELD-MAPPING.md`**.
+
+---
+
+## Update 2026-05-31 — Account access + team/workspace guidance follow-up
+
+This follow-up refines first-entry setup clarity and adds owner-facing account
+access/team guidance without introducing staff invite backend yet.
+
+First-entry setup (`/setup/{token}`):
+
+- title/intent is now **Account setup**
+- fields are grouped into two blocks:
+  - **Account details**: Clinic name, Main office phone, ZIP code
+  - **Account access**: Login email (read-only), Create password, Confirm password
+- button remains `Continue setup`
+
+`/account` left nav is now grouped:
+
+- **Setup**: Phone number, Business profile, SMS approval, Billing
+- **Account**: Account access, Team access
+
+`Account access` replaces `Security` and is not treated as setup progress.
+
+`Team access` is owner-only UI shell in this phase:
+
+- explains workspace link model (`/workspace` is shared link; access comes from
+  login session + membership + role)
+- includes a copy/open link action
+- includes invite form shell (`Front desk` access only) with safe placeholder
+  response when invite backend is not connected
+- includes real owner row and sample team rows when real staff memberships are
+  absent
+
+`/workspace` empty-state behavior now includes **Sample requests** cards so the
+front desk flow is clear before real conversation data exists. Sample cards are
+UI-only and never stored.
+
+Minimal result controls are now shown as a **non-mutating preview** in sample
+mode:
+
+- Result options: Appointment booked, No appointment booked, Could not reach patient
+- Note field: optional short note
+- no write route/mutation in this phase
+
+Future analytics derivation (documented, not implemented):
+
+- Appointment booked -> follow-up completed + recovered
+- No appointment booked -> follow-up completed + not recovered
+- Could not reach patient -> follow-up completed + unreachable/not recovered
+- no result selected -> still needs follow-up
+
+Sample-data rule:
+
+- Any fake domain/email in product UI/docs must use `example.com` only.

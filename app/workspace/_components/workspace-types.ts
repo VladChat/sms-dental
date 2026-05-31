@@ -3,11 +3,14 @@
 
 export type WorkspaceStatus =
   | "new"
+  | "needs_follow_up"
   | "needs_reply"
   | "waiting_for_patient"
   | "ready_to_call"
   | "booked"
-  | "closed";
+  | "closed"
+  | "no_appointment_booked"
+  | "could_not_reach_patient";
 
 export type WorkspaceTimelineItem = {
   id: string;
@@ -33,6 +36,10 @@ export type PatientRequestCard = {
   createdAt: string; // ISO
   lastActivityAt: string; // ISO
   timeline: WorkspaceTimelineItem[];
+  // True only for UI-only demo cards rendered when no real conversations exist.
+  isSample?: boolean;
+  // Optional sample note shown in the detail view.
+  sampleNote?: string | null;
 };
 
 // Conservative status derivation from existing data only. We never guess beyond
@@ -56,11 +63,14 @@ export const WORKSPACE_STATUS_META: Record<
   { label: string; badge: string }
 > = {
   new: { label: "New", badge: "badge-info" },
+  needs_follow_up: { label: "Needs follow-up", badge: "badge-warning" },
   needs_reply: { label: "Needs reply", badge: "badge-warning" },
   waiting_for_patient: { label: "Waiting for patient", badge: "badge-neutral" },
   ready_to_call: { label: "Ready to call", badge: "badge-brand" },
   booked: { label: "Booked", badge: "badge-success" },
   closed: { label: "Closed", badge: "badge-neutral" },
+  no_appointment_booked: { label: "No appointment booked", badge: "badge-neutral" },
+  could_not_reach_patient: { label: "Could not reach patient", badge: "badge-warning" },
 };
 
 export const NOT_PROVIDED = "Not provided yet";

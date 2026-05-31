@@ -9,9 +9,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export const metadata: Metadata = {
-  title: "Set up your office — Missed Calls Dental",
+  title: "Account setup — Missed Calls Dental",
   description:
-    "Complete your Missed Calls Dental setup: create your office profile and account.",
+    "Complete your Missed Calls Dental account setup.",
   robots: { index: false, follow: false },
 };
 

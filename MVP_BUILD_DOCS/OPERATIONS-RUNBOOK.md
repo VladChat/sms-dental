@@ -1208,3 +1208,56 @@ Migration:
 Full auth/access model:
 
 - `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`
+
+---
+
+## Account access and team/workspace guidance follow-up — 2026-05-31
+
+Scope of this follow-up:
+
+- no Twilio/SMS changes
+- no Stripe changes
+- no invite email backend
+- no invite acceptance flow
+- no new migrations
+
+Implemented runtime behavior:
+
+- `/setup/{token}` now presents **Account setup** with two blocks:
+  - `Account details`: clinic name, main office phone, ZIP code
+  - `Account access`: read-only login email + password/confirm
+- `/account` left nav split into:
+  - `Setup`: Phone number, Business profile, SMS approval, Billing
+  - `Account`: Account access, Team access
+- `Account access` replaces old `Security` naming and includes:
+  - read-only login email
+  - password status
+  - sign-out action
+  - safe `Change password` placeholder modal (non-mutating)
+- `Team access` owner-only shell includes:
+  - workspace link + open/copy actions
+  - invite-form placeholder (`Front desk` only; no real send)
+  - owner member row from real data
+  - sample member rows when real staff memberships are not present
+
+Workspace sample behavior:
+
+- if no real conversation cards exist, `/workspace` renders a clearly-labeled
+  `Sample requests` set
+- sample cards are UI-only and not persisted
+- result controls are a non-mutating preview in sample mode only
+
+Operational constraints:
+
+- do not treat sample team rows/cards as real access or production data
+- do not wire sample rows/cards into analytics
+- do not expose backend auth/provider internals in placeholder messages
+
+Sample-domain policy:
+
+- fake/demo addresses must use `example.com` only
+- approved sample emails:
+  - `owner@example.com`
+  - `frontdesk@example.com`
+  - `reception@example.com`
+  - `staff@example.com`

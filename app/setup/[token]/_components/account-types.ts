@@ -54,4 +54,12 @@ export type BusinessProfileData = {
   security: {
     passwordEnabled: boolean;
   };
+  teamAccess: {
+    // Real active members from auth + membership data.
+    members: {
+      email: string;
+      role: "owner" | "front_desk" | "admin";
+      status: "active";
+    }[];
+  };
 };

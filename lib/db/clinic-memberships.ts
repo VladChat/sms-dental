@@ -70,3 +70,23 @@ export async function listActiveMembershipsForProfile(
   `;
   return rows;
 }
+
+export async function listActiveMembershipsForClinic(
+  clinicId: string,
+): Promise<ClinicMembershipRow[]> {
+  const sql = getDb();
+  const rows = await sql<ClinicMembershipRow[]>`
+    select *
+    from public.clinic_memberships
+    where clinic_id = ${clinicId}::uuid
+      and status = 'active'
+    order by
+      case role
+        when 'owner' then 0
+        when 'admin' then 1
+        else 2
+      end,
+      created_at asc
+  `;
+  return rows;
+}

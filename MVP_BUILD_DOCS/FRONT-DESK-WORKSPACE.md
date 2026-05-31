@@ -178,3 +178,46 @@ Staff invites are still not built in this phase:
 
 Authoritative auth flow and table model are documented in:
 `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`.
+
+## 12. Sample requests + result preview (2026-05-31 follow-up)
+
+To reduce "empty screen" confusion while real data is sparse, `/workspace` now
+shows a clearly labeled **Sample requests** section when there are no real
+conversation cards.
+
+Sample states included:
+
+- Needs follow-up
+- Waiting for patient
+- Appointment booked
+- No appointment booked
+- Could not reach patient
+
+Sample behavior rules:
+
+- each sample card is explicitly labeled `Sample`
+- sample cards are UI-only and never written to the database
+- sample cards are not real staff outcomes and must not be used as analytics
+  inputs
+- when real cards exist, real cards remain primary and samples are not shown
+
+Result controls (preview-only in this phase):
+
+- `Result` options:
+  - Appointment booked
+  - No appointment booked
+  - Could not reach patient
+- `Note` field (optional short note)
+
+No production mutation is implemented from these controls in this phase.
+
+Future analytics derivation (planned):
+
+- Appointment booked -> follow-up completed + recovered
+- No appointment booked -> follow-up completed + not recovered
+- Could not reach patient -> follow-up completed + unreachable/not recovered
+- no result selected -> still needs follow-up
+
+Sample-domain policy:
+
+- any fake domains/emails in workspace examples must use `example.com` only.

@@ -70,66 +70,74 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
 
   return (
     <section className="card card-pad">
-      <p className="t-eyebrow" style={{ marginBottom: "var(--space-2)" }}>Step 1 of 2</p>
-      <h2 className="t-h3">Create office profile</h2>
+      <h2 className="t-h3">Account setup</h2>
       <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
-        We&apos;ll use these details to set up your account. Your main office number stays the same.
+        Finish your clinic details and account access.
       </p>
 
       <form onSubmit={onSubmit} style={{ marginTop: "var(--space-6)", display: "grid", gap: "var(--space-5)" }} noValidate>
-        <Field
-          label="Login email"
-          name="login_email"
-          required
-          helper="This email will be used to sign in to your account."
-          defaultValue={loginEmail}
-          type="email"
-          autoComplete="email"
-          readOnly
-        />
-        <Field
-          label="Clinic name"
-          name="name"
-          required
-          helper="Enter the public name patients know your office by."
-          placeholder="Bright Smile Dental"
-          defaultValue={initialValues.name}
-        />
-        <Field
-          label="Main office phone"
-          name="main_phone"
-          required
-          helper="Enter the phone number patients currently call."
-          placeholder="(224) 555-1234"
-          inputMode="tel"
-          autoComplete="tel"
-          defaultValue={initialValues.mainPhone}
-        />
-        <Field
-          label="ZIP code"
-          name="postal_code"
-          required
-          helper="We’ll use this ZIP code to find a local number near your office."
-          placeholder="60010"
-          inputMode="numeric"
-          autoComplete="postal-code"
-          defaultValue={initialValues.postalCode}
-        />
-        <Field
-          label="Create password"
-          name="password"
-          required
-          helper={`Use at least ${MIN_PASSWORD_LENGTH} characters with one letter and one number.`}
-          type="password"
-          autoComplete="new-password"
-        />
-        <Field
-          label="Confirm password"
-          name="confirm_password"
-          required
-          type="password"
-          autoComplete="new-password"
-        />
+        <section className="acct-card-subsection" aria-labelledby="account-details-title">
+          <h3 id="account-details-title" className="t-h4">Account details</h3>
+          <div style={{ display: "grid", gap: "var(--space-5)", marginTop: "var(--space-4)" }}>
+            <Field
+              label="Clinic name"
+              name="name"
+              required
+              placeholder="Bright Smile Dental"
+              defaultValue={initialValues.name}
+            />
+            <Field
+              label="Main office phone"
+              name="main_phone"
+              required
+              placeholder="(224) 555-1234"
+              inputMode="tel"
+              autoComplete="tel"
+              defaultValue={initialValues.mainPhone}
+            />
+            <Field
+              label="ZIP code"
+              name="postal_code"
+              required
+              helper="We’ll use this ZIP code to prepare a local number near your office."
+              placeholder="60010"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              defaultValue={initialValues.postalCode}
+            />
+          </div>
+        </section>
+
+        <section className="acct-card-subsection" aria-labelledby="account-access-title">
+          <h3 id="account-access-title" className="t-h4">Account access</h3>
+          <div style={{ display: "grid", gap: "var(--space-5)", marginTop: "var(--space-4)" }}>
+            <Field
+              label="Login email"
+              name="login_email"
+              required
+              helper="This is the email your setup link was sent to."
+              defaultValue={loginEmail}
+              type="email"
+              autoComplete="email"
+              readOnly
+            />
+            <Field
+              label="Create password"
+              name="password"
+              required
+              helper={`Use at least ${MIN_PASSWORD_LENGTH} characters with one letter and one number.`}
+              type="password"
+              autoComplete="new-password"
+            />
+            <Field
+              label="Confirm password"
+              name="confirm_password"
+              required
+              type="password"
+              autoComplete="new-password"
+            />
+          </div>
+        </section>
 
         {passwordError && (
           <p className="helper" role="alert" style={{ margin: 0, color: "var(--error-text)" }}>
@@ -198,7 +206,7 @@ function Field({
         id={name}
         name={name}
         type={type}
-        className="input"
+        className={`input${readOnly ? " acct-readonly" : ""}`}
         required={required}
         placeholder={placeholder}
         defaultValue={defaultValue}
