@@ -1107,3 +1107,26 @@ notes/tasks) and must not expose EIN, legal business details, billing/payment
 method, SMS approval controls, or owner setup settings.
 
 Canonical field mapping: **`SMS-APPROVAL-FIELD-MAPPING.md`**.
+
+---
+
+## Update 2026-05-31 — Front-desk workspace (read-only) + /account cleanup
+
+Two product surfaces are now explicit:
+
+- `/account` — owner/admin setup & settings (phone number, business profile, SMS
+  approval, billing, future owner-only SMS & conversation settings).
+- `/workspace` — front-desk operational view of missed-call replies and patient
+  requests. Read-only in this pass. Separate audience; staff never use `/account`.
+
+The full front-desk spec (boundary, access model, patient request card model,
+status vocabulary, data mapping, privacy rule, future actions, and the proposed
+`patient_requests` table for later) lives in **`FRONT-DESK-WORKSPACE.md`**.
+
+`/account` cleanup shipped in the same pass: removed the duplicate Billing
+`Needs setup` badge (status now only on the Payment method row), one no-charge
+note, `Free trial ends in X days` casing, reserved the scrollbar gutter so panels
+don't shift horizontally between sections, and dropped the redundant Phone-number
+panel-header badge (emphasis stays in the service rows).
+
+Canonical field mapping: **`SMS-APPROVAL-FIELD-MAPPING.md`**.
