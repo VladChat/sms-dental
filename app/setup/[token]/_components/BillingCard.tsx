@@ -34,7 +34,7 @@ export function BillingCard({
           {hasPaymentMethod ? (
             <StatusBadge kind="complete" label="Added" />
           ) : (
-            <StatusBadge kind="needs_action" label="Payment method needed" />
+            <StatusBadge kind="needs_setup" />
           )}
         </StatusRow>
         <StatusRow label="Plan">
@@ -53,9 +53,21 @@ export function BillingCard({
         </StatusRow>
       </div>
 
+      <div className="acct-pay-shell">
+        <span className="acct-pay-shell-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <path d="M2 10h20" />
+          </svg>
+        </span>
+        <span className="t-small" style={{ color: "var(--text-muted)" }}>
+          {hasPaymentMethod ? "Payment method on file" : "No payment method on file"}
+        </span>
+      </div>
+
       <div style={{ display: "grid", gap: "var(--space-2)" }}>
         <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>
-          Add payment method
+          {hasPaymentMethod ? "Update payment method" : "Add payment method"}
         </button>
         <p className="t-small" style={{ color: "var(--text-muted)" }}>
           You will not be charged until SMS recovery is active and your trial period ends.
@@ -75,7 +87,9 @@ export function BillingCard({
             aria-labelledby="add-payment-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="add-payment-title" className="t-h4">Add payment method</h3>
+            <h3 id="add-payment-title" className="t-h4">
+              {hasPaymentMethod ? "Update payment method" : "Add payment method"}
+            </h3>
             <div className="acct-modal-placeholder" aria-hidden="true">
               <span className="t-small" style={{ color: "var(--text-muted)" }}>
                 Secure payment setup will open here when billing is connected.

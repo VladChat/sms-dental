@@ -1,7 +1,7 @@
 # SMS Approval Field Mapping
 
 Status: Active
-Last updated: 2026-05-30
+Last updated: 2026-05-31
 
 Canonical mapping between the customer-facing onboarding UI, internal storage,
 and the messaging/carrier approval ("A2P") submission fields. This is the
@@ -104,9 +104,12 @@ Notes:
   `PRIVATE_PROFIT`.
 - Representative email/phone are pre-filled from the login email and main office
   phone for convenience, but remain editable.
-- This section keeps the authorization checkbox with short copy
-  ("Texting will start after approval."). The large "What we'll submit" review
-  block was removed (2026-05-30) — it read like internal submission paperwork.
+- This section keeps the authorization checkbox. Saving marks the section
+  `Complete`, but a dedicated **Texting** status row in the panel shows the real
+  texting state (`Not active` → `Waiting for approval` → `Active`, "Starts after
+  approval"), so "Complete" is never read as "texting is live". The large "What
+  we'll submit" review block was removed (2026-05-30) — it read like internal
+  submission paperwork.
 - The generated public-page links are a compact text row directly above the
   checkbox: `Review public pages: Business profile · Privacy policy · SMS terms`
   (simple text links). There is no separate Documents section, no big document

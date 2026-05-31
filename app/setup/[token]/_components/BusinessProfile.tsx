@@ -33,9 +33,9 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [active, setActive] = useState<SectionId>("phone");
 
   const phoneStatus = phoneSectionStatus(data.number.localNumberStatus, smsStatus, hasPaymentMethod);
-  const bizStatus: StatusKind = bizDone ? "complete" : "needs_action";
-  const smsSectionStatus: StatusKind = smsDone ? "complete" : "needs_action";
-  const billingStatus: StatusKind = hasPaymentMethod ? "complete" : "needs_action";
+  const bizStatus: StatusKind = bizDone ? "complete" : "needs_setup";
+  const smsSectionStatus: StatusKind = smsDone ? "complete" : "needs_setup";
+  const billingStatus: StatusKind = hasPaymentMethod ? "complete" : "needs_setup";
 
   const navItems: { id: SectionId; label: string; status: StatusKind }[] = [
     { id: "phone", label: "Phone number", status: phoneStatus },
@@ -124,6 +124,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 token={data.token}
                 publicBaseUrl={data.publicBaseUrl}
                 slug={data.slug}
+                smsStatus={smsStatus}
                 value={sms}
                 onChange={(patch) => setSms((prev) => ({ ...prev, ...patch }))}
                 onSaved={(persisted) => {
@@ -185,6 +186,6 @@ function phoneSectionStatus(
   if (smsStatus === "active") return "active";
   if (smsStatus === "waiting_for_approval") return "waiting";
   if (localNumberStatus === "assigned" || localNumberStatus === "reserved") return "pending";
-  if (!hasPaymentMethod) return "needs_action";
+  if (!hasPaymentMethod) return "needs_setup";
   return "pending";
 }

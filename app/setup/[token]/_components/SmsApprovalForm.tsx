@@ -5,8 +5,8 @@ import {
   BUSINESS_TYPES,
   BUSINESS_TYPE_LABELS,
 } from "../../../../lib/validation/url";
-import { Field, SelectField, SaveBar, nowLabel } from "./AccountUI";
-import type { SmsApprovalFields } from "./account-types";
+import { Field, SelectField, SaveBar, StatusBadge, nowLabel, type StatusKind } from "./AccountUI";
+import type { SmsApprovalFields, SmsStatus } from "./account-types";
 
 type FieldErrors = Partial<Record<keyof SmsApprovalFields, string>>;
 
@@ -19,6 +19,7 @@ export function SmsApprovalForm({
   token,
   publicBaseUrl,
   slug,
+  smsStatus,
   value,
   onChange,
   onSaved,
@@ -26,11 +27,19 @@ export function SmsApprovalForm({
   token: string;
   publicBaseUrl: string;
   slug: string | null;
+  smsStatus: SmsStatus;
   value: SmsApprovalFields;
   onChange: (patch: Partial<SmsApprovalFields>) => void;
   onSaved: (persisted: SmsApprovalFields) => void;
 }) {
   const docsBase = slug ? `${publicBaseUrl}/business/${slug}` : null;
+
+  // Texting approval is a separate concept from form completion: saving the form
+  // marks the section "Complete", but patient texting only turns on after a
+  // separate approval. Surface that explicitly so "Complete" is never mistaken
+  // for "texting is live".
+  const textingKind: StatusKind =
+    smsStatus === "active" ? "active" : smsStatus === "waiting_for_approval" ? "waiting" : "not_active";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -197,9 +206,15 @@ export function SmsApprovalForm({
           SMS approval.
         </span>
       </label>
-      <p className="t-helper" style={{ margin: "calc(var(--space-3) * -1 + 2px) 0 0" }}>
-        Texting will start after approval.
-      </p>
+      <div className="acct-texting-row">
+        <span className="t-small" style={{ color: "var(--text-secondary)" }}>Texting</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}>
+          {smsStatus !== "active" && (
+            <span className="t-helper">Starts after approval</span>
+          )}
+          <StatusBadge kind={textingKind} />
+        </span>
+      </div>
 
       <SaveBar label="Save approval information" saving={saving} savedAt={savedAt} error={error} />
     </form>

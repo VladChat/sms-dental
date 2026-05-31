@@ -23,6 +23,7 @@ out/
 .idea/
 *.log
 *.zip
+*.bak
 
 # OS/temp
 Thumbs.db
