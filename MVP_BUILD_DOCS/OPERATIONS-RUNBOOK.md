@@ -1129,3 +1129,40 @@ mention a "Documents section" or the pre-2026-05-30 layout.
   separate future product (conversations, replies, callback/booked/handled,
   notes) and must not expose EIN, legal/billing details, SMS approval controls,
   or owner setup settings.
+
+---
+
+## Front desk workspace `/workspace` (read-only) — 2026-05-31
+
+Operational view for clinic staff to review missed-call SMS replies and patient
+requests. Separate from the owner/admin `/account` area. Full spec:
+`FRONT-DESK-WORKSPACE.md`.
+
+- **Route:** `app/workspace/page.tsx` (server, `force-dynamic`, nodejs). Read-only
+  — no writes, no SMS, no call actions, no status mutations.
+- **Access:** gated by the same `mcd_account` httpOnly cookie as `/account`
+  (owner-accessible preview until staff auth exists). No valid context → safe
+  "open your account link" message. Not public. Tokens never in URL / logs;
+  patient message contents not logged.
+- **Data:** `lib/db/front-desk.ts` `listClinicConversations(clinicId)` reads only
+  front-desk-safe columns from `patient_conversations` + `messages` (no
+  raw_payload, Twilio SIDs, errors, owner/billing/compliance fields). No new
+  table (the read-only view works from existing data; a proposed
+  `patient_requests` table is documented for later).
+- **Privacy:** minimum-necessary display. The workspace never shows EIN, legal
+  business details, billing/payment, SMS approval controls, approval documents,
+  owner setup settings, Twilio details, or internal IDs (conversation UUIDs are
+  used only as React keys). Unknown fields render `Not provided yet`.
+- **Status vocabulary (derived):** New / Needs reply / Waiting for patient /
+  Ready to call / Booked / Closed. Conservative derivation from conversation
+  lifecycle + latest message direction; `Ready to call` not auto-assigned yet.
+
+`/account` cleanup (same pass): removed the duplicate Billing `Needs setup`
+badge (status only on the Payment method row); one no-charge note;
+`Free trial ends in X days` casing; reserved the scrollbar gutter so the panel
+doesn't shift horizontally between sections; removed the redundant Phone-number
+panel-header badge (emphasis stays in the Voice / SMS service rows).
+
+Future (owner/admin, not built): owner-only `SMS & conversation settings`
+(message templates, follow-up questions, reply-handling, handoff rules,
+notification routing, what is passed to the front desk).

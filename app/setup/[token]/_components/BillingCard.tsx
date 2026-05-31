@@ -47,7 +47,7 @@ export function BillingCard({
             <StatusBadge kind="needs_action" label="Trial ended" />
           ) : (
             <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-              Free Trial ends in {dayLabel}
+              Free trial ends in {dayLabel}
             </span>
           )}
         </StatusRow>

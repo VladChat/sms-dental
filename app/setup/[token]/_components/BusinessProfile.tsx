@@ -82,7 +82,6 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
               id="phone-number"
               title="Phone number"
               description="Your office number for calls and texting."
-              status={{ kind: phoneStatus }}
             >
               <AssignedNumberCard
                 localNumberStatus={data.number.localNumberStatus}
@@ -140,8 +139,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
             <Section
               id="billing"
               title="Billing & payment method"
-              description="Add a payment method to continue. No charge during your trial."
-              status={{ kind: billingStatus }}
+              description="Add a payment method to finish setup."
             >
               <BillingCard
                 hasPaymentMethod={hasPaymentMethod}

@@ -1560,3 +1560,58 @@ future owner-only SMS & conversation settings; separate front-desk workspace.
 
 Operations docs update needed: yes — done (guide + runbook + field-mapping +
 this entry).
+
+---
+
+## 2026-05-31 — Read-only front-desk workspace + /account cleanup
+
+Added the first front-desk workspace surface and a focused `/account` cleanup.
+No SMS/Twilio/Stripe side effects; no DB migration; read-only.
+
+`/account` cleanup:
+
+- `BillingCard.tsx` — `Free Trial` → `Free trial` casing.
+- `BusinessProfile.tsx` — removed the panel-header status badge on **Billing**
+  (was duplicated by the Payment-method row) and on **Phone number** (was
+  duplicated by the Voice / SMS service rows); Billing subtitle trimmed to
+  "Add a payment method to finish setup." (the no-charge note appears once, at
+  the bottom). Business profile and SMS approval keep their header badges.
+- `app/globals.css` — `html { scrollbar-gutter: stable; }` so the centered
+  dashboard panel no longer shifts horizontally between sections.
+
+Front-desk workspace (`/workspace`, read-only):
+
+- New `app/workspace/page.tsx` — server route; gated by the `mcd_account`
+  cookie (owner-accessible preview); safe gate message with no context; maps
+  conversations → patient request cards.
+- New `app/workspace/_components/workspace-types.ts` — `PatientRequestCard`
+  shape, conservative `deriveWorkspaceStatus`, status meta, formatting.
+- New `app/workspace/_components/Workspace.tsx` — client list + detail +
+  empty/selection states; calm status badges; conversation timeline.
+- New `lib/db/front-desk.ts` — read-only `listClinicConversations`; selects only
+  front-desk-safe columns from `patient_conversations` + `messages` (no
+  raw_payload, Twilio SIDs, errors, owner/billing/compliance). No writes.
+- New `app/globals.css` `.ws-*` styles.
+- New doc `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md`; appended notes to
+  `ONBOARDING-WORKFLOW-BUILD-GUIDE.md` and `OPERATIONS-RUNBOOK.md`.
+
+Data-model finding: there is no patient-name / request-type / preferred-time /
+summary column anywhere (PHI is intentionally minimized), so those card fields
+render `Not provided yet`. Usable today: `patient_conversations` (phone, status,
+timestamps) and `messages` (direction, body, timestamps).
+
+Validation: `npm run typecheck` pass; `npm run build` pass (`/workspace` present
+as a dynamic route; no `lint`/test scripts). Live click-through not run from this
+env (prod DB pooler + needs a real account cookie).
+
+Side effects: no SMS sent; `sms_recovery_enabled` unchanged (false); no Stripe;
+no Twilio settings change; no number purchased/reserved; no production mutations
+from `/workspace`; no env/DNS/Vercel changes; no migration; `docs/` untouched.
+
+Remaining / next steps: staff authentication + front-desk role; write actions
+(reply, call, mark booked/handled, internal notes); proposed `patient_requests`
+table if conversation+messages become insufficient; owner-only SMS & conversation
+settings in `/account`.
+
+Operations docs update needed: yes — done (`FRONT-DESK-WORKSPACE.md` new;
+`ONBOARDING-WORKFLOW-BUILD-GUIDE.md`, `OPERATIONS-RUNBOOK.md`, this entry).
