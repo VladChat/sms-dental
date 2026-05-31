@@ -1091,3 +1091,41 @@ verification queries in `SETUP-LOG.md` under the
 `2026-05-27 — Country-aware onboarding` entry.
 
 The migration is idempotent and safe to re-run.
+
+---
+
+## Account dashboard — current state (2026-05-31)
+
+Authoritative note; supersedes older inline descriptions above that still
+mention a "Documents section" or the pre-2026-05-30 layout.
+
+- The owner dashboard renders at `/account` (clean URL; `/setup/{token}` is the
+  magic-entry link that hands off to `/account` via an httpOnly cookie).
+- Left nav order: **Phone number → Business profile → SMS approval → Billing**.
+  Phone number opens by default. No Documents nav item; the public-page links are
+  a compact text row inside SMS approval.
+- **Unified status vocabulary** (nav, headers, status rows, phone statuses,
+  billing): `Needs setup` (amber dot) is the default for unfinished setup;
+  `Needs action` (amber alert) is reserved for act-now states (e.g.
+  `Trial ended`); plus `Complete`, `Active`, `Waiting for approval`, `Pending`,
+  `Not started`, `Not active`, `Error`. Calm tones; red is real errors only.
+- **SMS approval** shows the section `Complete` after save, but a separate
+  **Texting** row shows the real texting state
+  (`Not active`/`Waiting for approval`/`Active`) — "Complete" never means texting
+  is live.
+- **Billing** shows one payment-method status (`Needs setup` until added), a
+  secure payment-method visual, plan, and a live trial countdown. "Add payment
+  method" opens a Stripe-ready modal with **no card fields, no card storage, no
+  Stripe network call**. `hasPaymentMethod` is derived server-side from
+  `stripe_customer_id` / `billing_status`.
+- **Phone number** shows the assigned number (or "Not assigned yet") + Voice /
+  Calls and SMS / Texting sub-statuses; with no payment method a gentle callout
+  points to Billing. No "Add payment method" button in this section.
+- Provisioning note: the billing→phone gate is presentational; server-side
+  enforcement must be added before any real number purchase/reservation.
+- **Future (not built):** an owner-only `SMS & conversation settings` section
+  belongs in `/account` (templates, follow-up questions, reply-handling, handoff
+  rules, what is passed to the front desk). The **front-desk workspace** is a
+  separate future product (conversations, replies, callback/booked/handled,
+  notes) and must not expose EIN, legal/billing details, SMS approval controls,
+  or owner setup settings.

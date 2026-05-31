@@ -1051,3 +1051,59 @@ Components: `BusinessProfile.tsx` is the dashboard orchestrator; sections live i
 (`.acct-layout` / `.acct-nav` / `.acct-panel` / `.acct-callout`).
 
 Canonical field mapping: **`SMS-APPROVAL-FIELD-MAPPING.md`**.
+
+---
+
+## Update 2026-05-31 — Phone-first dashboard + clarity polish (current state)
+
+This section is the authoritative description of the `/account` dashboard and
+supersedes the layout details in the "Update 2026-05-30" section above (which
+still described a 5-item nav with a Documents section and a first-incomplete
+default — both no longer true).
+
+Current dashboard:
+
+- Renders at the clean `/account` URL. `/setup/{token}` is the email
+  magic-entry link only; after "Continue setup" an httpOnly account-context
+  cookie is set and the customer moves to `/account` (the long token never stays
+  in the address bar).
+- Left section nav + right active panel (one section at a time; wrapping tabs on
+  mobile). **Nav order: Phone number → Business profile → SMS approval →
+  Billing.** Phone number is first and opens by default — it is the customer's
+  primary resource. The dashboard does NOT auto-open the first incomplete
+  section. There is no Documents nav item.
+- **Phone number** (status): assigned number or muted "Not assigned yet" + Voice
+  / Calls and SMS / Texting sub-statuses. With no payment method, a gentle info
+  callout: "Add a payment method to receive your phone number." + the no-charge
+  line. No "Add payment method" button here.
+- **Business profile** (form): clinic name, read-only login email, main office
+  phone, full address, website. Saved by `business-info`.
+- **SMS approval** (form): legal business name, business type, EIN, authorized
+  representative. The public-page links are a compact text row
+  ("Review public pages: Business profile · Privacy policy · SMS terms") directly
+  above the authorization checkbox — not a Documents section, cards, table,
+  View/Copy buttons, or URL pills. Saving marks the section `Complete`; a
+  separate **Texting** row shows the real texting state (`Not active` →
+  `Waiting for approval` → `Active`) so Complete is never mistaken for live
+  texting. Saved by `a2p`.
+- **Billing** (payment method): single `Needs setup` status (no duplicate
+  badges), a secure payment-method visual, plan row
+  (`Missed-call text follow-up · $99/mo`), a live trial countdown
+  (`Free Trial ends in N days`, "Trial ended" at 0), and an active "Add payment
+  method" button opening a safe modal ("Secure payment setup will open here when
+  billing is connected.") — no card fields, no storage, no Stripe call.
+
+Unified status vocabulary: `Complete`, `Active`, `Waiting for approval`,
+`Pending`, `Needs setup` (amber dot — default for unfinished setup),
+`Needs action` (amber alert — act-now states like `Trial ended`),
+`Not started`, `Not active`, `Error` (red — real errors only).
+
+Roadmap (not built): an owner-only `SMS & conversation settings` section belongs
+in this `/account` area (first missed-call template, follow-up questions,
+reply-handling, conversation handoff rules, what is passed to the front desk).
+The front-desk workspace is a separate future product (missed-call
+conversations, patient replies, request summaries, callback/booked/handled,
+notes/tasks) and must not expose EIN, legal business details, billing/payment
+method, SMS approval controls, or owner setup settings.
+
+Canonical field mapping: **`SMS-APPROVAL-FIELD-MAPPING.md`**.

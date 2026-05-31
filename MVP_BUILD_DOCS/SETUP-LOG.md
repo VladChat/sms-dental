@@ -1507,3 +1507,56 @@ Commit: `ef8c29a` (code + most docs), plus a docs follow-up for
 
 Operations docs update needed: yes — updated `OPERATIONS-RUNBOOK.md`,
 `ONBOARDING-WORKFLOW-BUILD-GUIDE.md`, and `SMS-APPROVAL-FIELD-MAPPING.md`.
+
+---
+
+## 2026-05-31 — Owner account dashboard clarity polish
+
+Polish pass from live-QA screenshots (no structural change to the dashboard).
+Commit `f52100b` (code + .gitignore + field-mapping) plus this docs follow-up.
+
+- **Status system:** added a calmer `needs_setup` status (amber **dot**,
+  "Needs setup") in `AccountUI.tsx` and switched all normal incomplete states
+  (Business profile, SMS approval, Billing, phone-before-payment) to it. `Needs
+  action` (amber **alert**) is now reserved for act-now states (e.g. `Trial
+  ended`). No red/danger styling for normal setup; red stays errors-only.
+- **Billing:** removed the duplicate status (header badge + competing
+  "Payment method needed" row). The payment-method row shows a single
+  `Needs setup`; added a secure payment-method visual (card glyph + "No payment
+  method on file"). Button/modal stay active and safe; copy flips to "Update
+  payment method"/"Payment method on file" when one exists. Still no card fields,
+  no storage, no Stripe call.
+- **Phone number:** "Not assigned yet" is now muted body text (not a heading);
+  the payment-method note is a gentle info callout, not an error block. No "Add
+  payment method" button here (only in Billing).
+- **SMS approval:** section still marks `Complete` on save, but a new **Texting**
+  row shows the real texting state (`Not active`/`Waiting for approval`/`Active`,
+  "Starts after approval") so Complete ≠ live texting. Public-page links unchanged.
+- **Docs:** appended authoritative current-state sections to
+  `ONBOARDING-WORKFLOW-BUILD-GUIDE.md` and `OPERATIONS-RUNBOOK.md` (the prior
+  "2026-05-30" inline descriptions were stale — still listed a Documents nav item
+  and first-incomplete default). Recorded a roadmap note for a future owner-only
+  `SMS & conversation settings` section and the front-desk-workspace separation
+  (front desk must not see EIN/legal/billing/SMS-approval/owner settings).
+  Neither is built now.
+- **Cleanup:** added `*.bak` to `.gitignore` (editor auto-backups were leaking
+  into commits); 0 `.bak` files tracked.
+
+Files: `AccountUI.tsx`, `BusinessProfile.tsx`, `BillingCard.tsx`,
+`AssignedNumberCard.tsx`, `SmsApprovalForm.tsx`, `app/globals.css`, `.gitignore`,
+`ONBOARDING-WORKFLOW-BUILD-GUIDE.md`, `OPERATIONS-RUNBOOK.md`,
+`SMS-APPROVAL-FIELD-MAPPING.md`, this entry.
+
+Validation: `npm run typecheck` pass; `npm run build` pass (no `lint`/test
+scripts). Live click-through not run from this env (prod DB pooler + needs a real
+setup token); status/persistence logic unchanged.
+
+Side effects: no SMS sent; `sms_recovery_enabled` unchanged (false); no Stripe
+calls/resources; no raw card data; Twilio settings/webhooks unchanged; no number
+purchased/reserved; no DNS/env/Vercel changes; no migration.
+
+Remaining: real Stripe wiring; server-side billing→phone provisioning gate;
+future owner-only SMS & conversation settings; separate front-desk workspace.
+
+Operations docs update needed: yes — done (guide + runbook + field-mapping +
+this entry).
