@@ -158,3 +158,23 @@ A focused `/account` cleanup shipped alongside this foundation:
   so the right panel no longer shifts horizontally when switching sections.
 - Phone number: removed the redundant panel-header status badge so the clearest
   status emphasis stays in the Voice / Calls and SMS / Texting service rows.
+
+## 11. Auth foundation update (2026-05-31)
+
+Phase 1 real auth is now in place for owners:
+
+- `/login` supports owner email+password sign-in.
+- `/account` and `/workspace` now use authenticated session + clinic membership
+  as the **primary** access path.
+- Legacy `mcd_account` setup-token cookie remains a temporary fallback so
+  existing setup-link users are not locked out during rollout.
+
+Staff invites are still not built in this phase:
+
+- no self-service front-desk invite acceptance yet
+- no staff-only credentials issued by product flow yet
+- workspace remains an owner-accessible preview until invite + front-desk role
+  onboarding is implemented
+
+Authoritative auth flow and table model are documented in:
+`MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`.

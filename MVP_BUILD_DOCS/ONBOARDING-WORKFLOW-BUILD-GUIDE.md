@@ -995,6 +995,59 @@ Canonical field mapping: **`SMS-APPROVAL-FIELD-MAPPING.md`**.
 
 ---
 
+## Update 2026-05-31 — Owner auth foundation (Phase 1)
+
+Onboarding now establishes real owner authentication while preserving the setup
+link as the first-entry path.
+
+Current first-entry setup behavior:
+
+- Route: `/setup/{token}`.
+- Token is validated server-side.
+- Screen shows:
+  - read-only login email
+  - clinic name
+  - main office phone
+  - ZIP code
+  - create password
+  - confirm password
+- Primary button text: `Continue setup`.
+
+On submit (`POST /api/onboarding/[token]/clinic`):
+
+1. validates token + required fields + password rules
+2. creates/updates clinic profile
+3. creates owner auth user when missing
+4. upserts `profiles` and `clinic_memberships` (`role='owner'`)
+5. creates authenticated session
+6. redirects to `/account`
+
+If auth user already exists for setup email:
+
+- no duplicate auth user is created
+- user receives a safe sign-in path via `/login`
+
+Returning-user route:
+
+- `/login` (email + password) -> owner redirect to `/account`
+
+Backward compatibility:
+
+- Legacy setup-token cookie (`mcd_account`) remains as temporary fallback for
+  `/account` and `/workspace` while rollout verification is in progress.
+
+Not included in this phase:
+
+- staff invite flow
+- Google login
+- Apple login
+
+Auth source-of-truth doc:
+
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`
+
+---
+
 ## Update 2026-05-30 — Account/settings dashboard (supersedes the checklist)
 
 The Screen 4 page was redesigned from the app-style 6-step activation checklist

@@ -27,7 +27,9 @@ export type LocalNumberStatus = "preparing" | "reserved" | "assigned";
 export type SmsStatus = "preparing" | "waiting_for_approval" | "active";
 
 export type BusinessProfileData = {
-  token: string;
+  // Legacy setup token for token-scoped API routes. Null when authenticated
+  // session routes are used (normal /login -> /account flow).
+  token: string | null;
   // Read-only email the setup link was sent to.
   loginEmail: string;
   // Absolute base URL for the public /business/{slug} pages.
@@ -48,5 +50,8 @@ export type BusinessProfileData = {
     // Days left in the 21-day trial, counted from setup creation. 0 when ended.
     trialDaysRemaining: number;
     trialEnded: boolean;
+  };
+  security: {
+    passwordEnabled: boolean;
   };
 };

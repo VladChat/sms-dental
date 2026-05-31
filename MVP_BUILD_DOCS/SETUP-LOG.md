@@ -1615,3 +1615,128 @@ settings in `/account`.
 
 Operations docs update needed: yes — done (`FRONT-DESK-WORKSPACE.md` new;
 `ONBOARDING-WORKFLOW-BUILD-GUIDE.md`, `OPERATIONS-RUNBOOK.md`, this entry).
+
+---
+
+## 2026-05-31 — Owner auth foundation (Phase 1)
+
+Implemented the first real authentication foundation for owner accounts while
+preserving setup-token fallback to avoid lockouts during rollout.
+
+What changed:
+
+- Added Supabase Auth dependencies:
+  - `@supabase/supabase-js`
+  - `@supabase/ssr`
+- Added Supabase auth helpers:
+  - `lib/supabase/config.ts`
+  - `lib/supabase/server.ts`
+  - `lib/supabase/admin.ts`
+- Added membership/auth DB helpers:
+  - `lib/db/auth-users.ts`
+  - `lib/db/profiles.ts`
+  - `lib/db/clinic-memberships.ts`
+  - `lib/auth/access.ts`
+  - `lib/auth/password.ts`
+- Added migration:
+  - `supabase/migrations/20260531000100_auth_profiles_memberships.sql`
+  - creates `public.profiles` and `public.clinic_memberships`
+  - enables RLS + minimal policies for those two new tables only
+- Updated onboarding entry screen:
+  - `app/setup/[token]/page.tsx`
+  - `app/setup/[token]/_components/ClinicForm.tsx`
+  - now shows read-only login email + password/confirm fields
+  - submit button now `Continue setup`
+- Updated setup submit route:
+  - `app/api/onboarding/[token]/clinic/route.ts`
+  - validates password
+  - creates owner auth account when missing
+  - upserts `profiles` + `clinic_memberships` owner role
+  - establishes authenticated session
+  - keeps legacy `mcd_account` fallback cookie
+  - handles existing-user case safely with `/login` path
+- Added authenticated account save routes:
+  - `app/api/account/business-info/route.ts`
+  - `app/api/account/a2p/route.ts`
+- Added auth routes:
+  - `app/api/auth/login/route.ts`
+  - `app/api/auth/logout/route.ts`
+- Added login UI:
+  - `app/login/page.tsx`
+  - `app/login/_components/LoginForm.tsx`
+- Updated `/account` + `/workspace` guards:
+  - auth session + membership is primary path
+  - legacy token cookie is temporary fallback
+- Added minimal Security section in `/account`:
+  - login email
+  - password sign-in status
+  - sign out button
+
+Files changed (primary):
+
+- `package.json`, `package-lock.json`
+- `app/setup/[token]/page.tsx`
+- `app/setup/[token]/_components/ClinicForm.tsx`
+- `app/setup/[token]/_components/BusinessProfile.tsx`
+- `app/setup/[token]/_components/BusinessProfileForm.tsx`
+- `app/setup/[token]/_components/SmsApprovalForm.tsx`
+- `app/setup/[token]/_components/account-types.ts`
+- `app/setup/[token]/_components/SecurityCard.tsx` (new)
+- `app/account/page.tsx`
+- `app/workspace/page.tsx`
+- `app/login/page.tsx` (new)
+- `app/login/_components/LoginForm.tsx` (new)
+- `app/api/onboarding/[token]/clinic/route.ts`
+- `app/api/account/business-info/route.ts` (new)
+- `app/api/account/a2p/route.ts` (new)
+- `app/api/auth/login/route.ts` (new)
+- `app/api/auth/logout/route.ts` (new)
+- `lib/db/setup-requests.ts`
+- `lib/supabase/config.ts` (new)
+- `lib/supabase/server.ts` (new)
+- `lib/supabase/admin.ts` (new)
+- `lib/db/auth-users.ts` (new)
+- `lib/db/profiles.ts` (new)
+- `lib/db/clinic-memberships.ts` (new)
+- `lib/auth/access.ts` (new)
+- `lib/auth/password.ts` (new)
+- `supabase/migrations/20260531000100_auth_profiles_memberships.sql` (new)
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md` (new)
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/ONBOARDING-WORKFLOW-BUILD-GUIDE.md`
+- `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Manual QA status:
+
+- Local static/type/build validation complete.
+- Full browser E2E + real Supabase Auth session walkthrough not executed from
+  this terminal-only run (requires live token/session click-through).
+
+Side effects avoided:
+
+- no SMS sent
+- no Twilio webhook changes
+- no Twilio number purchase/reservation
+- no Stripe billing/payment behavior changes
+- no live SMS activation
+- no `docs/` marketing site edits
+- no secret values logged/committed
+
+Commit hash: pending (record in final delivery report for this run)  
+Push status: pending (record in final delivery report for this run)
+
+Remaining risks / next steps:
+
+- Verify end-to-end setup-link -> password create -> `/account` on live environment.
+- Verify returning `/login` flow on fresh browser session.
+- Implement phase 2 staff invite flow (`front_desk` membership onboarding).
+- Add password reset UI flow (currently support handoff is manual).
+
+Operations docs update needed: yes — done (`AUTH-AND-ACCESS-CONTROL.md` added;
+runbook/workflow/workspace/log updated in this pass).

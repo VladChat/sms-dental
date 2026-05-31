@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { lookupSetupRequestByRawToken } from "../../../lib/onboarding/verify";
+import { findClinicById } from "../../../lib/db/clinics";
 import { SetupInvalid } from "./_components/SetupInvalid";
 import { ClinicForm } from "./_components/ClinicForm";
-import { AccountHandoff } from "./_components/AccountHandoff";
 import { PageShell } from "./_components/PageShell";
 
 export const dynamic = "force-dynamic";
@@ -16,9 +16,9 @@ export const metadata: Metadata = {
 };
 
 // `/setup/[token]` is the magic-entry URL from the setup email. It validates the
-// token and shows the initial office-profile form. Once a clinic exists, account
-// context is established and the customer moves to the clean `/account` URL so
-// the long token does not stay in the address bar.
+// token and shows the first-entry onboarding form (office identity + password).
+// After submit, the server creates/updates clinic records, creates owner auth,
+// establishes session, and redirects to the clean `/account` URL.
 export default async function SetupTokenPage({
   params,
 }: {
@@ -36,19 +36,21 @@ export default async function SetupTokenPage({
   }
   const setupRequest = lookup.setupRequest;
 
-  // Magic-entry screen — create office profile (no clinic yet).
-  if (
-    setupRequest.status === "requested" ||
-    setupRequest.status === "email_sent" ||
-    !setupRequest.clinic_id
-  ) {
-    return (
-      <PageShell>
-        <ClinicForm token={token} />
-      </PageShell>
-    );
-  }
+  const clinic = setupRequest.clinic_id
+    ? await findClinicById(setupRequest.clinic_id).catch(() => null)
+    : null;
 
-  // Clinic exists — establish account context and move to the clean /account URL.
-  return <AccountHandoff token={token} />;
+  return (
+    <PageShell>
+      <ClinicForm
+        token={token}
+        loginEmail={setupRequest.owner_email}
+        initialValues={{
+          name: clinic?.name ?? "",
+          mainPhone: clinic?.main_phone ?? "",
+          postalCode: clinic?.postal_code ?? "",
+        }}
+      />
+    </PageShell>
+  );
 }
