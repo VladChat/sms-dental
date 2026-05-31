@@ -6,10 +6,36 @@ import type { LocalNumberStatus, SmsStatus } from "./account-types";
 export function AssignedNumberCard({
   localNumberStatus,
   smsStatus,
+  hasPaymentMethod,
+  onAddPaymentMethod,
 }: {
   localNumberStatus: LocalNumberStatus;
   smsStatus: SmsStatus;
+  hasPaymentMethod: boolean;
+  onAddPaymentMethod: () => void;
 }) {
+  // A payment method must be on file before we prepare or assign a number.
+  if (!hasPaymentMethod) {
+    return (
+      <div className="acct-callout">
+        <StatusRow label="Status">
+          <Badge tone="warning">Payment method needed</Badge>
+        </StatusRow>
+        <p className="t-body" style={{ margin: 0 }}>
+          Add a payment method to receive your phone number.
+        </p>
+        <p className="t-small" style={{ margin: 0, color: "var(--text-muted)" }}>
+          You will not be charged until SMS recovery is active and your trial period ends.
+        </p>
+        <div>
+          <button type="button" className="btn btn-primary" onClick={onAddPaymentMethod}>
+            Add payment method
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const numberAssigned = localNumberStatus === "assigned" || localNumberStatus === "reserved";
   const numberLabel =
     localNumberStatus === "assigned"

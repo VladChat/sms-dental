@@ -5,8 +5,8 @@ import {
   BUSINESS_TYPES,
   BUSINESS_TYPE_LABELS,
 } from "../../../../lib/validation/url";
-import { Field, SelectField, SaveBar, DocRow, ReviewRow, nowLabel } from "./AccountUI";
-import type { BusinessProfileFields, SmsApprovalFields } from "./account-types";
+import { Field, SelectField, SaveBar, nowLabel } from "./AccountUI";
+import type { SmsApprovalFields } from "./account-types";
 
 type FieldErrors = Partial<Record<keyof SmsApprovalFields, string>>;
 
@@ -15,29 +15,13 @@ const BUSINESS_TYPE_OPTIONS = BUSINESS_TYPES.map((v) => ({
   label: BUSINESS_TYPE_LABELS[v],
 }));
 
-function businessTypeLabel(value: string): string {
-  return BUSINESS_TYPE_LABELS[value as keyof typeof BUSINESS_TYPE_LABELS] ?? "";
-}
-
-function formatAddress(b: BusinessProfileFields): string {
-  const line1 = [b.streetAddress, b.addressLine2].filter(Boolean).join(", ");
-  const line2 = [b.city, b.stateRegion, b.postalCode].filter(Boolean).join(" ");
-  return [line1, line2].filter(Boolean).join(", ");
-}
-
 export function SmsApprovalForm({
   token,
-  publicBaseUrl,
-  slug,
-  businessProfile,
   value,
   onChange,
   onSaved,
 }: {
   token: string;
-  publicBaseUrl: string;
-  slug: string | null;
-  businessProfile: BusinessProfileFields;
   value: SmsApprovalFields;
   onChange: (patch: Partial<SmsApprovalFields>) => void;
   onSaved: (persisted: SmsApprovalFields) => void;
@@ -46,8 +30,6 @@ export function SmsApprovalForm({
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-
-  const base = slug ? `${publicBaseUrl}/business/${slug}` : null;
 
   function validate(): FieldErrors {
     const e: FieldErrors = {};
@@ -109,14 +91,14 @@ export function SmsApprovalForm({
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: "var(--space-5)" }}>
+    <form onSubmit={onSubmit} noValidate className="acct-form">
       <Field
         label="Legal business name"
         name="legal_business_name"
         value={value.legalBusinessName}
         onChange={(v) => onChange({ legalBusinessName: v })}
         required
-        helper="The exact registered name on your business paperwork. It can differ from the name patients see."
+        helper="The exact registered name on your business paperwork."
         error={fieldErrors.legalBusinessName}
       />
 
@@ -128,7 +110,7 @@ export function SmsApprovalForm({
         options={BUSINESS_TYPE_OPTIONS}
         placeholder="Select business type…"
         required
-        helper="Most dental offices are a private company. Pick what matches your registration."
+        helper="Select the legal business structure that matches your registration."
         error={fieldErrors.businessType}
       />
 
@@ -139,7 +121,7 @@ export function SmsApprovalForm({
         onChange={(v) => onChange({ einTaxId: v })}
         required
         inputMode="numeric"
-        helper="Your federal Employer Identification Number. Carriers require it to approve business texting."
+        helper="Your 9-digit federal tax ID."
         error={fieldErrors.einTaxId}
       />
 
@@ -188,44 +170,6 @@ export function SmsApprovalForm({
         </div>
       </fieldset>
 
-      {/* Generated approval documents */}
-      <div className="acct-subsection">
-        <h3 className="t-h4">Approval documents</h3>
-        <p className="t-small" style={{ margin: "var(--space-1) 0 var(--space-3)" }}>
-          We created these public pages from your details. They&apos;re submitted with your approval.
-        </p>
-        {base ? (
-          <div style={{ display: "grid", gap: "var(--space-2)" }}>
-            <DocRow label="Business profile" url={base} />
-            <DocRow label="Privacy policy" url={`${base}/privacy`} />
-            <DocRow label="SMS terms" url={`${base}/sms-terms`} />
-          </div>
-        ) : (
-          <p className="t-small" style={{ color: "var(--text-muted)" }}>
-            These appear automatically once you save your business profile.
-          </p>
-        )}
-      </div>
-
-      {/* What we'll submit — read-only review summary */}
-      <div className="acct-subsection">
-        <h3 className="t-h4">What we&apos;ll submit</h3>
-        <dl className="acct-review" style={{ marginTop: "var(--space-3)" }}>
-          <ReviewRow label="Clinic name" value={businessProfile.name} />
-          <ReviewRow label="Legal business name" value={value.legalBusinessName} />
-          <ReviewRow label="Business type" value={businessTypeLabel(value.businessType)} />
-          <ReviewRow label="EIN" value={value.einTaxId} />
-          <ReviewRow label="Main office phone" value={businessProfile.mainPhone} />
-          <ReviewRow label="Business address" value={formatAddress(businessProfile)} />
-          <ReviewRow
-            label="Representative"
-            value={[value.repFirstName, value.repLastName].filter(Boolean).join(" ")}
-          />
-          <ReviewRow label="Representative email" value={value.repEmail} />
-          <ReviewRow label="Representative phone" value={value.repPhone} />
-        </dl>
-      </div>
-
       <label className="check">
         <input
           type="checkbox"
@@ -233,13 +177,12 @@ export function SmsApprovalForm({
           onChange={(e) => onChange({ authorized: e.target.checked })}
         />
         <span>
-          I&apos;ve reviewed the business and approval details above, confirm they&apos;re accurate,
-          and authorize Missed Calls Dental to use them to submit this business for SMS texting
-          approval.
+          I confirm these details are accurate and authorize Missed Calls Dental to submit them for
+          SMS approval.
         </span>
       </label>
-      <p className="t-helper" style={{ marginTop: "calc(var(--space-3) * -1 + var(--space-1))" }}>
-        Texting stays off until approval is complete. You can update these details before then.
+      <p className="t-helper" style={{ margin: "calc(var(--space-3) * -1 + 2px) 0 0" }}>
+        Texting will start after approval.
       </p>
 
       <SaveBar label="Save approval information" saving={saving} savedAt={savedAt} error={error} />

@@ -42,5 +42,8 @@ export type BusinessProfileData = {
   billing: {
     billingStatus: string;
     trialDays: number;
+    // True once a payment method is on file (derived server-side from the
+    // Stripe customer / billing status). No raw card data is ever stored.
+    hasPaymentMethod: boolean;
   };
 };
