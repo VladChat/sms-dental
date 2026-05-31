@@ -18,10 +18,12 @@ Principles:
 - Customer-facing UI never shows external provider/brand names or backend
   technical systems. The customer-facing section is named
   "SMS Approval Information" ("A2P" stays internal/registration-only).
-- The account setup page is a single customer-facing page with four sections:
-  Business Profile (form), SMS Approval Information (form), Assigned Phone
-  Number (read-only status), and Billing & Payment Method (read-only status).
-  It is not a multi-step technical checklist.
+- The account setup page is a customer **account/settings dashboard**: a left
+  section nav + a right panel that shows one active section at a time (collapses
+  to wrapping tabs on mobile). Sections: Business profile (form), SMS approval
+  (form), Billing (payment method), Phone number (read-only status), Documents
+  (approval links). It is not a multi-step technical checklist and never stacks
+  all forms on one long page.
 - Field ownership: the clinic's public identity + address live in **Business
   Profile**. The legal/registration fields (legal name, EIN, business type)
   plus the authorized representative live in **SMS Approval Information**,
@@ -97,9 +99,11 @@ Notes:
   `PRIVATE_PROFIT`.
 - Representative email/phone are pre-filled from the login email and main office
   phone for convenience, but remain editable.
-- This section also renders the generated **Approval documents** (compliance
-  links), a read-only **"What we'll submit"** review summary of the relevant
-  Business Profile + SMS Approval fields, and the authorization checkbox.
+- This section keeps the authorization checkbox with short copy
+  ("Texting will start after approval."). The large "What we'll submit" review
+  block was removed (2026-05-30) — it read like internal submission paperwork.
+- The generated compliance links now live in their own **Documents** section
+  (View / Copy link), not inside SMS Approval.
 
 Removed from the customer-editable form (do NOT collect from the customer):
 
@@ -132,9 +136,8 @@ customer only as read-only context where helpful, never as editable inputs.
 
 ## Generated compliance pages
 
-The setup UI shows these inside the SMS Approval Information section as an
-"Approval documents" subsection with View / Copy link actions (not raw path
-pills, not a separate top-level step):
+The setup UI shows these in the **Documents** section of the account dashboard,
+with View / Copy link actions (not raw path pills):
 
 - Business profile — `/business/{slug}`
 - Privacy policy — `/business/{slug}/privacy`

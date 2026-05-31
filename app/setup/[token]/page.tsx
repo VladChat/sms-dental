@@ -94,6 +94,12 @@ export default async function SetupTokenPage({
     billing: {
       billingStatus: clinic.billing_status,
       trialDays: 21,
+      // A payment method is considered on file once Stripe has a customer for
+      // this clinic or billing has moved past "not_started". We never store raw
+      // card data; this is the only signal the gate relies on.
+      hasPaymentMethod:
+        Boolean(clinic.stripe_customer_id) ||
+        ["trialing", "active", "past_due"].includes(clinic.billing_status),
     },
   };
 

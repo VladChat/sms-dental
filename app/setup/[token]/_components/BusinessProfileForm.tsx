@@ -82,7 +82,7 @@ export function BusinessProfileForm({
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate style={{ display: "grid", gap: "var(--space-5)" }}>
+    <form onSubmit={onSubmit} noValidate className="acct-form">
       <Field
         label="Clinic name"
         name="name"

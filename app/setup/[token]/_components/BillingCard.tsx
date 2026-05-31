@@ -2,12 +2,22 @@
 
 import { Badge, StatusRow } from "./AccountUI";
 
-export function BillingCard({ trialDays }: { trialDays: number }) {
+export function BillingCard({
+  trialDays,
+  hasPaymentMethod,
+}: {
+  trialDays: number;
+  hasPaymentMethod: boolean;
+}) {
   return (
-    <div style={{ display: "grid", gap: "var(--space-4)" }}>
+    <div style={{ display: "grid", gap: "var(--space-5)" }}>
       <div>
         <StatusRow label="Payment method">
-          <Badge tone="neutral">Not added yet</Badge>
+          {hasPaymentMethod ? (
+            <Badge tone="success">Added</Badge>
+          ) : (
+            <Badge tone="warning">Payment method needed</Badge>
+          )}
         </StatusRow>
         <StatusRow label="Plan">
           <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
@@ -16,17 +26,18 @@ export function BillingCard({ trialDays }: { trialDays: number }) {
         </StatusRow>
         <StatusRow label="Free trial">
           <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-            {trialDays} days, starts after activation
+            {trialDays} days
           </span>
         </StatusRow>
       </div>
 
       <div style={{ display: "grid", gap: "var(--space-2)" }}>
-        <button type="button" className="btn btn-secondary" disabled aria-disabled="true">
+        <button type="button" className="btn btn-primary" disabled aria-disabled="true">
           Add payment method
         </button>
         <p className="t-small" style={{ color: "var(--text-muted)" }}>
-          Billing starts only after SMS recovery is active. No card is charged before activation.
+          Secure payment setup opens here shortly. You will not be charged until SMS recovery is
+          active and your trial period ends.
         </p>
       </div>
     </div>

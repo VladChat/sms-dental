@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Section, type BadgeTone } from "./AccountUI";
+import { Section, type BadgeTone } from "./AccountUI";
 import { BusinessProfileForm } from "./BusinessProfileForm";
 import { SmsApprovalForm } from "./SmsApprovalForm";
 import { AssignedNumberCard } from "./AssignedNumberCard";
 import { BillingCard } from "./BillingCard";
+import { DocumentsCard } from "./DocumentsCard";
 import type {
   BusinessProfileData,
   BusinessProfileFields,
@@ -15,6 +16,16 @@ import type {
 
 export type { BusinessProfileData } from "./account-types";
 
+type SectionId = "business" | "sms" | "billing" | "phone" | "documents";
+
+const DOT_COLOR: Record<BadgeTone, string> = {
+  success: "var(--success)",
+  warning: "var(--warning)",
+  info: "var(--info)",
+  brand: "var(--primary)",
+  neutral: "var(--border-strong)",
+};
+
 export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [biz, setBiz] = useState<BusinessProfileFields>(stripCompleted(data.businessProfile));
   const [bizDone, setBizDone] = useState(data.businessProfile.completed);
@@ -23,9 +34,26 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [smsDone, setSmsDone] = useState(data.smsApproval.completed);
   const [smsStatus, setSmsStatus] = useState<SmsStatus>(data.number.smsStatus);
 
+  const hasPaymentMethod = data.billing.hasPaymentMethod;
+
   const clinicName = biz.name || "Your clinic";
 
-  const numberBadge = numberSectionBadge(data.number.localNumberStatus, smsStatus);
+  // Open the first unfinished section so the next step is obvious, without a
+  // harsh checklist.
+  const [active, setActive] = useState<SectionId>(() => {
+    if (!bizDone) return "business";
+    if (!smsDone) return "sms";
+    if (!hasPaymentMethod) return "billing";
+    return "phone";
+  });
+
+  const navItems: { id: SectionId; label: string; dot: BadgeTone }[] = [
+    { id: "business", label: "Business profile", dot: bizDone ? "success" : "warning" },
+    { id: "sms", label: "SMS approval", dot: smsDone ? "info" : "warning" },
+    { id: "billing", label: "Billing", dot: hasPaymentMethod ? "success" : "warning" },
+    { id: "phone", label: "Phone number", dot: phoneDot(hasPaymentMethod, smsStatus) },
+    { id: "documents", label: "Documents", dot: data.slug ? "neutral" : "neutral" },
+  ];
 
   return (
     <main className="acct-page">
@@ -33,79 +61,110 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
         <p className="t-eyebrow">{clinicName}</p>
         <h1 className="t-h2" style={{ marginTop: "var(--space-2)" }}>Account setup</h1>
         <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
-          Add your details below. Patient texting stays off until your account is approved.
+          Manage your account details and finish setup. Texting starts after approval.
         </p>
-        <div className="acct-summary" role="status">
-          <Badge tone={smsStatusTone(smsStatus)}>Texting: {smsStatusLabel(smsStatus)}</Badge>
-        </div>
       </header>
 
-      <div className="acct-sections">
-        <Section
-          id="business-profile"
-          title="Business profile"
-          description="The basics patients and approvals rely on."
-          badge={
-            bizDone
-              ? { tone: "success", label: "Saved" }
-              : { tone: "warning", label: "Needs your details" }
-          }
-        >
-          <BusinessProfileForm
-            token={data.token}
-            loginEmail={data.loginEmail}
-            value={biz}
-            onChange={(patch) => setBiz((prev) => ({ ...prev, ...patch }))}
-            onSaved={(persisted) => {
-              setBiz(persisted);
-              setBizDone(true);
-            }}
-          />
-        </Section>
+      <div className="acct-layout">
+        <nav className="acct-nav" aria-label="Account sections">
+          {navItems.map((item, i) => {
+            const isActive = item.id === active;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className="acct-nav-item"
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => setActive(item.id)}
+              >
+                <span className="acct-nav-main">
+                  <span className="acct-nav-num" aria-hidden="true">{i + 1}</span>
+                  <span className="acct-nav-text">{item.label}</span>
+                </span>
+                <span
+                  className="acct-nav-dot"
+                  style={{ background: DOT_COLOR[item.dot] }}
+                  aria-hidden="true"
+                />
+              </button>
+            );
+          })}
+        </nav>
 
-        <Section
-          id="sms-approval"
-          title="SMS approval information"
-          description="Details carriers require before your office can text patients."
-          badge={
-            smsDone
-              ? { tone: "info", label: "Ready for review" }
-              : { tone: "warning", label: "Needs your details" }
-          }
-        >
-          <SmsApprovalForm
-            token={data.token}
-            publicBaseUrl={data.publicBaseUrl}
-            slug={data.slug}
-            businessProfile={biz}
-            value={sms}
-            onChange={(patch) => setSms((prev) => ({ ...prev, ...patch }))}
-            onSaved={(persisted) => {
-              setSms(persisted);
-              setSmsDone(true);
-              setSmsStatus((s) => (s === "preparing" ? "waiting_for_approval" : s));
-            }}
-          />
-        </Section>
+        <div className="acct-panel">
+          {active === "business" && (
+            <Section
+              id="business-profile"
+              title="Business profile"
+              description="The basics patients and approvals rely on."
+            >
+              <BusinessProfileForm
+                token={data.token}
+                loginEmail={data.loginEmail}
+                value={biz}
+                onChange={(patch) => setBiz((prev) => ({ ...prev, ...patch }))}
+                onSaved={(persisted) => {
+                  setBiz(persisted);
+                  setBizDone(true);
+                }}
+              />
+            </Section>
+          )}
 
-        <Section
-          id="assigned-number"
-          title="Assigned phone number"
-          badge={numberBadge}
-        >
-          <AssignedNumberCard
-            localNumberStatus={data.number.localNumberStatus}
-            smsStatus={smsStatus}
-          />
-        </Section>
+          {active === "sms" && (
+            <Section
+              id="sms-approval"
+              title="SMS approval"
+              description="Details required before your office can text patients."
+            >
+              <SmsApprovalForm
+                token={data.token}
+                value={sms}
+                onChange={(patch) => setSms((prev) => ({ ...prev, ...patch }))}
+                onSaved={(persisted) => {
+                  setSms(persisted);
+                  setSmsDone(true);
+                  setSmsStatus((s) => (s === "preparing" ? "waiting_for_approval" : s));
+                }}
+              />
+            </Section>
+          )}
 
-        <Section
-          id="billing"
-          title="Billing & payment method"
-          badge={{ tone: "neutral", label: "Set up later" }}
-        >
-          <BillingCard trialDays={data.billing.trialDays} />
-        </Section>
+          {active === "billing" && (
+            <Section
+              id="billing"
+              title="Billing & payment method"
+              description="Add a payment method to continue. No charge during your trial."
+            >
+              <BillingCard trialDays={data.billing.trialDays} hasPaymentMethod={hasPaymentMethod} />
+            </Section>
+          )}
+
+          {active === "phone" && (
+            <Section
+              id="phone-number"
+              title="Phone number"
+              description="Your office number for calls and texting."
+            >
+              <AssignedNumberCard
+                localNumberStatus={data.number.localNumberStatus}
+                smsStatus={smsStatus}
+                hasPaymentMethod={hasPaymentMethod}
+                onAddPaymentMethod={() => setActive("billing")}
+              />
+            </Section>
+          )}
+
+          {active === "documents" && (
+            <Section
+              id="documents"
+              title="Documents"
+              description="Public pages created for your account."
+            >
+              <DocumentsCard publicBaseUrl={data.publicBaseUrl} slug={data.slug} />
+            </Section>
+          )}
+        </div>
       </div>
     </main>
   );
@@ -133,26 +192,9 @@ function withRepDefaults(data: BusinessProfileData): SmsApprovalFields {
   };
 }
 
-function numberSectionBadge(
-  localNumberStatus: BusinessProfileData["number"]["localNumberStatus"],
-  smsStatus: SmsStatus,
-): { tone: BadgeTone; label: string } {
-  if (smsStatus === "active") return { tone: "success", label: "Active" };
-  if (smsStatus === "waiting_for_approval") return { tone: "info", label: "Waiting for approval" };
-  if (localNumberStatus === "assigned" || localNumberStatus === "reserved") {
-    return { tone: "neutral", label: "Number ready" };
-  }
-  return { tone: "neutral", label: "Preparing" };
-}
-
-function smsStatusLabel(s: SmsStatus): string {
-  if (s === "active") return "Active";
-  if (s === "waiting_for_approval") return "Pending approval";
-  return "Not started";
-}
-
-function smsStatusTone(s: SmsStatus): BadgeTone {
-  if (s === "active") return "success";
-  if (s === "waiting_for_approval") return "info";
+function phoneDot(hasPaymentMethod: boolean, smsStatus: SmsStatus): BadgeTone {
+  if (!hasPaymentMethod) return "warning";
+  if (smsStatus === "active") return "success";
+  if (smsStatus === "waiting_for_approval") return "info";
   return "neutral";
 }

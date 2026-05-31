@@ -226,16 +226,6 @@ export function StatusRow({ label, children }: { label: string; children: React.
   );
 }
 
-/** A row in the "What we'll submit" review summary. */
-export function ReviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="acct-review-row">
-      <dt>{label}</dt>
-      <dd>{value || <span style={{ color: "var(--text-muted)" }}>Not provided yet</span>}</dd>
-    </div>
-  );
-}
-
 /** A generated compliance document row with View + Copy actions. */
 export function DocRow({ label, url }: { label: string; url: string }) {
   const [copied, setCopied] = useState(false);
