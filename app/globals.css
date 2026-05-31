@@ -206,7 +206,12 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 }
 .acct-nav-item[aria-current="page"] .acct-nav-num { background:var(--primary); color:var(--text-on-brand); }
 .acct-nav-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.acct-nav-dot { width:8px; height:8px; border-radius:999px; flex:0 0 auto; }
+.acct-nav-status { display:inline-flex; align-items:center; flex:0 0 auto; }
+.acct-nav-status.tone-success { color:var(--success); }
+.acct-nav-status.tone-warning { color:var(--warning); }
+.acct-nav-status.tone-info { color:var(--info); }
+.acct-nav-status.tone-neutral { color:var(--text-muted); }
+.acct-nav-status.tone-error { color:var(--error); }
 .acct-panel { min-width:0; }
 @media (max-width: 860px) {
   .acct-layout { grid-template-columns:1fr; gap:var(--space-5); }
@@ -222,9 +227,29 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .acct-fieldset legend { padding:0; margin-bottom:var(--space-1); }
 .acct-statusrow { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); padding:var(--space-3) 0; }
 .acct-statusrow + .acct-statusrow { border-top:1px solid var(--border); }
-.acct-doc-row { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); flex-wrap:wrap; padding:var(--space-3) var(--space-4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); font:var(--body-sm); }
 .acct-number { padding:var(--space-4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); }
-.acct-callout { display:grid; gap:var(--space-3); padding:var(--space-5); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); }
+.acct-callout { display:grid; gap:var(--space-2); padding:var(--space-4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); }
+.acct-review-links { margin:0; }
+.acct-review-links .link { white-space:nowrap; }
+
+/* status badges carry a small leading icon */
+.badge svg { width:14px; height:14px; flex:0 0 auto; }
+
+/* billing payment-method modal (Stripe-ready shell — no card fields) */
+.acct-modal-backdrop {
+  position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+  padding:var(--space-5); background:rgba(12,43,42,.45);
+}
+.acct-modal {
+  width:100%; max-width:440px; display:grid; gap:var(--space-4);
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+  box-shadow:var(--shadow-xl); padding:var(--space-6);
+}
+.acct-modal-placeholder {
+  display:flex; align-items:center; justify-content:center; text-align:center;
+  min-height:120px; padding:var(--space-5); border:1.5px dashed var(--border-strong);
+  border-radius:var(--r-md); background:var(--surface-sunken);
+}
 
 /* ---------------------------------------------------------------- misc */
 .tile { width:44px; height:44px; border-radius:var(--r-md); display:inline-flex; align-items:center; justify-content:center; background:var(--primary-soft); color:var(--primary); flex:0 0 auto; }

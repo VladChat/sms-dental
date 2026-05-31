@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Section, type BadgeTone } from "./AccountUI";
+import { Section, NavStatusIcon, type StatusKind } from "./AccountUI";
 import { BusinessProfileForm } from "./BusinessProfileForm";
 import { SmsApprovalForm } from "./SmsApprovalForm";
 import { AssignedNumberCard } from "./AssignedNumberCard";
 import { BillingCard } from "./BillingCard";
-import { DocumentsCard } from "./DocumentsCard";
 import type {
   BusinessProfileData,
   BusinessProfileFields,
@@ -16,15 +15,7 @@ import type {
 
 export type { BusinessProfileData } from "./account-types";
 
-type SectionId = "business" | "sms" | "billing" | "phone" | "documents";
-
-const DOT_COLOR: Record<BadgeTone, string> = {
-  success: "var(--success)",
-  warning: "var(--warning)",
-  info: "var(--info)",
-  brand: "var(--primary)",
-  neutral: "var(--border-strong)",
-};
+type SectionId = "phone" | "business" | "sms" | "billing";
 
 export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [biz, setBiz] = useState<BusinessProfileFields>(stripCompleted(data.businessProfile));
@@ -35,31 +26,29 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [smsStatus, setSmsStatus] = useState<SmsStatus>(data.number.smsStatus);
 
   const hasPaymentMethod = data.billing.hasPaymentMethod;
-
   const clinicName = biz.name || "Your clinic";
 
-  // Open the first unfinished section so the next step is obvious, without a
-  // harsh checklist.
-  const [active, setActive] = useState<SectionId>(() => {
-    if (!bizDone) return "business";
-    if (!smsDone) return "sms";
-    if (!hasPaymentMethod) return "billing";
-    return "phone";
-  });
+  // Phone number is the customer's primary resource, so it is first and opens by
+  // default. We do NOT auto-jump to the first incomplete section.
+  const [active, setActive] = useState<SectionId>("phone");
 
-  const navItems: { id: SectionId; label: string; dot: BadgeTone }[] = [
-    { id: "business", label: "Business profile", dot: bizDone ? "success" : "warning" },
-    { id: "sms", label: "SMS approval", dot: smsDone ? "info" : "warning" },
-    { id: "billing", label: "Billing", dot: hasPaymentMethod ? "success" : "warning" },
-    { id: "phone", label: "Phone number", dot: phoneDot(hasPaymentMethod, smsStatus) },
-    { id: "documents", label: "Documents", dot: data.slug ? "neutral" : "neutral" },
+  const phoneStatus = phoneSectionStatus(data.number.localNumberStatus, smsStatus, hasPaymentMethod);
+  const bizStatus: StatusKind = bizDone ? "complete" : "needs_action";
+  const smsSectionStatus: StatusKind = smsDone ? "complete" : "needs_action";
+  const billingStatus: StatusKind = hasPaymentMethod ? "complete" : "needs_action";
+
+  const navItems: { id: SectionId; label: string; status: StatusKind }[] = [
+    { id: "phone", label: "Phone number", status: phoneStatus },
+    { id: "business", label: "Business profile", status: bizStatus },
+    { id: "sms", label: "SMS approval", status: smsSectionStatus },
+    { id: "billing", label: "Billing", status: billingStatus },
   ];
 
   return (
     <main className="acct-page">
       <header className="acct-header">
         <p className="t-eyebrow">{clinicName}</p>
-        <h1 className="t-h2" style={{ marginTop: "var(--space-2)" }}>Account setup</h1>
+        <h1 className="t-h2" style={{ marginTop: "var(--space-2)" }}>Account</h1>
         <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
           Manage your account details and finish setup. Texting starts after approval.
         </p>
@@ -81,22 +70,35 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                   <span className="acct-nav-num" aria-hidden="true">{i + 1}</span>
                   <span className="acct-nav-text">{item.label}</span>
                 </span>
-                <span
-                  className="acct-nav-dot"
-                  style={{ background: DOT_COLOR[item.dot] }}
-                  aria-hidden="true"
-                />
+                <NavStatusIcon kind={item.status} />
               </button>
             );
           })}
         </nav>
 
         <div className="acct-panel">
+          {active === "phone" && (
+            <Section
+              id="phone-number"
+              title="Phone number"
+              description="Your office number for calls and texting."
+              status={{ kind: phoneStatus }}
+            >
+              <AssignedNumberCard
+                localNumberStatus={data.number.localNumberStatus}
+                smsStatus={smsStatus}
+                assignedPhone={data.number.assignedPhone}
+                hasPaymentMethod={hasPaymentMethod}
+              />
+            </Section>
+          )}
+
           {active === "business" && (
             <Section
               id="business-profile"
               title="Business profile"
               description="The basics patients and approvals rely on."
+              status={{ kind: bizStatus }}
             >
               <BusinessProfileForm
                 token={data.token}
@@ -116,9 +118,12 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
               id="sms-approval"
               title="SMS approval"
               description="Details required before your office can text patients."
+              status={{ kind: smsSectionStatus }}
             >
               <SmsApprovalForm
                 token={data.token}
+                publicBaseUrl={data.publicBaseUrl}
+                slug={data.slug}
                 value={sms}
                 onChange={(patch) => setSms((prev) => ({ ...prev, ...patch }))}
                 onSaved={(persisted) => {
@@ -135,33 +140,13 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
               id="billing"
               title="Billing & payment method"
               description="Add a payment method to continue. No charge during your trial."
+              status={{ kind: billingStatus }}
             >
-              <BillingCard trialDays={data.billing.trialDays} hasPaymentMethod={hasPaymentMethod} />
-            </Section>
-          )}
-
-          {active === "phone" && (
-            <Section
-              id="phone-number"
-              title="Phone number"
-              description="Your office number for calls and texting."
-            >
-              <AssignedNumberCard
-                localNumberStatus={data.number.localNumberStatus}
-                smsStatus={smsStatus}
+              <BillingCard
                 hasPaymentMethod={hasPaymentMethod}
-                onAddPaymentMethod={() => setActive("billing")}
+                trialDaysRemaining={data.billing.trialDaysRemaining}
+                trialEnded={data.billing.trialEnded}
               />
-            </Section>
-          )}
-
-          {active === "documents" && (
-            <Section
-              id="documents"
-              title="Documents"
-              description="Public pages created for your account."
-            >
-              <DocumentsCard publicBaseUrl={data.publicBaseUrl} slug={data.slug} />
             </Section>
           )}
         </div>
@@ -192,9 +177,14 @@ function withRepDefaults(data: BusinessProfileData): SmsApprovalFields {
   };
 }
 
-function phoneDot(hasPaymentMethod: boolean, smsStatus: SmsStatus): BadgeTone {
-  if (!hasPaymentMethod) return "warning";
-  if (smsStatus === "active") return "success";
-  if (smsStatus === "waiting_for_approval") return "info";
-  return "neutral";
+function phoneSectionStatus(
+  localNumberStatus: BusinessProfileData["number"]["localNumberStatus"],
+  smsStatus: SmsStatus,
+  hasPaymentMethod: boolean,
+): StatusKind {
+  if (smsStatus === "active") return "active";
+  if (smsStatus === "waiting_for_approval") return "waiting";
+  if (localNumberStatus === "assigned" || localNumberStatus === "reserved") return "pending";
+  if (!hasPaymentMethod) return "needs_action";
+  return "pending";
 }

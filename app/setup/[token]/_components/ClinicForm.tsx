@@ -23,12 +23,17 @@ export function ClinicForm({ token }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: { message?: string } };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        redirect?: string;
+        error?: { message?: string };
+      };
       if (!res.ok || !data.ok) {
         setError(data?.error?.message ?? "Could not save your office details. Please check your entries.");
         return;
       }
-      window.location.reload();
+      // Account context is set server-side; move to the clean /account URL.
+      window.location.assign(data.redirect ?? "/account");
     } catch {
       setError("We couldn't reach the server. Please try again in a moment.");
     } finally {

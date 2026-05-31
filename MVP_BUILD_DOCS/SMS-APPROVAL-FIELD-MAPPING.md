@@ -20,10 +20,15 @@ Principles:
   "SMS Approval Information" ("A2P" stays internal/registration-only).
 - The account setup page is a customer **account/settings dashboard**: a left
   section nav + a right panel that shows one active section at a time (collapses
-  to wrapping tabs on mobile). Sections: Business profile (form), SMS approval
-  (form), Billing (payment method), Phone number (read-only status), Documents
-  (approval links). It is not a multi-step technical checklist and never stacks
-  all forms on one long page.
+  to wrapping tabs on mobile). Section order: **Phone number** (status, opens by
+  default), Business profile (form), SMS approval (form), Billing (payment
+  method). There is no Documents nav item — the public-page links are a compact
+  text row inside SMS approval. It is not a multi-step technical checklist and
+  never stacks all forms on one long page.
+- The dashboard renders at the clean `/account` URL. `/setup/{token}` is only the
+  email magic-entry link; after "Continue setup" (or on a returning visit) the
+  app sets an httpOnly account-context cookie and moves the customer to
+  `/account`, so the long token does not stay in the address bar.
 - Field ownership: the clinic's public identity + address live in **Business
   Profile**. The legal/registration fields (legal name, EIN, business type)
   plus the authorized representative live in **SMS Approval Information**,
@@ -102,8 +107,10 @@ Notes:
 - This section keeps the authorization checkbox with short copy
   ("Texting will start after approval."). The large "What we'll submit" review
   block was removed (2026-05-30) — it read like internal submission paperwork.
-- The generated compliance links now live in their own **Documents** section
-  (View / Copy link), not inside SMS Approval.
+- The generated public-page links are a compact text row directly above the
+  checkbox: `Review public pages: Business profile · Privacy policy · SMS terms`
+  (simple text links). There is no separate Documents section, no big document
+  cards, no table, and no raw URL pills.
 
 Removed from the customer-editable form (do NOT collect from the customer):
 
@@ -136,8 +143,9 @@ customer only as read-only context where helpful, never as editable inputs.
 
 ## Generated compliance pages
 
-The setup UI shows these in the **Documents** section of the account dashboard,
-with View / Copy link actions (not raw path pills):
+The setup UI shows these as a compact text-link row inside the SMS approval
+section (above the authorization checkbox), not as a separate Documents section
+or raw path pills:
 
 - Business profile — `/business/{slug}`
 - Privacy policy — `/business/{slug}/privacy`

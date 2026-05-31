@@ -1,22 +1,40 @@
 "use client";
 
-import { Badge, StatusRow } from "./AccountUI";
+import { useEffect, useRef, useState } from "react";
+import { StatusBadge, StatusRow } from "./AccountUI";
 
 export function BillingCard({
-  trialDays,
   hasPaymentMethod,
+  trialDaysRemaining,
+  trialEnded,
 }: {
-  trialDays: number;
   hasPaymentMethod: boolean;
+  trialDaysRemaining: number;
+  trialEnded: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    closeRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const dayLabel = `${trialDaysRemaining} ${trialDaysRemaining === 1 ? "day" : "days"}`;
+
   return (
     <div style={{ display: "grid", gap: "var(--space-5)" }}>
       <div>
         <StatusRow label="Payment method">
           {hasPaymentMethod ? (
-            <Badge tone="success">Added</Badge>
+            <StatusBadge kind="complete" label="Added" />
           ) : (
-            <Badge tone="warning">Payment method needed</Badge>
+            <StatusBadge kind="needs_action" label="Payment method needed" />
           )}
         </StatusRow>
         <StatusRow label="Plan">
@@ -25,21 +43,60 @@ export function BillingCard({
           </span>
         </StatusRow>
         <StatusRow label="Free trial">
-          <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-            {trialDays} days
-          </span>
+          {trialEnded ? (
+            <StatusBadge kind="needs_action" label="Trial ended" />
+          ) : (
+            <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
+              Free Trial ends in {dayLabel}
+            </span>
+          )}
         </StatusRow>
       </div>
 
       <div style={{ display: "grid", gap: "var(--space-2)" }}>
-        <button type="button" className="btn btn-primary" disabled aria-disabled="true">
+        <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>
           Add payment method
         </button>
         <p className="t-small" style={{ color: "var(--text-muted)" }}>
-          Secure payment setup opens here shortly. You will not be charged until SMS recovery is
-          active and your trial period ends.
+          You will not be charged until SMS recovery is active and your trial period ends.
         </p>
       </div>
+
+      {open && (
+        <div
+          className="acct-modal-backdrop"
+          onClick={() => setOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="acct-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-payment-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="add-payment-title" className="t-h4">Add payment method</h3>
+            <div className="acct-modal-placeholder" aria-hidden="true">
+              <span className="t-small" style={{ color: "var(--text-muted)" }}>
+                Secure payment setup will open here when billing is connected.
+              </span>
+            </div>
+            <p className="t-small" style={{ color: "var(--text-muted)", margin: 0 }}>
+              Your card details are entered on a secure payment screen — never stored by us.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                ref={closeRef}
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

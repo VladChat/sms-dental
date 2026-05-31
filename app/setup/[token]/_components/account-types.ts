@@ -1,5 +1,5 @@
-// Shared types for the customer-facing account setup page. No runtime code, so
-// both the server page and the client components can import these freely.
+// Shared types for the customer-facing account setup dashboard. No runtime code,
+// so both the server page and the client components can import these freely.
 
 export type BusinessProfileFields = {
   name: string;
@@ -38,12 +38,15 @@ export type BusinessProfileData = {
   number: {
     localNumberStatus: LocalNumberStatus;
     smsStatus: SmsStatus;
+    // The assigned office number in E.164 when one exists, else null.
+    assignedPhone: string | null;
   };
   billing: {
-    billingStatus: string;
-    trialDays: number;
     // True once a payment method is on file (derived server-side from the
     // Stripe customer / billing status). No raw card data is ever stored.
     hasPaymentMethod: boolean;
+    // Days left in the 21-day trial, counted from setup creation. 0 when ended.
+    trialDaysRemaining: number;
+    trialEnded: boolean;
   };
 };

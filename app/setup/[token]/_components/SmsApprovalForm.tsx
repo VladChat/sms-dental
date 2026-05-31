@@ -17,15 +17,20 @@ const BUSINESS_TYPE_OPTIONS = BUSINESS_TYPES.map((v) => ({
 
 export function SmsApprovalForm({
   token,
+  publicBaseUrl,
+  slug,
   value,
   onChange,
   onSaved,
 }: {
   token: string;
+  publicBaseUrl: string;
+  slug: string | null;
   value: SmsApprovalFields;
   onChange: (patch: Partial<SmsApprovalFields>) => void;
   onSaved: (persisted: SmsApprovalFields) => void;
 }) {
+  const docsBase = slug ? `${publicBaseUrl}/business/${slug}` : null;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -169,6 +174,17 @@ export function SmsApprovalForm({
           />
         </div>
       </fieldset>
+
+      {docsBase && (
+        <p className="t-small acct-review-links">
+          Review public pages:{" "}
+          <a className="link" href={docsBase} target="_blank" rel="noopener noreferrer">Business profile</a>
+          {" · "}
+          <a className="link" href={`${docsBase}/privacy`} target="_blank" rel="noopener noreferrer">Privacy policy</a>
+          {" · "}
+          <a className="link" href={`${docsBase}/sms-terms`} target="_blank" rel="noopener noreferrer">SMS terms</a>
+        </p>
+      )}
 
       <label className="check">
         <input

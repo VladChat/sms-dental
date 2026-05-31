@@ -1,34 +1,115 @@
 "use client";
 
-import { useState } from "react";
-
-/* Shared building blocks for the customer-facing account setup page.
+/* Shared building blocks for the customer-facing account setup dashboard.
    These use the global design-system classes (.card, .field, .input, .btn,
-   .badge, .alert) so the account page matches the rest of the product. */
+   .badge, .alert) so the dashboard matches the rest of the product. */
 
-export type BadgeTone = "neutral" | "brand" | "success" | "warning" | "info";
+export type BadgeTone = "neutral" | "brand" | "success" | "warning" | "info" | "error";
 
-export function Badge({ tone, children }: { tone: BadgeTone; children: React.ReactNode }) {
+/* -------------------------------------------------- unified status system */
+/* One consistent vocabulary used in the left nav, panel headers, status rows,
+   phone-number service statuses, and billing. Calm colors: green = done,
+   amber = needs action, blue = informational in-progress, gray = idle. Red is
+   reserved for real errors only. */
+
+export type StatusKind =
+  | "complete"
+  | "active"
+  | "waiting"
+  | "pending"
+  | "needs_action"
+  | "not_started"
+  | "not_active"
+  | "error";
+
+type StatusIconName = "check" | "clock" | "alert" | "dot";
+
+const STATUS_META: Record<StatusKind, { label: string; tone: BadgeTone; icon: StatusIconName }> = {
+  complete: { label: "Complete", tone: "success", icon: "check" },
+  active: { label: "Active", tone: "success", icon: "check" },
+  waiting: { label: "Waiting for approval", tone: "info", icon: "clock" },
+  pending: { label: "Pending", tone: "neutral", icon: "clock" },
+  needs_action: { label: "Needs action", tone: "warning", icon: "alert" },
+  not_started: { label: "Not started", tone: "neutral", icon: "dot" },
+  not_active: { label: "Not active", tone: "neutral", icon: "dot" },
+  error: { label: "Error", tone: "error", icon: "alert" },
+};
+
+function StatusIcon({ name }: { name: StatusIconName }) {
+  const common = {
+    width: 14,
+    height: 14,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  switch (name) {
+    case "check":
+      return (
+        <svg {...common}>
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      );
+    case "clock":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      );
+    case "alert":
+      return (
+        <svg {...common}>
+          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+          <path d="M12 9v4" />
+          <path d="M12 17h.01" />
+        </svg>
+      );
+    case "dot":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="4" />
+        </svg>
+      );
+  }
+}
+
+export function StatusBadge({ kind, label }: { kind: StatusKind; label?: string }) {
+  const m = STATUS_META[kind];
   return (
-    <span className={`badge badge-${tone}`}>
-      <span className="dot" aria-hidden="true" />
-      {children}
+    <span className={`badge badge-${m.tone}`}>
+      <StatusIcon name={m.icon} />
+      {label ?? m.label}
     </span>
   );
 }
 
-/** A top-level account section rendered as a card with a header + badge. */
+/** Compact colored status icon for the left nav (no text label). */
+export function NavStatusIcon({ kind }: { kind: StatusKind }) {
+  const m = STATUS_META[kind];
+  return (
+    <span className={`acct-nav-status tone-${m.tone}`} title={m.label} aria-hidden="true">
+      <StatusIcon name={m.icon} />
+    </span>
+  );
+}
+
+/** A top-level dashboard section: a card with a header, optional status, body. */
 export function Section({
   id,
   title,
   description,
-  badge,
+  status,
   children,
 }: {
   id: string;
   title: string;
   description?: string;
-  badge?: { tone: BadgeTone; label: string };
+  status?: { kind: StatusKind; label?: string };
   children: React.ReactNode;
 }) {
   return (
@@ -40,7 +121,7 @@ export function Section({
             <p className="t-small" style={{ marginTop: "var(--space-1)" }}>{description}</p>
           )}
         </div>
-        {badge && <Badge tone={badge.tone}>{badge.label}</Badge>}
+        {status && <StatusBadge kind={status.kind} label={status.label} />}
       </header>
       {children}
     </section>
@@ -222,33 +303,6 @@ export function StatusRow({ label, children }: { label: string; children: React.
     <div className="acct-statusrow">
       <span className="t-small" style={{ color: "var(--text-secondary)" }}>{label}</span>
       <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}>{children}</span>
-    </div>
-  );
-}
-
-/** A generated compliance document row with View + Copy actions. */
-export function DocRow({ label, url }: { label: string; url: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard unavailable; View still works */
-    }
-  }
-  return (
-    <div className="acct-doc-row">
-      <span style={{ fontWeight: 600, color: "var(--text)" }}>{label}</span>
-      <span style={{ display: "inline-flex", gap: "var(--space-2)" }}>
-        <a href={url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
-          View
-        </a>
-        <button type="button" onClick={copy} className="btn btn-secondary btn-sm">
-          {copied ? "Copied" : "Copy link"}
-        </button>
-      </span>
     </div>
   );
 }
