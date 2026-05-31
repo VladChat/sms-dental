@@ -1740,3 +1740,102 @@ Remaining risks / next steps:
 
 Operations docs update needed: yes — done (`AUTH-AND-ACCESS-CONTROL.md` added;
 runbook/workflow/workspace/log updated in this pass).
+
+---
+
+## 2026-05-31 — Account access and team/workspace guidance follow-up
+
+What changed:
+
+- Setup first-entry UI (`/setup/{token}`) now uses **Account setup** framing with
+  two clear blocks:
+  - `Account details`: Clinic name, Main office phone, ZIP code
+  - `Account access`: Login email (read-only), Create password, Confirm password
+- `/account` navigation now separates setup progress from account settings:
+  - `Setup`: Phone number, Business profile, SMS approval, Billing
+  - `Account`: Account access, Team access
+- Security naming replaced by **Account access** section:
+  - read-only login email
+  - password status (`Password is set`)
+  - `Change password` safe placeholder modal (non-mutating)
+  - `Sign out`
+- Added owner-only **Team access** UI shell:
+  - workspace link model + Open/Copy actions
+  - invite form shell (`Front desk` only) with safe placeholder response
+  - owner member row from real membership/profile data
+  - sample rows when no real staff memberships are present
+- Added `/workspace` sample requests when real data is empty:
+  - clearly labeled sample cards
+  - sample states: needs follow-up, waiting, booked, no appointment booked,
+    could not reach patient
+  - added minimal result controls preview (non-mutating, sample mode only)
+- Added/expanded read-only query helpers for team-member display:
+  - list active memberships by clinic
+  - list profiles by IDs
+
+Why it changed:
+
+- Improve onboarding clarity by grouping login identity and password together.
+- Keep setup progress separate from permanent account settings.
+- Provide owner-facing team/workspace guidance safely before invite backend is
+  implemented.
+- Make empty workspace states understandable without creating fake production
+  data.
+
+Files changed:
+
+- `app/setup/[token]/page.tsx`
+- `app/setup/[token]/_components/ClinicForm.tsx`
+- `app/setup/[token]/_components/account-types.ts`
+- `app/setup/[token]/_components/BusinessProfile.tsx`
+- `app/setup/[token]/_components/SecurityCard.tsx`
+- `app/setup/[token]/_components/TeamAccessCard.tsx` (new)
+- `app/account/page.tsx`
+- `app/workspace/_components/workspace-types.ts`
+- `app/workspace/_components/Workspace.tsx`
+- `lib/db/clinic-memberships.ts`
+- `lib/db/profiles.ts`
+- `app/globals.css`
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`
+- `MVP_BUILD_DOCS/ONBOARDING-WORKFLOW-BUILD-GUIDE.md`
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Side effects avoided:
+
+- no SMS sent
+- no outbound reply actions
+- no call actions
+- no Twilio settings changes
+- no number purchase/reservation
+- no Stripe billing changes
+- no new migrations
+- no invite emails sent
+- no invite/membership writes from Team access UI
+- no sample data persisted
+- no secrets/tokens/passwords logged
+- public `docs/` marketing pages untouched
+
+Commit hash: pending  
+Push status: pending
+
+Remaining risks:
+
+- Team invite backend/accept lifecycle still missing (intended next phase).
+- Full route/API RBAC matrix enforcement remains partial.
+- Change-password flow is still placeholder-only in UI.
+
+Next steps:
+
+1. Implement invite token lifecycle + acceptance flow for `front_desk`.
+2. Enforce complete route/API role matrix from shared guard utilities.
+3. Replace password-change placeholder with secure authenticated update flow.
+4. Add server-backed outcome mutation model/routes for workspace results.
+
+Operations docs update needed: yes

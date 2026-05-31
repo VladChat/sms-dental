@@ -39,3 +39,14 @@ export async function findProfileById(id: string): Promise<ProfileRow | null> {
   `;
   return rows[0] ?? null;
 }
+
+export async function listProfilesByIds(ids: string[]): Promise<ProfileRow[]> {
+  if (ids.length === 0) return [];
+  const sql = getDb();
+  const rows = await sql<ProfileRow[]>`
+    select *
+    from public.profiles
+    where id in ${sql(ids)}
+  `;
+  return rows;
+}

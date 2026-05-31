@@ -6,7 +6,8 @@ import { BusinessProfileForm } from "./BusinessProfileForm";
 import { SmsApprovalForm } from "./SmsApprovalForm";
 import { AssignedNumberCard } from "./AssignedNumberCard";
 import { BillingCard } from "./BillingCard";
-import { SecurityCard } from "./SecurityCard";
+import { AccountAccessCard } from "./SecurityCard";
+import { TeamAccessCard } from "./TeamAccessCard";
 import type {
   BusinessProfileData,
   BusinessProfileFields,
@@ -16,8 +17,9 @@ import type {
 
 export type { BusinessProfileData } from "./account-types";
 
-type SectionId = "phone" | "business" | "sms" | "billing";
-type ExtendedSectionId = SectionId | "security";
+type SetupSectionId = "phone" | "business" | "sms" | "billing";
+type AccountSectionId = "account_access" | "team_access";
+type SectionId = SetupSectionId | AccountSectionId;
 
 export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [biz, setBiz] = useState<BusinessProfileFields>(stripCompleted(data.businessProfile));
@@ -32,19 +34,23 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
 
   // Phone number is the customer's primary resource, so it is first and opens by
   // default. We do NOT auto-jump to the first incomplete section.
-  const [active, setActive] = useState<ExtendedSectionId>("phone");
+  const [active, setActive] = useState<SectionId>("phone");
 
   const phoneStatus = phoneSectionStatus(data.number.localNumberStatus, smsStatus, hasPaymentMethod);
   const bizStatus: StatusKind = bizDone ? "complete" : "needs_setup";
   const smsSectionStatus: StatusKind = smsDone ? "complete" : "needs_setup";
   const billingStatus: StatusKind = hasPaymentMethod ? "complete" : "needs_setup";
 
-  const navItems: { id: ExtendedSectionId; label: string; status: StatusKind }[] = [
+  const setupNavItems: { id: SetupSectionId; label: string; status: StatusKind }[] = [
     { id: "phone", label: "Phone number", status: phoneStatus },
     { id: "business", label: "Business profile", status: bizStatus },
     { id: "sms", label: "SMS approval", status: smsSectionStatus },
     { id: "billing", label: "Billing", status: billingStatus },
-    { id: "security", label: "Security", status: "complete" },
+  ];
+
+  const accountNavItems: { id: AccountSectionId; label: string }[] = [
+    { id: "account_access", label: "Account access" },
+    { id: "team_access", label: "Team access" },
   ];
 
   return (
@@ -59,24 +65,47 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
 
       <div className="acct-layout">
         <nav className="acct-nav" aria-label="Account sections">
-          {navItems.map((item, i) => {
-            const isActive = item.id === active;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className="acct-nav-item"
-                aria-current={isActive ? "page" : undefined}
-                onClick={() => setActive(item.id)}
-              >
-                <span className="acct-nav-main">
-                  <span className="acct-nav-num" aria-hidden="true">{i + 1}</span>
-                  <span className="acct-nav-text">{item.label}</span>
-                </span>
-                <NavStatusIcon kind={item.status} />
-              </button>
-            );
-          })}
+          <section className="acct-nav-group" aria-labelledby="acct-nav-group-setup">
+            <h2 id="acct-nav-group-setup" className="acct-nav-group-label">Setup</h2>
+            {setupNavItems.map((item, i) => {
+              const isActive = item.id === active;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="acct-nav-item"
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => setActive(item.id)}
+                >
+                  <span className="acct-nav-main">
+                    <span className="acct-nav-num" aria-hidden="true">{i + 1}</span>
+                    <span className="acct-nav-text">{item.label}</span>
+                  </span>
+                  <NavStatusIcon kind={item.status} />
+                </button>
+              );
+            })}
+          </section>
+
+          <section className="acct-nav-group" aria-labelledby="acct-nav-group-account">
+            <h2 id="acct-nav-group-account" className="acct-nav-group-label">Account</h2>
+            {accountNavItems.map((item) => {
+              const isActive = item.id === active;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="acct-nav-item"
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => setActive(item.id)}
+                >
+                  <span className="acct-nav-main">
+                    <span className="acct-nav-text">{item.label}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </section>
         </nav>
 
         <div className="acct-panel">
@@ -152,15 +181,27 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
             </Section>
           )}
 
-          {active === "security" && (
+          {active === "account_access" && (
             <Section
-              id="security"
-              title="Security"
-              description="Sign-in access for your owner account."
+              id="account-access"
+              title="Account access"
             >
-              <SecurityCard
+              <AccountAccessCard
                 loginEmail={data.loginEmail}
                 passwordEnabled={data.security.passwordEnabled}
+              />
+            </Section>
+          )}
+
+          {active === "team_access" && (
+            <Section
+              id="team-access"
+              title="Team access"
+            >
+              <TeamAccessCard
+                appBaseUrl={data.publicBaseUrl}
+                ownerEmail={data.loginEmail}
+                members={data.teamAccess.members}
               />
             </Section>
           )}

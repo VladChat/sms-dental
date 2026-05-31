@@ -109,15 +109,31 @@ Current behavior:
 - `/workspace`: auth+membership primary, token fallback.
 - `/login`: redirects away if already signed in with active membership.
 
-## 6. Account security surface
+## 6. Account access and team access surface
 
-`/account` now includes a minimal owner-only `Security` section:
+`/account` now separates setup progress from permanent account settings:
 
-- login email
-- password status (`Password sign-in enabled`)
+- `Setup` group: Phone number, Business profile, SMS approval, Billing.
+- `Account` group: Account access, Team access.
+
+`Account access` replaces the old Security label and is not part of setup
+progress numbering/status.
+
+`Account access` currently includes:
+
+- login email (read-only)
+- password status (`Password is set`)
+- `Change password` placeholder modal (non-mutating; no fake save)
 - sign out action
 
-Password change UI is not included in this phase.
+`Team access` is owner-only UI shell in this phase:
+
+- workspace link guidance (`/workspace`, same link for all users)
+- invite form shell (`Front desk` only) with safe placeholder on submit
+- owner row from real account membership
+- sample rows only when no real staff memberships are present
+
+Staff invite send/accept backend remains next-phase work.
 
 ## 7. Backfill and migration notes
 
@@ -160,3 +176,26 @@ Phase 2 target:
 - `front_desk` membership activation
 - workspace-only access for staff
 - owner-only restriction for billing/legal/setup sections
+
+## 11. Permission matrix (current vs intended)
+
+Current role routes:
+
+- `owner` -> `/account`, `/workspace`
+- `front_desk` -> intended `/workspace` only (invite/auth lifecycle not built yet)
+- `admin` -> currently treated as account-capable role, future internal admin
+  scope to be defined
+
+Current state notes:
+
+- `/account` and `/workspace` use auth session + membership as primary guard.
+- Some API routes enforce role checks (for example, front-desk blocked from
+  account business/SMS approval mutation endpoints), but full route/API matrix
+  enforcement is still partial.
+- Legacy `mcd_account` setup-token fallback remains active for compatibility.
+
+Intended next-phase completion:
+
+- enforce canonical route/API permission matrix end-to-end
+- deliver staff invite + acceptance lifecycle
+- activate front-desk-only workspace access with owner/admin restrictions

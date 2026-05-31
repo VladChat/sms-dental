@@ -50,6 +50,18 @@ Example:
 
 If the next step only needs clinic identity, office phone, and ZIP code, ask only for those fields. Do not ask for legal business name, owner phone, timezone, compliance details, billing details, or test data until those fields are actually required for the next step.
 
+## Sample Domain Rule
+
+When fake/demo/sample domains or emails are needed in UI copy, docs, tests, or
+examples, use only `example.com`.
+
+Approved sample emails:
+
+- `owner@example.com`
+- `frontdesk@example.com`
+- `reception@example.com`
+- `staff@example.com`
+
 For infrastructure, deployment, DNS, Supabase, Vercel, Twilio, Stripe, or production-like work, also read:
 
 - `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`

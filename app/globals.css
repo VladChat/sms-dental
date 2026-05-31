@@ -191,7 +191,15 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .acct-page { max-width:var(--app-max); margin:0 auto; padding:var(--space-10) var(--space-6) var(--space-20); }
 .acct-header { margin-bottom:var(--space-8); }
 .acct-layout { display:grid; grid-template-columns:minmax(220px,256px) 1fr; gap:var(--space-8); align-items:start; }
-.acct-nav { display:flex; flex-direction:column; gap:var(--space-1); position:sticky; top:var(--space-6); }
+.acct-nav { display:flex; flex-direction:column; gap:var(--space-5); position:sticky; top:var(--space-6); }
+.acct-nav-group { display:grid; gap:var(--space-1); margin:0; padding:0; border:0; }
+.acct-nav-group-label {
+  margin:0 0 var(--space-1);
+  font:600 .75rem/1 var(--font-sans);
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--text-muted);
+}
 .acct-nav-item {
   display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
   width:100%; text-align:left; padding:var(--space-3) var(--space-4);
@@ -218,11 +226,16 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .acct-panel { min-width:0; }
 @media (max-width: 860px) {
   .acct-layout { grid-template-columns:1fr; gap:var(--space-5); }
-  .acct-nav { position:static; flex-direction:row; flex-wrap:wrap; gap:var(--space-2); }
-  .acct-nav-item { width:auto; }
+  .acct-nav { position:static; gap:var(--space-4); }
 }
 .acct-form { display:grid; gap:var(--space-5); }
 .acct-readonly { background:var(--surface-2); color:var(--text-secondary); cursor:default; }
+.acct-card-subsection {
+  border:1px solid var(--border);
+  border-radius:var(--r-md);
+  padding:var(--space-4);
+  background:var(--surface);
+}
 .acct-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4); }
 .acct-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:var(--space-4); }
 @media (max-width: 560px) { .acct-grid-2, .acct-grid-3 { grid-template-columns:1fr; } }
@@ -240,6 +253,36 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 /* Secure payment-method area visual (Stripe-ready shell — no card fields). */
 .acct-pay-shell { display:flex; align-items:center; gap:var(--space-3); padding:var(--space-4); border:1.5px dashed var(--border-strong); border-radius:var(--r-md); background:var(--surface-sunken); }
 .acct-pay-shell-icon { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:var(--r-sm); background:var(--surface-2); color:var(--text-secondary); flex:0 0 auto; }
+.acct-team-access-row {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:var(--space-3);
+  padding:var(--space-3) var(--space-4);
+  border:1px solid var(--border);
+  border-radius:var(--r-md);
+  background:var(--surface-2);
+}
+.acct-team-table-wrap {
+  width:100%;
+  overflow-x:auto;
+}
+.acct-team-table {
+  width:100%;
+  border-collapse:collapse;
+}
+.acct-team-table th,
+.acct-team-table td {
+  text-align:left;
+  padding:var(--space-3);
+  border-bottom:1px solid var(--border);
+  font:var(--body-sm);
+  color:var(--text-body);
+}
+.acct-team-table th {
+  color:var(--text-secondary);
+  font:var(--label);
+}
 
 /* status badges carry a small leading icon */
 .badge svg { width:14px; height:14px; flex:0 0 auto; }
@@ -276,6 +319,25 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
   display:grid; gap:var(--space-3); place-items:center; text-align:center;
   padding:var(--space-16) var(--space-6); border:1px dashed var(--border-strong);
   border-radius:var(--r-lg); background:var(--surface);
+}
+.ws-sample-callout { margin-bottom:var(--space-5); }
+.ws-sample-note {
+  padding:var(--space-4);
+  border:1px solid var(--info-border);
+  border-radius:var(--r-md);
+  background:var(--info-bg);
+}
+.ws-result-preview {
+  display:grid;
+  gap:var(--space-4);
+  padding:var(--space-4);
+  border:1px solid var(--border);
+  border-radius:var(--r-md);
+  background:var(--surface-2);
+}
+.ws-result-options {
+  display:grid;
+  gap:var(--space-2);
 }
 
 /* billing payment-method modal (Stripe-ready shell — no card fields) */
