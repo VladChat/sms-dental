@@ -1455,3 +1455,55 @@ Validation:
 Side note: the legacy `OWNER_TEST_SETUP_LINK_FALLBACK` env var is still
 present on Vercel but is ignored by the new code path; it can be deleted
 at the owner's leisure (no behavior depends on it).
+
+---
+
+## 2026-05-30 — Account setup converted to a settings dashboard + billing gate
+
+UX correction pass on top of the same-day 4-section redesign. The stacked page
+became a real **account/settings dashboard**: left section nav + a right panel
+showing one active section. Mobile collapses the nav to wrapping tabs (no
+horizontal overflow). Persistence behavior from the prior commit is preserved.
+
+Changes:
+
+- `app/setup/[token]/_components/BusinessProfile.tsx` — now a dashboard
+  orchestrator (left nav + active panel + status dots; opens the first
+  unfinished section).
+- New `DocumentsCard.tsx` — the compliance links (business profile / privacy /
+  SMS terms) are now their own **Documents** section, removed from SMS approval.
+- `SmsApprovalForm.tsx` — removed the "What we'll submit" review block; neutral
+  business-type helper ("Select the legal business structure that matches your
+  registration."); shorter checkbox copy + "Texting will start after approval."
+- `BillingCard.tsx` — real payment-method area: "Payment method needed"/"Added",
+  plan, 21-day trial, disabled "Add payment method" CTA (Stripe-ready, no raw
+  card storage, no Stripe network call), "You will not be charged until SMS
+  recovery is active and your trial period ends."
+- `AssignedNumberCard.tsx` — **billing gate:** with no payment method, shows
+  "Payment method needed" + "Add a payment method to receive your phone number."
+  + CTA (jumps to Billing). No "locked"/"blocked"/"you cannot" wording. With a
+  payment method, shows number status + Voice/Calls + SMS/Texting sub-statuses.
+- `account-types.ts` + `page.tsx` — added `billing.hasPaymentMethod`, derived
+  server-side from `stripe_customer_id` / `billing_status`. No raw card data is
+  collected or stored anywhere.
+- `AccountUI.tsx` — removed the now-unused `ReviewRow` primitive.
+- `app/globals.css` — replaced stacked `.acct-sections` styles with dashboard
+  styles (`.acct-layout`, `.acct-nav`, `.acct-panel`, `.acct-callout`).
+
+Payment/card safety: no card number/expiry/CVC field exists anywhere; nothing is
+written to the DB for cards; the CTA makes no Stripe call. Real card capture is
+deferred to a Stripe-hosted/tokenized flow (SetupIntent/Checkout/Payment Element).
+
+Validation: `npm run typecheck` pass; `npm run build` pass (no `lint` script).
+Live click-through not run from this environment (prod DB pooler + needs a real
+setup token); persistence unchanged from the prior commit.
+
+Side effects: no SMS sent; `sms_recovery_enabled` unchanged (false); no Stripe
+calls/resources; no raw card data stored; Twilio settings/webhooks unchanged; no
+number purchased/reserved; no DNS/env/Vercel changes; no migration applied.
+
+Commit: `ef8c29a` (code + most docs), plus a docs follow-up for
+`ONBOARDING-WORKFLOW-BUILD-GUIDE.md` and this entry.
+
+Operations docs update needed: yes — updated `OPERATIONS-RUNBOOK.md`,
+`ONBOARDING-WORKFLOW-BUILD-GUIDE.md`, and `SMS-APPROVAL-FIELD-MAPPING.md`.
