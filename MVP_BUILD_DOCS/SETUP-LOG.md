@@ -1822,8 +1822,8 @@ Side effects avoided:
 - no secrets/tokens/passwords logged
 - public `docs/` marketing pages untouched
 
-Commit hash: pending  
-Push status: pending
+Commit hash: `aafd69d`  
+Push status: pushed to `main`
 
 Remaining risks:
 
