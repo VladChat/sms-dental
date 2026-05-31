@@ -18,6 +18,7 @@ import {
 } from "../../../../../lib/db/setup-requests";
 import { isValidE164, normalizePhone } from "../../../../../lib/phone/normalize";
 import { prepareLocalNumber } from "../../../../../lib/onboarding/local-number";
+import { setAccountSessionCookie } from "../../../../../lib/onboarding/account-session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -124,11 +125,16 @@ export async function POST(
     // status stays "preparing"; non-blocking.
   }
 
+  // Establish account context (httpOnly cookie) so the customer can move to the
+  // clean /account URL instead of keeping the long token in the address bar.
+  await setAccountSessionCookie(token);
+
   return jsonOk({
     ok: true,
     clinic_id: clinic.id,
     main_phone: clinic.main_phone,
     country: clinic.country,
     slug,
+    redirect: "/account",
   });
 }
