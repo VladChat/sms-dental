@@ -2502,4 +2502,6 @@ email shows From Missed Calls Dental, subject "Reset your password", snippet
 unchanged (false); no secrets/tokens/links printed or committed; .env.local not
 committed; no marketing image changes.
 
-**Commit hash / push:** recorded in the follow-up "docs: record auth polish commit metadata".
+**Commit hash / push:** `a83c99d` (`fix: polish auth login and reset flows`),
+pushed to `origin/main`. Metadata recorded by the follow-up
+`docs: record auth polish commit metadata`.
