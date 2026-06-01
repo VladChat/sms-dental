@@ -392,3 +392,30 @@ name `Missed Calls Dental`; subject exactly `Reset your password`; body/snippet
 begins "We received a request to reset the password for your account." The
 app-domain `{{ .SiteURL }}/auth/callback?token_hash=...&type=recovery&next=/reset-password`
 link is unchanged; do not reintroduce `{{ .ConfirmationURL }}`.
+
+## 15. Setup link idempotency (2026-06-01)
+
+Reopening a used `/setup/{token}` link must not restart setup or ask for a new
+password. Canonical completed marker: **an owner auth account exists for the
+setup request's `owner_email`** (`isSetupAlreadyCompleted` in
+`lib/onboarding/verify.ts`). The form's only job is to create that account +
+password, so once it exists, setup is complete. This marker is true for old links
+(no backfill/migration) and is not bypassable by reopening a stale email link;
+`setup_requests.status` is not used here because it keeps advancing past
+`clinic_details_completed` after the account is created.
+
+State handling at `/setup/{token}`:
+
+- invalid/expired/cancelled token → unchanged invalid-link card;
+- completed + signed in → server-side redirect to `/account`
+  (`supabase.auth.getUser()`); 
+- completed + signed out → no-password completed-state card
+  (`Account setup is already complete` / `Sign in to continue to your account.` /
+  `Sign in` → `/login`);
+- first-time, not-yet-created → existing onboarding form (office + password).
+
+`POST /api/onboarding/[token]/clinic` enforces the same check before any writes
+and returns `{ ok:true, completed:true, redirect }` for an already-created
+account, so a stale re-submit cannot create a duplicate auth user/clinic,
+overwrite the password, or rerun setup. The setup token is still never logged;
+the completion check uses only the owner email.
