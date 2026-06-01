@@ -2878,4 +2878,6 @@ Constraints honored: no password invented/printed/stored/committed;
 `PLATFORM_ADMIN_EMAILS` not changed; no separate admin password system; one
 Supabase Auth system. No repo source changed (docs only this entry).
 
-Commit hash / push: recorded in the follow-up `docs: record admin bootstrap metadata`.
+Commit hash / push: `bb4d80e` (`docs: bootstrap first platform admin user`),
+pushed to `origin/main`. Metadata recorded by the follow-up
+`docs: record admin bootstrap metadata`.
