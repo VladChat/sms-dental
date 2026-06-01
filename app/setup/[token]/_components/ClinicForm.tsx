@@ -53,7 +53,7 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
         error?: { code?: string; message?: string };
       };
       if (!res.ok || !data.ok) {
-        setError(data?.error?.message ?? "Could not save your office details. Please check your entries.");
+        setError(data?.error?.message ?? "Could not save your account setup. Please check your entries.");
         if (data?.error?.code === "owner_user_exists_login_required") {
           setShowLoginLink(true);
         }
@@ -71,9 +71,6 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
   return (
     <section className="card card-pad">
       <h2 className="t-h3">Account setup</h2>
-      <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
-        Finish your clinic details and account access.
-      </p>
 
       <form onSubmit={onSubmit} style={{ marginTop: "var(--space-6)", display: "grid", gap: "var(--space-5)" }} noValidate>
         <section className="acct-card-subsection" aria-labelledby="account-details-title">

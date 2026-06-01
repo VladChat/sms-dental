@@ -1237,3 +1237,42 @@ Future analytics derivation (documented, not implemented):
 Sample-data rule:
 
 - Any fake domain/email in product UI/docs must use `example.com` only.
+
+---
+
+## Update 2026-05-31 — Remaining copy/UI cleanup follow-up
+
+This follow-up is a minimal copy/UI pass after the account/team/workspace
+guidance implementation.
+
+Setup entry cleanup:
+
+- removed unnecessary setup subtitle text under `Account setup`
+- retained `Account details` + `Account access` grouping
+- standardized fallback error copy:
+  `Could not save your account setup. Please check your entries.`
+- removed remaining customer-facing `Office setup` label in shared setup shell
+
+Account dashboard cleanup:
+
+- header subtitle reduced to:
+  `Texting starts after approval.`
+- account-access component file renamed to align with UI language:
+  `SecurityCard.tsx` -> `AccountAccessCard.tsx`
+
+Team access cleanup:
+
+- real team members remain first
+- sample staff moved into a separate clearly-marked sample block
+- sample block includes local hide/show behavior using browser storage only
+- sample actions standardized to `Remove` / `Restore` (`Restore` reserved for
+  future invite restart behavior)
+
+Workspace cleanup:
+
+- conversation collapsed by default behind `View conversation`
+- sample detail result UI simplified to:
+  - `Appointment booked?` (`Yes`/`No`)
+  - optional note
+  - `Save result`
+- no result persistence implemented in this phase

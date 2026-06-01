@@ -14,7 +14,7 @@ export default function HomePage() {
         Bring missed callers back to book appointments.
       </h1>
       <p className="t-body-lg" style={{ marginTop: 0 }}>
-        This is the application surface for Missed Calls Dental. Office setup opens from the
+        This is the application surface for Missed Calls Dental. Account setup opens from the
         secure link we email you.
       </p>
       <p className="t-body">

@@ -1261,3 +1261,37 @@ Sample-domain policy:
   - `frontdesk@example.com`
   - `reception@example.com`
   - `staff@example.com`
+
+---
+
+## Remaining copy/UI cleanup follow-up — 2026-05-31
+
+Scope:
+
+- copy/UI refinement only
+- no migrations
+- no invite backend
+- no result persistence backend
+
+What changed:
+
+- setup flow copy trimmed (removed extra subtitle under `Account setup`)
+- setup fallback error standardized to account wording
+- shared setup shell label updated from `Office setup` to `Account setup`
+- account header subtitle reduced to one line:
+  `Texting starts after approval.`
+- component rename for clarity:
+  `SecurityCard.tsx` -> `AccountAccessCard.tsx`
+- team access sample rows moved to a dedicated sample block with local hide/show
+  state (`localStorage`)
+- team action labels simplified (`Remove`, `Restore`, `—`)
+- workspace conversation collapsed by default (`View conversation`)
+- workspace sample result UI simplified to `Appointment booked?` yes/no + note +
+  `Save result`
+
+Operational constraints preserved:
+
+- no invite sends
+- no membership mutations from sample actions
+- no workspace result writes
+- no Twilio/Stripe/SMS side effects

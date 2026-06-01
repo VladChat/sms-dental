@@ -85,9 +85,6 @@ export function LoginForm() {
         <button type="submit" className="btn btn-primary" disabled={submitting}>
           {submitting ? "Signing in…" : "Sign in"}
         </button>
-        <a className="link" href="mailto:support@missedcallsdental.com?subject=Password%20reset%20help">
-          Need password reset help?
-        </a>
       </div>
     </form>
   );

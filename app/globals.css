@@ -283,6 +283,30 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
   color:var(--text-secondary);
   font:var(--label);
 }
+.acct-sample-block {
+  position:relative;
+  overflow:hidden;
+  border:1px dashed var(--info-border);
+  border-radius:var(--r-md);
+  background:linear-gradient(180deg, var(--info-bg), var(--surface));
+  padding:var(--space-4);
+}
+.acct-sample-block::after {
+  content:"SAMPLE";
+  position:absolute;
+  right:-18px;
+  bottom:8px;
+  font:700 1.75rem/1 var(--font-display);
+  letter-spacing:.08em;
+  color:rgba(14,111,103,.10);
+  pointer-events:none;
+}
+.acct-sample-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:var(--space-3);
+}
 
 /* status badges carry a small leading icon */
 .badge svg { width:14px; height:14px; flex:0 0 auto; }
@@ -339,6 +363,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
   display:grid;
   gap:var(--space-2);
 }
+.ws-conversation { display:grid; gap:var(--space-2); }
 
 /* billing payment-method modal (Stripe-ready shell — no card fields) */
 .acct-modal-backdrop {

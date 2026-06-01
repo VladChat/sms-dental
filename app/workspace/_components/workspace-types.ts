@@ -4,7 +4,6 @@
 export type WorkspaceStatus =
   | "new"
   | "needs_follow_up"
-  | "needs_reply"
   | "waiting_for_patient"
   | "ready_to_call"
   | "booked"
@@ -52,9 +51,9 @@ export function deriveWorkspaceStatus(
   if (dbStatus === "booked") return "booked";
   if (dbStatus === "closed" || dbStatus === "lost") return "closed";
 
-  if (timeline.length === 0) return "new";
+  if (timeline.length === 0) return "needs_follow_up";
   const latest = timeline[timeline.length - 1];
-  if (latest.direction === "inbound") return "needs_reply";
+  if (latest.direction === "inbound") return "needs_follow_up";
   return "waiting_for_patient";
 }
 
@@ -62,15 +61,14 @@ export const WORKSPACE_STATUS_META: Record<
   WorkspaceStatus,
   { label: string; badge: string }
 > = {
-  new: { label: "New", badge: "badge-info" },
+  new: { label: "Needs follow-up", badge: "badge-warning" },
   needs_follow_up: { label: "Needs follow-up", badge: "badge-warning" },
-  needs_reply: { label: "Needs reply", badge: "badge-warning" },
   waiting_for_patient: { label: "Waiting for patient", badge: "badge-neutral" },
   ready_to_call: { label: "Ready to call", badge: "badge-brand" },
-  booked: { label: "Booked", badge: "badge-success" },
+  booked: { label: "Appointment booked", badge: "badge-success" },
   closed: { label: "Closed", badge: "badge-neutral" },
   no_appointment_booked: { label: "No appointment booked", badge: "badge-neutral" },
-  could_not_reach_patient: { label: "Could not reach patient", badge: "badge-warning" },
+  could_not_reach_patient: { label: "Closed", badge: "badge-neutral" },
 };
 
 export const NOT_PROVIDED = "Not provided yet";
