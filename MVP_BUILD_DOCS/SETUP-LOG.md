@@ -2668,5 +2668,6 @@ references this audit + the auth/front-desk docs. No source behavior changed.
 Validation: `npm run typecheck` pass; `npm run build` pass. `package.json` has no
 `lint`/`test` script (only dev/build/start/typecheck).
 
-Commit hash / push: recorded in the follow-up
+Commit hash / push: `ce401ea` (`docs: audit production readiness placeholders`),
+pushed to `origin/main`. Metadata recorded by the follow-up
 `docs: record placeholder audit commit metadata`.
