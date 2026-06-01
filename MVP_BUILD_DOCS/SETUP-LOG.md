@@ -2294,5 +2294,6 @@ logs/reports.
 workspace/result-persistence changes; `sms_recovery_enabled` unchanged (false);
 no `.env.local` commit; no secrets printed; `docs/` marketing untouched.
 
-**Commit hash:** see follow-up `docs: record password reset email routing commit metadata`.
-**Push status:** pushed to `origin/main` (recorded in the follow-up metadata entry).
+**Commit hash:** `b163ecd` (`fix: configure password reset email routing`);
+metadata recorded by follow-up `docs: record password reset email routing commit metadata`.
+**Push status:** pushed to `origin/main`.
