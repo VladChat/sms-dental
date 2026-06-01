@@ -8,7 +8,7 @@ import {
   jsonOk,
 } from "../../../../lib/http/responses";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server";
-import { resolvePlatformAdmin } from "../../../../lib/auth/platform-admin";
+import { resolvePlatformAdminFromUser } from "../../../../lib/auth/platform-admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +46,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return jsonError(401, "invalid_credentials", "Invalid email or password.");
   }
 
-  const admin = await resolvePlatformAdmin();
+  const admin = await resolvePlatformAdminFromUser({
+    id: signIn.data.user.id,
+    email: signIn.data.user.email,
+  });
   if (!admin.ok) {
     await supabase.auth.signOut();
     return jsonForbidden("This account is not authorized for platform admin access.");

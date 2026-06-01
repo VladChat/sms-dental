@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { resolvePostAuthRedirectPath } from "../../../lib/auth/post-auth-redirect";
 import { createSupabaseServerClient } from "../../../lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -53,7 +54,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (error) {
       return redirectToLoginWithError(requestUrl);
     }
-    return NextResponse.redirect(new URL(nextPath, requestUrl.origin));
+    const targetPath =
+      nextPath ??
+      await resolveRoleAwareFallbackPath(supabase);
+    return NextResponse.redirect(new URL(targetPath, requestUrl.origin));
   }
 
   // PKCE/code flow (kept for existing links and providers).
@@ -62,17 +66,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (error) {
       return redirectToLoginWithError(requestUrl);
     }
-    return NextResponse.redirect(new URL(nextPath, requestUrl.origin));
+    const targetPath =
+      nextPath ??
+      await resolveRoleAwareFallbackPath(supabase);
+    return NextResponse.redirect(new URL(targetPath, requestUrl.origin));
   }
 
   return redirectToLoginWithError(requestUrl);
 }
 
-function getSafeNextPath(next: string | null): string {
-  if (!next) return "/account";
-  if (!next.startsWith("/") || next.startsWith("//")) return "/account";
-  if (next.includes("\\") || next.includes("\r") || next.includes("\n")) return "/account";
+function getSafeNextPath(next: string | null): string | null {
+  if (!next) return null;
+  if (!next.startsWith("/") || next.startsWith("//")) return null;
+  if (next.includes("\\") || next.includes("\r") || next.includes("\n")) return null;
   return next;
+}
+
+async function resolveRoleAwareFallbackPath(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+): Promise<string> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return "/login";
+
+  return resolvePostAuthRedirectPath({
+    id: data.user.id,
+    email: data.user.email,
+  });
 }
 
 function redirectToLoginWithError(url: URL): NextResponse {

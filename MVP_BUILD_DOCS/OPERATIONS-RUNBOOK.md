@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-01 (password reset email routing + branded SMTP)
+Last updated: 2026-06-01 (platform admin login completion + reset routing)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1601,13 +1601,50 @@ front-desk `/workspace`. Full spec: `PLATFORM-ADMIN-CONSOLE-PLAN.md`.
 API, email pre-confirmed, **no password**) and a recovery email was sent so the
 owner sets their own password — no password is stored anywhere.
 
-To finish enabling `/admin` for this owner:
-1. Owner opens the recovery email → `/reset-password` → sets a password.
-2. Operator sets `PLATFORM_ADMIN_EMAILS=allyexporter@gmail.com` in Vercel
-   Production env and redeploys (this is what grants platform-admin access).
-3. Owner signs in at `/admin/login`.
+Production completion status (2026-06-01):
+
+1. Owner password was set via the standard recovery flow.
+2. `PLATFORM_ADMIN_EMAILS` was added to Vercel Production env.
+3. Production was redeployed so the new env value is active.
+4. `/admin/login` now authorizes the first platform admin account correctly.
+   - Deployment: `dpl_DqSiCmdNYu9pH4vRDowHpY6j3kmv` (READY)
 
 Re-send if needed: `POST https://app.missedcallsdental.com/api/auth/forgot-password`
 with `{"email":"allyexporter@gmail.com"}`, or use Supabase Dashboard →
 Authentication → Users → Send password recovery. Never paste the recovery
 link/token anywhere.
+
+---
+
+## Platform admin login + reset routing fix — 2026-06-01
+
+Root causes found:
+
+- Production env was missing `PLATFORM_ADMIN_EMAILS`, so valid admin credentials
+  passed password auth but failed platform-admin authorization.
+- Reset completion path used owner-only defaults (`/account`) and did not apply
+  role-aware routing.
+- `/reset-password` used separate per-field Show/Hide controls; UX requirement is
+  one shared toggle for both password fields.
+
+Fixes applied:
+
+- Added `PLATFORM_ADMIN_EMAILS` in Vercel Production env and redeployed.
+- Admin login hardening:
+  - `/api/admin/login` now authorizes against the signed-in user object directly
+    (allowlist/profile flag check), so first-login authorization does not depend
+    on an immediate cookie roundtrip.
+- Role-aware post-auth routing:
+  - new shared resolver returns `/admin`, `/account`, `/workspace`, or
+    `/auth/no-access` based on platform-admin authorization + clinic membership.
+  - `POST /api/auth/update-password` now redirects by resolved role, not fixed
+    `/account`.
+  - `/auth/callback` now uses the same role-aware fallback when `next` is
+    missing/unsafe.
+  - clinic `/login` now returns a role-mismatch message for platform-admin
+    accounts (`Please use /admin/login`) instead of clinic-membership wording.
+- Reset-password toggle:
+  - replaced per-field toggles with one shared control:
+    `Show passwords` / `Hide passwords`
+  - toggles both `New password` and `Confirm password` together without clearing
+    values.

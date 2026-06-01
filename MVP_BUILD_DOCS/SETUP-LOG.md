@@ -2881,3 +2881,62 @@ Supabase Auth system. No repo source changed (docs only this entry).
 Commit hash / push: `bb4d80e` (`docs: bootstrap first platform admin user`),
 pushed to `origin/main`. Metadata recorded by the follow-up
 `docs: record admin bootstrap metadata`.
+
+---
+
+## 2026-06-01 — Complete platform admin login setup (production)
+
+Root causes:
+
+- Production Vercel env did not include `PLATFORM_ADMIN_EMAILS`, so
+  `/admin/login` could pass password auth but still deny authorization.
+- Post-reset redirect logic used clinic-owner defaults (`/account`) and sent
+  platform-admin users into the wrong flow.
+- `/reset-password` used separate per-field Show/Hide controls; required UX is a
+  shared toggle.
+
+What changed:
+
+- Added `PLATFORM_ADMIN_EMAILS` to Vercel Production env and confirmed presence
+  via `vercel env ls production`.
+- Implemented robust platform-admin auth check for first login:
+  `/api/admin/login` now authorizes directly from the signed-in user object
+  (allowlist/profile flag), rather than relying on an immediate cookie
+  roundtrip.
+- Added role-aware post-auth redirect resolver (`/admin`, `/account`,
+  `/workspace`, `/auth/no-access`) and wired it into:
+  - `POST /api/auth/update-password`
+  - `/auth/callback` fallback redirect path
+- Added neutral no-role landing page: `/auth/no-access`.
+- Updated clinic `/login` to return a role-mismatch message for platform-admin
+  accounts:
+  `This account uses platform admin sign in. Please use /admin/login.`
+- Replaced reset-password per-field toggles with one shared toggle:
+  `Show passwords` / `Hide passwords`, controlling both password fields together.
+
+Supabase bootstrap status (`allyexporter@gmail.com`):
+
+- Auth user exists.
+- Email confirmed.
+- No clinic membership (expected for platform admin).
+- `profiles` row absent (platform access is currently env allowlist-based).
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Deployment:
+
+- Vercel Production env updated: `PLATFORM_ADMIN_EMAILS` present.
+- Production redeploy completed and READY:
+  `dpl_DqSiCmdNYu9pH4vRDowHpY6j3kmv`
+
+Side effects avoided:
+
+- no SMS sent
+- no patient/marketing email sent
+- no Stripe sessions/customers/subscriptions/charges
+- no Twilio number purchase/reservation/release
+- no migrations created
+- no secrets printed or committed

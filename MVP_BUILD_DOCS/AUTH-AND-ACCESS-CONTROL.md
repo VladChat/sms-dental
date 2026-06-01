@@ -73,6 +73,13 @@ The user gets a safe login path via `/login`.
 
 If no active membership exists, the response is a safe generic error.
 
+Role-mismatch guard:
+
+- If credentials are valid but the account is a platform admin, `/login` returns
+  a clear role-specific message:
+  `This account uses platform admin sign in. Please use /admin/login.`
+- Platform-admin and clinic-owner paths stay separate by design.
+
 ### 3.3 Password reset flow
 
 1. Owner opens `/login` and selects `Forgot password?`.
@@ -92,7 +99,11 @@ If no active membership exists, the response is a safe generic error.
    flow (`exchangeCodeForSession`), establishes the session cookies, and
    redirects safely:
    - allows internal relative `next` paths only
-   - defaults to `/account` when `next` is missing/unsafe
+   - when `next` is missing/unsafe, resolves a role-aware fallback:
+     - platform admin -> `/admin`
+     - clinic owner/admin -> `/account`
+     - front desk -> `/workspace`
+     - no recognized role -> `/auth/no-access`
    - on failure redirects to `/login?error=invalid_or_expired_link`
 7. `/reset-password` requires an active authenticated session from the recovery
    flow; otherwise it shows:
@@ -102,7 +113,18 @@ If no active membership exists, the response is a safe generic error.
    - same password rule as setup (>=8 chars, at least one letter, one number)
    - authenticated session exists
 9. On success, password is updated through Supabase Auth and user is redirected
-   to `/account`.
+   by role:
+   - platform admin -> `/admin`
+   - clinic owner/admin -> `/account`
+   - front desk -> `/workspace`
+   - no recognized role -> `/auth/no-access` (neutral guidance page)
+
+Reset-password visibility control:
+
+- `/reset-password` uses one shared toggle for both fields:
+  - `Show passwords` / `Hide passwords`
+- Toggle changes both `New password` and `Confirm password` together without
+  clearing values.
 
 ## 4. Data model (Phase 1)
 
@@ -497,6 +519,13 @@ Auth system; authorization is `resolvePlatformAdmin()` (`lib/auth/platform-admin
 authenticated email in `PLATFORM_ADMIN_EMAILS` OR `profiles.is_internal_admin`.
 This is independent of clinic membership; clinic `owner`/`admin`/`front_desk` never
 grant platform-admin access. `/admin` and `/api/admin/*` are guarded server-side;
-`/admin/login` is outside the guarded route group. Operator must set
-`PLATFORM_ADMIN_EMAILS` (env) — `/admin` denies all until then. Full spec +
-implemented scope: `PLATFORM-ADMIN-CONSOLE-PLAN.md` §15.
+`/admin/login` is outside the guarded route group.
+
+Production status (2026-06-01):
+
+- `PLATFORM_ADMIN_EMAILS` is set in Vercel Production for the first platform
+  admin (`allyexporter@gmail.com`) and production was redeployed.
+- Without this env/config (or `profiles.is_internal_admin=true`), `/admin` denies
+  all access by design.
+
+Full spec + implemented scope: `PLATFORM-ADMIN-CONSOLE-PLAN.md` §15.
