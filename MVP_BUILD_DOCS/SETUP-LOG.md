@@ -1842,6 +1842,67 @@ Operations docs update needed: yes
 
 ---
 
+## 2026-06-01 — Setup form wording simplification (first-entry only)
+
+What changed:
+
+- Updated first setup form copy/layout in
+  `app/setup/[token]/_components/ClinicForm.tsx`:
+  - `Clinic information` -> `Business information`
+  - `Business name` label with placeholder `Example: Smile Dental`
+  - `Business phone` label with placeholder `(555) 123-1234`
+  - added read-only `Country` field with value `United States`
+  - kept `Sign-in` section with read-only `Login email`,
+    `Create password`, `Confirm password`
+  - kept primary action `Continue setup`
+- Removed duplicate in-card heading so `Account setup` appears once on page
+  (shell heading only).
+- Removed extra customer-facing setup helper copy to keep the form minimal.
+- Added phone formatting while typing to `(555) 123-1234`.
+- Added standard show/hide controls for both password fields (default hidden).
+
+Why it changed:
+
+- simplify first-entry setup copy
+- reduce repeated account wording
+- align visible form structure with current product wording
+
+Files changed:
+
+- `app/setup/[token]/_components/ClinicForm.tsx`
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`
+- `MVP_BUILD_DOCS/ONBOARDING-WORKFLOW-BUILD-GUIDE.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Side effects avoided:
+
+- no backend behavior changes
+- no migrations
+- no Twilio/Stripe/SMS changes
+- no workspace/team/login flow changes
+- no marketing `docs/` changes
+
+Commit hash: pending  
+Push status: pending
+
+Remaining risks:
+
+- none identified for this scoped UI/copy-only pass
+
+Next steps:
+
+1. Implement real team invite lifecycle in dedicated backend phase.
+2. Implement workspace result persistence in dedicated backend phase.
+
+Operations docs update needed: yes
+
+---
+
 ## 2026-06-01 — Setup page copy/layout simplification
 
 What changed:
