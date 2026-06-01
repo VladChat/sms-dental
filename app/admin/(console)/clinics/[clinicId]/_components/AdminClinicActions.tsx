@@ -8,29 +8,21 @@ type Props = {
   isActive: boolean;
   smsRecoveryEnabled: boolean;
   adminInternalNote: string | null;
-  adminProvisioningStatus: string | null;
-  adminProvisioningNote: string | null;
-  enableSmsBlockedReason: string | null;
+  // Non-null when the clinic cannot be launched yet — the exact operator reason.
+  launchBlockedReason: string | null;
 };
-
-const PROVISIONING_OPTIONS = [
-  { v: "none", t: "None" },
-  { v: "review_needed", t: "Review needed" },
-  { v: "in_review", t: "In review" },
-  { v: "cleared", t: "Cleared" },
-  { v: "blocked", t: "Blocked" },
-];
 
 const NOTE_MAX = 1000;
 
+// The only working platform-admin mutations: clinic status (pause/reactivate),
+// the single service-launch control (launch / pause sending), and the internal
+// note. Provisioning review and the duplicate SMS-recovery toggle were removed.
 export function AdminClinicActions(props: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState(props.adminInternalNote ?? "");
-  const [provStatus, setProvStatus] = useState(props.adminProvisioningStatus ?? "none");
-  const [provNote, setProvNote] = useState(props.adminProvisioningNote ?? "");
 
   async function run(
     action: string,
@@ -65,7 +57,6 @@ export function AdminClinicActions(props: Props) {
   }
 
   const noteTooLong = note.length > NOTE_MAX;
-  const provNoteTooLong = provNote.length > NOTE_MAX;
 
   return (
     <div className="adm-actions-panel" style={{ display: "grid", gap: "var(--space-5)" }}>
@@ -75,7 +66,7 @@ export function AdminClinicActions(props: Props) {
         </div>
       )}
 
-      {/* Lifecycle */}
+      {/* Clinic status — the single master on/off control (clinics.is_active) */}
       <div className="adm-action-group">
         <h4 className="t-h4">Clinic status</h4>
         {props.isActive ? (
@@ -84,10 +75,10 @@ export function AdminClinicActions(props: Props) {
             className="btn btn-danger"
             disabled={busy !== null}
             onClick={() =>
-              run("deactivate", {}, "Deactivate this clinic? Call lookups and recovery SMS stop immediately. Data is kept.")
+              run("deactivate", {}, "Pause this clinic? Call lookups and any recovery SMS stop immediately. Data is kept.")
             }
           >
-            {busy === "deactivate" ? "Working…" : "Deactivate clinic"}
+            {busy === "deactivate" ? "Working…" : "Pause clinic"}
           </button>
         ) : (
           <button
@@ -101,27 +92,32 @@ export function AdminClinicActions(props: Props) {
         )}
       </div>
 
-      {/* SMS recovery */}
+      {/* Service launch — the single final-readiness control (sms_recovery_enabled) */}
       <div className="adm-action-group">
-        <h4 className="t-h4">SMS recovery</h4>
+        <h4 className="t-h4">Service launch</h4>
         {props.smsRecoveryEnabled ? (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={busy !== null}
-            onClick={() =>
-              run("disable_sms", {}, "Disable SMS recovery for this clinic? Future recovery texts will not be sent.")
-            }
-          >
-            {busy === "disable_sms" ? "Working…" : "Disable SMS recovery"}
-          </button>
-        ) : props.enableSmsBlockedReason ? (
+          <div>
+            <p className="t-small" style={{ margin: "0 0 var(--space-2)" }}>
+              <span className="badge badge-success">Launched</span>
+            </p>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy !== null}
+              onClick={() =>
+                run("disable_sms", {}, "Pause SMS sending for this clinic? Recovery texts stop until you launch again. The clinic stays active.")
+              }
+            >
+              {busy === "disable_sms" ? "Working…" : "Pause SMS sending"}
+            </button>
+          </div>
+        ) : props.launchBlockedReason ? (
           <div>
             <button type="button" className="btn btn-primary" disabled aria-disabled="true">
-              Enable SMS recovery
+              Launch service
             </button>
             <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-2) 0 0" }}>
-              Blocked: {props.enableSmsBlockedReason}
+              Blocked: {props.launchBlockedReason}
             </p>
           </div>
         ) : (
@@ -134,21 +130,21 @@ export function AdminClinicActions(props: Props) {
                 run(
                   "enable_sms",
                   {},
-                  "Enable SMS recovery for this clinic? Live sending also requires the platform SMS mode to be live; opt-outs are always respected.",
+                  "Launch service for this clinic? Live sending also requires the platform SMS mode to be live; opt-outs are always respected.",
                 )
               }
             >
-              {busy === "enable_sms" ? "Working…" : "Enable SMS recovery"}
+              {busy === "enable_sms" ? "Working…" : "Launch service"}
             </button>
             <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-2) 0 0" }}>
-              Enabling the per-clinic gate does not send SMS by itself — live sending also requires the
-              platform SMS mode and respects opt-outs.
+              Launching turns on the per-clinic gate. Live sending also requires the platform SMS mode and
+              always respects opt-outs.
             </p>
           </div>
         )}
       </div>
 
-      {/* Internal note */}
+      {/* Internal note — single, plain-text, internal-only */}
       <div className="adm-action-group">
         <h4 className="t-h4">Internal note</h4>
         <p className="t-helper" style={{ margin: "0 0 var(--space-2)" }}>Internal only — never shown to the clinic.</p>
@@ -168,38 +164,6 @@ export function AdminClinicActions(props: Props) {
           onClick={() => run("update_note", { note })}
         >
           {busy === "update_note" ? "Saving…" : "Save note"}
-        </button>
-      </div>
-
-      {/* Provisioning / compliance review (internal) */}
-      <div className="adm-action-group">
-        <h4 className="t-h4">Provisioning review</h4>
-        <div className="field">
-          <label htmlFor="prov-status">Status</label>
-          <select id="prov-status" className="input" value={provStatus} onChange={(e) => setProvStatus(e.target.value)}>
-            {PROVISIONING_OPTIONS.map((o) => (
-              <option key={o.v} value={o.v}>{o.t}</option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="prov-note">Review note</label>
-          <textarea
-            id="prov-note"
-            className="textarea"
-            value={provNote}
-            onChange={(e) => setProvNote(e.target.value)}
-            aria-invalid={provNoteTooLong ? "true" : undefined}
-          />
-          <span className={`helper${provNoteTooLong ? " adm-over" : ""}`}>{provNote.length}/{NOTE_MAX}</span>
-        </div>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy !== null || provNoteTooLong}
-          onClick={() => run("set_provisioning", { provisioningStatus: provStatus, note: provNote })}
-        >
-          {busy === "set_provisioning" ? "Saving…" : "Save provisioning"}
         </button>
       </div>
     </div>

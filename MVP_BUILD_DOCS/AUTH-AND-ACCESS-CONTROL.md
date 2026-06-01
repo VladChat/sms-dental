@@ -546,3 +546,21 @@ authorization helper path with explicit request-cookie support for route handler
 Result: platform admins who are authorized for `/admin` are evaluated through the
 same authorization logic for Deactivate/Reactivate/Disable SMS/Enable SMS/Internal
 note actions, without weakening any guardrails.
+
+## 20. Clinic detail simplification — auth unchanged (2026-06-01)
+
+The `/admin/clinics/[clinicId]` UI was simplified (plan §16) without touching the
+authorization model:
+
+- Page guard (`app/admin/(console)/layout.tsx`) and the action API
+  (`/api/admin/clinics/[clinicId]/action`) still both resolve through
+  `resolvePlatformAdmin(...)` — the §19 request-cookie alignment is intact.
+- The action enum shrank to `deactivate | reactivate | disable_sms | enable_sms |
+  update_note` (removed `set_provisioning`). Every remaining action still requires a
+  resolved platform admin and writes `admin_audit_events`; no action path bypasses the
+  allowlist (`PLATFORM_ADMIN_EMAILS`) or `profiles.is_internal_admin`.
+- No admin email is hardcoded; no separate admin password system was introduced.
+
+Verification: the previously reported symptom — admin page opens but actions return
+"not authorized" — was already resolved in §19 and remains fixed (page guard and API
+share one helper). The refactor was confirmed to preserve it.

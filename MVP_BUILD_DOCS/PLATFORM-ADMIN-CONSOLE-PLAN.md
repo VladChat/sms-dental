@@ -477,3 +477,60 @@ Phase 1 + the first safe write actions are built (production-near, real — not 
   production was redeployed. `/admin` authorization now works for the first
   platform admin account.
 - **Next:** `/workspace/login` role-specific login (front desk).
+
+## 16. Clinic detail page simplified — operator workflow (2026-06-01)
+
+`/admin/clinics/[clinicId]` was rebuilt around the real launch workflow instead of a
+status dump. The page is now a single ordered flow: **A** Clinic summary → **B**
+Launch readiness → **C** Phone numbers → **D** Billing → **E** A2P / SMS approval →
+**F** Admin controls → **G** Diagnostics → **H** Recent admin activity.
+
+Removed (confusing / duplicated UI):
+- The separate primary **Enable/Disable SMS recovery** toggle that sat next to clinic
+  active/inactive. Clinic on/off is now **one** control: **Clinic status** (Active /
+  Paused) → `clinics.is_active`. SMS recovery (`clinics.sms_recovery_enabled`) is now
+  surfaced **only** as the single final **Service launch** control / launch-readiness
+  state, never as a duplicate always-on toggle.
+- **Provisioning review** dropdown, **Provisioning note**, and **Save provisioning**.
+  Readiness is now derived from real data (business / phone / A2P / billing rows), so a
+  second manual status was redundant. DB columns `admin_provisioning_status` /
+  `admin_provisioning_note` are kept (additive, no data touched); the
+  `set_provisioning` API action and its UI were removed.
+- **Audit** from the top admin nav. The `/admin/audit` route stays available; each
+  clinic page now shows its own **Recent admin activity** (last 5, human-readable).
+
+Single internal note retained: **Internal note** → `clinics.admin_internal_note`
+(plain text, ≤1000 chars, internal-only, never shown to clinic owner/front desk).
+
+### Evidence map — every clinic detail UI item
+
+| UI item | Source table/API/helper | Purpose | Action/effect | Keep/remove |
+|---|---|---|---|---|
+| Clinic name | `clinics.name` | Identify clinic | read-only | keep |
+| Owner email | `clinics.owner_contact_email` / `clinic_memberships`+`profiles` | Contact / identity | read-only | keep |
+| Clinic status (Active/Paused) | `clinics.is_active` | Master on/off | read-only badge | keep |
+| Service state (Launched/Not launched/Blocked/Paused) | derived: `is_active`, `sms_recovery_enabled`, launch gate | One-glance answer | read-only | keep |
+| Launch readiness › Business profile | `clinics.business_info_completed` (+ legal name/type/EIN/address) | Compliance/identity | read-only status | keep |
+| Launch readiness › Billing | `clinics.billing_status` + `stripe_customer_id` presence | Payment readiness | read-only status | keep (not a launch gate in MVP) |
+| Launch readiness › Phone numbers | `clinic_phone_numbers` (active) | Voice/SMS needs a number | read-only status | keep |
+| Launch readiness › A2P / SMS approval | `clinics.a2p_info_completed`, `a2p_authorized` | Carrier compliance | read-only status | keep |
+| Launch readiness › Service launch | derived from rows + `is_active`/`sms_recovery_enabled` | Can it launch? | status; action in §F | keep |
+| Phone numbers list | `clinic_phone_numbers` (id, masked number, role, is_active, SID tail) | Show assigned numbers | read-only (masked) | keep |
+| Add phone number (disabled) | n/a — Twilio purchase not wired | Future buy/assign | disabled, reason shown | keep as honest placeholder |
+| Billing rows | `clinics.billing_status`, `stripe_customer_id`/`stripe_subscription_id` presence, `trial_ends_at` | Billing state | read-only (presence only) | keep |
+| Manage billing (disabled) | n/a — Stripe not wired | Future billing mgmt | disabled, reason shown | keep as honest placeholder |
+| A2P rows | `clinics.sms_status`, `a2p_info_completed`, `a2p_authorized`, `a2p_rep_email` presence | Approval readiness | read-only | keep |
+| Submit SMS approval (disabled) | n/a — A2P submission not wired | Future carrier submit | disabled, reason shown | keep as honest placeholder |
+| Pause / Reactivate clinic | `POST …/action` `deactivate`/`reactivate` → `clinics.is_active` | Clinic on/off | **working**, audited | keep |
+| Launch service / Pause SMS sending | `POST …/action` `enable_sms` (gated: active+number+A2P) / `disable_sms` → `clinics.sms_recovery_enabled` | Single launch control | **working**, audited | keep |
+| Internal note | `POST …/action` `update_note` → `clinics.admin_internal_note` | Operator note | **working**, audited | keep |
+| Diagnostics (opt-outs, setup status, link) | `opt_outs`, `clinics.setup_status`, `/events` (`call_events`+`messages`) | Secondary troubleshooting | read-only (masked) | keep |
+| Recent admin activity | `admin_audit_events` (clinic-scoped, last 5) | Black-box change history | read-only, human-readable | keep |
+| Provisioning review/note | (removed) | duplicated readiness | — | **removed from UI** |
+| Separate SMS recovery toggle | (removed) | duplicated launch/status | — | **removed from UI** |
+
+The **Launch service** action mirrors the server preconditions exactly
+(`is_active` + at least one assigned number + `a2p_info_completed`); it is disabled
+with the precise blocking reason until the gate clears, and writes `admin_audit_events`
+on success. Billing is shown as a readiness row but is **not** a hard launch gate in
+this MVP (Stripe backend not connected), so launch is never permanently impossible.

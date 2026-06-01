@@ -45,6 +45,15 @@ export type AdminClinicMember = {
   status: string;
 };
 
+export type AdminClinicPhoneNumber = {
+  id: string;
+  phoneMasked: string | null;
+  role: string;
+  isActive: boolean;
+  sidTail: string | null;
+  createdAt: string;
+};
+
 export type AdminClinicDetail = {
   id: string;
   name: string;
@@ -78,6 +87,7 @@ export type AdminClinicDetail = {
   localNumberStatus: string;
   assignedPhoneMasked: string | null;
   hasAssignedNumber: boolean;
+  phoneNumbers: AdminClinicPhoneNumber[];
   // sms approval / a2p (presence/flags only)
   smsStatus: string;
   a2pInfoCompleted: boolean;

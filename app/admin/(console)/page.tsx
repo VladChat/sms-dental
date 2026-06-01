@@ -44,9 +44,9 @@ export default async function AdminOverviewPage() {
       <section className="card card-pad">
         <h2 className="t-h4">Next</h2>
         <p className="t-small" style={{ marginTop: "var(--space-2)", color: "var(--text-secondary)" }}>
-          Open <Link className="link" href="/admin/clinics">Clinics</Link> to review a clinic and run
-          admin actions, or the <Link className="link" href="/admin/audit">Audit</Link> log to see recent
-          admin activity.
+          Open <Link className="link" href="/admin/clinics">Clinics</Link> to review a clinic and run admin
+          actions. Each clinic page shows its recent admin activity; the full cross-clinic{" "}
+          <Link className="link" href="/admin/audit">audit log</Link> stays available for compliance review.
         </p>
       </section>
     </div>

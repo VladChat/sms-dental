@@ -310,3 +310,22 @@ items above (B1 Stripe billing, B2 Twilio purchase, B3 A2P submission) are now
 surfaced **honestly in `/admin` as disabled controls with the prerequisite
 reason** — they remain blocked until their integrations land. See
 `PLATFORM-ADMIN-CONSOLE-PLAN.md` §15.
+
+## 17. Clinic detail simplified — placeholder honesty preserved (2026-06-01)
+
+`/admin/clinics/[clinicId]` was simplified into the operator launch workflow (plan
+§16). The three essential-but-unbuilt capabilities remain visible **only** as honest
+disabled placeholders — never fake-clickable:
+
+| Disabled control | Reason shown | Real blocker |
+|---|---|---|
+| **Add phone number** | `Twilio purchase flow required` | Twilio number purchase/assign not wired into `/admin` (B2) |
+| **Manage billing** | `Stripe billing backend required` | No Stripe billing integration (B1) |
+| **Submit SMS approval** | `A2P submission backend required` | No A2P/carrier submission integration (B3) |
+
+Working, audited actions on the page: Pause/Reactivate clinic (`is_active`), Launch
+service / Pause SMS sending (`sms_recovery_enabled`, gated), Save internal note. The
+duplicate SMS-recovery toggle and the Provisioning review were removed from the UI;
+no new fake actions were added. Billing is shown as a readiness row but is not a hard
+launch gate in this MVP (so launch is not permanently blocked by the missing Stripe
+backend).

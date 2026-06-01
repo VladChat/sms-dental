@@ -2981,3 +2981,49 @@ Validation:
 
 - `npm run typecheck` -> pass
 - `npm run build` -> pass
+
+---
+
+## 2026-06-01 — Simplify platform admin clinic detail page
+
+Rebuilt `/admin/clinics/[clinicId]` into a practical operator screen (plan §16,
+audit §17, runbook entry, auth §20). No schema change, no integration started.
+
+What changed:
+
+- **One clinic on/off control**: Clinic status (Active/Paused) → `clinics.is_active`
+  (`Pause clinic` / `Reactivate clinic`). The separate primary SMS-recovery toggle was
+  removed; `clinics.sms_recovery_enabled` now appears only as the single **Service
+  launch** control (`Launch service` when the gate clears / `Pause SMS sending` when
+  launched).
+- **Removed Provisioning review/note + Save provisioning** from the UI; removed the
+  `set_provisioning` action from `/api/admin/clinics/[clinicId]/action` and its body
+  fields. Columns `admin_provisioning_status`/`admin_provisioning_note` are kept
+  (additive, untouched). `setAdminProvisioning` helper retained but no longer wired.
+- **Page reorganized** into A Clinic summary, B Launch readiness (Business / Billing /
+  Phone / A2P / Service launch from real data), C Phone numbers (`clinic_phone_numbers`,
+  masked), D Billing, E A2P / SMS approval, F Admin controls, G Diagnostics, H Recent
+  admin activity (`admin_audit_events`, clinic-scoped last 5, human-readable).
+- **Audit removed from top nav**; `/admin/audit` route kept.
+- **Single internal note** retained → `clinics.admin_internal_note` (≤1000).
+- **Honest disabled placeholders only**: `Add phone number` → "Twilio purchase flow
+  required"; `Manage billing` → "Stripe billing backend required"; `Submit SMS
+  approval` → "A2P submission backend required".
+
+Files changed: `app/admin/(console)/clinics/[clinicId]/page.tsx`,
+`.../[clinicId]/_components/AdminClinicActions.tsx`,
+`app/admin/(console)/_components/AdminUI.tsx`, `app/admin/(console)/layout.tsx`,
+`app/admin/(console)/page.tsx`, `app/api/admin/clinics/[clinicId]/action/route.ts`,
+`lib/db/admin/clinics.ts`, `lib/db/admin/types.ts`, `app/globals.css`, plus docs.
+
+Auth/action bug: the earlier "page opens but action says not authorized" symptom was
+already fixed (page guard + API share `resolvePlatformAdmin`); this refactor preserves
+it. No auth weakened, no admin email hardcoded.
+
+Side effects avoided: no SMS sent, no email sent, no Stripe call, no Twilio number
+purchase/reserve/release, no A2P submission, no migration, no secrets printed/committed.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass

@@ -12,7 +12,6 @@ import { resolvePlatformAdmin } from "../../../../../../lib/auth/platform-admin"
 import { getAdminClinicDetail } from "../../../../../../lib/db/admin/clinics";
 import {
   setAdminInternalNote,
-  setAdminProvisioning,
   setClinicActive,
   setSmsRecoveryEnabled,
   type ActionResult,
@@ -26,8 +25,12 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 const NOTE_MAX = 1000;
-const PROVISIONING_STATUSES = ["none", "review_needed", "in_review", "cleared", "blocked"] as const;
 
+// Working admin actions only. `deactivate`/`reactivate` are the clinic status
+// control (clinics.is_active). `enable_sms`/`disable_sms` back the single
+// service-launch control (clinics.sms_recovery_enabled): `enable_sms` = launch,
+// `disable_sms` = pause sending. Provisioning review was removed from the
+// product; the columns remain but are no longer settable from here.
 const BodySchema = z.object({
   action: z.enum([
     "deactivate",
@@ -35,10 +38,8 @@ const BodySchema = z.object({
     "disable_sms",
     "enable_sms",
     "update_note",
-    "set_provisioning",
   ]),
   note: z.union([z.string(), z.null()]).optional(),
-  provisioningStatus: z.string().optional(),
 });
 
 // POST /api/admin/clinics/[clinicId]/action
@@ -84,21 +85,22 @@ export async function POST(
       auditAction = "clinic.sms_recovery.disable";
       result = await setSmsRecoveryEnabled(clinicId, false);
     } else if (action === "enable_sms") {
+      // "Launch service": flips the per-clinic SMS recovery gate on. This never
+      // sends SMS by itself (the send path also requires SMS_RECOVERY_MODE=live
+      // and respects opt-outs); we still gate it on real readiness so it is not
+      // launched prematurely. These three preconditions are the canonical launch
+      // gate — the clinic detail UI mirrors them exactly.
       auditAction = "clinic.sms_recovery.enable";
-      // Preconditions derived from existing product logic. Enabling the per-clinic
-      // flag never sends SMS by itself (the send path also requires
-      // SMS_RECOVERY_MODE=live and respects opt-outs); we still gate it on real
-      // readiness so it is not enabled prematurely.
       const detail = await getAdminClinicDetail(clinicId);
       if (!detail) return jsonError(404, "not_found", "Clinic not found.");
       if (!detail.isActive) {
-        return jsonError(409, "precondition_failed", "Clinic is inactive. Reactivate it before enabling SMS recovery.");
+        return jsonError(409, "precondition_failed", "Clinic is paused. Reactivate it before launching service.");
       }
       if (!detail.hasAssignedNumber) {
-        return jsonError(409, "precondition_failed", "No assigned phone number. Assign a number before enabling SMS recovery.");
+        return jsonError(409, "precondition_failed", "No phone number assigned. Assign a number before launching.");
       }
       if (!detail.a2pInfoCompleted) {
-        return jsonError(409, "precondition_failed", "SMS approval information is not completed yet.");
+        return jsonError(409, "precondition_failed", "SMS approval information is not complete yet.");
       }
       result = await setSmsRecoveryEnabled(clinicId, true);
     } else if (action === "update_note") {
@@ -108,17 +110,6 @@ export async function POST(
         return jsonBadRequest(`Note must be ${NOTE_MAX} characters or less.`);
       }
       result = await setAdminInternalNote(clinicId, trimmed.length > 0 ? trimmed : null);
-    } else if (action === "set_provisioning") {
-      auditAction = "clinic.provisioning.update";
-      const status = (parsed.data.provisioningStatus ?? "").trim();
-      if (!(PROVISIONING_STATUSES as readonly string[]).includes(status)) {
-        return jsonBadRequest("Please choose a valid provisioning status.");
-      }
-      const trimmed = (parsed.data.note ?? "").trim();
-      if (trimmed.length > NOTE_MAX) {
-        return jsonBadRequest(`Note must be ${NOTE_MAX} characters or less.`);
-      }
-      result = await setAdminProvisioning(clinicId, status, trimmed.length > 0 ? trimmed : null);
     }
   } catch {
     return jsonError(500, "action_failed", "Could not complete this action. Please try again.");
@@ -151,11 +142,10 @@ export async function POST(
 
 function redactSnapshot(
   action: string,
-  s: { is_active: boolean; sms_recovery_enabled: boolean; admin_internal_note: string | null; admin_provisioning_status: string | null; admin_provisioning_note: string | null },
+  s: { is_active: boolean; sms_recovery_enabled: boolean; admin_internal_note: string | null },
 ): Record<string, string | number | boolean | null> {
   if (action === "deactivate" || action === "reactivate") return { is_active: s.is_active };
   if (action === "disable_sms" || action === "enable_sms") return { sms_recovery_enabled: s.sms_recovery_enabled };
   if (action === "update_note") return { admin_internal_note_present: Boolean(s.admin_internal_note) };
-  if (action === "set_provisioning") return { admin_provisioning_status: s.admin_provisioning_status };
   return {};
 }
