@@ -1407,7 +1407,7 @@ Authentication → Emails → Custom SMTP (Resend):
 Host:      smtp.resend.com
 Port:      465
 Username:  resend
-Password:  <Resend SMTP credential / API key — never print or commit>
+Password:  leave the existing provider value unchanged; never write SMTP passwords in docs.
 Sender:    no-reply@missedcallsdental.com
 Name:      Missed Calls Dental
 ```
@@ -1448,8 +1448,8 @@ programmatically to project `qfjpvbvfvhbtebwivcdc`:
 - Set + independently re-verified: `site_url=https://app.missedcallsdental.com`,
   `uri_allow_list` = both callback URLs, Resend Custom SMTP
   (`smtp.resend.com:465`, user `resend`, sender
-  `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`, password = Resend
-  API key).
+  `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`, SMTP password
+  value retained in provider config; never stored in docs).
 - BEFORE state had `site_url=http://localhost:3000` and an **empty**
   `uri_allow_list` — the empty allow list is why recovery links were localhost.
 
