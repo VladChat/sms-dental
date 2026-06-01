@@ -1886,7 +1886,7 @@ Supabase Auth redirect URL settings recorded:
 Validation:
 
 - `npm run typecheck` -> pass
-- `npm run build` -> pending
+- `npm run build` -> pass
 
 Manual QA:
 
@@ -1908,8 +1908,8 @@ Side effects avoided:
 - no marketing `docs/` changes
 - no password/token/reset-link logging
 
-Commit hash: pending  
-Push status: pending
+Commit hash: `6325424`  
+Push status: pushed to `main`
 
 Remaining risks:
 
