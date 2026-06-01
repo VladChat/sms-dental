@@ -2436,5 +2436,11 @@ not committed; no secrets/tokens/links/keys printed.
 **Token hygiene:** the temporary `SUPABASE_ACCESS_TOKEN` (used for the template
 PATCH) should still be revoked/rotated after this task.
 
-**Commit hash / push:** recorded in the follow-up
+**Deploy:** commit `13eeddb` deployed to production
+(`dpl_CsNiPpo82RtDFbRjvK9RBAEt8q8M`, state READY, aliased to
+`app.missedcallsdental.com`); the `token_hash` callback flow is live. A fresh
+reset email was triggered post-deploy so the link works end-to-end.
+
+**Commit hash / push:** `13eeddb` (`fix: route reset email link through app
+domain`), pushed to `origin/main`. Metadata recorded by the follow-up
 `docs: record reset email phishing fix commit metadata`.
