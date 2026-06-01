@@ -2213,3 +2213,86 @@ Next steps:
 3. Complete route/API RBAC matrix enforcement for owner/front-desk/admin boundaries.
 
 Operations docs update needed: yes
+
+---
+
+## 2026-06-01 — Password reset email: production routing + branded Supabase Auth SMTP (Resend)
+
+**What changed (this task):** documentation + operator configuration handoff.
+No application code changed — the reset flow code was already correct.
+
+**Reported symptom:** production password reset email delivered, but the reset
+link pointed to `http://localhost:3000`, and the email came from the default
+Supabase sender `noreply@mail.app.supabase.io` (not acceptable for production
+branding).
+
+**Root cause (verified in code):**
+
+- App code is correct. `POST /api/auth/forgot-password` builds
+  `redirectTo = https://app.missedcallsdental.com/auth/callback?next=/reset-password`
+  from `getAppDomains()` → `runtimeConfig.app.appBaseUrl`
+  (`config/runtime.config.ts`). It never reads a localhost value.
+  `APP_BASE_URL` (env) is not read by any code path (grep-confirmed; only a stale
+  comment in `lib/onboarding/tokens.ts`), so Vercel env cannot inject localhost
+  into the reset link.
+- The localhost link is produced by **Supabase Auth**: GoTrue ignores an emailed
+  `redirect_to` that is not in the Auth **Redirect URLs** allow list and falls
+  back to the project **Site URL** for `{{ .ConfirmationURL }}`. The Site URL was
+  still the dev default `http://localhost:3000`.
+- The unbranded sender is because Supabase Auth **Custom SMTP was not configured**
+  (using the shared default sender).
+
+**Files changed (docs only):**
+
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md` — section 10 rewritten as the
+  canonical Supabase Auth URL + Custom SMTP (Resend) configuration reference.
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` — added the password-reset email routing
+  + branded SMTP operations section and bumped the header date.
+- `MVP_BUILD_DOCS/SETUP-LOG.md` — this entry.
+
+**Dashboard settings to change (operator action — NOT performable from the repo
+CLI; no MCP tool exists for Supabase Auth URL/SMTP config):**
+
+- Supabase → Authentication → URL Configuration:
+  - Site URL → `https://app.missedcallsdental.com` (was `http://localhost:3000`)
+  - Redirect URLs allow list → add
+    `https://app.missedcallsdental.com/auth/callback` and keep
+    `http://localhost:3000/auth/callback` (local dev only).
+  - Then send a FRESH reset email (old emails keep the localhost link).
+- Supabase → Authentication → Emails (Custom SMTP), Resend:
+  - Host `smtp.resend.com`, Port `465`, Username `resend`, Password = Resend
+    SMTP credential / API key (never printed/committed).
+  - Sender `no-reply@missedcallsdental.com`, Name `Missed Calls Dental`.
+  - Requires the sending domain verified in Resend. The setup-email path already
+    uses the verified subdomain `mail.missedcallsdental.com`; the root domain
+    `missedcallsdental.com` may need separate Resend/DNS verification. Safe
+    interim branded sender if only the subdomain is verified:
+    `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`.
+- Supabase → Authentication → Email Templates → Reset Password: keep the default
+  `{{ .ConfirmationURL }}` placeholder; no hardcoded localhost/tokens/links.
+
+**Vercel:** no change needed for this fix. App base URL for the reset link is
+committed runtime config, not a Vercel env var. Production does not use localhost
+for the reset redirect. (`APP_BASE_URL` listed in older env docs is unused by
+current code; left as-is to avoid unrelated churn.)
+
+**Validation commands/results:**
+
+- `npm run typecheck`: pass.
+- `npm run build`: pass.
+- No `lint` script; no test script.
+
+**Live reset E2E result:** NOT run from the repo CLI (requires the Supabase
+dashboard changes above, a real inbox, and a browser). Pending operator run:
+`/login` → Forgot password? → submit owner email → confirm branded sender →
+confirm link is `https://app.missedcallsdental.com/...` (not localhost) →
+through `/auth/callback` → `/reset-password` → set new password → login → `/account`.
+Per security rule, the full reset link and recovery token must not be pasted into
+logs/reports.
+
+**Side effects avoided:** no Twilio/Stripe/SMS changes; no DB migration; no
+workspace/result-persistence changes; `sms_recovery_enabled` unchanged (false);
+no `.env.local` commit; no secrets printed; `docs/` marketing untouched.
+
+**Commit hash:** see follow-up `docs: record password reset email routing commit metadata`.
+**Push status:** pushed to `origin/main` (recorded in the follow-up metadata entry).

@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-01 (owner password reset flow)
+Last updated: 2026-06-01 (password reset email routing + branded SMTP)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1367,3 +1367,71 @@ Supabase Auth redirect URL allow list (required):
 
 If either callback URL is missing from Supabase Auth redirect settings,
 password-recovery links can fail or return expired/invalid-link behavior.
+
+---
+
+## Password reset email: production routing + branded SMTP (Resend) — 2026-06-01
+
+Authoritative operations reference for owner password reset email behavior.
+Full auth-config reference: `AUTH-AND-ACCESS-CONTROL.md` section 10.
+
+### Symptom and root cause
+
+- Symptom: reset email delivered but link pointed to `http://localhost:3000`,
+  and sender was the default `noreply@mail.app.supabase.io`.
+- Root cause is **Supabase Auth configuration**, not app code:
+  - The app sends the correct production `redirectTo`
+    (`https://app.missedcallsdental.com/auth/callback?next=/reset-password`),
+    built from committed `runtimeConfig.app.appBaseUrl`.
+  - Supabase GoTrue ignores an emailed `redirect_to` that is not in the Auth
+    Redirect URLs allow list and substitutes the project **Site URL**. Site URL
+    was still `http://localhost:3000`.
+  - Branded sender requires Custom SMTP, which was not configured.
+
+### Required Supabase Auth settings (operator, one-time)
+
+Authentication → URL Configuration:
+
+```
+Site URL:       https://app.missedcallsdental.com
+Redirect URLs:  https://app.missedcallsdental.com/auth/callback
+                http://localhost:3000/auth/callback   (local dev only)
+```
+
+After saving, send a **fresh** reset email. Previously sent emails keep the old
+localhost link and cannot be retro-fixed.
+
+Authentication → Emails → Custom SMTP (Resend):
+
+```
+Host:      smtp.resend.com
+Port:      465
+Username:  resend
+Password:  <Resend SMTP credential / API key — never print or commit>
+Sender:    no-reply@missedcallsdental.com
+Name:      Missed Calls Dental
+```
+
+Domain verification: the setup-email path already sends from the Resend-verified
+subdomain `mail.missedcallsdental.com`. Sending Auth email from the root domain
+`no-reply@missedcallsdental.com` requires the **root domain** verified in Resend
+(SPF/DKIM DNS at Namecheap). If only the subdomain is verified, use the safe
+interim branded sender `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`
+until the root domain passes verification.
+
+Email Templates → Reset Password: keep the default `{{ .ConfirmationURL }}`
+placeholder. Do not hardcode localhost, tokens, or reset links.
+
+### Live E2E (operator; never expose the link or token)
+
+1. `https://app.missedcallsdental.com/login` → Forgot password?
+2. Submit the owner email.
+3. Confirm email arrives from `Missed Calls Dental <no-reply@…missedcallsdental.com>`.
+4. Confirm the link host is `app.missedcallsdental.com` (not localhost).
+5. Open link → passes through `/auth/callback` → lands on `/reset-password`.
+6. Set a new password → confirm login works → `/account` opens.
+
+### Notes
+
+- No app code change is required; the reset flow code is correct and deployed.
+- No Vercel env change is required for this fix.

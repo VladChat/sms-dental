@@ -201,12 +201,54 @@ Do not remove token fallback until this flow is verified for existing accounts.
 - Apple login.
 - Full role/RLS cutover across all product tables.
 
-## 10. Supabase redirect allow list
+## 10. Supabase Auth URL + email sender configuration (canonical)
 
-Supabase Auth redirect URLs must allow:
+The reset `redirectTo` is built **in code** from committed runtime config, not
+from any env var:
 
-- `https://app.missedcallsdental.com/auth/callback`
-- `http://localhost:3000/auth/callback`
+- `POST /api/auth/forgot-password` calls `getAppDomains()` (`lib/env.ts`), which
+  reads `runtimeConfig.app.appBaseUrl` (`config/runtime.config.ts` =
+  `https://app.missedcallsdental.com`). It sends:
+  `https://app.missedcallsdental.com/auth/callback?next=/reset-password`.
+- `APP_BASE_URL` (env) is **not read by current code** — only a stale comment in
+  `lib/onboarding/tokens.ts` mentions it. Changing it on Vercel does not affect
+  the reset link.
+
+So a localhost reset link is **not** an app bug — it comes from Supabase Auth
+settings. Supabase GoTrue ignores an emailed `redirect_to` that is not in the
+**Redirect URLs** allow list and substitutes the project **Site URL** into
+`{{ .ConfirmationURL }}`. If Site URL is `http://localhost:3000`, recovery links
+point to localhost.
+
+Required Supabase Dashboard → **Authentication → URL Configuration**:
+
+- **Site URL:** `https://app.missedcallsdental.com`
+- **Redirect URLs** (allow list):
+  - `https://app.missedcallsdental.com/auth/callback`
+  - `http://localhost:3000/auth/callback` (local dev only; keep intentionally)
+
+After changing these, send a **fresh** reset email — old emails keep the old
+(localhost) link and cannot be retro-fixed.
+
+Required Supabase Dashboard → **Authentication → Emails (Custom SMTP)** for
+branded sender (replaces the default `noreply@mail.app.supabase.io`):
+
+- Provider: **Resend SMTP**
+- Host `smtp.resend.com`, Port `465`, Username `resend`
+- Password: Resend SMTP credential / API key (from the Resend dashboard — never
+  printed, logged, or committed)
+- Sender email `no-reply@missedcallsdental.com`, Sender name `Missed Calls Dental`
+- Requires the sending domain to be **verified in Resend**. The transactional
+  setup-email path already uses the verified **subdomain** `mail.missedcallsdental.com`
+  (`runtimeConfig.email.defaultSetupFrom`). The root domain
+  `missedcallsdental.com` may need separate Resend verification (SPF/DKIM DNS) to
+  send from `no-reply@missedcallsdental.com`. If only the subdomain is verified,
+  a safe interim branded sender is
+  `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`.
+
+**Reset Password** email template must keep the Supabase-provided
+`{{ .ConfirmationURL }}` placeholder. Never hardcode localhost, production
+tokens, or full reset links in the template.
 
 ## 11. Next phase
 
