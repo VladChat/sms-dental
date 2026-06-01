@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-05-30 (account dashboard + billing gate)
+Last updated: 2026-06-01 (owner password reset flow)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1328,3 +1328,42 @@ Hardening in app code:
 - setup route now returns structured JSON error if profile/membership linking
   fails (`account_link_failed`) instead of unhandled 500.
 - setup form submit now safely handles non-JSON server responses.
+
+---
+
+## Owner password reset flow operations — 2026-06-01
+
+Scope:
+
+- auth/reset only
+- no Twilio/SMS/Stripe/workspace/team-access changes
+- no schema migrations
+
+Routes added:
+
+- `/forgot-password`
+- `POST /api/auth/forgot-password`
+- `/auth/callback`
+- `/reset-password`
+- `POST /api/auth/update-password`
+
+Behavior:
+
+- `/login` now has a live `Forgot password?` link to `/forgot-password`.
+- Forgot-password submit always returns generic success for normal requests:
+  `If an account exists for this email, we'll send a password reset link.`
+- Recovery links return to `/auth/callback?next=/reset-password`.
+- Callback route exchanges Supabase PKCE code for session, allows only internal
+  relative `next` paths, defaults to `/account` when `next` is missing/unsafe,
+  and redirects to `/login?error=invalid_or_expired_link` on failure.
+- `/reset-password` requires a valid session from recovery flow.
+- Password update uses the same rule as setup:
+  minimum 8 characters, at least one letter, at least one number.
+
+Supabase Auth redirect URL allow list (required):
+
+- `https://app.missedcallsdental.com/auth/callback`
+- `http://localhost:3000/auth/callback`
+
+If either callback URL is missing from Supabase Auth redirect settings,
+password-recovery links can fail or return expired/invalid-link behavior.

@@ -1842,6 +1842,91 @@ Operations docs update needed: yes
 
 ---
 
+## 2026-06-01 — Owner login password reset flow
+
+What changed:
+
+- Added real password-reset entry points and routes:
+  - `/login` now includes `Forgot password?` link to `/forgot-password`
+  - `/forgot-password` page + form
+  - `POST /api/auth/forgot-password`
+  - `/auth/callback` PKCE exchange route
+  - `/reset-password` page + form
+  - `POST /api/auth/update-password`
+- Added show/hide controls on reset-password form fields.
+- Kept login invalid-credential behavior unchanged:
+  `Invalid email or password.`
+
+Why it changed:
+
+- remove dead password-reset copy
+- provide a real owner self-service recovery flow from login
+- keep password management fully in Supabase Auth with safe redirects
+
+Files changed:
+
+- `app/login/_components/LoginForm.tsx`
+- `app/forgot-password/page.tsx`
+- `app/forgot-password/_components/ForgotPasswordForm.tsx`
+- `app/api/auth/forgot-password/route.ts`
+- `app/auth/callback/route.ts`
+- `app/reset-password/page.tsx`
+- `app/reset-password/_components/ResetPasswordForm.tsx`
+- `app/api/auth/update-password/route.ts`
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/ONBOARDING-WORKFLOW-BUILD-GUIDE.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Supabase Auth redirect URL settings recorded:
+
+- `https://app.missedcallsdental.com/auth/callback`
+- `http://localhost:3000/auth/callback`
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pending
+
+Manual QA:
+
+- `/login` forgot-password link wiring: implemented
+- `/forgot-password` generic success UX: implemented
+- reset redirect target: `/auth/callback?next=/reset-password` implemented
+- callback safe-redirect guard: implemented (internal relative paths only)
+- `/reset-password` session gate: implemented
+- password mismatch + weak-password errors: implemented
+- full live email-delivery/recovery-link verification in production: pending
+
+Side effects avoided:
+
+- no Team access or invite flow changes
+- no workspace behavior changes
+- no Twilio/SMS changes
+- no Stripe changes
+- no migrations
+- no marketing `docs/` changes
+- no password/token/reset-link logging
+
+Commit hash: pending  
+Push status: pending
+
+Remaining risks:
+
+- Supabase Auth redirect allow list must include both callback URLs or recovery
+  links may fail.
+- End-to-end live verification depends on mailbox access for a real owner
+  account.
+
+Next steps:
+
+1. Verify recovery email + callback end-to-end in production with a real owner account.
+2. Replace `/account` password placeholder with an in-session change-password flow when scoped.
+
+Operations docs update needed: yes
+
+---
+
 ## 2026-06-01 — Production setup submit error fix (`/setup/{token}`)
 
 What changed:
