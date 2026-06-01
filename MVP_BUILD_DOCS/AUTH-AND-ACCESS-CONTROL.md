@@ -529,3 +529,20 @@ Production status (2026-06-01):
   all access by design.
 
 Full spec + implemented scope: `PLATFORM-ADMIN-CONSOLE-PLAN.md` §15.
+
+## 19. Admin action API auth consistency fix (2026-06-01)
+
+`/admin` layouts and `/api/admin/*` routes now use the same platform-admin
+authorization helper path with explicit request-cookie support for route handlers.
+
+- `resolvePlatformAdmin()` accepts an optional request cookie source.
+- `/api/admin/clinics/[clinicId]/action` calls `resolvePlatformAdmin(req)`.
+- The allowlist check (`PLATFORM_ADMIN_EMAILS`) and profile-flag fallback
+  (`profiles.is_internal_admin`) are unchanged and shared across both page and
+  API authorization.
+- Client-triggered admin action requests explicitly use
+  `credentials: "include"` when calling `/api/admin/clinics/[clinicId]/action`.
+
+Result: platform admins who are authorized for `/admin` are evaluated through the
+same authorization logic for Deactivate/Reactivate/Disable SMS/Enable SMS/Internal
+note actions, without weakening any guardrails.

@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "../supabase/server";
 import { findProfileById } from "../db/profiles";
 import { getPlatformAdminEmails } from "../env";
+import type { NextRequest } from "next/server";
 
 // Platform-admin authorization. This is intentionally SEPARATE from
 // `resolveAuthClinicAccess` (which requires a clinic membership): platform admins
@@ -39,8 +40,12 @@ export async function resolvePlatformAdminFromUser(
   return { ok: false, reason: "not_authorized" };
 }
 
-export async function resolvePlatformAdmin(): Promise<PlatformAdminResult> {
-  const supabase = await createSupabaseServerClient();
+export async function resolvePlatformAdmin(
+  request?: Pick<NextRequest, "cookies">,
+): Promise<PlatformAdminResult> {
+  const supabase = await createSupabaseServerClient(
+    request ? { request } : undefined,
+  );
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {
     return { ok: false, reason: "no_session" };

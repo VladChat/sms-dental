@@ -2940,3 +2940,44 @@ Side effects avoided:
 - no Twilio number purchase/reservation/release
 - no migrations created
 - no secrets printed or committed
+
+---
+
+## 2026-06-01 — Fix `/admin` vs `/api/admin/clinics/*/action` auth mismatch
+
+Observed production behavior:
+
+- `allyexporter@gmail.com` could open `/admin` pages.
+- `POST /api/admin/clinics/[clinicId]/action` returned:
+  `You are not authorized for platform admin access.`
+
+Root cause:
+
+- Admin page/layout and admin action API both used `resolvePlatformAdmin()`, but
+  API authorization was resolved from the generic `next/headers` cookie context.
+  In production, this could diverge from the exact incoming request cookie set
+  used by client-triggered `/api/admin/*` calls.
+
+Fix applied (minimal + safe):
+
+- `resolvePlatformAdmin()` now accepts an optional request cookie source and uses
+  the same helper path for both page guards and API routes.
+- `createSupabaseServerClient()` now supports route-handler request cookie input,
+  so API auth checks use the incoming request cookie jar directly.
+- `POST /api/admin/clinics/[clinicId]/action` now calls
+  `resolvePlatformAdmin(req)`.
+- Admin clinic action client fetch now sends `credentials: "include"` explicitly
+  to guarantee cookie/session forwarding on all supported browsers.
+
+Security posture:
+
+- No auth bypass introduced.
+- No hardcoded admin email.
+- No separate admin password system.
+- Platform-admin authorization still requires allowlist
+  (`PLATFORM_ADMIN_EMAILS`) or `profiles.is_internal_admin=true`.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass

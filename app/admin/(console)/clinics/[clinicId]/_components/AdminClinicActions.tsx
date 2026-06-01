@@ -44,6 +44,7 @@ export function AdminClinicActions(props: Props) {
     try {
       const res = await fetch(`/api/admin/clinics/${props.clinicId}/action`, {
         method: "POST",
+        credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action, ...extra }),
       });
