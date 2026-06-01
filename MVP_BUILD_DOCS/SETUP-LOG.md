@@ -2747,5 +2747,6 @@ gets a one-line pointer. Recommended next implementation prompt:
 "feat: read-only platform admin console (access guard + clinics overview/detail/events)".
 
 Validation: docs-only (`git diff --check` clean; no source files changed, so no
-typecheck/build needed). Commit hash / push: recorded in the follow-up
-`docs: record platform admin plan metadata`.
+typecheck/build needed). Commit hash / push: `214b70f`
+(`docs: plan platform admin console`), pushed to `origin/main`. Metadata recorded
+by the follow-up `docs: record platform admin plan metadata`.
