@@ -14,6 +14,9 @@ type Props = {
 };
 
 export function ClinicForm({ token, loginEmail, initialValues }: Props) {
+  const [businessPhone, setBusinessPhone] = useState(formatUsPhone(initialValues.mainPhone));
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -71,34 +74,40 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
   return (
     <section className="card card-pad">
       <form onSubmit={onSubmit} style={{ marginTop: "var(--space-6)", display: "grid", gap: "var(--space-5)" }} noValidate>
-        <section aria-labelledby="clinic-information-title">
-          <h3 id="clinic-information-title" className="t-h4">Clinic information</h3>
+        <section aria-labelledby="business-information-title">
+          <h3 id="business-information-title" className="t-h4">Business information</h3>
           <div style={{ display: "grid", gap: "var(--space-5)", marginTop: "var(--space-4)" }}>
             <Field
-              label="Clinic name"
+              label="Business name"
               name="name"
               required
-              placeholder="Bright Smile Dental"
+              placeholder="Example: Smile Dental"
               defaultValue={initialValues.name}
             />
             <Field
-              label="Main office phone"
+              label="Business phone"
               name="main_phone"
               required
-              placeholder="(224) 555-1234"
+              placeholder="(555) 123-1234"
               inputMode="tel"
               autoComplete="tel"
-              defaultValue={initialValues.mainPhone}
+              value={businessPhone}
+              onChange={(v) => setBusinessPhone(formatUsPhone(v))}
             />
             <Field
               label="ZIP code"
               name="postal_code"
               required
-              helper="We’ll use this ZIP code to prepare a local number near your office."
               placeholder="60010"
               inputMode="numeric"
               autoComplete="postal-code"
               defaultValue={initialValues.postalCode}
+            />
+            <Field
+              label="Country"
+              name="country_display"
+              defaultValue="United States"
+              readOnly
             />
           </div>
         </section>
@@ -112,25 +121,25 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
               label="Login email"
               name="login_email"
               required
-              helper="This is the email your setup link was sent to."
               defaultValue={loginEmail}
               type="email"
               autoComplete="email"
               readOnly
             />
-            <Field
+            <PasswordField
               label="Create password"
               name="password"
               required
-              helper={`Use at least ${MIN_PASSWORD_LENGTH} characters with one letter and one number.`}
-              type="password"
+              shown={showPassword}
+              onToggle={() => setShowPassword((prev) => !prev)}
               autoComplete="new-password"
             />
-            <Field
+            <PasswordField
               label="Confirm password"
               name="confirm_password"
               required
-              type="password"
+              shown={showConfirmPassword}
+              onToggle={() => setShowConfirmPassword((prev) => !prev)}
               autoComplete="new-password"
             />
           </div>
@@ -160,10 +169,6 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
             {submitting ? "Continuing…" : "Continue setup"}
           </button>
         </div>
-
-        <p className="t-helper" style={{ margin: 0 }}>
-          Automated setup is currently available for U.S. clinics only.
-        </p>
       </form>
     </section>
   );
@@ -176,6 +181,8 @@ function Field({
   required = false,
   placeholder,
   defaultValue,
+  value,
+  onChange,
   inputMode,
   autoComplete,
   helper,
@@ -187,6 +194,8 @@ function Field({
   required?: boolean;
   placeholder?: string;
   defaultValue?: string;
+  value?: string;
+  onChange?: (value: string) => void;
   inputMode?: "text" | "tel" | "email" | "numeric";
   autoComplete?: string;
   helper?: string;
@@ -206,7 +215,8 @@ function Field({
         className={`input${readOnly ? " acct-readonly" : ""}`}
         required={required}
         placeholder={placeholder}
-        defaultValue={defaultValue}
+        {...(value !== undefined ? { value } : { defaultValue })}
+        onChange={onChange ? (event) => onChange(event.target.value) : undefined}
         inputMode={inputMode}
         autoComplete={autoComplete ?? "off"}
         aria-describedby={helperId}
@@ -219,4 +229,54 @@ function Field({
       )}
     </div>
   );
+}
+
+function PasswordField({
+  label,
+  name,
+  required = false,
+  autoComplete,
+  shown,
+  onToggle,
+}: {
+  label: string;
+  name: string;
+  required?: boolean;
+  autoComplete?: string;
+  shown: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={name}>
+        {label}
+        {required && <span className="req" aria-hidden="true"> *</span>}
+      </label>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+        <input
+          id={name}
+          name={name}
+          type={shown ? "text" : "password"}
+          className="input"
+          required={required}
+          autoComplete={autoComplete ?? "off"}
+          spellCheck={false}
+        />
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onToggle}>
+          {shown ? "Hide" : "Show"}
+        </button>
+      </div>
+      {name === "password" && (
+        <p className="helper">{`Use at least ${MIN_PASSWORD_LENGTH} characters with one letter and one number.`}</p>
+      )}
+    </div>
+  );
+}
+
+function formatUsPhone(value: string): string {
+  const raw = value.replace(/\D/g, "");
+  const digits = (raw.length > 10 && raw.startsWith("1") ? raw.slice(1) : raw).slice(0, 10);
+  if (digits.length <= 3) return digits.length ? `(${digits}` : "";
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }

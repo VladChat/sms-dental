@@ -1276,3 +1276,29 @@ Workspace cleanup:
   - optional note
   - `Save result`
 - no result persistence implemented in this phase
+
+---
+
+## Update 2026-06-01 — Setup form wording simplification
+
+This pass narrows the first setup form copy/layout only.
+
+Current visible setup structure at `/setup/{token}`:
+
+- `Account setup` (single page heading)
+- `Business information` section:
+  - Business name
+  - Business phone
+  - ZIP code
+  - Country (United States, read-only)
+- `Sign-in` section:
+  - Login email (read-only)
+  - Create password
+  - Confirm password
+- Primary action: `Continue setup`
+
+Behavior in this pass:
+
+- no backend flow changes
+- no new migrations
+- no Twilio/Stripe/SMS changes

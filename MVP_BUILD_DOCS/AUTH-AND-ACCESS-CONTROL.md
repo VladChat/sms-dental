@@ -1,7 +1,7 @@
 # Auth and Access Control
 
 Status: Active (Phase 1 foundation)  
-Last updated: 2026-05-31
+Last updated: 2026-06-01
 
 This document is the auth/access source of truth for the current repository.
 It describes the legacy onboarding token flow, the new owner password login
@@ -35,10 +35,11 @@ prevention. It is not the long-term auth model.
 1. Owner opens `/setup/{token}`.
 2. Token is validated.
 3. Setup page shows:
-   - read-only login email
-   - clinic name
-   - main office phone
+   - business name
+   - business phone
    - ZIP code
+   - country (United States, read-only)
+   - read-only login email
    - create password
    - confirm password
 4. Owner submits `Continue setup`.
