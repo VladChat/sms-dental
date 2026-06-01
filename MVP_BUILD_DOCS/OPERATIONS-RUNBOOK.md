@@ -1464,3 +1464,30 @@ local `.env.local`.
 **Still requires a human:** browser/inbox E2E (branded From, non-localhost link,
 `/auth/callback` → `/reset-password` → set password → login → `/account`) and
 optional root-domain (`no-reply@missedcallsdental.com`) Resend verification.
+
+---
+
+## Reset email phishing-target fix — 2026-06-01
+
+Gmail flagged the reset email because the branded sender (Missed Calls Dental)
+pointed its button at a raw Supabase project-ref URL
+(`https://<ref>.supabase.co/auth/v1/verify...`) from `{{ .ConfirmationURL }}`.
+
+Fix:
+
+- Recovery template (`mailer_templates_recovery_content` via Management API) now
+  links to the app domain:
+  `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`.
+  Subject: `Reset your Missed Calls Dental password`. Do not reintroduce
+  `{{ .ConfirmationURL }}` in the recovery template.
+- `app/auth/callback/route.ts` handles both the `token_hash`+`type` link
+  (`verifyOtp`) and the legacy PKCE `code` link (`exchangeCodeForSession`).
+
+Deployment ordering: the template change is live immediately; the callback code
+change requires the Vercel deploy to be READY before a `token_hash` link can
+complete. Generate a fresh reset email after deploy for a full click-through. Use
+curl (not python-urllib) for the Management API PATCH (Cloudflare 1010).
+
+Verify (operator): the Gmail link target starts with `app.missedcallsdental.com`,
+then link → `/auth/callback` → `/reset-password` → set password → login →
+`/account`. Never paste the reset link or token.
