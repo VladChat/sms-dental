@@ -1295,3 +1295,36 @@ Operational constraints preserved:
 - no membership mutations from sample actions
 - no workspace result writes
 - no Twilio/Stripe/SMS side effects
+
+---
+
+## Troubleshooting: setup submit fails with generic network message (2026-06-01)
+
+Symptom:
+
+- User submits `/setup/{token}` and sees:
+  `We couldn't reach the server.`
+
+Production signature:
+
+- Vercel log error on `POST /api/onboarding/[token]/clinic`:
+  `relation "public.profiles" does not exist` (`42P01`).
+
+Cause:
+
+- Auth foundation migration missing in the target DB.
+
+Fix:
+
+1. Apply migration:
+   `supabase/migrations/20260531000100_auth_profiles_memberships.sql`
+2. Verify tables exist:
+   - `public.profiles`
+   - `public.clinic_memberships`
+3. Re-test setup submit.
+
+Hardening in app code:
+
+- setup route now returns structured JSON error if profile/membership linking
+  fails (`account_link_failed`) instead of unhandled 500.
+- setup form submit now safely handles non-JSON server responses.

@@ -175,17 +175,25 @@ export async function POST(
     }
   }
 
-  await upsertProfile({
-    id: authUserId,
-    email: setupRequest.owner_email,
-    fullName: setupRequest.owner_full_name,
-  });
-  await upsertClinicMembership({
-    clinicId: clinic.id,
-    profileId: authUserId,
-    role: "owner",
-    status: "active",
-  });
+  try {
+    await upsertProfile({
+      id: authUserId,
+      email: setupRequest.owner_email,
+      fullName: setupRequest.owner_full_name,
+    });
+    await upsertClinicMembership({
+      clinicId: clinic.id,
+      profileId: authUserId,
+      role: "owner",
+      status: "active",
+    });
+  } catch {
+    return jsonError(
+      500,
+      "account_link_failed",
+      "We couldn't finish account setup right now. Please try again.",
+    );
+  }
 
   // Establish account context (httpOnly cookie) so the customer can move to the
   // clean /account URL instead of keeping the long token in the address bar.

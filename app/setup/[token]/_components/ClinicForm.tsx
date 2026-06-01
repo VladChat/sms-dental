@@ -50,12 +50,12 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => null)) as {
         ok?: boolean;
         redirect?: string;
         error?: { code?: string; message?: string };
-      };
-      if (!res.ok || !data.ok) {
+      } | null;
+      if (!res.ok || !data?.ok) {
         setError(data?.error?.message ?? "Could not save your account setup. Please check your entries.");
         if (data?.error?.code === "owner_user_exists_login_required") {
           setShowLoginLink(true);
@@ -63,7 +63,7 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
         return;
       }
       // Account context is set server-side; move to the clean /account URL.
-      window.location.assign(data.redirect ?? "/account");
+      window.location.assign(data?.redirect ?? "/account");
     } catch {
       setError("We couldn't reach the server. Please try again in a moment.");
     } finally {
