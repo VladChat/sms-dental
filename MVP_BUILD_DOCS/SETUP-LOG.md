@@ -1897,8 +1897,8 @@ Side effects avoided:
 - no new schema beyond applying already-committed auth migration
 - no secret/token/password logging
 
-Commit hash: pending  
-Push status: pending
+Commit hash: `3333a5e`  
+Push status: pushed to `main`
 
 Remaining risks:
 
