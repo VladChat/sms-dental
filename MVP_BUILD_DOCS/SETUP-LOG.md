@@ -2710,3 +2710,42 @@ submission. See `PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md`.
 Commit hash / push: `97d416b` (`fix: remove misleading account placeholders`),
 pushed to `origin/main`. Metadata recorded by the follow-up
 `docs: record account placeholder trust-fix metadata`.
+
+---
+
+## 2026-06-01 — Platform admin console: architecture/spec (docs only)
+
+Planning-only pass (no code, no migration, no behavior change). Wrote
+`MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md` — the spec for a future internal
+platform-owner console at `/admin` (cross-tenant; distinct from clinic `/account`
+and front-desk `/workspace`).
+
+Key recommendations:
+
+- **Access model:** hybrid bootstrap — env/config allowlist `PLATFORM_ADMIN_EMAILS`
+  + the existing (currently unused) `profiles.is_internal_admin` flag. New
+  server guard `resolvePlatformAdmin` (separate from `resolveAuthClinicAccess`,
+  which requires a clinic membership). Clinic `owner`/`front_desk` never grant
+  platform access. **No migration needed to start.**
+- **Data model:** existing tables already support a useful **read-only** admin v1
+  with no migration (clinics has all status/lifecycle/billing/A2P fields; messages
+  /call_events/webhook_events/opt_outs/memberships/profiles cover diagnostics). The
+  only new schema (Phase 2, for writes) is `admin_audit_events` + a small
+  `clinics.admin_internal_note`.
+- **v1 scope:** real read-only console (overview, clinics list, clinic detail,
+  events) — no migration. Phase 2 adds audit log + safe writes (note,
+  deactivate/reactivate, disable SMS recovery, resend setup link, assign owned
+  number). Billing/number-purchase/enable-live-SMS stay blocked behind Stripe /
+  Twilio purchase / A2P — never faked.
+- **Safety:** service-role reads only behind the admin guard; redact raw
+  payloads/tokens/secrets; audit + confirm + idempotency + rollback for writes;
+  `/admin` is purely additive and must not touch `/account`, `/workspace`,
+  onboarding, webhooks, or SMS gates.
+
+Index updates: `MANIFEST.md` references the plan; `PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md`
+gets a one-line pointer. Recommended next implementation prompt:
+"feat: read-only platform admin console (access guard + clinics overview/detail/events)".
+
+Validation: docs-only (`git diff --check` clean; no source files changed, so no
+typecheck/build needed). Commit hash / push: recorded in the follow-up
+`docs: record platform admin plan metadata`.

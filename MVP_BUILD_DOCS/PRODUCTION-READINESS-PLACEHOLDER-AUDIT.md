@@ -269,3 +269,15 @@ Still open (unchanged, future tasks): B1 Stripe billing, B2 phone purchase, B3
 A2P/carrier submission, B4 live SMS, PW1 server-side billing→phone gate, P2 real
 staff invitations. Next recommended task: **Stripe payment-method collection**
 (collect during setup; no charge until SMS recovery is active).
+
+---
+
+## 14. Related plan — platform admin console
+
+Several gaps above (billing readiness, phone provisioning, A2P status, SMS
+activation, clinic kill switch) will be **operated** from a future internal
+platform-owner console at `/admin`. Its architecture/spec is in
+`PLATFORM-ADMIN-CONSOLE-PLAN.md` (separate from clinic `/account` and front-desk
+`/workspace`; plan only, not implemented). The admin console does not change these
+gaps' status — it is the operator surface that will manage them once their
+prerequisites (Stripe, Twilio purchase, A2P) are wired.
