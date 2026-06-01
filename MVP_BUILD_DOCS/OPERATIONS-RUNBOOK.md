@@ -1539,3 +1539,22 @@ then link → `/auth/callback` → `/reset-password` → set password → login 
   `Please contact support to save workspace results.` modal is removed.
 - **Re-verify after change:** save an outcome on a real card, refresh, confirm it
   persists; confirm a >300-char note is rejected; confirm samples never hit the DB.
+
+---
+
+## Setup link idempotency — 2026-06-01
+
+Reopening a used `/setup/{token}` link is now safe and never restarts setup.
+
+- **Completed marker:** an owner auth account exists for the setup request's
+  `owner_email` (`isSetupAlreadyCompleted` in `lib/onboarding/verify.ts`). No
+  migration — works for old links.
+- **Page:** completed + signed in → server redirect to `/account`; completed +
+  signed out → completed-state card (`Account setup is already complete` /
+  `Sign in to continue to your account.` / `Sign in` → `/login`); no password
+  fields render. First-time links are unchanged.
+- **API:** `POST /api/onboarding/[token]/clinic` short-circuits to the completed
+  state when the account already exists — no duplicate auth user / clinic, no
+  password overwrite, no rerun.
+- **Token safety:** unchanged — raw token never logged; the completion check uses
+  only the email.

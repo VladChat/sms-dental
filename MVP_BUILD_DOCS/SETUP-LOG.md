@@ -2570,3 +2570,61 @@ committed; no secrets printed.
 **Commit hash / push:** `575a975` (`fix: make workspace outcomes saveable`),
 pushed to `origin/main`. Metadata recorded by the follow-up
 `docs: record workspace outcomes commit metadata`.
+
+---
+
+## 2026-06-01 — Setup links are idempotent (no password form after account exists)
+
+**Bug:** reopening a used `Complete your setup` link
+(`/setup/{token}`) re-rendered the account/password form even though the account
+and password were already created. Root cause: `lookupSetupRequestByRawToken`
+only treats `setup_requests.status = 'active'` as completed, but the completion
+path sets `clinic_details_completed` after creating the clinic + owner auth user,
+so the lookup returned `ok` and the form rendered again.
+
+**Canonical completed marker (no migration):** an **owner auth account exists**
+for the setup request's `owner_email` (`findAuthUserByEmail`). The form's only job
+is to create that account + password, so once it exists setup is complete. This is
+reliable for old links too (no backfill needed) and cannot be bypassed by
+reopening a stale email link. New helper: `isSetupAlreadyCompleted(ownerEmail)` in
+`lib/onboarding/verify.ts`.
+
+**Behavior now:**
+
+- Invalid/expired/cancelled token → unchanged invalid-link card.
+- Completed setup + signed in → **server-side redirect to `/account`** (via
+  `supabase.auth.getUser()`, not client-only).
+- Completed setup + signed out → no-password completed-state card:
+  title `Account setup is already complete`, body `Sign in to continue to your
+  account.`, primary button `Sign in` → `/login`.
+- First-time, not-yet-created → the existing onboarding form (office + password)
+  is unchanged.
+- The `status = 'active'` terminal case (lookup reason `completed`) is routed to
+  the same completed-state flow.
+
+**Server-side enforcement:** `POST /api/onboarding/[token]/clinic` now returns the
+completed state (`{ ok:true, completed:true, redirect }`) when the owner account
+already exists — before any writes — so a re-submitted/stale token cannot create a
+duplicate auth user, overwrite the password, duplicate clinic data, or rerun
+setup. The client form routes to the returned redirect.
+
+**Files changed:** `lib/onboarding/verify.ts`,
+`app/setup/[token]/page.tsx`, `app/setup/[token]/_components/SetupComplete.tsx`
+(new), `app/api/onboarding/[token]/clinic/route.ts`, plus docs.
+
+**Migration:** none (existing auth-account marker used).
+
+**Validation:** `npm run typecheck` pass; `npm run build` pass.
+
+**Manual QA remaining (browser — operator):** fresh link → normal setup works;
+complete once; reopen while signed in → `/account`; sign out; reopen → completed
+card + `Sign in` (no password fields); `Sign in` → `/login`; repeated POST cannot
+duplicate account/clinic/password; invalid/expired token still handled.
+
+**Security:** setup token never logged/printed; the completion check uses only
+`owner_email` (token is not passed to it); no new account/admin data exposed.
+
+**Side effects avoided:** no Twilio/Stripe/SMS; no Supabase auth/Vercel/env
+changes; no DB migration; `.env.local` not committed; no secrets printed.
+
+**Commit hash / push:** recorded in the follow-up `docs: record setup idempotency commit metadata`.

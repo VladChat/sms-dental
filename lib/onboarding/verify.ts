@@ -2,6 +2,7 @@ import {
   findSetupRequestByTokenHash,
   type SetupRequestRow,
 } from "../db/setup-requests";
+import { findAuthUserByEmail } from "../db/auth-users";
 import {
   hashSetupToken,
   isExpired,
@@ -31,4 +32,24 @@ export async function lookupSetupRequestByRawToken(
   if (row.status === "expired") return { ok: false, reason: "expired" };
   if (row.status === "active") return { ok: false, reason: "completed" };
   return { ok: true, setupRequest: row };
+}
+
+/**
+ * Canonical "setup already completed" marker.
+ *
+ * The setup form exists only to create the owner auth account + password. So
+ * once an auth user exists for the setup request's owner email, setup must be
+ * treated as complete: the form must not render again, and the submit handler
+ * must not create duplicate accounts, overwrite the password, or rerun setup.
+ *
+ * Using the linked auth account (rather than a setup_requests status) is the
+ * reliable marker — it is true for old links too, so no backfill/migration is
+ * needed, and it cannot be bypassed by reopening a stale email link. The setup
+ * request's `status` advances through several non-`active` values (e.g.
+ * `clinic_details_completed`) after the account is created, so status alone is
+ * not a dependable completion signal here.
+ */
+export async function isSetupAlreadyCompleted(ownerEmail: string): Promise<boolean> {
+  const authUser = await findAuthUserByEmail(ownerEmail);
+  return Boolean(authUser);
 }

@@ -618,3 +618,16 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       existing lifecycle status enum instead of inventing new statuses.
 - [ ] Separate real vs sample UI into distinct sections with a local Hide/Show that
       only affects the sample layer; never let hiding samples hide real data.
+
+---
+
+## Setup-link idempotency (reusable lessons)
+
+- [ ] Bearer "magic" links (setup/invite/reset) must be idempotent: determine the
+      completed state server-side BEFORE rendering or processing a create form.
+- [ ] Use a reliable completion marker (e.g. the linked auth account exists) over
+      an intermediate status value that keeps advancing after creation.
+- [ ] Enforce the same completed-state check in the submit handler, not just the
+      page, so a stale tab/re-POST cannot duplicate accounts or overwrite passwords.
+- [ ] Completed-state UI shows no password fields (so password managers do not see
+      a new-password form) and offers a single Sign in action.

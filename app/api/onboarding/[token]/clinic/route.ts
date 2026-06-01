@@ -6,7 +6,10 @@ import {
   jsonError,
   jsonOk,
 } from "../../../../../lib/http/responses";
-import { lookupSetupRequestByRawToken } from "../../../../../lib/onboarding/verify";
+import {
+  isSetupAlreadyCompleted,
+  lookupSetupRequestByRawToken,
+} from "../../../../../lib/onboarding/verify";
 import {
   ensureClinicSlug,
   upsertClinicForOnboarding,
@@ -65,6 +68,17 @@ export async function POST(
     return jsonError(404, "invalid_setup_link", "This setup link is invalid or expired.");
   }
   const setupRequest = lookup.setupRequest;
+
+  // Idempotency guard (defense-in-depth alongside the setup page). The form only
+  // exists to create the owner account + password; if that account already
+  // exists, setup is complete. Never create duplicate auth users, overwrite the
+  // password, duplicate clinic data, or rerun setup. Return the completed state
+  // so the client routes to /account (signed in) or /login.
+  if (await isSetupAlreadyCompleted(setupRequest.owner_email)) {
+    const existing = await createSupabaseServerClient();
+    const { data } = await existing.auth.getUser();
+    return jsonOk({ ok: true, completed: true, redirect: data.user ? "/account" : "/login" });
+  }
 
   let body: unknown;
   try {
