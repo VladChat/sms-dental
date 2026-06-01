@@ -2627,4 +2627,6 @@ duplicate account/clinic/password; invalid/expired token still handled.
 **Side effects avoided:** no Twilio/Stripe/SMS; no Supabase auth/Vercel/env
 changes; no DB migration; `.env.local` not committed; no secrets printed.
 
-**Commit hash / push:** recorded in the follow-up `docs: record setup idempotency commit metadata`.
+**Commit hash / push:** `70635a2` (`fix: make setup links idempotent`), pushed to
+`origin/main`. Metadata recorded by the follow-up
+`docs: record setup idempotency commit metadata`.
