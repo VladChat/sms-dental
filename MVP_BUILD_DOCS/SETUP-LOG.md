@@ -2750,3 +2750,34 @@ Validation: docs-only (`git diff --check` clean; no source files changed, so no
 typecheck/build needed). Commit hash / push: `214b70f`
 (`docs: plan platform admin console`), pushed to `origin/main`. Metadata recorded
 by the follow-up `docs: record platform admin plan metadata`.
+
+---
+
+## 2026-06-01 — Auth decision: role-specific login entry points (docs only)
+
+Recorded a mandatory production auth/navigation rule (no code, no behavior
+change): **one underlying Supabase Auth system, separate role-specific login
+entry points + redirects**.
+
+- Platform admin: `/admin/login` → `/admin` (requires platform-admin auth via
+  `PLATFORM_ADMIN_EMAILS` or `profiles.is_internal_admin`). First admin
+  `allyexporter@gmail.com` — value in local/Vercel env only, never hardcoded;
+  `.env.local.example` may carry the name only.
+- Clinic owner: `/login` → `/account` (plan permits a later `/account/login`
+  rename). Requires owner/admin membership.
+- Front desk: `/workspace/login` → `/workspace`. Requires `front_desk` membership.
+- No separate admin password store; reset stays tied to the Supabase Auth email;
+  forms use correct `autocomplete`. Server-side protection required on `/admin`,
+  `/workspace`, `/account` and their `/api/*`.
+
+To-Do recorded in `AUTH-AND-ACCESS-CONTROL.md` §17 and
+`PLATFORM-ADMIN-CONSOLE-PLAN.md` §3: implement `/admin/login`, `/workspace/login`,
+and the clinic-owner login entry for `/account`, backed by one Supabase Auth
+system with strict server-side role redirects.
+
+Docs updated: `PLATFORM-ADMIN-CONSOLE-PLAN.md` (§3 login entry points + bootstrap
+email + `/admin/login` route/roadmap/next-prompt), `AUTH-AND-ACCESS-CONTROL.md`
+(§1 + new §17), `PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md` (§15 pointer),
+`MANIFEST.md` (note). Validation: docs-only (`git diff --check` clean; no source
+files changed). Commit hash / push: recorded in the follow-up
+`docs: record role-specific login decision metadata`.

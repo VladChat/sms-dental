@@ -281,3 +281,17 @@ platform-owner console at `/admin`. Its architecture/spec is in
 `/workspace`; plan only, not implemented). The admin console does not change these
 gaps' status — it is the operator surface that will manage them once their
 prerequisites (Stripe, Twilio purchase, A2P) are wired.
+
+---
+
+## 15. Auth decision — role-specific login entry points (2026-06-01)
+
+Recorded a required product rule: **one Supabase Auth system** with **separate
+role-specific login pages** — `/admin/login` → `/admin` (platform admin),
+`/login` (→ `/account`, clinic owner; may later become `/account/login`),
+`/workspace/login` → `/workspace` (front desk) — all with strict server-side role
+redirects. First platform admin (`allyexporter@gmail.com`) via
+`PLATFORM_ADMIN_EMAILS` env (not hardcoded). Details:
+`AUTH-AND-ACCESS-CONTROL.md` §17 and `PLATFORM-ADMIN-CONSOLE-PLAN.md` §3. Not
+implemented yet; this does not change the placeholder/working status of any item
+above.
