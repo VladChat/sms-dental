@@ -159,21 +159,26 @@ progress numbering/status.
 
 - login email (read-only)
 - password status (`Password is set`)
-- `Change password` placeholder modal (non-mutating; no fake save)
+- `Change password` — **real** in-session change via
+  `POST /api/account/change-password` (see §16)
 - sign out action
 
 Reset behavior in this phase:
 
 - password reset is available from `/login` via `/forgot-password`
-- account-page `Change password` remains a placeholder until an in-session
-  account-settings password change flow is explicitly scoped
+- account-page `Change password` is a **real** in-session flow (verify current
+  password, then update via Supabase Auth). See §16.
 
-`Team access` is owner-only UI shell in this phase:
+`Team access` is owner-only UI shell in this phase (now presented honestly):
 
-- workspace link guidance (`/workspace`, same link for all users)
-- invite form shell (`Front desk` only) with safe placeholder on submit
-- owner row from real account membership
-- sample rows only when no real staff memberships are present
+- workspace link guidance (`/workspace`, same link for all users) — real (open /
+  copy link work)
+- invite form is a **disabled preview** (`Staff invitations not connected yet`) —
+  no fake submit modal; no email/invite/user/membership created
+- owner row from real account membership; member-management actions render as a
+  non-actionable dash (not connected yet)
+- sample staff rows are clearly labeled `Sample`; their actions are plain text
+  (no buttons, no modal)
 
 Staff invite send/accept backend remains next-phase work.
 
@@ -419,3 +424,21 @@ and returns `{ ok:true, completed:true, redirect }` for an already-created
 account, so a stale re-submit cannot create a duplicate auth user/clinic,
 overwrite the password, or rerun setup. The setup token is still never logged;
 the completion check uses only the owner email.
+
+## 16. In-session password change (2026-06-01)
+
+Signed-in owners can change their password from `/account` → Account access →
+`Change password` (real modal: current password, new password, confirm, Save).
+
+- Route: `POST /api/account/change-password`.
+- Server: requires an authenticated session (`auth.getUser()`); verifies the
+  **current** password on a throwaway Supabase client (no session persistence, so
+  the caller's cookies are untouched); then updates via the session client's
+  `auth.updateUser({ password })`. Passwords are never logged.
+- Validation reuses `lib/auth/password.ts` (`getPasswordValidationError`,
+  `MIN_PASSWORD_LENGTH` = 8: ≥8 chars, one letter, one number); confirm must
+  match; wrong current password → clean `Your current password is incorrect.`;
+  success → `Password updated.`
+- Does not touch the forgot/reset-password flow or login/logout. Inputs use
+  `autocomplete="current-password"` / `new-password`; Show/Hide toggles input
+  `type` without remounting.

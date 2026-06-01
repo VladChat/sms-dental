@@ -1558,3 +1558,14 @@ Reopening a used `/setup/{token}` link is now safe and never restarts setup.
   password overwrite, no rerun.
 - **Token safety:** unchanged — raw token never logged; the completion check uses
   only the email.
+
+---
+
+## In-session password change — 2026-06-01
+
+`POST /api/account/change-password` lets a signed-in owner change their password
+from `/account` → Account access. Requires an authenticated session; verifies the
+current password (throwaway client, no cookie disturbance) before
+`auth.updateUser`. No password logged. Independent of forgot/reset and
+login/logout. Billing, staff invites, phone provisioning, and A2P remain not
+connected (honest disabled states; see `PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md`).

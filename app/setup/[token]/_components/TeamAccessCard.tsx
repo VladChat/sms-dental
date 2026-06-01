@@ -18,7 +18,7 @@ type SampleMember = {
   email: string;
   access: string;
   status: string;
-  action: "Remove" | "Restore";
+  action: string;
 };
 
 const SAMPLE_MEMBERS: SampleMember[] = [
@@ -29,11 +29,7 @@ const SAMPLE_MEMBERS: SampleMember[] = [
 const SAMPLE_VISIBILITY_KEY = "mcd_team_samples_hidden";
 
 export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteError, setInviteError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showTeamActionModal, setShowTeamActionModal] = useState(false);
   const [samplesHidden, setSamplesHidden] = useState(false);
 
   const workspaceLink = useMemo(() => {
@@ -90,21 +86,6 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
     }
   }
 
-  function onSendInvite(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setInviteError(null);
-    const candidate = inviteEmail.trim().toLowerCase();
-    if (!candidate) {
-      setInviteError("Enter a work email.");
-      return;
-    }
-    if (candidate === normalizedOwnerEmail) {
-      setInviteError("This email already has owner access.");
-      return;
-    }
-    setShowInviteModal(true);
-  }
-
   function hideSampleBlock() {
     setSamplesHidden(true);
     try {
@@ -148,11 +129,8 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
             Copy link
           </button>
         </div>
-        <p className="t-helper" style={{ margin: "var(--space-3) 0 0" }}>
-          Staff can use this link after they accept an invitation.
-        </p>
         {copyMessage && (
-          <p className="t-small" role="status" aria-live="polite" style={{ margin: "var(--space-2) 0 0" }}>
+          <p className="t-small" role="status" aria-live="polite" style={{ margin: "var(--space-3) 0 0" }}>
             {copyMessage}
           </p>
         )}
@@ -161,40 +139,36 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
       <section className="acct-card-subsection" aria-labelledby="team-invite-title">
         <h3 id="team-invite-title" className="t-h4">Invite staff</h3>
         <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
-          Send an invitation to a front desk team member. They will create their own password and use Workspace to review patient requests.
+          Front desk staff get their own sign-in and use Workspace to review patient requests.
         </p>
-        <form onSubmit={onSendInvite} className="acct-form" style={{ marginTop: "var(--space-4)" }} noValidate>
-          <div className="field">
-            <label htmlFor="team-invite-email">Work email</label>
-            <input
-              id="team-invite-email"
-              name="work_email"
-              type="email"
-              className="input"
-              placeholder="frontdesk@example.com"
-              autoComplete="email"
-              value={inviteEmail}
-              onChange={(event) => setInviteEmail(event.target.value)}
-              required
-              spellCheck={false}
-            />
-          </div>
-
-          <div className="acct-team-access-row">
-            <span className="t-small" style={{ color: "var(--text-secondary)" }}>Access</span>
-            <span className="badge badge-neutral">Front desk</span>
-          </div>
-
-          {inviteError && (
-            <div className="alert alert-error" role="alert" aria-live="polite">
-              <span>{inviteError}</span>
-            </div>
-          )}
-
-          <div>
-            <button type="submit" className="btn btn-primary">Send invite</button>
-          </div>
-        </form>
+        {/* Staff invitations are not wired yet. Show an honest disabled preview
+            instead of a button that opens a fake "contact support" modal. No
+            email is sent and no invite/user/membership is created. */}
+        <div className="field" style={{ marginTop: "var(--space-4)" }}>
+          <label htmlFor="team-invite-email">Work email</label>
+          <input
+            id="team-invite-email"
+            name="work_email"
+            type="email"
+            className="input"
+            placeholder="frontdesk@example.com"
+            autoComplete="off"
+            disabled
+            aria-disabled="true"
+          />
+        </div>
+        <div className="acct-team-access-row">
+          <span className="t-small" style={{ color: "var(--text-secondary)" }}>Access</span>
+          <span className="badge badge-neutral">Front desk</span>
+        </div>
+        <div style={{ marginTop: "var(--space-4)" }}>
+          <button type="button" className="btn btn-primary" disabled aria-disabled="true">
+            Staff invitations not connected yet
+          </button>
+          <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-2) 0 0" }}>
+            Staff invitations will be connected after team access is wired.
+          </p>
+        </div>
       </section>
 
       <section className="acct-card-subsection" aria-labelledby="team-members-title">
@@ -215,7 +189,8 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
                   <td className="t-mono">{member.email}</td>
                   <td>{roleLabel(member.role)}</td>
                   <td>{member.status === "active" ? "Active" : member.status}</td>
-                  <td>{teamActionLabel(member)}</td>
+                  {/* Member management is not connected yet — no fake actions. */}
+                  <td style={{ color: "var(--text-muted)" }}>—</td>
                 </tr>
               ))}
             </tbody>
@@ -234,7 +209,7 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
               </button>
             </div>
             <p className="t-small" style={{ margin: "var(--space-2) 0 0" }}>
-              These examples show how staff access works.
+              These examples show how staff access will work. They are not saved.
             </p>
 
             <div className="acct-team-table-wrap" style={{ marginTop: "var(--space-4)" }}>
@@ -253,15 +228,9 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
                       <td className="t-mono">{sample.email}</td>
                       <td>{sample.access}</td>
                       <td>{sample.status}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setShowTeamActionModal(true)}
-                        >
-                          {sample.action}
-                        </button>
-                      </td>
+                      {/* Sample rows render the action as plain text — no active
+                          button, no modal. */}
+                      <td style={{ color: "var(--text-muted)" }}>{sample.action}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -276,50 +245,6 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
           </div>
         )}
       </section>
-
-      {showInviteModal && (
-        <div className="acct-modal-backdrop" role="presentation" onClick={() => setShowInviteModal(false)}>
-          <div
-            className="acct-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="team-invite-placeholder-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3 id="team-invite-placeholder-title" className="t-h4">Team access</h3>
-            <p className="t-small" style={{ margin: 0 }}>
-              Please contact support to add staff access.
-            </p>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowInviteModal(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showTeamActionModal && (
-        <div className="acct-modal-backdrop" role="presentation" onClick={() => setShowTeamActionModal(false)}>
-          <div
-            className="acct-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="team-action-placeholder-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3 id="team-action-placeholder-title" className="t-h4">Team access</h3>
-            <p className="t-small" style={{ margin: 0 }}>
-              Please contact support to update staff access.
-            </p>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowTeamActionModal(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -328,10 +253,4 @@ function roleLabel(role: "owner" | "front_desk" | "admin"): string {
   if (role === "owner") return "Owner";
   if (role === "front_desk") return "Front desk";
   return "Admin";
-}
-
-function teamActionLabel(member: TeamMember): string {
-  if (member.role === "owner") return "—";
-  if (member.status === "active") return "Remove";
-  return "Restore";
 }

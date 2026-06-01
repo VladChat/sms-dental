@@ -2671,3 +2671,40 @@ Validation: `npm run typecheck` pass; `npm run build` pass. `package.json` has n
 Commit hash / push: `ce401ea` (`docs: audit production readiness placeholders`),
 pushed to `origin/main`. Metadata recorded by the follow-up
 `docs: record placeholder audit commit metadata`.
+
+---
+
+## 2026-06-01 — Trust fix: remove misleading account placeholders
+
+Removed active UI actions that implied working SaaS features but opened fake
+"contact support" / "will open here" modals. Scope-limited: no Stripe, staff
+invite backend, phone purchase, or A2P built this pass.
+
+- **Change password — now REAL.** New `POST /api/account/change-password`
+  (auth + verify current password on a throwaway client + `updateUser`). New real
+  modal in `AccountAccessCard.tsx` (current/new/confirm, Show/Hide, inline errors,
+  `Password updated.`). Reuses `lib/auth/password.ts`. Reset/login/logout
+  untouched. See `AUTH-AND-ACCESS-CONTROL.md` §16.
+- **Billing — honest, still not connected.** Removed the fake payment modal;
+  `BillingCard.tsx` now shows a disabled `Payment setup not connected yet` button
+  + helper (no Stripe call). Plan/trial/status display kept.
+- **Team invite — honest, still not connected.** Removed the
+  `Please contact support to add staff access.` modal; `TeamAccessCard.tsx` shows
+  a disabled email preview + disabled `Staff invitations not connected yet` +
+  helper. No email/invite/user/membership created.
+- **Sample/real team actions — no fake modals.** Removed the
+  `Please contact support to update staff access.` modal. Sample staff actions
+  render as plain text (labeled `Sample`); real member actions render `—`.
+- **Marketing.** Removed the dead, unreachable sign-in demo handler from
+  `docs/script.js` (`sign-in.html` already redirects to app `/login`). Trial form
+  + redirect handoff unchanged.
+
+Validation: `npm run typecheck` pass; `npm run build` pass (no `lint`/`test`
+script). No secrets touched; no Stripe/Twilio/email/SMS calls; `.env.local`
+unchanged.
+
+Still intentionally not connected (future tasks): Stripe billing/payment method,
+staff invitation backend, phone number reservation/purchase, A2P/carrier
+submission. See `PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md`.
+
+Commit hash / push: recorded in the follow-up `docs: record account placeholder trust-fix metadata`.
