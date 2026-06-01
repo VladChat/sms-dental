@@ -5,85 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in &mdash; Missed Calls Dental</title>
   <meta name="description" content="Sign in to your Missed Calls Dental account.">
-  <link rel="canonical" href="https://missedcallsdental.com/sign-in.html">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="Sign in &mdash; Missed Calls Dental">
-  <meta property="og:description" content="Sign in to your Missed Calls Dental account.">
-  <meta property="og:image" content="https://missedcallsdental.com/images/marketing/og-image.png">
-  <meta property="og:url" content="https://missedcallsdental.com/sign-in.html">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Sign in &mdash; Missed Calls Dental">
-  <meta name="twitter:description" content="Sign in to your Missed Calls Dental account.">
-  <meta name="twitter:image" content="https://missedcallsdental.com/images/marketing/og-image.png">
-  <meta name="theme-color" content="#0B6F67">
+  <meta name="robots" content="noindex, follow">
+  <link rel="canonical" href="https://app.missedcallsdental.com/login">
+  <meta http-equiv="refresh" content="0; url=https://app.missedcallsdental.com/login">
   <link rel="icon" href="favicon.ico" sizes="any">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="manifest" href="site.webmanifest">
   <link rel="stylesheet" href="styles.css">
+  <script>
+    // Sign in now lives on the app domain. Hand off immediately; the meta
+    // refresh and the link below are fallbacks if JS is disabled.
+    window.location.replace("https://app.missedcallsdental.com/login");
+  </script>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to main content</a>
-
-  <header class="site-header">
-    <div class="container header-inner">
-      <a class="brand" href="index.html" aria-label="Missed Calls Dental home">
-        <img src="brand/logo-mark.webp" alt="" width="1254" height="1254">
-        <span class="brand-text"><span class="brand-name">Missed Calls Dental</span></span>
-      </a>
-      <div class="header-end">
-        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Open menu">
-          <span class="menu-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span><span>Menu</span>
-        </button>
-        <nav class="site-nav" id="primary-nav" aria-label="Main navigation">
-          <a class="nav-link" href="index.html#how-it-works">How it works</a>
-          <a class="nav-link" href="index.html#pricing">Pricing</a>
-          <a class="nav-link" href="index.html#faq">FAQ</a>
-          <div class="auth-group">
-            <a class="auth-link" href="sign-in.html" aria-current="page">Sign in</a>
-            <a class="auth-link auth-link--primary" href="index.html#start-trial">Start trial</a>
-          </div>
-        </nav>
-      </div>
-    </div>
-  </header>
-
   <main id="main">
     <section class="section">
-      <div class="container">
-        <div class="auth-card">
-          <h1>Sign in</h1>
-          <p class="sub">Welcome back. Sign in to your office account.</p>
-          <form id="signin-form" aria-label="Sign in" novalidate>
-            <div class="field">
-              <label for="email">Email</label>
-              <input id="email" name="email" type="email" class="input" autocomplete="email" placeholder="you@youroffice.com" spellcheck="false" required>
-            </div>
-            <div class="field">
-              <label for="password">Password</label>
-              <input id="password" name="password" type="password" class="input" autocomplete="current-password" placeholder="Your password" required>
-            </div>
-            <div class="form-error" id="signin-error" role="alert" aria-live="polite" hidden>
-              Incorrect email or password. Please try again.
-            </div>
-            <button type="submit" class="btn btn-primary btn-block">Sign in</button>
-          </form>
-          <p class="form-foot">Need an account? <a class="link" href="index.html#start-trial">Start trial</a></p>
-        </div>
+      <div class="container" style="text-align:center;">
+        <h1>Sign in</h1>
+        <p class="sub">Taking you to sign in&hellip;</p>
+        <p><a class="link" href="https://app.missedcallsdental.com/login">Continue to sign in</a></p>
       </div>
     </section>
   </main>
-
-  <footer class="site-footer">
-    <div class="container footer-inner">
-      <span class="footer-copy">&copy; <span data-current-year>2026</span> Missed Calls Dental</span>
-      <nav class="footer-nav" aria-label="Legal navigation">
-        <a href="privacy.html">Privacy Policy</a>
-        <a href="terms.html">Terms of Service</a>
-        <a href="sms-consent.html">SMS Terms</a>
-      </nav>
-    </div>
-  </footer>
-
-  <script src="script.js" defer></script>
 </body>
 </html>

@@ -365,3 +365,30 @@ Resolution:
    error (`account_link_failed`) instead of unhandled 500.
 3. Updated setup form submit parsing to tolerate non-JSON server responses
    without falling into a misleading network-only message path.
+
+## 15. Auth login + reset polish (2026-06-01)
+
+Canonical sign-in is `https://app.missedcallsdental.com/login` (real auth). It now
+mirrors the marketing sign-in design (brand header, centered card, footer legal
+links) using shared design tokens + new `.auth-*` classes in `app/globals.css`;
+`LoginForm` behavior is unchanged. `docs/sign-in.html` is a redirect/handoff to the
+app login (meta refresh + JS replace + fallback link, `noindex`), and all marketing
+pages' Sign in nav links point to the app login. Do not re-add a marketing login
+form.
+
+`/reset-password` form:
+
+- A read-only account **email** field (`autocomplete="username"`, value from the
+  recovery session `getUser().email`) precedes the password fields so the browser's
+  "Save password?" stores email + new password. The email cannot be edited during
+  reset.
+- Both password fields use `autocomplete="new-password"`. Show/Hide flips
+  `-webkit-text-security` and keeps `type="password"` constant, so Chrome's
+  strong-password generator is not re-triggered on a non-empty field (no remount;
+  stable key/value/name/id/autocomplete).
+
+Recovery email copy (supersedes the earlier subject in section 10): sender display
+name `Missed Calls Dental`; subject exactly `Reset your password`; body/snippet
+begins "We received a request to reset the password for your account." The
+app-domain `{{ .SiteURL }}/auth/callback?token_hash=...&type=recovery&next=/reset-password`
+link is unchanged; do not reintroduce `{{ .ConfirmationURL }}`.

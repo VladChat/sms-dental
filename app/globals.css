@@ -386,3 +386,26 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .divider { height:1px; background:var(--border); border:none; margin:0; }
 .spinner { width:20px; height:20px; border:2.5px solid var(--n-200); border-top-color:var(--primary); border-radius:999px; animation:spin .7s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
+
+/* ---------------------------------------------------------------- auth pages (sign-in / reset) */
+.auth-shell { min-height:100dvh; display:flex; flex-direction:column; background:var(--bg); }
+.auth-topbar { border-bottom:1px solid var(--border); background:var(--surface); }
+.auth-topbar-inner { max-width:var(--container); margin:0 auto; padding:0 var(--space-6); height:var(--header-h); display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); }
+.auth-brand { display:inline-flex; align-items:center; gap:10px; text-decoration:none; color:var(--text); }
+.auth-brand img { width:32px; height:32px; border-radius:8px; }
+.auth-brand-name { font:700 1.0625rem/1 var(--font-display); color:var(--text); letter-spacing:-.01em; }
+.auth-nav { display:inline-flex; align-items:center; gap:var(--space-2); }
+.auth-nav-link { padding:8px 12px; border-radius:var(--r-sm); color:var(--text-secondary); font:600 .9375rem/1 var(--font-sans); text-decoration:none; }
+.auth-nav-link:hover { background:var(--surface-2); color:var(--text); }
+.auth-nav-cta { padding:8px 14px; border-radius:var(--r-md); background:var(--primary); color:#fff; font:600 .9375rem/1 var(--font-sans); text-decoration:none; }
+.auth-nav-cta:hover { background:var(--primary-hover); color:#fff; }
+.auth-main { flex:1; display:grid; place-items:center; padding:var(--space-12) var(--space-6); }
+.auth-card { width:100%; max-width:460px; padding:var(--space-8); }
+.auth-card-sub { margin:var(--space-2) 0 0; color:var(--text-body); }
+.auth-card-foot { text-align:center; margin-top:var(--space-5); color:var(--text-muted); }
+.auth-footer { border-top:1px solid var(--border); background:var(--surface); padding:var(--space-8) 0; }
+.auth-footer-inner { max-width:var(--container); margin:0 auto; padding:0 var(--space-6); display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); flex-wrap:wrap; }
+.auth-footer-nav { display:flex; gap:var(--space-5); flex-wrap:wrap; }
+.auth-footer-nav a { color:var(--text-secondary); text-decoration:none; font:var(--body-sm); }
+.auth-footer-nav a:hover { color:var(--text); }
+@media (max-width:560px) { .auth-nav-link { display:none; } }
