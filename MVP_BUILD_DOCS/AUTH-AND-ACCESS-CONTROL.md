@@ -78,8 +78,15 @@ If no active membership exists, the response is a safe generic error.
    `/auth/callback?next=/reset-password`.
 4. UI always shows generic success for normal requests:
    `If an account exists for this email, we'll send a password reset link.`
-5. Recovery email returns to `/auth/callback`.
-6. `/auth/callback` exchanges `code` for session and redirects safely:
+5. Recovery email links to the **app domain** (anti-phishing):
+   `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`
+   — not `{{ .ConfirmationURL }}`, whose first hop is the raw Supabase
+   project-ref domain (`https://<ref>.supabase.co/auth/v1/verify...`) and triggers
+   Gmail phishing warnings against the Missed Calls Dental sender.
+6. `/auth/callback` supports **both** the `token_hash`+`type` flow (calls
+   `supabase.auth.verifyOtp({ token_hash, type })`) and the legacy PKCE `code`
+   flow (`exchangeCodeForSession`), establishes the session cookies, and
+   redirects safely:
    - allows internal relative `next` paths only
    - defaults to `/account` when `next` is missing/unsafe
    - on failure redirects to `/login?error=invalid_or_expired_link`
@@ -262,8 +269,20 @@ branded sender (replaces the default `noreply@mail.app.supabase.io`):
   a safe interim branded sender is
   `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`.
 
-**Reset Password** email template must keep the Supabase-provided
-`{{ .ConfirmationURL }}` placeholder. Never hardcode localhost, production
+**Reset Password** email template (anti-phishing, applied 2026-06-01): the
+recovery template links to the **app domain**, not the raw Supabase project-ref
+domain:
+
+```
+{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password
+```
+
+Do **not** use `{{ .ConfirmationURL }}` in the recovery template — its first hop
+is `https://<project-ref>.supabase.co/auth/v1/verify...`, which Gmail flags as
+phishing because it mismatches the Missed Calls Dental sender. `/auth/callback`
+handles this `token_hash`+`type` link via `verifyOtp` (alongside the legacy PKCE
+`code` flow). The template field is `mailer_templates_recovery_content` on the
+Management API `config/auth` endpoint. Never hardcode localhost, production
 tokens, or full reset links in the template.
 
 ## 11. Next phase
