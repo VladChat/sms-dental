@@ -2,6 +2,7 @@ import { z } from "zod";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getPasswordValidationError } from "../../../../lib/auth/password";
+import { resolvePostAuthRedirectPath } from "../../../../lib/auth/post-auth-redirect";
 import { jsonBadRequest, jsonError, jsonOk, jsonUnauthorized } from "../../../../lib/http/responses";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server";
 
@@ -53,9 +54,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const redirect = await resolvePostAuthRedirectPath({
+    id: data.user.id,
+    email: data.user.email,
+  });
+
   return jsonOk({
     ok: true,
-    redirect: "/account",
+    redirect,
   });
 }
-

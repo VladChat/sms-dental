@@ -472,6 +472,8 @@ Phase 1 + the first safe write actions are built (production-near, real — not 
   `clinics.admin_internal_note/admin_provisioning_status/admin_provisioning_note`).
 - **Redaction:** phones masked to last 4; Twilio SIDs shown as a short tail; no raw
   payloads/tokens/secrets; EIN + A2P rep shown as presence only.
-- **Operator step:** set `PLATFORM_ADMIN_EMAILS=allyexporter@gmail.com` in Vercel env
-  (+ redeploy). Until set, `/admin` denies all access.
+- **Operator step status (2026-06-01): complete.**
+  `PLATFORM_ADMIN_EMAILS=allyexporter@gmail.com` was set in Vercel Production and
+  production was redeployed. `/admin` authorization now works for the first
+  platform admin account.
 - **Next:** `/workspace/login` role-specific login (front desk).

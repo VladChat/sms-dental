@@ -9,20 +9,10 @@ type UpdatePasswordResponse = {
   error?: { message?: string };
 };
 
-// Reveal a password input WITHOUT changing its `type`. Toggling `type` between
-// "password" and "text" makes Chrome re-run its password-field heuristics and can
-// re-offer the "Use strong password" generator on a field that already has text.
-// Keeping `type="password"` constant and flipping `-webkit-text-security` reveals
-// the value without that side effect, so the generator only appears on an empty,
-// focused field. (Cast: `-webkit-text-security` is a valid CSS property that is
-// not in React's typed CSSProperties.)
-const REVEAL_STYLE = { WebkitTextSecurity: "none" } as unknown as React.CSSProperties;
-
 export function ResetPasswordForm({ email }: { email: string }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPasswords, setShowPasswords] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,56 +81,46 @@ export function ResetPasswordForm({ email }: { email: string }) {
 
       <div className="field">
         <label htmlFor="reset-password">New password</label>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+        <div style={{ display: "grid", gap: "var(--space-2)" }}>
+          <div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowPasswords((prev) => !prev)}
+              aria-pressed={showPasswords}
+            >
+              {showPasswords ? "Hide passwords" : "Show passwords"}
+            </button>
+          </div>
           <input
             id="reset-password"
             name="password"
-            type="password"
+            type={showPasswords ? "text" : "password"}
             className="input"
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             spellCheck={false}
-            style={showPassword ? REVEAL_STYLE : undefined}
           />
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowPassword((prev) => !prev)}
-            aria-label={showPassword ? "Hide password" : "Show password"}
-            aria-pressed={showPassword}
-          >
-            {showPassword ? "Hide" : "Show"}
-          </button>
         </div>
         <p className="helper">{`Use at least ${MIN_PASSWORD_LENGTH} characters with one letter and one number.`}</p>
       </div>
 
       <div className="field">
         <label htmlFor="reset-confirm-password">Confirm password</label>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+        <div style={{ display: "grid", gap: "var(--space-2)" }}>
           <input
             id="reset-confirm-password"
             name="confirm_password"
-            type="password"
+            type={showPasswords ? "text" : "password"}
             className="input"
             autoComplete="new-password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
             spellCheck={false}
-            style={showConfirmPassword ? REVEAL_STYLE : undefined}
           />
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowConfirmPassword((prev) => !prev)}
-            aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
-            aria-pressed={showConfirmPassword}
-          >
-            {showConfirmPassword ? "Hide" : "Show"}
-          </button>
         </div>
       </div>
 

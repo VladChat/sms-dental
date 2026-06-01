@@ -292,9 +292,11 @@ role-specific login pages** — `/admin/login` → `/admin` (platform admin),
 `/workspace/login` → `/workspace` (front desk) — all with strict server-side role
 redirects. First platform admin (`allyexporter@gmail.com`) via
 `PLATFORM_ADMIN_EMAILS` env (not hardcoded). Details:
-`AUTH-AND-ACCESS-CONTROL.md` §17 and `PLATFORM-ADMIN-CONSOLE-PLAN.md` §3. Not
-implemented yet; this does not change the placeholder/working status of any item
-above.
+`AUTH-AND-ACCESS-CONTROL.md` §17 and `PLATFORM-ADMIN-CONSOLE-PLAN.md` §3.
+
+Status update (2026-06-01): platform-admin route separation is implemented and
+live (`/admin/login` -> `/admin`) with production allowlist env configured.
+`/workspace/login` remains planned.
 
 ---
 

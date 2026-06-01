@@ -5,6 +5,7 @@ import { jsonBadRequest, jsonError, jsonOk } from "../../../../lib/http/response
 import { createSupabaseServerClient } from "../../../../lib/supabase/server";
 import { findPrimaryActiveMembershipForProfile } from "../../../../lib/db/clinic-memberships";
 import { routeForRole } from "../../../../lib/auth/access";
+import { resolvePlatformAdminFromUser } from "../../../../lib/auth/platform-admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const membership = await findPrimaryActiveMembershipForProfile(signIn.data.user.id);
   if (!membership) {
+    const admin = await resolvePlatformAdminFromUser({
+      id: signIn.data.user.id,
+      email: signIn.data.user.email,
+    });
     await supabase.auth.signOut();
+    if (admin.ok) {
+      return jsonError(
+        403,
+        "role_mismatch_platform_admin",
+        "This account uses platform admin sign in. Please use /admin/login.",
+      );
+    }
     return jsonError(
       403,
       "membership_not_found",
