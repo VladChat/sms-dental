@@ -582,3 +582,22 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       the technology/service provider.
 - [ ] Billing stays **Not started**; the 21-day trial baseline starts only after
       SMS recovery activation and does not count down while approval is pending.
+
+---
+
+## Auth UX polish (reusable lessons)
+
+- [ ] One canonical login on the app domain; the marketing sign-in page is a
+      redirect to it, and every marketing nav Sign in link points to the app login.
+      Avoid two separate login experiences.
+- [ ] Match the app login visually to the marketing design by reusing shared design
+      tokens (same CSS variables) rather than duplicating provider CSS.
+- [ ] Password reset form: include a read-only email field with
+      `autocomplete="username"` (value from the authenticated recovery session) so
+      the browser saves credential = email + new password. Use
+      `autocomplete="new-password"` on the password fields.
+- [ ] Show/Hide a password by toggling `-webkit-text-security` (keep
+      `type="password"` constant) — toggling `type` makes Chrome re-offer the
+      strong-password generator on a field that already has text. Don't remount it.
+- [ ] Reset email Gmail row: don't repeat the brand in the subject (the sender name
+      already shows it), and don't start the body/snippet with the subject text.

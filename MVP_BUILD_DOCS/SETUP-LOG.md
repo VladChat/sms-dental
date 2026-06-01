@@ -2444,3 +2444,62 @@ reset email was triggered post-deploy so the link works end-to-end.
 **Commit hash / push:** `13eeddb` (`fix: route reset email link through app
 domain`), pushed to `origin/main`. Metadata recorded by the follow-up
 `docs: record reset email phishing fix commit metadata`.
+
+---
+
+## 2026-06-01 — Auth login + reset UX polish (4 fixes)
+
+Scope: reset-password UX, login page design + consolidation, reset email Gmail
+copy. No schema/migration; no Twilio/Stripe/SMS; no secrets exposed.
+
+**Fix 1 — reset strong-password popup:** Show/Hide on `/reset-password` no longer
+toggles the input `type`. The input stays `type="password"` and visibility flips
+via `-webkit-text-security` (`ResetPasswordForm` `REVEAL_STYLE`). Chrome no longer
+re-offers "Use strong password" on a field that already has text; the input is not
+remounted and key/value/name/id/autocomplete are unchanged. (Firefox lacks
+`-webkit-text-security`, so "Show" leaves the field masked there — acceptable; the
+stated target is Chrome/Google Password Manager.)
+
+**Fix 2 — reset Save Password username:** `/reset-password` now renders a read-only
+account email field (`autocomplete="username"`, value from the recovery session
+`getUser().email`) ahead of the two `autocomplete="new-password"` fields, so Chrome
+saves the credential as email + new password. The email is read-only (reset cannot
+change the account email). No tokens in UI/logs/URLs.
+
+**Fix 3 — one canonical sign-in:** the real login stays at
+`https://app.missedcallsdental.com/login`, redesigned to match the marketing
+sign-in (brand header, centered card, footer legal links) using shared design
+tokens + new `.auth-*` classes in `app/globals.css`. `docs/sign-in.html` is now a
+safe redirect/handoff to the app login (meta refresh + JS replace + fallback link,
+noindex, canonical to app login). The Sign in nav link on all marketing pages
+(contact, how-it-works, index, pricing, privacy, sms-consent, terms) now points to
+the app login. Real auth behavior unchanged.
+
+**Fix 4 — reset email Gmail row:** subject is now exactly `Reset your password`
+(brand removed from the subject; the sender already shows Missed Calls Dental). The
+body no longer starts with another "Reset your password"; the snippet begins
+"We received a request to reset the password for your account." The app-domain
+token_hash reset link is preserved. Applied via the Management API
+(mailer_subjects_recovery, mailer_templates_recovery_content); re-verified by GET.
+Supersedes the earlier subject "Reset your Missed Calls Dental password".
+
+**Files changed:** app/login/page.tsx, app/reset-password/page.tsx,
+app/reset-password/_components/ResetPasswordForm.tsx, app/globals.css,
+docs/sign-in.html, the seven marketing pages above, plus docs (this entry, runbook,
+checklist, auth doc).
+
+**Validation:** npm run typecheck pass; npm run build pass.
+
+**Manual QA remaining (browser/inbox — operator):** (1) type partial password, blur,
+Show/Hide, refocus then confirm no strong-password popup when the field has text;
+(2) complete a reset then confirm Chrome "Save password?" shows the account email as
+username, login works, lands on /account; (3) sign-in.html redirects to the app
+login, marketing Sign in opens the app login, forgot-password works; (4) fresh reset
+email shows From Missed Calls Dental, subject "Reset your password", snippet
+"We received...".
+
+**Side effects avoided:** no Twilio/Stripe/SMS; no migration; sms_recovery_enabled
+unchanged (false); no secrets/tokens/links printed or committed; .env.local not
+committed; no marketing image changes.
+
+**Commit hash / push:** recorded in the follow-up "docs: record auth polish commit metadata".

@@ -1491,3 +1491,26 @@ curl (not python-urllib) for the Management API PATCH (Cloudflare 1010).
 Verify (operator): the Gmail link target starts with `app.missedcallsdental.com`,
 then link → `/auth/callback` → `/reset-password` → set password → login →
 `/account`. Never paste the reset link or token.
+
+---
+
+## Auth login + reset polish — 2026-06-01
+
+- **Canonical login:** `https://app.missedcallsdental.com/login` is the only real
+  sign-in. It mirrors the marketing sign-in design (brand header, centered card,
+  footer legal links) via new `.auth-*` classes in `app/globals.css`; auth logic
+  (`LoginForm`) is unchanged.
+- **Marketing handoff:** `docs/sign-in.html` is a redirect to the app login (meta
+  refresh + JS `location.replace` + fallback link, `noindex`). Every marketing
+  page's Sign in nav link points to the app login. Do not re-add a separate
+  marketing login form.
+- **Reset password page:** read-only account email field
+  (`autocomplete="username"`) so Chrome "Save password?" captures email + new
+  password; both password fields use `autocomplete="new-password"`. Show/Hide flips
+  `-webkit-text-security` (keeps `type="password"` constant) so Chrome's strong-
+  password generator does not re-trigger on a non-empty field.
+- **Reset email copy:** sender `Missed Calls Dental`; subject `Reset your password`
+  (no brand in subject); snippet starts "We received a request to reset the password
+  for your account." Set via Management API mailer_subjects_recovery /
+  mailer_templates_recovery_content (curl; Cloudflare 1010 blocks python-urllib
+  writes). Keep the app-domain token_hash link; do not reintroduce ConfirmationURL.

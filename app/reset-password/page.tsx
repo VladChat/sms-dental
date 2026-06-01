@@ -29,7 +29,7 @@ export default async function ResetPasswordPage() {
             </span>
           </div>
         ) : (
-          <ResetPasswordForm />
+          <ResetPasswordForm email={data.user?.email ?? ""} />
         )}
       </section>
     </main>
