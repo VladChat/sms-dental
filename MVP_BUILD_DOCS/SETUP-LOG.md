@@ -2707,4 +2707,6 @@ Still intentionally not connected (future tasks): Stripe billing/payment method,
 staff invitation backend, phone number reservation/purchase, A2P/carrier
 submission. See `PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md`.
 
-Commit hash / push: recorded in the follow-up `docs: record account placeholder trust-fix metadata`.
+Commit hash / push: `97d416b` (`fix: remove misleading account placeholders`),
+pushed to `origin/main`. Metadata recorded by the follow-up
+`docs: record account placeholder trust-fix metadata`.
