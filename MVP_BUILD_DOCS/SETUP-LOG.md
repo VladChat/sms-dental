@@ -2837,4 +2837,6 @@ number purchase/reservation/release, no users created; existing `/login`,
 `/account`, `/workspace`, setup, reset-password, webhooks unaffected;
 `.env.local` not committed; the real admin email is not hardcoded in source.
 
-**Commit hash / push:** recorded in the follow-up `docs: record platform admin console metadata`.
+**Commit hash / push:** `8967f93` (`feat: add platform admin console`), pushed to
+`origin/main`. Metadata recorded by the follow-up
+`docs: record platform admin console metadata`.
