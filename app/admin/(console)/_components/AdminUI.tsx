@@ -62,3 +62,72 @@ export function smsStatusTone(status: string): Tone {
 export function billingTone(status: string): Tone {
   return BILLING_TONE[status] ?? "neutral";
 }
+
+// Launch-readiness checklist row: a human title, an optional hint, and a status
+// badge. Used by the clinic detail "Launch readiness" section. Pure/server-safe.
+export type ReadyState =
+  | "ready"
+  | "needs_action"
+  | "missing"
+  | "not_connected"
+  | "blocked"
+  | "launched"
+  | "not_launched";
+
+const READY_LABEL: Record<ReadyState, string> = {
+  ready: "Ready",
+  needs_action: "Needs action",
+  missing: "Missing",
+  not_connected: "Not connected",
+  blocked: "Blocked",
+  launched: "Launched",
+  not_launched: "Not launched",
+};
+const READY_TONE: Record<ReadyState, Tone> = {
+  ready: "success",
+  needs_action: "warning",
+  missing: "warning",
+  not_connected: "neutral",
+  blocked: "neutral",
+  launched: "success",
+  not_launched: "neutral",
+};
+
+export function ReadyBadge({ state }: { state: ReadyState }) {
+  return <Badge tone={READY_TONE[state]}>{READY_LABEL[state]}</Badge>;
+}
+
+export function CheckRow({
+  title,
+  hint,
+  state,
+}: {
+  title: string;
+  hint?: ReactNode;
+  state: ReadyState;
+}) {
+  return (
+    <div className="adm-check">
+      <div className="adm-check-main">
+        <span className="adm-check-title">{title}</span>
+        {hint ? <span className="adm-check-hint">{hint}</span> : null}
+      </div>
+      <ReadyBadge state={state} />
+    </div>
+  );
+}
+
+// Maps an audit action key to plain operator language for the activity feed.
+// Anything unmapped falls back to the raw key (still no JSON, no secrets).
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  "clinic.deactivate": "Paused clinic",
+  "clinic.reactivate": "Reactivated clinic",
+  "clinic.sms_recovery.enable": "Launched service",
+  "clinic.sms_recovery.disable": "Paused SMS sending",
+  "clinic.note.update": "Updated internal note",
+  "clinic.provisioning.update": "Updated provisioning (legacy)",
+};
+
+export function describeAuditAction(action: string): string {
+  return AUDIT_ACTION_LABELS[action] ?? action;
+}

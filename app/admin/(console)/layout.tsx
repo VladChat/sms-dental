@@ -48,7 +48,6 @@ export default async function AdminConsoleLayout({
         <nav className="adm-nav" aria-label="Admin sections">
           <Link href="/admin">Overview</Link>
           <Link href="/admin/clinics">Clinics</Link>
-          <Link href="/admin/audit">Audit</Link>
         </nav>
         <div className="adm-topbar-right">
           <span className="t-helper adm-who">{admin.email}</span>

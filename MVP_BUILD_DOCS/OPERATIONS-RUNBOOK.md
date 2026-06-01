@@ -1687,3 +1687,49 @@ Verification checklist:
    - Save internal note
 4. Confirm each response returns success and the audit feed shows matching
    `admin_audit_events` rows.
+
+---
+
+## Admin clinic detail — simplified operator workflow — 2026-06-01
+
+`/admin/clinics/[clinicId]` is now a single ordered operator screen:
+
+1. **Clinic summary** — name, owner email, Clinic status (Active/Paused), Service
+   state (Launched / Not launched / Blocked / Paused).
+2. **Launch readiness** — one row each: Business profile, Billing, Phone numbers,
+   A2P / SMS approval, Service launch. Each shows Ready / Needs action / Missing /
+   Not connected / Blocked from real data.
+3. **Phone numbers** — all `clinic_phone_numbers` for the clinic (masked, role,
+   active). `Add phone number` is disabled → "Twilio purchase flow required".
+4. **Billing** — real fields only (presence). `Manage billing` disabled → "Stripe
+   billing backend required".
+5. **A2P / SMS approval** — approval flags. `Submit SMS approval` disabled → "A2P
+   submission backend required".
+6. **Admin controls** — the only working buttons: Pause/Reactivate clinic, Launch
+   service / Pause SMS sending, Save internal note.
+7. **Diagnostics** — opt-outs, setup status, link to call/message events.
+8. **Recent admin activity** — last 5 audited actions for this clinic (human text).
+
+How to operate:
+
+- **Pause a clinic:** Admin controls → **Pause clinic** (stops call lookups + any
+  recovery SMS immediately; data kept). **Reactivate clinic** restores it.
+- **Launch a clinic's SMS recovery:** clear the readiness gate (active clinic +
+  ≥1 assigned number + A2P info complete), then Admin controls → **Launch service**.
+  The button is disabled with the exact missing prerequisite until the gate clears.
+  Live sending additionally requires `SMS_RECOVERY_MODE=live` and always respects
+  opt-outs.
+- **Stop texting without pausing the whole clinic:** when launched, Admin controls
+  shows **Pause SMS sending** (the inverse of launch).
+- **Internal note:** single plain-text note (≤1000 chars), internal-only.
+
+Removed from the UI (intentionally): the separate Enable/Disable **SMS recovery**
+toggle (now folded into Launch service), **Provisioning review/note**, and the top-nav
+**Audit** link (the `/admin/audit` route still works; per-clinic history is in Recent
+admin activity).
+
+Manual QA (2026-06-01): `/admin/clinics/[clinicId]` loads; Provisioning review/note
+gone; one internal note; no duplicate status/SMS controls; Pause/Reactivate, Launch
+service, and Save note all succeed and write `admin_audit_events`; the three disabled
+placeholders show their reasons; no SMS/email sent, no Stripe call, no Twilio number
+purchase, no A2P submission. `npm run typecheck` and `npm run build` pass.

@@ -5,9 +5,11 @@ import {
 import { listProfilesByIds } from "../profiles";
 import {
   maskPhone,
+  tailSid,
   type AdminClinicDetail,
   type AdminClinicFilters,
   type AdminClinicListItem,
+  type AdminClinicPhoneNumber,
 } from "./types";
 
 type ClinicListRow = {
@@ -156,6 +158,32 @@ export async function getAdminClinicDetail(
     }))
     .filter((m) => m.email.length > 0);
 
+  // All phone numbers on file for this clinic (active first, then oldest first).
+  // Numbers are masked to the last 4 digits; Twilio SIDs show a short tail only.
+  const phoneRows = await sql<
+    {
+      id: string;
+      phone_number: string;
+      role: string;
+      is_active: boolean;
+      twilio_phone_number_sid: string | null;
+      created_at: Date;
+    }[]
+  >`
+    select id, phone_number, role, is_active, twilio_phone_number_sid, created_at
+    from public.clinic_phone_numbers
+    where clinic_id = ${clinicId}
+    order by is_active desc, created_at asc
+  `.catch(() => []);
+  const phoneNumbers: AdminClinicPhoneNumber[] = phoneRows.map((p) => ({
+    id: p.id,
+    phoneMasked: maskPhone(p.phone_number),
+    role: p.role,
+    isActive: p.is_active,
+    sidTail: tailSid(p.twilio_phone_number_sid),
+    createdAt: p.created_at.toISOString(),
+  }));
+
   return {
     id: r.id,
     name: r.name,
@@ -185,6 +213,7 @@ export async function getAdminClinicDetail(
     localNumberStatus: r.local_number_status,
     assignedPhoneMasked: maskPhone(r.assigned_phone),
     hasAssignedNumber: Boolean(r.assigned_phone),
+    phoneNumbers,
     smsStatus: r.sms_status,
     a2pInfoCompleted: r.a2p_info_completed,
     a2pAuthorized: r.a2p_authorized,
