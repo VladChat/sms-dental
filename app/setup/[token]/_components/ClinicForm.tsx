@@ -70,11 +70,9 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
 
   return (
     <section className="card card-pad">
-      <h2 className="t-h3">Account setup</h2>
-
       <form onSubmit={onSubmit} style={{ marginTop: "var(--space-6)", display: "grid", gap: "var(--space-5)" }} noValidate>
-        <section className="acct-card-subsection" aria-labelledby="account-details-title">
-          <h3 id="account-details-title" className="t-h4">Account details</h3>
+        <section aria-labelledby="clinic-information-title">
+          <h3 id="clinic-information-title" className="t-h4">Clinic information</h3>
           <div style={{ display: "grid", gap: "var(--space-5)", marginTop: "var(--space-4)" }}>
             <Field
               label="Clinic name"
@@ -105,8 +103,10 @@ export function ClinicForm({ token, loginEmail, initialValues }: Props) {
           </div>
         </section>
 
-        <section className="acct-card-subsection" aria-labelledby="account-access-title">
-          <h3 id="account-access-title" className="t-h4">Account access</h3>
+        <hr className="divider" />
+
+        <section aria-labelledby="sign-in-title">
+          <h3 id="sign-in-title" className="t-h4">Sign-in</h3>
           <div style={{ display: "grid", gap: "var(--space-5)", marginTop: "var(--space-4)" }}>
             <Field
               label="Login email"

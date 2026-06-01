@@ -1842,6 +1842,61 @@ Operations docs update needed: yes
 
 ---
 
+## 2026-06-01 — Setup page copy/layout simplification
+
+What changed:
+
+- Simplified setup form copy and structure to exactly:
+  - `Account setup` (single page heading in shell only)
+  - `Clinic information` section
+  - `Sign-in` section
+  - `Continue setup`
+- Removed duplicate `Account setup` heading from inside the setup card/form.
+- Renamed setup section labels:
+  - `Account details` -> `Clinic information`
+  - `Account access` -> `Sign-in`
+- Kept login email read-only in the sign-in section.
+- Simplified form layout to a single clean card using section spacing + divider
+  (removed nested inset subsection boxes in this form only).
+
+Why it changed:
+
+- reduce repeated “Account” wording
+- keep first-entry setup scan-friendly and minimal
+- align visible structure with explicit product copy requirements
+
+Files changed:
+
+- `app/setup/[token]/_components/ClinicForm.tsx`
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Side effects avoided:
+
+- no backend/auth/session behavior changes
+- no Twilio/SMS/Stripe changes
+- no DB changes/migrations
+- no token/password logging changes
+
+Commit hash: pending  
+Push status: pending
+
+Remaining risks:
+
+- none identified for this narrow copy/layout-only change
+
+Next steps:
+
+1. Continue with team invite backend phase (separately scoped).
+2. Continue with workspace result persistence phase (separately scoped).
+
+Operations docs update needed: yes
+
+---
+
 ## 2026-05-31 — Remaining copy/UI cleanup (account + workspace)
 
 What changed:
