@@ -1842,6 +1842,80 @@ Operations docs update needed: yes
 
 ---
 
+## 2026-06-01 — Production setup submit error fix (`/setup/{token}`)
+
+What changed:
+
+- Investigated production setup submit failure after `Continue setup`.
+- Verified Vercel production logs for
+  `POST /api/onboarding/[token]/clinic` and found:
+  `relation "public.profiles" does not exist` (Postgres `42P01`).
+- Applied missing auth/membership migration directly to production DB:
+  `supabase/migrations/20260531000100_auth_profiles_memberships.sql`.
+- Added minimal route hardening in
+  `app/api/onboarding/[token]/clinic/route.ts`:
+  - wraps `upsertProfile` + `upsertClinicMembership` with guarded error
+    handling
+  - returns structured JSON error code `account_link_failed` on failure
+    instead of unhandled 500.
+- Added minimal client hardening in
+  `app/setup/[token]/_components/ClinicForm.tsx`:
+  - safe JSON parsing for submit response (`res.json().catch(...)`) so non-JSON
+    500 responses do not trigger misleading generic network error handling.
+
+Why it changed:
+
+- Root cause was a production migration mismatch, not Twilio/Stripe/design.
+- The missing `public.profiles` table caused server 500 and bubbled to the
+  setup form as `We couldn't reach the server.`.
+
+Files changed:
+
+- `app/api/onboarding/[token]/clinic/route.ts`
+- `app/setup/[token]/_components/ClinicForm.tsx`
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Production verification performed:
+
+- Vercel logs query:
+  `vercel logs app.missedcallsdental.com --since 2h --json`
+  confirmed prior 500 root cause.
+- DB verification query confirmed table existence after migration:
+  `to_regclass('public.profiles')`, `to_regclass('public.clinic_memberships')`.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Side effects avoided:
+
+- no Team access/workspace feature work
+- no Stripe changes
+- no Twilio/SMS changes
+- no new schema beyond applying already-committed auth migration
+- no secret/token/password logging
+
+Commit hash: pending  
+Push status: pending
+
+Remaining risks:
+
+- Existing setup-link flows still depend on correct DB migration state across
+  environments.
+- Invite lifecycle/result persistence remain separate future phases (unchanged).
+
+Next steps:
+
+1. Add preflight environment/migration verification checklist before promoting
+   onboarding/auth changes.
+2. Keep route-level structured error responses for setup/auth mutations.
+
+Operations docs update needed: yes
+
+---
+
 ## 2026-06-01 — Setup form wording simplification (first-entry only)
 
 What changed:

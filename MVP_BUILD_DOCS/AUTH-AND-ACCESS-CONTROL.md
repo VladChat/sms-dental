@@ -224,3 +224,27 @@ Changes:
 
 `Restore` is a future invite-restart action. In this phase it does not mutate
 memberships.
+
+## 13. Production incident fix — setup submit 500 (2026-06-01)
+
+Observed production symptom:
+
+- `/setup/{token}` submit showed `We couldn't reach the server.` after
+  `Continue setup`.
+
+Root cause:
+
+- Production logs showed `POST /api/onboarding/[token]/clinic` failing with:
+  `relation "public.profiles" does not exist` (Postgres `42P01`).
+- The owner-auth migration creating `public.profiles` and
+  `public.clinic_memberships` had not been applied on production DB.
+
+Resolution:
+
+1. Applied migration:
+   `supabase/migrations/20260531000100_auth_profiles_memberships.sql`
+   against production DB.
+2. Added minimal hardening so account-link DB failures return structured JSON
+   error (`account_link_failed`) instead of unhandled 500.
+3. Updated setup form submit parsing to tolerate non-JSON server responses
+   without falling into a misleading network-only message path.
