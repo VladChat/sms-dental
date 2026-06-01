@@ -5,12 +5,16 @@ Last updated: 2026-06-01
 
 This document is the auth/access source of truth for the current repository.
 It describes the legacy onboarding token flow, the new owner password login
-foundation, route ownership, and what remains for future staff invites.
+foundation, owner password reset flow, route ownership, and what remains for
+future staff invites.
 
 ## 1. Product boundary
 
 - `/setup/{token}`: onboarding entry link from setup email.
 - `/login`: normal returning-user sign-in route.
+- `/forgot-password`: start password reset.
+- `/auth/callback`: Supabase Auth PKCE callback exchange route.
+- `/reset-password`: set a new password from a valid recovery session.
 - `/account`: owner/admin account dashboard.
 - `/workspace`: front-desk operational workspace; currently owner-accessible
   preview in this phase.
@@ -64,6 +68,30 @@ The user gets a safe login path via `/login`.
    - `front_desk` (future) -> `/workspace`
 
 If no active membership exists, the response is a safe generic error.
+
+### 3.3 Password reset flow
+
+1. Owner opens `/login` and selects `Forgot password?`.
+2. Owner submits email on `/forgot-password`.
+3. `POST /api/auth/forgot-password` validates email and calls
+   `supabase.auth.resetPasswordForEmail(...)` with:
+   `/auth/callback?next=/reset-password`.
+4. UI always shows generic success for normal requests:
+   `If an account exists for this email, we'll send a password reset link.`
+5. Recovery email returns to `/auth/callback`.
+6. `/auth/callback` exchanges `code` for session and redirects safely:
+   - allows internal relative `next` paths only
+   - defaults to `/account` when `next` is missing/unsafe
+   - on failure redirects to `/login?error=invalid_or_expired_link`
+7. `/reset-password` requires an active authenticated session from the recovery
+   flow; otherwise it shows:
+   `This reset link is expired or invalid. Request a new password reset link.`
+8. `POST /api/auth/update-password` validates:
+   - password + confirm match
+   - same password rule as setup (>=8 chars, at least one letter, one number)
+   - authenticated session exists
+9. On success, password is updated through Supabase Auth and user is redirected
+   to `/account`.
 
 ## 4. Data model (Phase 1)
 
@@ -127,6 +155,12 @@ progress numbering/status.
 - `Change password` placeholder modal (non-mutating; no fake save)
 - sign out action
 
+Reset behavior in this phase:
+
+- password reset is available from `/login` via `/forgot-password`
+- account-page `Change password` remains a placeholder until an in-session
+  account-settings password change flow is explicitly scoped
+
 `Team access` is owner-only UI shell in this phase:
 
 - workspace link guidance (`/workspace`, same link for all users)
@@ -165,10 +199,16 @@ Do not remove token fallback until this flow is verified for existing accounts.
 - Staff invites/team management.
 - Google login.
 - Apple login.
-- Full password reset UI.
 - Full role/RLS cutover across all product tables.
 
-## 10. Next phase
+## 10. Supabase redirect allow list
+
+Supabase Auth redirect URLs must allow:
+
+- `https://app.missedcallsdental.com/auth/callback`
+- `http://localhost:3000/auth/callback`
+
+## 11. Next phase
 
 Phase 2 target:
 
@@ -178,7 +218,7 @@ Phase 2 target:
 - workspace-only access for staff
 - owner-only restriction for billing/legal/setup sections
 
-## 11. Permission matrix (current vs intended)
+## 12. Permission matrix (current vs intended)
 
 Current role routes:
 
@@ -201,7 +241,7 @@ Intended next-phase completion:
 - deliver staff invite + acceptance lifecycle
 - activate front-desk-only workspace access with owner/admin restrictions
 
-## 12. Copy/UI cleanup follow-up (2026-05-31)
+## 13. Copy/UI cleanup follow-up (2026-05-31)
 
 This pass made focused UI/copy cleanup only; it did not add invite backend,
 invite email delivery, invite acceptance, or full RBAC completion.
@@ -225,7 +265,7 @@ Changes:
 `Restore` is a future invite-restart action. In this phase it does not mutate
 memberships.
 
-## 13. Production incident fix — setup submit 500 (2026-06-01)
+## 14. Production incident fix — setup submit 500 (2026-06-01)
 
 Observed production symptom:
 

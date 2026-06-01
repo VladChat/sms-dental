@@ -3,7 +3,7 @@
 Status: Source of truth  
 Audience: AI coding agent / implementation agent  
 Project: Missed Calls Dental  
-Last updated: 2026-05-28  
+Last updated: 2026-06-01  
 Purpose: Build the current customer onboarding flow around a simple Business Profile setup.
 
 This file describes the current onboarding direction. It replaces the older flow where customers manually chose a Twilio number from a catalog.
@@ -1302,3 +1302,40 @@ Behavior in this pass:
 - no backend flow changes
 - no new migrations
 - no Twilio/Stripe/SMS changes
+
+---
+
+## Update 2026-06-01 — Owner password reset flow
+
+Returning-owner auth now includes password reset.
+
+Added routes:
+
+- `/forgot-password`
+- `POST /api/auth/forgot-password`
+- `/auth/callback`
+- `/reset-password`
+- `POST /api/auth/update-password`
+
+Flow summary:
+
+1. Owner selects `Forgot password?` on `/login`.
+2. Owner submits email on `/forgot-password`.
+3. API sends Supabase recovery email using redirect:
+   `/auth/callback?next=/reset-password`.
+4. Callback exchanges code for session and redirects safely.
+5. Owner sets a new password on `/reset-password`.
+6. API updates password through Supabase Auth and returns `/account` redirect.
+
+Safety details:
+
+- forgot-password response stays generic to avoid revealing whether an email
+  exists.
+- callback allows only internal relative `next` paths.
+- reset page requires a valid recovery session.
+- password rule matches setup: at least 8 chars, one letter, one number.
+
+Required Supabase Auth redirect URL allow list:
+
+- `https://app.missedcallsdental.com/auth/callback`
+- `http://localhost:3000/auth/callback`
