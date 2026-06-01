@@ -2567,4 +2567,6 @@ it persists; note >300 rejected client + server; samples never write; old modal 
 additive migration touched the DB (no customer data altered); `.env.local` not
 committed; no secrets printed.
 
-**Commit hash / push:** recorded in the follow-up `docs: record workspace outcomes commit metadata`.
+**Commit hash / push:** `575a975` (`fix: make workspace outcomes saveable`),
+pushed to `origin/main`. Metadata recorded by the follow-up
+`docs: record workspace outcomes commit metadata`.
