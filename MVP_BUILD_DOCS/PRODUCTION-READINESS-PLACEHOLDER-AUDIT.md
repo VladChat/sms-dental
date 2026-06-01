@@ -245,3 +245,27 @@ This pass changed only documentation, so behavior is unchanged.
 ## 12. Commit
 
 Commit hash: `ce401ea` (`docs: audit production readiness placeholders`); pushed to `origin/main`.
+
+---
+
+## 13. Update — trust fix applied (2026-06-01)
+
+First recommended task (§8.1) is done: misleading active placeholder actions were
+removed. Status changes to the §3 inventory:
+
+- **P3 Change password — RESOLVED (now real).** `POST /api/account/change-password`
+  + real modal. See `AUTH-AND-ACCESS-CONTROL.md` §16.
+- **P1 Add/Update payment method — RESOLVED as honest disabled state.** Fake modal
+  removed; disabled `Payment setup not connected yet` + helper. Stripe still not
+  built (B1 remains open).
+- **P2 Send invite — RESOLVED as honest disabled state.** Fake support modal
+  removed; disabled `Staff invitations not connected yet` + helper. Invite backend
+  still not built.
+- **P4 Sample Remove/Restore — RESOLVED.** Modal removed; sample actions are plain
+  text; real member actions render `—`.
+- **P5 Marketing sign-in demo handler — RESOLVED.** Removed from `docs/script.js`.
+
+Still open (unchanged, future tasks): B1 Stripe billing, B2 phone purchase, B3
+A2P/carrier submission, B4 live SMS, PW1 server-side billing→phone gate, P2 real
+staff invitations. Next recommended task: **Stripe payment-method collection**
+(collect during setup; no charge until SMS recovery is active).

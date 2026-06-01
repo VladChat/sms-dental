@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { StatusBadge, StatusRow } from "./AccountUI";
 
 export function BillingCard({
@@ -12,19 +11,6 @@ export function BillingCard({
   trialDaysRemaining: number;
   trialEnded: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    closeRef.current?.focus();
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
-
   const dayLabel = `${trialDaysRemaining} ${trialDaysRemaining === 1 ? "day" : "days"}`;
 
   return (
@@ -65,52 +51,17 @@ export function BillingCard({
         </span>
       </div>
 
+      {/* Stripe is not wired yet. Show an honest, disabled state instead of a
+          button that opens a fake payment modal. No Stripe call is made. */}
       <div style={{ display: "grid", gap: "var(--space-2)" }}>
-        <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>
-          {hasPaymentMethod ? "Update payment method" : "Add payment method"}
+        <button type="button" className="btn btn-primary" disabled aria-disabled="true">
+          Payment setup not connected yet
         </button>
         <p className="t-small" style={{ color: "var(--text-muted)" }}>
-          You will not be charged until SMS recovery is active and your trial period ends.
+          Secure payment setup will be connected next. You will not be charged until
+          SMS recovery is active and your trial period ends.
         </p>
       </div>
-
-      {open && (
-        <div
-          className="acct-modal-backdrop"
-          onClick={() => setOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="acct-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-payment-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="add-payment-title" className="t-h4">
-              {hasPaymentMethod ? "Update payment method" : "Add payment method"}
-            </h3>
-            <div className="acct-modal-placeholder" aria-hidden="true">
-              <span className="t-small" style={{ color: "var(--text-muted)" }}>
-                Secure payment setup will open here when billing is connected.
-              </span>
-            </div>
-            <p className="t-small" style={{ color: "var(--text-muted)", margin: 0 }}>
-              Your card details are entered on a secure payment screen — never stored by us.
-            </p>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button
-                ref={closeRef}
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

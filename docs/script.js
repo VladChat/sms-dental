@@ -84,18 +84,6 @@
     el.textContent = new Date().getFullYear();
   });
 
-  /* ---------- Sign-in form (front-end demo: always show inline error) ---------- */
-  var signinForm = document.getElementById('signin-form');
-  if (signinForm) {
-    var signinError = document.getElementById('signin-error');
-    signinForm.addEventListener('submit', function (event) {
-      event.preventDefault();
-      if (signinError) {
-        signinError.hidden = false;
-      }
-    });
-  }
-
   /* ---------- Setup-request form (POSTs to app.missedcallsdental.com) ---------- */
   var form = document.getElementById('trial-form');
   if (form) {
