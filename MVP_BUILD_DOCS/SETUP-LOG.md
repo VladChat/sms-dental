@@ -2297,3 +2297,69 @@ no `.env.local` commit; no secrets printed; `docs/` marketing untouched.
 **Commit hash:** `b163ecd` (`fix: configure password reset email routing`);
 metadata recorded by follow-up `docs: record password reset email routing commit metadata`.
 **Push status:** pushed to `origin/main`.
+
+---
+
+## 2026-06-01 — Supabase Auth URL + Resend SMTP APPLIED via Management API
+
+Applied the password-reset email configuration programmatically using the
+Supabase Management API with a temporary `SUPABASE_ACCESS_TOKEN` read from local
+`.env.local` (value never printed, logged, or committed).
+
+Endpoint: `PATCH https://api.supabase.com/v1/projects/qfjpvbvfvhbtebwivcdc/config/auth`
+
+**BEFORE (GET):** `site_url = http://localhost:3000`, `uri_allow_list = ''`
+(empty), SMTP unset. This confirms the root cause: an empty redirect allow list
+made GoTrue fall back to the localhost Site URL for `{{ .ConfirmationURL }}`,
+producing localhost reset links. App code was never the cause.
+
+**APPLIED + independently re-verified (second GET, HTTP 200):**
+
+- `site_url = https://app.missedcallsdental.com`
+- `uri_allow_list = https://app.missedcallsdental.com/auth/callback,http://localhost:3000/auth/callback`
+- `smtp_host = smtp.resend.com`
+- `smtp_port = 465`
+- `smtp_user = resend`
+- `smtp_pass` = set (Resend API key from local env; value not stored anywhere in docs)
+- `smtp_admin_email = no-reply@mail.missedcallsdental.com`
+- `smtp_sender_name = Missed Calls Dental`
+- `external_email_enabled = true`
+
+**Sender used:** `Missed Calls Dental <no-reply@mail.missedcallsdental.com>` —
+the Resend subdomain already verified for setup emails. Root sender
+`no-reply@missedcallsdental.com` deferred (root-domain Resend verification is a
+later improvement, not a blocker).
+
+**Ops gotcha (recorded):** the Supabase Management API is behind Cloudflare. A
+`python-urllib` PATCH was blocked with HTTP 403 + Cloudflare `error code: 1010`
+(client-signature block); the same write via **curl** succeeded (GET worked from
+either client). Use curl for Management API writes.
+
+**Fresh reset email:** `POST /api/auth/forgot-password` (production) for the
+owner email returned `200` generic success, so Supabase was asked to send a fresh
+recovery email via the new Resend SMTP sender.
+
+**Live E2E (browser + inbox): NOT performed from the repo CLI** (no browser/inbox
+in this environment — not fabricated). Remaining operator verification:
+
+- email From shows `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`;
+- reset link host is `app.missedcallsdental.com` (not localhost);
+- link → `/auth/callback` → `/reset-password` → set new password → login →
+  `/account`. Never paste the reset link or token anywhere.
+
+**Files changed:** docs only (this entry; `AUTH-AND-ACCESS-CONTROL.md` §10
+applied-status note; `OPERATIONS-RUNBOOK.md` reset section). `.env.local.example`
+adds the `SUPABASE_ACCESS_TOKEN` name (no value). No app code changed.
+
+**Validation:** `npm run typecheck` pass; `npm run build` pass.
+
+**Side effects avoided:** no Twilio/Stripe/SMS; no DB migration; no team/workspace
+changes; `sms_recovery_enabled` unchanged (false); `docs/` untouched;
+`.env.local` not committed; no secrets printed.
+
+**Security follow-up — REVOKE/ROTATE the token:** the temporary
+`SUPABASE_ACCESS_TOKEN` should be revoked or rotated now that this task is done
+(Supabase Dashboard → Account → Access Tokens). It was used only for this
+auth-config change. Remove it from local `.env.local` afterward.
+
+**Commit hash / push:** recorded in the follow-up `docs: record auth email configuration commit metadata`.

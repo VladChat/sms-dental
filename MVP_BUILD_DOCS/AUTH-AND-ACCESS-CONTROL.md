@@ -203,6 +203,22 @@ Do not remove token fallback until this flow is verified for existing accounts.
 
 ## 10. Supabase Auth URL + email sender configuration (canonical)
 
+> **Applied 2026-06-01 (via Supabase Management API,
+> `PATCH /v1/projects/qfjpvbvfvhbtebwivcdc/config/auth`):** Site URL =
+> `https://app.missedcallsdental.com`; redirect allow list =
+> `https://app.missedcallsdental.com/auth/callback` +
+> `http://localhost:3000/auth/callback`; Custom SMTP = Resend
+> (`smtp.resend.com:465`, user `resend`) sending as
+> `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`. Independently
+> re-verified by a second GET. The BEFORE state had Site URL
+> `http://localhost:3000` and an **empty** redirect allow list — that empty list
+> is why GoTrue fell back to the localhost Site URL. Browser/inbox E2E (open the
+> fresh email → link → `/reset-password` → set password → login → `/account`)
+> remains an operator step. See `SETUP-LOG.md` (2026-06-01) and
+> `OPERATIONS-RUNBOOK.md` for the apply method (use curl — the Management API is
+> behind Cloudflare and 1010-blocks python-urllib writes) and the token-revoke
+> reminder. The settings below are the canonical reference.
+
 The reset `redirectTo` is built **in code** from committed runtime config, not
 from any env var:
 

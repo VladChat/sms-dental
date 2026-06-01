@@ -1435,3 +1435,32 @@ placeholder. Do not hardcode localhost, tokens, or reset links.
 
 - No app code change is required; the reset flow code is correct and deployed.
 - No Vercel env change is required for this fix.
+
+---
+
+## Auth email config APPLIED via Management API — 2026-06-01
+
+The password-reset email config (see the reset section above) was applied
+programmatically to project `qfjpvbvfvhbtebwivcdc`:
+
+- `PATCH /v1/projects/{ref}/config/auth` with a `SUPABASE_ACCESS_TOKEN` from local
+  `.env.local` (never printed/committed).
+- Set + independently re-verified: `site_url=https://app.missedcallsdental.com`,
+  `uri_allow_list` = both callback URLs, Resend Custom SMTP
+  (`smtp.resend.com:465`, user `resend`, sender
+  `Missed Calls Dental <no-reply@mail.missedcallsdental.com>`, password = Resend
+  API key).
+- BEFORE state had `site_url=http://localhost:3000` and an **empty**
+  `uri_allow_list` — the empty allow list is why recovery links were localhost.
+
+**Cloudflare gotcha:** the Management API sits behind Cloudflare. `python-urllib`
+write requests get blocked with HTTP 403 + `error code: 1010` (client-signature
+block). Use **curl** for Management API writes (GET works from either).
+
+**Token hygiene:** revoke/rotate the temporary `SUPABASE_ACCESS_TOKEN` after
+config tasks (Supabase Dashboard → Account → Access Tokens) and remove it from
+local `.env.local`.
+
+**Still requires a human:** browser/inbox E2E (branded From, non-localhost link,
+`/auth/callback` → `/reset-password` → set password → login → `/account`) and
+optional root-domain (`no-reply@missedcallsdental.com`) Resend verification.
