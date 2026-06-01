@@ -2779,5 +2779,6 @@ Docs updated: `PLATFORM-ADMIN-CONSOLE-PLAN.md` (§3 login entry points + bootstr
 email + `/admin/login` route/roadmap/next-prompt), `AUTH-AND-ACCESS-CONTROL.md`
 (§1 + new §17), `PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md` (§15 pointer),
 `MANIFEST.md` (note). Validation: docs-only (`git diff --check` clean; no source
-files changed). Commit hash / push: recorded in the follow-up
-`docs: record role-specific login decision metadata`.
+files changed). Commit hash / push: `20fcbc9`
+(`docs: require role-specific login entry points`), pushed to `origin/main`.
+Metadata recorded by the follow-up `docs: record role-specific login decision metadata`.
