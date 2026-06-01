@@ -2630,3 +2630,43 @@ changes; no DB migration; `.env.local` not committed; no secrets printed.
 **Commit hash / push:** `70635a2` (`fix: make setup links idempotent`), pushed to
 `origin/main`. Metadata recorded by the follow-up
 `docs: record setup idempotency commit metadata`.
+
+---
+
+## 2026-06-01 — Production-readiness placeholder audit
+
+Audit-only pass (no feature behavior changed). Inventoried every UI action,
+route, sample block, and doc statement that implies the product works when it is
+a placeholder, sample, blocked, partially wired, or not implemented. Full
+inventory + priority sequence + next-5 tasks:
+`MVP_BUILD_DOCS/PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md` (canonical current
+real-vs-placeholder reference).
+
+Headline placeholders/gaps (do not treat as working):
+
+- Billing `Add/Update payment method` → inert modal; no Stripe collect/charge;
+  `hasPaymentMethod` effectively always false (`stripe_customer_id` never set).
+- Team access `Send invite` and sample Remove/Restore → "contact support" modals;
+  no invite backend.
+- Account access `Change password` → placeholder modal (forgot-password works).
+- Phone number assignment blocked: purchase gated off (`503 purchase_disabled`),
+  "prepare" is search-only; billing→phone gate is presentational (no server
+  enforcement).
+- A2P/carrier registration not submitted (status "Waiting for approval" is local
+  only); live SMS recovery gated off by config + per-clinic flag (intentional).
+
+Working (verified real): auth (login/logout/forgot/reset/callback), setup-link
+idempotency, onboarding capture + owner account creation, business-profile /
+SMS-approval saves, account dashboard display, workspace outcome saving, public
+business pages, Twilio voice/SMS webhooks + opt-out, marketing handoff, Stripe
+webhook ingress (signature verify + idempotent record, no billing logic yet).
+
+Doc fixes this pass (materially misleading only): `PROJECT-CONTEXT.md` §11 (voice
+now verified, Twilio Full) and §16 (point to this audit); `MANIFEST.md` now
+references this audit + the auth/front-desk docs. No source behavior changed.
+
+Validation: `npm run typecheck` pass; `npm run build` pass. `package.json` has no
+`lint`/`test` script (only dev/build/start/typecheck).
+
+Commit hash / push: recorded in the follow-up
+`docs: record placeholder audit commit metadata`.
