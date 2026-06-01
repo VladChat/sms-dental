@@ -47,7 +47,7 @@ export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ clinicId: string }> },
 ): Promise<NextResponse> {
-  const admin = await resolvePlatformAdmin();
+  const admin = await resolvePlatformAdmin(req);
   if (!admin.ok) {
     if (admin.reason === "no_session") return jsonUnauthorized("Please sign in to continue.");
     return jsonForbidden("You are not authorized for platform admin access.");

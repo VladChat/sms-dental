@@ -1648,3 +1648,42 @@ Fixes applied:
     `Show passwords` / `Hide passwords`
   - toggles both `New password` and `Confirm password` together without clearing
     values.
+
+---
+
+## Admin clinic action auth mismatch fix — 2026-06-01
+
+Symptom:
+
+- Platform admin can load `/admin` successfully, but clinic action mutations from
+  `/admin/clinics/[clinicId]` fail with:
+  `You are not authorized for platform admin access.`
+
+Cause:
+
+- API authorization path could resolve against a cookie context that differed from
+  the exact incoming route-handler request cookie jar.
+
+Fix:
+
+- Route-handler auth now uses request-cookie-aware admin resolution:
+  `/api/admin/clinics/[clinicId]/action` calls `resolvePlatformAdmin(req)`.
+- Shared helper updates:
+  - `createSupabaseServerClient({ request })` can read cookies directly from the
+    incoming `NextRequest` for API auth checks.
+  - `resolvePlatformAdmin(request?)` uses the same allowlist/profile-flag logic
+    for both page guards and API routes.
+- Admin actions fetch now explicitly sends `credentials: "include"`.
+
+Verification checklist:
+
+1. Sign in as an allowlisted platform admin at `/admin/login`.
+2. Open any clinic detail page under `/admin/clinics/[clinicId]`.
+3. Run each action once:
+   - Deactivate clinic
+   - Reactivate clinic
+   - Disable SMS recovery
+   - Enable SMS recovery (when prerequisites are met)
+   - Save internal note
+4. Confirm each response returns success and the audit feed shows matching
+   `admin_audit_events` rows.
