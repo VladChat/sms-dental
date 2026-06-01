@@ -1,0 +1,167 @@
+// Shared types + pure redaction helpers for the platform admin console.
+// No runtime side effects. Redaction: phone numbers are masked to the last 4
+// digits; Twilio SIDs are shown as a short tail only; raw payloads/tokens/secrets
+// are never surfaced.
+
+export type AdminOverview = {
+  totalClinics: number;
+  activeClinics: number;
+  inactiveClinics: number;
+  smsRecoveryEnabled: number;
+  smsRecoveryDisabled: number;
+  withAssignedNumber: number;
+  withoutAssignedNumber: number;
+  recentCalls: number;
+  recentMessageFailures: number;
+  clinicsNeedingAction: number;
+};
+
+export type AdminClinicListItem = {
+  id: string;
+  name: string;
+  ownerEmail: string | null;
+  isActive: boolean;
+  smsRecoveryEnabled: boolean;
+  hasAssignedNumber: boolean;
+  assignedPhoneMasked: string | null;
+  billingStatus: string;
+  setupStatus: string;
+  smsStatus: string;
+  localNumberStatus: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminClinicFilters = {
+  search?: string | null;
+  active?: boolean | null;
+  sms?: boolean | null;
+  phone?: boolean | null;
+};
+
+export type AdminClinicMember = {
+  email: string;
+  role: string;
+  status: string;
+};
+
+export type AdminClinicDetail = {
+  id: string;
+  name: string;
+  slug: string | null;
+  isActive: boolean;
+  smsRecoveryEnabled: boolean;
+  // business identity (PII kept minimal: EIN shown as presence only)
+  legalBusinessName: string | null;
+  businessType: string | null;
+  einProvided: boolean;
+  mainPhoneMasked: string | null;
+  street: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  stateRegion: string | null;
+  postalCode: string | null;
+  country: string;
+  website: string | null;
+  businessInfoCompleted: boolean;
+  // owner / members
+  ownerContactEmail: string | null;
+  ownerContactName: string | null;
+  members: AdminClinicMember[];
+  // billing readiness (presence only — no Stripe ids/secrets shown)
+  billingStatus: string;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  stripeCustomerPresent: boolean;
+  stripeSubscriptionPresent: boolean;
+  // phone
+  localNumberStatus: string;
+  assignedPhoneMasked: string | null;
+  hasAssignedNumber: boolean;
+  // sms approval / a2p (presence/flags only)
+  smsStatus: string;
+  a2pInfoCompleted: boolean;
+  a2pAuthorized: boolean;
+  a2pRepProvided: boolean;
+  // lifecycle
+  setupStatus: string;
+  // internal-only operator fields
+  adminInternalNote: string | null;
+  adminProvisioningStatus: string | null;
+  adminProvisioningNote: string | null;
+  // diagnostics
+  optOutCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminCallEvent = {
+  id: string;
+  fromMasked: string | null;
+  toMasked: string | null;
+  callStatus: string | null;
+  direction: string | null;
+  isMissed: boolean | null;
+  sidTail: string | null;
+  occurredAt: string;
+};
+
+export type AdminMessageEvent = {
+  id: string;
+  direction: string;
+  status: string | null;
+  detectedKeyword: string | null;
+  errored: boolean;
+  sidTail: string | null;
+  createdAt: string;
+};
+
+export type AdminClinicEvents = {
+  calls: AdminCallEvent[];
+  messages: AdminMessageEvent[];
+};
+
+export type AuditEventInput = {
+  adminUserId: string | null;
+  adminEmail: string;
+  action: string;
+  targetType: string;
+  targetId?: string | null;
+  clinicId?: string | null;
+  beforeState?: Record<string, string | number | boolean | null> | null;
+  afterState?: Record<string, string | number | boolean | null> | null;
+  metadata?: Record<string, string | number | boolean | null> | null;
+};
+
+export type AuditEventRow = {
+  id: string;
+  admin_email: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  clinic_id: string | null;
+  before_state: unknown;
+  after_state: unknown;
+  metadata: unknown;
+  created_at: Date;
+};
+
+export type AuditListFilters = {
+  adminEmail?: string | null;
+  clinicId?: string | null;
+  action?: string | null;
+};
+
+// ---- pure redaction helpers ----
+
+export function maskPhone(p: string | null | undefined): string | null {
+  if (!p) return null;
+  const digits = p.replace(/\D/g, "");
+  if (digits.length < 4) return "••••";
+  return `••• ••• ${digits.slice(-4)}`;
+}
+
+export function tailSid(sid: string | null | undefined, n = 6): string | null {
+  if (!sid) return null;
+  return `…${sid.slice(-n)}`;
+}

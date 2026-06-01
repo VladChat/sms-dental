@@ -1,9 +1,12 @@
 # Platform Admin Console — Architecture & Implementation Plan
 
-Status: Plan (not implemented)
+Status: v1 IMPLEMENTED (2026-06-01) — see §15. This document remains the spec +
+roadmap for later phases.
 Last updated: 2026-06-01
-Scope: design only. No `/admin` UI, no admin API routes, no migrations created in
-this pass. This document is the spec to review before implementation.
+Scope: architecture/spec plus the implemented v1 (access guard, `/admin/login`,
+console pages, audit log, safe clinic actions). Phases 3–6 (Stripe billing, Twilio
+number purchase, A2P submission, manage-admins) remain future work and are shown
+in `/admin` as blocked-with-reason, never faked.
 
 > Three distinct surfaces — do not mix:
 > - `/account` — **clinic owner/admin** setup & account dashboard (per-clinic).
@@ -442,3 +445,33 @@ follow per the §3 role-specific login decision.
 
 ## 14. Commit
 Commit hash: `214b70f` (`docs: plan platform admin console`); pushed to `origin/main`.
+
+---
+
+## 15. Implemented — admin console v1 (2026-06-01)
+
+Phase 1 + the first safe write actions are built (production-near, real — not a shell):
+
+- **Access:** `lib/auth/platform-admin.ts` `resolvePlatformAdmin()` — authorized iff
+  authenticated email ∈ `PLATFORM_ADMIN_EMAILS` (env) OR `profiles.is_internal_admin`.
+  Separate from `resolveAuthClinicAccess` (no clinic membership required). Guarded
+  route group `app/admin/(console)/*` (layout guard); `/admin/login` lives outside
+  the group so it is never guard-looped.
+- **Pages:** `/admin/login`, `/admin` (live KPIs), `/admin/clinics`
+  (server-side search + active/SMS/phone filters), `/admin/clinics/[clinicId]`
+  (detail + action panel), `/admin/clinics/[clinicId]/events` (redacted
+  call/message diagnostics), `/admin/audit`.
+- **Real actions (audited):** deactivate / reactivate clinic; disable / enable SMS
+  recovery (enable gated on `is_active` + assigned number + `a2p_info_completed`);
+  update internal note (≤1000); set provisioning status/note. All via
+  `POST /api/admin/clinics/[clinicId]/action`, each writing `admin_audit_events`.
+- **Blocked (shown disabled with reason — never fake):** Stripe billing (collect/
+  start/pause), Twilio number purchase/release/reassign, A2P/carrier submission,
+  live SMS mode.
+- **Migration `20260601000200_admin_console.sql`** applied (admin_audit_events +
+  `clinics.admin_internal_note/admin_provisioning_status/admin_provisioning_note`).
+- **Redaction:** phones masked to last 4; Twilio SIDs shown as a short tail; no raw
+  payloads/tokens/secrets; EIN + A2P rep shown as presence only.
+- **Operator step:** set `PLATFORM_ADMIN_EMAILS=allyexporter@gmail.com` in Vercel env
+  (+ redeploy). Until set, `/admin` denies all access.
+- **Next:** `/workspace/login` role-specific login (front desk).

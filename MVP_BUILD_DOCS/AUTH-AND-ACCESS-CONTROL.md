@@ -489,3 +489,14 @@ Password / reset behavior:
 > `/admin/login`, `/workspace/login`, and the clinic owner login entry for
 > `/account`, all backed by one Supabase Auth system with strict server-side role
 > redirects.
+
+## 18. Platform admin console implemented (2026-06-01)
+
+`/admin/login` + a guarded `/admin` console are live. Auth uses the one Supabase
+Auth system; authorization is `resolvePlatformAdmin()` (`lib/auth/platform-admin.ts`):
+authenticated email in `PLATFORM_ADMIN_EMAILS` OR `profiles.is_internal_admin`.
+This is independent of clinic membership; clinic `owner`/`admin`/`front_desk` never
+grant platform-admin access. `/admin` and `/api/admin/*` are guarded server-side;
+`/admin/login` is outside the guarded route group. Operator must set
+`PLATFORM_ADMIN_EMAILS` (env) — `/admin` denies all until then. Full spec +
+implemented scope: `PLATFORM-ADMIN-CONSOLE-PLAN.md` §15.

@@ -295,3 +295,16 @@ redirects. First platform admin (`allyexporter@gmail.com`) via
 `AUTH-AND-ACCESS-CONTROL.md` §17 and `PLATFORM-ADMIN-CONSOLE-PLAN.md` §3. Not
 implemented yet; this does not change the placeholder/working status of any item
 above.
+
+---
+
+## 16. Platform admin console v1 implemented (2026-06-01)
+
+A real, guarded `/admin` console now exists for the platform operator (separate
+from clinic `/account` and front-desk `/workspace`). It provides live cross-tenant
+visibility and real, audited admin actions (deactivate/reactivate clinic,
+disable/enable SMS recovery, internal note, provisioning status). The blocked
+items above (B1 Stripe billing, B2 Twilio purchase, B3 A2P submission) are now
+surfaced **honestly in `/admin` as disabled controls with the prerequisite
+reason** — they remain blocked until their integrations land. See
+`PLATFORM-ADMIN-CONSOLE-PLAN.md` §15.
