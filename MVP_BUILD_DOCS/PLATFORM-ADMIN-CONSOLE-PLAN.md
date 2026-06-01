@@ -99,6 +99,46 @@ A request is a **platform admin** iff:
    operator allowlist in committed runtime config or Vercel env) **OR** the
    user's `profiles.is_internal_admin = true`.
 
+### Login entry points (REQUIRED product decision — 2026-06-01)
+
+**One underlying auth system, separate role-specific login pages.** All three
+audiences authenticate against the **same Supabase Auth** users — there is no
+separate admin password store and no second auth system. What differs is the
+**entry point** and the **post-login redirect**, each enforced server-side.
+
+| Audience | Login route | Success target | Access requirement |
+|---|---|---|---|
+| Platform admin | `/admin/login` | `/admin` | authenticated user **+** platform-admin authorization (`PLATFORM_ADMIN_EMAILS` or `profiles.is_internal_admin`) |
+| Clinic owner | `/login` (today; the plan permits a later rename to `/account/login` as the clearer long-term owner route) | `/account` | active clinic `owner`/`admin` membership |
+| Front desk | `/workspace/login` | `/workspace` | active `front_desk` membership |
+
+**Authorization rules (must be documented + enforced server-side):**
+- Platform-admin access is **not** granted by clinic `owner` role.
+- Clinic-owner access is **not** granted by platform-admin status.
+- Front-desk access is limited to `/workspace`; front-desk users must **not** see
+  `/account`, `/admin`, billing, EIN/legal business info, SMS approval controls,
+  or platform diagnostics.
+- Clinic owners must **not** see `/admin`.
+- `/admin` and `/api/admin/*` protected server-side (`resolvePlatformAdmin`).
+- `/workspace` and `/api/workspace/*` protected server-side (front-desk/owner
+  membership).
+- `/account` and `/api/account/*` protected server-side (owner/admin membership).
+
+**Password / reset behavior:**
+- Every user has a normal Supabase Auth email/password account; there is **no
+  separate "admin password"** outside Supabase Auth.
+- The platform admin signs in with their Supabase Auth email via `/admin/login`.
+- Password reset stays tied to the Supabase Auth user email (existing
+  `/forgot-password` → `/auth/callback` → `/reset-password` flow).
+- Each login/reset form must use correct password-manager `autocomplete`
+  attributes (`email` / `current-password` / `new-password`) so browsers do not
+  confuse the role-specific forms.
+
+> **TO-DO (implementation):** Implement separate role-specific login pages:
+> `/admin/login`, `/workspace/login`, and the clinic owner login entry for
+> `/account`, all backed by one Supabase Auth system with strict server-side role
+> redirects.
+
 ### Why this option
 - `is_internal_admin` already exists → durable, table-managed source of truth with
   **zero migration** to start.
@@ -118,13 +158,17 @@ and must never be implied by owning one clinic.
   `getUser()` → load profile by id → admin iff `is_internal_admin` or email ∈
   allowlist. Returns `{ ok, profileId, email }` or `{ ok:false, reason }`.
 - `/admin` uses a **server layout** (`app/admin/layout.tsx`) that calls the guard
-  and `redirect("/login")` (or renders a minimal "not authorized" page) when not
-  an admin. Every `app/api/admin/**` route calls the same guard first and returns
-  `401/403` JSON otherwise. No client-only gating.
+  and `redirect("/admin/login")` (or renders a minimal "not authorized" page) when
+  not an admin. Every `app/api/admin/**` route calls the same guard first and
+  returns `401/403` JSON otherwise. No client-only gating.
 - Front-desk users (`is_internal_admin=false`, not in allowlist) and clinic owners
   are rejected by the same checks.
 
 ### Bootstrap (no DB write required)
+- **First platform admin:** `allyexporter@gmail.com`. **Do not hardcode this email
+  in source code.** Provide it via `PLATFORM_ADMIN_EMAILS` in local/Vercel
+  environment configuration; `.env.local.example` may carry the variable **name
+  only** (no value) when implementation begins.
 - Set `PLATFORM_ADMIN_EMAILS` to the operator email(s). Because the app base/admin
   allowlist is **non-secret config**, prefer `config/runtime.config.ts`
   (`platform.adminEmails`) per the project's env-ownership rule; a Vercel env is
@@ -148,6 +192,7 @@ secrets/raw payloads.
 
 | Route | Purpose | Data sources | Key UI | Filters | Actions | Access |
 |---|---|---|---|---|---|---|
+| `/admin/login` | Platform-admin sign-in (Supabase Auth) | Supabase Auth | email + password form, correct `autocomplete`, forgot-password link | — | sign in → `/admin` (only if platform-admin authorized) | public page; non-admins are signed in but not authorized → denied at `/admin` |
 | `/admin` | Operations overview | aggregate counts over `clinics`, recent `messages`/`call_events`/`webhook_events` failures | KPI cards (total clinics, needs-action, SMS active/disabled, billing-ready, phone pending, trial ending), recent-errors list | time range | none (links only) | platform admin |
 | `/admin/clinics` | All clinics | `clinics` (+ joined latest phone/membership counts) | searchable/sortable table: name, slug, setup_status, sms_status, billing_status, local_number_status, is_active, trial_ends_at | search (name/email/slug), status filters, active/inactive | row → detail | platform admin |
 | `/admin/clinics/[clinicId]` | Clinic detail + actions | `clinics`, `clinic_phone_numbers`, `clinic_memberships`+`profiles`, recent `call_events`/`messages`/`opt_outs`, latest `setup_requests` | sections: Business info, Owner/members, Billing, Phone, SMS approval/A2P, SMS-recovery, recent activity, internal note, **Action panel** | activity type | see action matrix (§6) | platform admin |
@@ -358,7 +403,7 @@ platform admin with **no** clinic membership is allowed.
 
 | Phase | Title | Objective | Files likely touched | Migration | Validation | Manual QA | Risk | Commit message |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Read-only platform admin console | Cross-tenant visibility, no writes | `lib/auth/platform-admin.ts`, `app/admin/{layout,page}.tsx`, `app/admin/clinics/*`, `lib/db/admin/*`, `config/runtime.config.ts` (adminEmails), `app/globals.css` | none | typecheck, build | owner/front-desk denied; admin (no membership) allowed; data correct; redaction verified | medium | `feat: add read-only platform admin console` |
+| 1 | Read-only platform admin console + `/admin/login` | Cross-tenant visibility, no writes; role-specific admin sign-in with strict server-side redirect | `lib/auth/platform-admin.ts`, `app/admin/{layout,page}.tsx`, `app/admin/login/*`, `app/admin/clinics/*`, `lib/db/admin/*`, `config/runtime.config.ts` (adminEmails), `app/globals.css` | none | typecheck, build | owner/front-desk denied at `/admin`; admin (no membership) allowed; `/admin/login` signs in then authorizes; data correct; redaction verified | medium | `feat: add read-only platform admin console` |
 | 2 | Audit log + safe clinic actions | Note, deactivate/reactivate, disable SMS, resend link, assign-owned-number | `supabase/migrations/<ts>_admin_audit_and_notes.sql`, `lib/db/admin/*`, `app/api/admin/clinics/[id]/*`, `app/admin/audit/page.tsx` | **yes** (5.1+5.2) | typecheck, build; apply migration in staging first | each action: precondition block, confirm, audit row, idempotent no-op, rollback | high | `feat: add admin audit log and safe clinic actions` |
 | 3 | Billing admin (after Stripe) | Billing-ready views; start/pause | `app/admin/clinics/[id]/*`, `app/api/admin/.../billing`, `lib/stripe/*` | maybe | typecheck, build | no charge before SMS active | high | `feat: add admin billing controls` |
 | 4 | Number provisioning admin (after Twilio purchase) | Purchase/release | `app/api/admin/.../number`, `lib/twilio/*` | maybe | typecheck, build | idempotent purchase; webhooks set | high | `feat: add admin number provisioning` |
@@ -387,9 +432,11 @@ platform admin with **no** clinic membership is allowed.
 7. Is a dedicated `platform_admins` table wanted later (roles/scopes), or is the flag+allowlist sufficient long-term?
 
 ### Recommended next implementation prompt title
-**"feat: read-only platform admin console (access guard + clinics overview/detail/events)"**
+**"feat: read-only platform admin console + /admin/login (access guard + clinics overview/detail/events)"**
 — Phase 1 above: no migration, real cross-tenant visibility, strict server-side
-admin guard, redacted diagnostics.
+admin guard, `/admin/login` role-specific sign-in (one Supabase Auth system),
+redacted diagnostics. Separate `/workspace/login` and the clinic-owner login entry
+follow per the §3 role-specific login decision.
 
 ---
 
