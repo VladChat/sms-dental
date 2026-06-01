@@ -2840,3 +2840,42 @@ number purchase/reservation/release, no users created; existing `/login`,
 **Commit hash / push:** `8967f93` (`feat: add platform admin console`), pushed to
 `origin/main`. Metadata recorded by the follow-up
 `docs: record platform admin console metadata`.
+
+---
+
+## 2026-06-01 — First platform admin bootstrap (allyexporter@gmail.com)
+
+Checked Supabase Auth (`auth.users` via Management API): the user
+`allyexporter@gmail.com` **did not exist**.
+
+Created a safe bootstrap with **no invented password**:
+
+1. Created the Supabase Auth user via the GoTrue admin API
+   (`POST /auth/v1/admin/users`, service-role key from local env — never printed)
+   with `email_confirm: true` and **no password**. (GoTrue populates the
+   `encrypted_password` column on create, but there is no known plaintext — the
+   account cannot be logged into until a password is set via recovery.)
+2. Triggered the existing branded recovery email via
+   `POST /api/auth/forgot-password` (production). Supabase sends the recovery link
+   (Resend SMTP, app-domain `token_hash` link) to the owner's inbox.
+
+Owner completes setup (no agent action): open the email → `/auth/callback`
+(type=recovery) → `/reset-password` → set a password. After that, the owner signs
+in at `/admin/login`.
+
+Still required for `/admin` access (separate, already-documented operator step):
+set `PLATFORM_ADMIN_EMAILS=allyexporter@gmail.com` in Vercel Production env and
+redeploy. Password setup alone does not grant platform-admin authorization.
+
+Manual Supabase Dashboard fallback (if the email does not arrive):
+- Authentication → Users → the user exists (or Add user → Create new user →
+  email, leave password blank / "Auto-confirm user").
+- Authentication → Users → (user) → "Send password recovery" (or "Send magic
+  link"), which emails a link to set the password.
+- Or Authentication → Users → (user) → reset password.
+
+Constraints honored: no password invented/printed/stored/committed;
+`PLATFORM_ADMIN_EMAILS` not changed; no separate admin password system; one
+Supabase Auth system. No repo source changed (docs only this entry).
+
+Commit hash / push: recorded in the follow-up `docs: record admin bootstrap metadata`.

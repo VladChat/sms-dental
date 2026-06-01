@@ -1592,3 +1592,22 @@ front-desk `/workspace`. Full spec: `PLATFORM-ADMIN-CONSOLE-PLAN.md`.
   blocked until those integrations are built.
 - **Migration:** `20260601000200_admin_console.sql` (applied). Audit rows store
   redacted snapshots only — no secrets/tokens/raw payloads.
+
+---
+
+## First platform admin bootstrap — 2026-06-01
+
+`allyexporter@gmail.com` had no Supabase Auth account, so it was created (admin
+API, email pre-confirmed, **no password**) and a recovery email was sent so the
+owner sets their own password — no password is stored anywhere.
+
+To finish enabling `/admin` for this owner:
+1. Owner opens the recovery email → `/reset-password` → sets a password.
+2. Operator sets `PLATFORM_ADMIN_EMAILS=allyexporter@gmail.com` in Vercel
+   Production env and redeploys (this is what grants platform-admin access).
+3. Owner signs in at `/admin/login`.
+
+Re-send if needed: `POST https://app.missedcallsdental.com/api/auth/forgot-password`
+with `{"email":"allyexporter@gmail.com"}`, or use Supabase Dashboard →
+Authentication → Users → Send password recovery. Never paste the recovery
+link/token anywhere.
