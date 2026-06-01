@@ -2365,3 +2365,13 @@ auth-config change. Remove it from local `.env.local` afterward.
 **Commit hash / push:** `0b05e18` (`fix: apply auth email configuration`),
 pushed to `origin/main`. Metadata recorded by follow-up
 `docs: record auth email configuration commit metadata`.
+
+---
+
+## 2026-06-01 — Docs cleanup: SMTP password wording (secret-scan false positives)
+
+- Updated `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` Custom SMTP (Resend) guidance
+  to remove credential-like password wording.
+- Replaced SMTP password lines with non-secret operator instructions:
+  leave provider value unchanged and never store SMTP passwords in docs.
+- No source code changes. No secrets added.
