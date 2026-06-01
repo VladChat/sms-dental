@@ -1,6 +1,8 @@
 // Shared types + pure helpers for the front-desk workspace. No runtime side
 // effects, so both the server page and the client component import these.
 
+import type { FrontDeskOutcome } from "../../../lib/workspace/outcome";
+
 export type WorkspaceStatus =
   | "new"
   | "needs_follow_up"
@@ -39,6 +41,11 @@ export type PatientRequestCard = {
   isSample?: boolean;
   // Optional sample note shown in the detail view.
   sampleNote?: string | null;
+  // Saved front-desk outcome for real cards (undefined/null for samples and
+  // for real cards with no recorded result yet).
+  frontDeskOutcome?: FrontDeskOutcome | null;
+  frontDeskNote?: string | null;
+  frontDeskOutcomeAt?: string | null; // ISO
 };
 
 // Conservative status derivation from existing data only. We never guess beyond
@@ -57,6 +64,24 @@ export function deriveWorkspaceStatus(
   return "waiting_for_patient";
 }
 
+// A saved front-desk outcome is the primary source of a real card's final
+// status. Returns null when no outcome is saved, so the caller falls back to the
+// conservative timeline/lifecycle derivation above.
+export function workspaceStatusForOutcome(
+  outcome: FrontDeskOutcome | null | undefined,
+): WorkspaceStatus | null {
+  switch (outcome) {
+    case "appointment_booked":
+      return "booked";
+    case "no_appointment_booked":
+      return "no_appointment_booked";
+    case "could_not_reach_patient":
+      return "could_not_reach_patient";
+    default:
+      return null;
+  }
+}
+
 export const WORKSPACE_STATUS_META: Record<
   WorkspaceStatus,
   { label: string; badge: string }
@@ -68,7 +93,7 @@ export const WORKSPACE_STATUS_META: Record<
   booked: { label: "Appointment booked", badge: "badge-success" },
   closed: { label: "Closed", badge: "badge-neutral" },
   no_appointment_booked: { label: "No appointment booked", badge: "badge-neutral" },
-  could_not_reach_patient: { label: "Closed", badge: "badge-neutral" },
+  could_not_reach_patient: { label: "Could not reach patient", badge: "badge-neutral" },
 };
 
 export const NOT_PROVIDED = "Not provided yet";

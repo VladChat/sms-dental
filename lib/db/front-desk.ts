@@ -1,12 +1,17 @@
 import { getDb } from "./client";
+import {
+  FRONT_DESK_OUTCOME_TO_STATUS,
+  type FrontDeskOutcome,
+} from "../workspace/outcome";
 
-// Read-only data access for the front-desk workspace (/workspace).
+// Data access for the front-desk workspace (/workspace).
 //
 // Privacy / minimum-necessary: these queries select ONLY the columns the front
 // desk needs to handle a patient request (phone, message direction/body,
-// timestamps, conversation status). They deliberately never read raw webhook
-// payloads, Twilio SIDs, error codes, clinic/owner identity, billing, or any
-// compliance/setup fields. This module performs no writes.
+// timestamps, conversation status, and the saved front-desk outcome/note). They
+// deliberately never read raw webhook payloads, Twilio SIDs, error codes,
+// clinic/owner identity, billing, or any compliance/setup fields. The only write
+// is the clinic-scoped outcome save below.
 
 export type FrontDeskMessage = {
   id: string;
@@ -23,6 +28,10 @@ export type FrontDeskConversation = {
   dbStatus: string;
   createdAt: Date;
   lastMessageAt: Date | null;
+  // Saved front-desk outcome (null until a result is recorded).
+  frontDeskOutcome: FrontDeskOutcome | null;
+  frontDeskNote: string | null;
+  frontDeskOutcomeAt: Date | null;
   messages: FrontDeskMessage[];
 };
 
@@ -42,9 +51,13 @@ export async function listClinicConversations(
       status: string;
       created_at: Date;
       last_message_at: Date | null;
+      front_desk_outcome: string | null;
+      front_desk_note: string | null;
+      front_desk_outcome_at: Date | null;
     }[]
   >`
-    select id, patient_phone, status, created_at, last_message_at
+    select id, patient_phone, status, created_at, last_message_at,
+           front_desk_outcome, front_desk_note, front_desk_outcome_at
     from public.patient_conversations
     where clinic_id = ${clinicId}
     order by coalesce(last_message_at, created_at) desc
@@ -90,6 +103,61 @@ export async function listClinicConversations(
     dbStatus: c.status,
     createdAt: c.created_at,
     lastMessageAt: c.last_message_at,
+    frontDeskOutcome: (c.front_desk_outcome as FrontDeskOutcome | null) ?? null,
+    frontDeskNote: c.front_desk_note,
+    frontDeskOutcomeAt: c.front_desk_outcome_at,
     messages: byConvo.get(c.id) ?? [],
   }));
+}
+
+export type SavedFrontDeskOutcome = {
+  id: string;
+  outcome: FrontDeskOutcome;
+  note: string | null;
+  outcomeAt: Date;
+  status: string;
+};
+
+// Save a front-desk outcome + optional note for one conversation, and advance the
+// conversation lifecycle status to match. Scoped by clinic_id in the WHERE clause:
+// a conversation that does not belong to `clinicId` matches zero rows and returns
+// null (caller treats that as "not found"). `note` should already be trimmed by
+// the caller; pass null for an empty note.
+export async function saveFrontDeskOutcome(params: {
+  clinicId: string;
+  conversationId: string;
+  outcome: FrontDeskOutcome;
+  note: string | null;
+}): Promise<SavedFrontDeskOutcome | null> {
+  const sql = getDb();
+  const status = FRONT_DESK_OUTCOME_TO_STATUS[params.outcome];
+
+  const rows = await sql<
+    {
+      id: string;
+      front_desk_outcome: string;
+      front_desk_note: string | null;
+      front_desk_outcome_at: Date;
+      status: string;
+    }[]
+  >`
+    update public.patient_conversations
+    set front_desk_outcome = ${params.outcome},
+        front_desk_note = ${params.note},
+        front_desk_outcome_at = now(),
+        status = ${status}
+    where id = ${params.conversationId}
+      and clinic_id = ${params.clinicId}
+    returning id, front_desk_outcome, front_desk_note, front_desk_outcome_at, status
+  `;
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    outcome: row.front_desk_outcome as FrontDeskOutcome,
+    note: row.front_desk_note,
+    outcomeAt: row.front_desk_outcome_at,
+    status: row.status,
+  };
 }

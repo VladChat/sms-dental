@@ -254,3 +254,27 @@ Future analytics mapping (documented only):
 - `Yes` -> booked/recovered
 - `No` -> not booked/not recovered
 - blank -> still needs follow-up
+
+## 11. Outcome saving (implemented 2026-06-01) — supersedes the read-only scope
+
+`/workspace` is no longer read-only for real cards. The front desk can record an
+outcome and an optional note per real patient conversation.
+
+- **Schema:** instead of the proposed `patient_requests` table (§8), the minimal
+  home was three additive nullable columns on `public.patient_conversations`:
+  `front_desk_outcome`, `front_desk_note`, `front_desk_outcome_at`
+  (`supabase/migrations/20260601000100_front_desk_outcome.sql`; check constraints
+  for the outcome enum and a 300-char note limit). Revisit a dedicated table only
+  if first-class request state (assignment, multiple notes, etc.) is needed later.
+- **Outcomes:** `appointment_booked`, `no_appointment_booked`,
+  `could_not_reach_patient`. A saved outcome is the primary source of the card
+  status and advances the conversation lifecycle (`booked` / `lost` / `closed`
+  respectively); with no saved outcome the conservative timeline derivation stands.
+- **Write path:** `POST /api/workspace/outcome`, authenticated via
+  `resolveAuthClinicAccess`, clinic-scoped in SQL, sample IDs rejected, 300-char
+  note trimmed/limited client + server, empty note stored as NULL. Read path still
+  minimum-necessary (no owner/billing/compliance/Twilio/raw-payload exposure).
+- **Samples:** a clearly labeled, non-persistent training layer below real cards,
+  with a `Hide` / `Show samples` toggle (local state) that never affects real
+  cards. Sample outcome UI is disabled (`Sample preview · not saved`); the previous
+  "contact support" modal is gone. Empty state: `No real patient requests yet.`

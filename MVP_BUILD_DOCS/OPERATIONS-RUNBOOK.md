@@ -1514,3 +1514,28 @@ then link → `/auth/callback` → `/reset-password` → set password → login 
   for your account." Set via Management API mailer_subjects_recovery /
   mailer_templates_recovery_content (curl; Cloudflare 1010 blocks python-urllib
   writes). Keep the app-domain token_hash link; do not reintroduce ConfirmationURL.
+
+---
+
+## Workspace outcome saving — 2026-06-01
+
+`/workspace` real patient request cards now save an outcome + optional note.
+
+- **API:** `POST /api/workspace/outcome` `{conversationId, outcome, note}`.
+  Authenticated via `resolveAuthClinicAccess` (owner/admin/front_desk). Updates are
+  clinic-scoped in SQL (`id = $conversationId and clinic_id = $clinic`); sample IDs
+  and non-UUIDs are rejected. Note trimmed, empty → NULL, 300-char max enforced
+  client + server.
+- **DB:** `patient_conversations.front_desk_outcome` / `front_desk_note` /
+  `front_desk_outcome_at` (migration `20260601000100_front_desk_outcome.sql`,
+  additive nullable + check constraints, applied via Management API). A saved
+  outcome drives the card status and advances the conversation lifecycle:
+  `appointment_booked → booked`, `no_appointment_booked → lost`,
+  `could_not_reach_patient → closed`.
+- **Samples:** demo-only, never written. Shown in a separate, clearly labeled
+  `Sample requests` section with a `Hide`/`Show samples` toggle (local state). Real
+  cards always appear first and are never affected by hiding samples. Sample outcome
+  UI is disabled and labeled `Sample preview · not saved`. The old
+  `Please contact support to save workspace results.` modal is removed.
+- **Re-verify after change:** save an outcome on a real card, refresh, confirm it
+  persists; confirm a >300-char note is rejected; confirm samples never hit the DB.

@@ -5,8 +5,15 @@ import {
   WORKSPACE_STATUS_META,
   NOT_PROVIDED,
   formatDateTime,
+  workspaceStatusForOutcome,
   type PatientRequestCard,
 } from "./workspace-types";
+import {
+  FRONT_DESK_OUTCOMES,
+  FRONT_DESK_OUTCOME_LABEL,
+  FRONT_DESK_NOTE_MAX,
+  type FrontDeskOutcome,
+} from "../../../lib/workspace/outcome";
 
 function StatusBadge({ status }: { status: PatientRequestCard["status"] }) {
   const m = WORKSPACE_STATUS_META[status];
@@ -14,10 +21,9 @@ function StatusBadge({ status }: { status: PatientRequestCard["status"] }) {
 }
 
 export function Workspace({ cards }: { cards: PatientRequestCard[] }) {
-  const showingSamples = cards.length === 0;
-  const displayCards = showingSamples ? SAMPLE_REQUESTS : cards;
-  const [selectedId, setSelectedId] = useState<string | null>(displayCards[0]?.id ?? null);
-  const selected = displayCards.find((c) => c.id === selectedId) ?? displayCards[0] ?? null;
+  const realCards = cards;
+  const hasReal = realCards.length > 0;
+  const [samplesHidden, setSamplesHidden] = useState(false);
 
   return (
     <main className="ws-page">
@@ -28,67 +34,128 @@ export function Workspace({ cards }: { cards: PatientRequestCard[] }) {
         </p>
       </header>
 
-      {showingSamples && <SampleStateCallout />}
+      {hasReal ? (
+        <RequestSection cards={realCards} kind="real" />
+      ) : (
+        samplesHidden && (
+          <p className="ws-empty-real t-body">No real patient requests yet.</p>
+        )
+      )}
 
-      <div className="ws-layout">
-        <nav className="ws-list" aria-label={showingSamples ? "Sample requests" : "Patient requests"}>
-          {displayCards.map((c) => {
-            const m = WORKSPACE_STATUS_META[c.status];
-            return (
-              <button
-                key={c.id}
-                type="button"
-                className="ws-list-item"
-                aria-current={c.id === selectedId ? "true" : undefined}
-                onClick={() => setSelectedId(c.id)}
-              >
-                <span className="ws-list-top">
-                  <span className="ws-list-name">{c.patientName ?? c.callerPhone}</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}>
-                    {c.isSample && <span className="badge badge-info">Sample</span>}
-                    <span className={`badge ${m.badge}`}><span className="dot" aria-hidden="true" />{m.label}</span>
-                  </span>
-                </span>
-                {c.patientName && (
-                  <span className="t-small ws-meta t-mono">{c.callerPhone}</span>
-                )}
-                <span className="t-small ws-snippet">
-                  {c.latestMessage ?? "No messages yet"}
-                </span>
-                <span className="t-helper ws-meta">
-                  Last activity · {formatDateTime(c.lastActivityAt)}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
-
-        {selected ? (
-          <RequestDetail key={selected.id} card={selected} />
-        ) : (
-          <section className="card card-pad" aria-live="polite">
-            <p className="t-small" style={{ color: "var(--text-muted)" }}>
-              Select a request to see details.
-            </p>
-          </section>
-        )}
-      </div>
+      {samplesHidden ? (
+        <div className="ws-sample-strip">
+          <span className="t-small">Sample requests hidden</span>
+          <span aria-hidden="true" className="ws-sample-strip-dot">·</span>
+          <button type="button" className="link" onClick={() => setSamplesHidden(false)}>
+            Show samples
+          </button>
+        </div>
+      ) : (
+        <section className="ws-sample-section" aria-label="Sample requests">
+          <div className="ws-sample-banner">
+            <div>
+              <h2 className="t-h4">Sample requests</h2>
+              <p className="t-small" style={{ marginTop: "var(--space-1)" }}>
+                These are sample/demo requests. They are not saved.
+              </p>
+            </div>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSamplesHidden(true)}>
+              Hide
+            </button>
+          </div>
+          <RequestSection cards={SAMPLE_REQUESTS} kind="sample" />
+        </section>
+      )}
     </main>
   );
 }
 
-function SampleStateCallout() {
+function RequestSection({
+  cards,
+  kind,
+}: {
+  cards: PatientRequestCard[];
+  kind: "real" | "sample";
+}) {
+  const [items, setItems] = useState(cards);
+  const [selectedId, setSelectedId] = useState<string | null>(items[0]?.id ?? null);
+  const selected = items.find((c) => c.id === selectedId) ?? items[0] ?? null;
+
+  function applySavedOutcome(id: string, outcome: FrontDeskOutcome, note: string) {
+    setItems((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              frontDeskOutcome: outcome,
+              frontDeskNote: note.length > 0 ? note : null,
+              status: workspaceStatusForOutcome(outcome) ?? c.status,
+            }
+          : c,
+      ),
+    );
+  }
+
+  if (items.length === 0) {
+    return null;
+  }
+
   return (
-    <section className="ws-sample-callout card card-pad" aria-label="Sample requests">
-      <h2 className="t-h4">Sample requests</h2>
-      <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
-        No real patient requests are available yet. These sample cards show how front desk outcomes will look.
-      </p>
-    </section>
+    <div className="ws-layout">
+      <nav className="ws-list" aria-label={kind === "sample" ? "Sample requests" : "Patient requests"}>
+        {items.map((c) => {
+          const m = WORKSPACE_STATUS_META[c.status];
+          return (
+            <button
+              key={c.id}
+              type="button"
+              className="ws-list-item"
+              aria-current={c.id === selectedId ? "true" : undefined}
+              onClick={() => setSelectedId(c.id)}
+            >
+              <span className="ws-list-top">
+                <span className="ws-list-name">{c.patientName ?? c.callerPhone}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}>
+                  {c.isSample && <span className="badge badge-info">Sample</span>}
+                  <span className={`badge ${m.badge}`}><span className="dot" aria-hidden="true" />{m.label}</span>
+                </span>
+              </span>
+              {c.patientName && (
+                <span className="t-small ws-meta t-mono">{c.callerPhone}</span>
+              )}
+              <span className="t-small ws-snippet">
+                {c.latestMessage ?? "No messages yet"}
+              </span>
+              <span className="t-helper ws-meta">
+                Last activity · {formatDateTime(c.lastActivityAt)}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {selected ? (
+        <RequestDetail key={selected.id} card={selected} kind={kind} onSaved={applySavedOutcome} />
+      ) : (
+        <section className="card card-pad" aria-live="polite">
+          <p className="t-small" style={{ color: "var(--text-muted)" }}>
+            Select a request to see details.
+          </p>
+        </section>
+      )}
+    </div>
   );
 }
 
-function RequestDetail({ card }: { card: PatientRequestCard }) {
+function RequestDetail({
+  card,
+  kind,
+  onSaved,
+}: {
+  card: PatientRequestCard;
+  kind: "real" | "sample";
+  onSaved: (id: string, outcome: FrontDeskOutcome, note: string) => void;
+}) {
   const [showConversation, setShowConversation] = useState(false);
 
   return (
@@ -116,12 +183,6 @@ function RequestDetail({ card }: { card: PatientRequestCard }) {
         <Row label="First seen" value={formatDateTime(card.createdAt)} />
         <Row label="Last activity" value={formatDateTime(card.lastActivityAt)} />
       </dl>
-
-      {card.sampleNote && (
-        <div className="ws-sample-note">
-          <p className="t-small" style={{ margin: 0 }}>{card.sampleNote}</p>
-        </div>
-      )}
 
       <div className="ws-conversation">
         <button
@@ -156,7 +217,11 @@ function RequestDetail({ card }: { card: PatientRequestCard }) {
         )}
       </div>
 
-      {card.isSample && <SampleResultPreview />}
+      {kind === "real" ? (
+        <OutcomeForm card={card} onSaved={onSaved} />
+      ) : (
+        <SampleOutcomePreview card={card} />
+      )}
     </section>
   );
 }
@@ -171,79 +236,170 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SampleResultPreview() {
-  const [result, setResult] = useState<"" | "yes" | "no">("");
-  const [note, setNote] = useState("");
-  const [showSaveModal, setShowSaveModal] = useState(false);
+// Real outcome form. Saves the outcome + optional note to Supabase via the
+// authenticated, clinic-scoped API. The saved result persists across refreshes.
+function OutcomeForm({
+  card,
+  onSaved,
+}: {
+  card: PatientRequestCard;
+  onSaved: (id: string, outcome: FrontDeskOutcome, note: string) => void;
+}) {
+  const [outcome, setOutcome] = useState<FrontDeskOutcome | "">(card.frontDeskOutcome ?? "");
+  const [note, setNote] = useState(card.frontDeskNote ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
-  function onSave(event: React.FormEvent<HTMLFormElement>) {
+  const noteTooLong = note.length > FRONT_DESK_NOTE_MAX;
+
+  function clearStatus() {
+    if (saved) setSaved(false);
+    if (error) setError(null);
+  }
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setShowSaveModal(true);
+    setError(null);
+    setSaved(false);
+
+    if (!outcome) {
+      setError("Please choose an outcome.");
+      return;
+    }
+    if (noteTooLong) {
+      setError("Note must be 300 characters or less.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/workspace/outcome", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ conversationId: card.id, outcome, note }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; note?: string; error?: { message?: string } }
+        | null;
+      if (!res.ok || !data?.ok) {
+        setError(data?.error?.message ?? "Could not save. Please try again.");
+        return;
+      }
+      setSaved(true);
+      onSaved(card.id, outcome, data.note ?? note.trim());
+    } catch {
+      setError("Could not save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <>
-      <form className="ws-result-preview" aria-labelledby="ws-result-preview-title" onSubmit={onSave}>
-        <h3 id="ws-result-preview-title" className="t-h4">Appointment booked?</h3>
-        <div className="ws-result-options">
-          <label className="check">
+    <form className="ws-result-form" aria-labelledby="ws-outcome-title" onSubmit={onSubmit}>
+      <h3 id="ws-outcome-title" className="t-h4">Outcome</h3>
+      <div className="ws-result-options" role="radiogroup" aria-label="Outcome">
+        {FRONT_DESK_OUTCOMES.map((value) => (
+          <label className="check" key={value}>
             <input
               type="radio"
-              name="sample_result"
-              value="yes"
-              checked={result === "yes"}
-              onChange={(event) => setResult(event.target.value as "yes")}
+              name={`outcome-${card.id}`}
+              value={value}
+              checked={outcome === value}
+              onChange={() => {
+                setOutcome(value);
+                clearStatus();
+              }}
             />
-            <span>Yes</span>
+            <span>{FRONT_DESK_OUTCOME_LABEL[value]}</span>
           </label>
-          <label className="check">
-            <input
-              type="radio"
-              name="sample_result"
-              value="no"
-              checked={result === "no"}
-              onChange={(event) => setResult(event.target.value as "no")}
-            />
-            <span>No</span>
-          </label>
-        </div>
-        <div className="field">
-          <label htmlFor="sample-result-note">Note</label>
-          <textarea
-            id="sample-result-note"
-            className="textarea"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Optional short note"
-          />
-        </div>
-        <div>
-          <button type="submit" className="btn btn-primary">Save result</button>
-        </div>
-      </form>
+        ))}
+      </div>
 
-      {showSaveModal && (
-        <div className="acct-modal-backdrop" role="presentation" onClick={() => setShowSaveModal(false)}>
-          <div
-            className="acct-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ws-result-placeholder-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3 id="ws-result-placeholder-title" className="t-h4">Result</h3>
-            <p className="t-small" style={{ margin: 0 }}>
-              Please contact support to save workspace results.
-            </p>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowSaveModal(false)}>
-                Close
-              </button>
-            </div>
-          </div>
+      <div className="field">
+        <label htmlFor={`note-${card.id}`}>Note</label>
+        <textarea
+          id={`note-${card.id}`}
+          className="textarea"
+          value={note}
+          onChange={(event) => {
+            setNote(event.target.value);
+            clearStatus();
+          }}
+          aria-invalid={noteTooLong ? "true" : undefined}
+        />
+        <div className="ws-note-meta">
+          <span className="helper">Optional short note.</span>
+          <span className={`helper ws-note-count${noteTooLong ? " is-over" : ""}`}>
+            {note.length}/{FRONT_DESK_NOTE_MAX}
+          </span>
+        </div>
+        {noteTooLong && (
+          <p className="t-helper" style={{ color: "var(--error-text)" }}>
+            Note must be 300 characters or less.
+          </p>
+        )}
+      </div>
+
+      {error && (
+        <div className="alert alert-error" role="alert" aria-live="polite">
+          <span>{error}</span>
         </div>
       )}
-    </>
+      {saved && !error && (
+        <p className="t-small" role="status" style={{ color: "var(--success-text)", margin: 0 }}>
+          Result saved.
+        </p>
+      )}
+
+      <div>
+        <button type="submit" className="btn btn-primary" disabled={saving || noteTooLong}>
+          {saving ? "Saving…" : "Save result"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// Sample outcome preview. Non-persistent: disabled inputs, no save, clearly
+// labeled as demo content. Never writes to the database.
+function SampleOutcomePreview({ card }: { card: PatientRequestCard }) {
+  const previewOutcome: FrontDeskOutcome | null =
+    card.status === "booked"
+      ? "appointment_booked"
+      : card.status === "no_appointment_booked"
+        ? "no_appointment_booked"
+        : card.status === "could_not_reach_patient"
+          ? "could_not_reach_patient"
+          : null;
+  const previewNote = card.sampleNote ?? "";
+
+  return (
+    <div className="ws-result-form" aria-label="Sample outcome preview">
+      <div className="ws-result-head">
+        <h3 className="t-h4">Outcome</h3>
+        <span className="badge badge-info">Sample preview · not saved</span>
+      </div>
+      <div className="ws-result-options" aria-hidden="true">
+        {FRONT_DESK_OUTCOMES.map((value) => (
+          <label className="check" key={value}>
+            <input type="radio" name={`sample-outcome-${card.id}`} value={value} checked={previewOutcome === value} disabled readOnly />
+            <span>{FRONT_DESK_OUTCOME_LABEL[value]}</span>
+          </label>
+        ))}
+      </div>
+      <div className="field">
+        <label htmlFor={`sample-note-${card.id}`}>Note</label>
+        <textarea
+          id={`sample-note-${card.id}`}
+          className="textarea"
+          value={previewNote}
+          disabled
+          readOnly
+        />
+        <span className="helper">Optional short note.</span>
+      </div>
+    </div>
   );
 }
 
@@ -359,26 +515,26 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     sampleNote: "Patient did not book an appointment.",
   },
   {
-    id: "sample-closed",
+    id: "sample-could-not-reach",
     callerPhone: "+1 (555) 010-1005",
     patientName: "Riley Nguyen",
     requestType: "Appointment question",
     preferredTime: "Afternoon",
-    summary: "Conversation closed without booking.",
+    summary: "Could not reach the patient.",
     latestMessage: "Thanks for following up.",
     latestMessageDirection: "inbound",
-    status: "closed",
+    status: "could_not_reach_patient",
     createdAt: "2026-05-22T16:20:00.000Z",
     lastActivityAt: "2026-05-22T16:44:00.000Z",
     timeline: [
       {
-        id: "sample-closed-1",
+        id: "sample-could-not-reach-1",
         direction: "outbound",
         body: "Checking in if you still want help booking.",
         at: "2026-05-22T16:35:00.000Z",
       },
       {
-        id: "sample-closed-2",
+        id: "sample-could-not-reach-2",
         direction: "inbound",
         body: "Thanks for following up.",
         at: "2026-05-22T16:44:00.000Z",
