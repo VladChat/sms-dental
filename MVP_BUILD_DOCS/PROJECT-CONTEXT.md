@@ -245,7 +245,7 @@ Verified:
 - deployed `db.ok` is true.
 - Supabase foundation migration has been applied.
 - Twilio inbound SMS webhook has been verified.
-- Twilio voice webhook route exists and is configured, but real voice testing is blocked until Twilio account trial restrictions are resolved.
+- Twilio voice webhook is configured and verified end-to-end (Twilio was upgraded to a Full account on 2026-05-26; see `SETUP-LOG.md`).
 
 ---
 
@@ -342,6 +342,10 @@ Always follow these rules:
 ---
 
 ## 16. Current Immediate Next Step
+
+> For the current real-vs-placeholder state and the prioritized next tasks, see
+> `MVP_BUILD_DOCS/PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md` (canonical). The
+> onboarding-alignment note below is retained for phone-strategy context.
 
 The immediate next product/technical step is to align onboarding around the current source-of-truth flow:
 
