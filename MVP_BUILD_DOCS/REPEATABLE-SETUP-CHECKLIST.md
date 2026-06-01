@@ -601,3 +601,20 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       strong-password generator on a field that already has text. Don't remount it.
 - [ ] Reset email Gmail row: don't repeat the brand in the subject (the sender name
       already shows it), and don't start the body/snippet with the subject text.
+
+---
+
+## Workspace / operational tables (reusable lessons)
+
+- [ ] If the UI shows a Save control on real data, it must really persist. Demo
+      sample data must be clearly labeled and must never write to the database.
+- [ ] Keep operational write endpoints clinic-scoped in SQL (`where id = $id and
+      clinic_id = $clinic`) so a session can only mutate its own clinic's rows;
+      reject demo/sample IDs explicitly.
+- [ ] Enforce field limits both client-side (counter + inline error) and
+      server-side; trim text and store empty optional text as NULL.
+- [ ] Prefer additive nullable columns + check constraints over a new table when an
+      existing row is the right home for the new state; map domain outcomes onto the
+      existing lifecycle status enum instead of inventing new statuses.
+- [ ] Separate real vs sample UI into distinct sections with a local Hide/Show that
+      only affects the sample layer; never let hiding samples hide real data.

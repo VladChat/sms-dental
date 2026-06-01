@@ -2505,3 +2505,66 @@ committed; no marketing image changes.
 **Commit hash / push:** `a83c99d` (`fix: polish auth login and reset flows`),
 pushed to `origin/main`. Metadata recorded by the follow-up
 `docs: record auth polish commit metadata`.
+
+---
+
+## 2026-06-01 — Workspace outcomes are saveable (real cards) + sample layer
+
+Made `/workspace` a real front-desk workspace: real patient request cards can save
+an outcome + note to Supabase; sample cards are a clearly separated, non-persistent
+training layer.
+
+**Migration:** `supabase/migrations/20260601000100_front_desk_outcome.sql` — adds to
+`public.patient_conversations`: `front_desk_outcome text`, `front_desk_note text`,
+`front_desk_outcome_at timestamptz` (all nullable). Check constraints:
+`front_desk_outcome` in (`appointment_booked`, `no_appointment_booked`,
+`could_not_reach_patient`) or null; `char_length(front_desk_note) <= 300` or null.
+Additive + idempotent; **applied to production via the Supabase Management API**
+(`POST /v1/projects/qfjpvbvfvhbtebwivcdc/database/query`, curl; token from local
+`.env.local`, never printed). Verified: 3 columns + 2 constraints present. No data
+reset/deleted/rewritten/backfilled.
+
+**Outcome → status mapping** (conversation status check is open|closed|booked|lost):
+`appointment_booked → booked`, `no_appointment_booked → lost`,
+`could_not_reach_patient → closed`. A saved outcome is the primary source of a real
+card's status; with no saved outcome we keep the conservative timeline/lifecycle
+derivation.
+
+**Server/API:** new `POST /api/workspace/outcome` (`{conversationId, outcome, note}`).
+Auth via `resolveAuthClinicAccess` (owner/admin/front_desk allowed). Update is
+clinic-scoped (`where id = $conversationId and clinic_id = $clinic`) so only the
+session's clinic conversations can change. Rejects sample IDs and non-UUIDs.
+Validates outcome enum + 300-char note server-side; trims note; empty note stored
+as NULL. Clear JSON errors, no internals leaked.
+
+**Data access:** `lib/db/front-desk.ts` reads the three outcome fields (still
+minimum-necessary; no owner/billing/compliance/Twilio/raw-payload exposure) and
+adds the clinic-scoped `saveFrontDeskOutcome` write helper. Shared outcome
+constants in `lib/workspace/outcome.ts`.
+
+**UI:** `Workspace.tsx` — real cards first; a separate, clearly labeled `Sample
+requests` section below with a stronger info banner and a `Hide` button. Hiding
+collapses the entire sample section to a compact strip `Sample requests hidden ·
+Show samples`; `Show samples` restores it (local state only; never affects real
+cards). Empty state `No real patient requests yet.` when no real cards and samples
+hidden. Real cards have a working outcome form (3 radios + `Note` with
+`Optional short note.` helper, `0/300` counter, `Note must be 300 characters or
+less.` validation, `Result saved.` success, loading state, inline recoverable
+error). Saved outcome/note prefill and persist across refresh. Sample cards show a
+**disabled, non-persistent** outcome preview labeled `Sample preview · not saved` —
+no active Save, no support modal. **The old `Please contact support to save
+workspace results.` modal is removed.**
+
+**Validation:** `npm run typecheck` pass; `npm run build` pass (`/api/workspace/outcome`
+emitted; `/workspace` builds).
+
+**Manual QA remaining (browser — operator):** load `/workspace` (samples by default);
+Hide → only compact strip; Show samples restores; real cards (when present) above
+samples and unaffected by Hide; save outcome+note on a real card; refresh and confirm
+it persists; note >300 rejected client + server; samples never write; old modal gone.
+
+**Side effects avoided:** no Twilio/Stripe/SMS; no auth/Vercel/env changes; only the
+additive migration touched the DB (no customer data altered); `.env.local` not
+committed; no secrets printed.
+
+**Commit hash / push:** recorded in the follow-up `docs: record workspace outcomes commit metadata`.
