@@ -2362,4 +2362,6 @@ changes; `sms_recovery_enabled` unchanged (false); `docs/` untouched;
 (Supabase Dashboard → Account → Access Tokens). It was used only for this
 auth-config change. Remove it from local `.env.local` afterward.
 
-**Commit hash / push:** recorded in the follow-up `docs: record auth email configuration commit metadata`.
+**Commit hash / push:** `0b05e18` (`fix: apply auth email configuration`),
+pushed to `origin/main`. Metadata recorded by follow-up
+`docs: record auth email configuration commit metadata`.
