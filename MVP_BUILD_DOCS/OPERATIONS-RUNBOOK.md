@@ -1569,3 +1569,26 @@ current password (throwaway client, no cookie disturbance) before
 `auth.updateUser`. No password logged. Independent of forgot/reset and
 login/logout. Billing, staff invites, phone provisioning, and A2P remain not
 connected (honest disabled states; see `PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md`).
+
+---
+
+## Platform admin console `/admin` — 2026-06-01
+
+Internal operator console (cross-tenant). Separate from clinic `/account` and
+front-desk `/workspace`. Full spec: `PLATFORM-ADMIN-CONSOLE-PLAN.md`.
+
+- **Enable access (required):** set `PLATFORM_ADMIN_EMAILS` in Vercel Production
+  env to a comma-separated allowlist (e.g. `allyexporter@gmail.com`) and redeploy.
+  Alternatively set `profiles.is_internal_admin = true` for the user via the
+  Supabase SQL editor. With neither set, `/admin` denies everyone.
+- **Sign in:** `/admin/login` (same Supabase Auth account). Non-admins who sign in
+  are immediately signed back out with "not authorized".
+- **Pages:** `/admin` (KPIs), `/admin/clinics` (search/filter), clinic detail +
+  `/events` diagnostics, `/admin/audit` (action log).
+- **Actions (audited):** deactivate/reactivate clinic, disable/enable SMS recovery
+  (enable requires active + assigned number + completed SMS approval; live sending
+  still also requires `SMS_RECOVERY_MODE=live` and respects opt-outs), internal
+  note, provisioning status. Billing / number purchase / A2P submission are shown
+  blocked until those integrations are built.
+- **Migration:** `20260601000200_admin_console.sql` (applied). Audit rows store
+  redacted snapshots only — no secrets/tokens/raw payloads.

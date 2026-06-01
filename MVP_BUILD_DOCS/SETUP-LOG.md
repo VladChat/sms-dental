@@ -2782,3 +2782,59 @@ email + `/admin/login` route/roadmap/next-prompt), `AUTH-AND-ACCESS-CONTROL.md`
 files changed). Commit hash / push: `20fcbc9`
 (`docs: require role-specific login entry points`), pushed to `origin/main`.
 Metadata recorded by the follow-up `docs: record role-specific login decision metadata`.
+
+---
+
+## 2026-06-01 — Platform admin console v1 (implemented)
+
+Built a real, guarded `/admin` console for the platform operator (separate from
+clinic `/account` and front-desk `/workspace`). Not a demo: every visible action
+works, and anything depending on missing infra is shown disabled with its
+prerequisite reason.
+
+**Migration** `supabase/migrations/20260601000200_admin_console.sql` — `admin_audit_events`
+table + `clinics.admin_internal_note / admin_provisioning_status / admin_provisioning_note`
+(additive, idempotent, check-constrained). **Applied to production via the
+Management API** (curl; token from local env, never printed) and verified (table +
+3 columns present). No data reset/backfilled.
+
+**Access:** `lib/auth/platform-admin.ts` `resolvePlatformAdmin()` — authorized iff
+authenticated email ∈ `PLATFORM_ADMIN_EMAILS` (env) OR `profiles.is_internal_admin`.
+Independent of clinic membership; clinic `owner`/`admin`/`front_desk` never grant
+platform access. Guarded route group `app/admin/(console)/*`; `/admin/login` is
+outside the group (no guard loop). `PLATFORM_ADMIN_EMAILS` parsing added to
+`lib/env.ts` (`getPlatformAdminEmails`, trimmed/lowercased, never logged);
+`.env.local.example` carries the name only.
+
+**Pages:** `/admin/login`, `/admin` (live KPIs), `/admin/clinics` (server-side
+search + active/SMS/phone filters), `/admin/clinics/[clinicId]` (detail + action
+panel), `/admin/clinics/[clinicId]/events` (redacted call/message diagnostics),
+`/admin/audit`. Read helpers: `lib/db/admin/{overview,clinics,events,audit}.ts`.
+
+**Real actions (audited via `admin_audit_events`):** deactivate / reactivate
+clinic; disable / enable SMS recovery (enable gated server-side on `is_active` +
+assigned number + `a2p_info_completed`, with a clear blocked reason otherwise);
+update internal note (≤1000); set provisioning status/note. Route:
+`POST /api/admin/clinics/[clinicId]/action` (`lib/db/admin/actions.ts`). Confirmations
+on destructive actions; idempotent; clinic-scoped.
+
+**Blocked (disabled with reason — never fake):** Stripe billing collect/start/pause;
+Twilio number purchase/release/reassign; A2P/carrier submission; live SMS mode.
+
+**Redaction:** phones masked to last 4; Twilio SIDs shown as a short tail; EIN +
+A2P rep shown as presence only; no raw payloads/tokens/secrets.
+
+**Validation:** `npm run typecheck` pass; `npm run build` pass (`/admin*` +
+`/api/admin/*` routes emitted). No lint/test scripts.
+
+**Operator action required (outside Git):** set
+`PLATFORM_ADMIN_EMAILS=allyexporter@gmail.com` in Vercel Production env and
+redeploy. Until set, `/admin` denies all access (by design). The owner must sign
+in at `/admin/login` with their Supabase Auth account for that email.
+
+**Side effects avoided:** no SMS, no emails, no Stripe calls, no Twilio
+number purchase/reservation/release, no users created; existing `/login`,
+`/account`, `/workspace`, setup, reset-password, webhooks unaffected;
+`.env.local` not committed; the real admin email is not hardcoded in source.
+
+**Commit hash / push:** recorded in the follow-up `docs: record platform admin console metadata`.

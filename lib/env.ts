@@ -128,6 +128,17 @@ export function getAppDomainsSafe():
   return { appBaseUrl, publicSiteUrl };
 }
 
+// Platform-admin allowlist (non-secret operator emails) from the environment.
+// Comma-separated; trimmed + lowercased; empty array when unset (=> `/admin`
+// denies all access). Never log the parsed values.
+export function getPlatformAdminEmails(): string[] {
+  const raw = process.env.PLATFORM_ADMIN_EMAILS ?? "";
+  return raw
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.length > 0);
+}
+
 // Returns the validated Resend API key plus the resolved sender from config.
 export function getSetupEmailEnv(): {
   resendApiKey: string;
