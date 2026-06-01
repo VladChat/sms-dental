@@ -394,4 +394,4 @@ admin guard, redacted diagnostics.
 ---
 
 ## 14. Commit
-Commit hash: `__FILL_AFTER_COMMIT__`
+Commit hash: `214b70f` (`docs: plan platform admin console`); pushed to `origin/main`.
