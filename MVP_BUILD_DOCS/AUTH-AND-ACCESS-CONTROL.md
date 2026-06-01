@@ -199,3 +199,27 @@ Intended next-phase completion:
 - enforce canonical route/API permission matrix end-to-end
 - deliver staff invite + acceptance lifecycle
 - activate front-desk-only workspace access with owner/admin restrictions
+
+## 12. Copy/UI cleanup follow-up (2026-05-31)
+
+This pass made focused UI/copy cleanup only; it did not add invite backend,
+invite email delivery, invite acceptance, or full RBAC completion.
+
+Changes:
+
+- `/setup/{token}` removed extra subtitle copy and standardized fallback error:
+  `Could not save your account setup. Please check your entries.`
+- `/account` header copy simplified to a short status line:
+  `Texting starts after approval.`
+- component file rename:
+  - `app/setup/[token]/_components/SecurityCard.tsx`
+  - -> `app/setup/[token]/_components/AccountAccessCard.tsx`
+- team access now separates real members from a distinct `Sample staff examples`
+  block, with local hide state stored in browser storage only.
+- team action labels are simplified to:
+  - owner row: `—`
+  - sample invited/active staff: `Remove`
+  - sample access removed staff: `Restore`
+
+`Restore` is a future invite-restart action. In this phase it does not mutate
+memberships.

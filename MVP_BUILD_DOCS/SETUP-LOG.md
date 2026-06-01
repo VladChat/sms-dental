@@ -1839,3 +1839,102 @@ Next steps:
 4. Add server-backed outcome mutation model/routes for workspace results.
 
 Operations docs update needed: yes
+
+---
+
+## 2026-05-31 — Remaining copy/UI cleanup (account + workspace)
+
+What changed:
+
+- Setup page copy cleanup:
+  - removed extra subtitle under `Account setup`
+  - kept `Account details` and `Account access`
+  - updated fallback error copy to:
+    `Could not save your account setup. Please check your entries.`
+  - updated shared setup shell heading from `Office setup` to `Account setup`
+- Account header cleanup:
+  - reduced subtitle to `Texting starts after approval.`
+- Component naming cleanup:
+  - renamed `app/setup/[token]/_components/SecurityCard.tsx`
+  - to `app/setup/[token]/_components/AccountAccessCard.tsx`
+  - updated imports accordingly
+- Login cleanup:
+  - removed unfinished `Need password reset help?` link
+- Team access sample block cleanup:
+  - real members remain in primary team table
+  - sample rows moved into separate `Sample staff examples` block
+  - sample block can be hidden/shown using browser-only `localStorage`
+  - sample action labels simplified to `Remove` / `Restore`
+  - owner action remains `—`
+- Workspace cleanup:
+  - conversation collapsed by default behind `View conversation`
+  - sample request copy made neutral (no medical complaint examples)
+  - result preview replaced with `Appointment booked?` -> `Yes` / `No`
+  - note field + `Save result` button retained as non-mutating UI
+  - removed customer-facing developer preview/future notes
+- Status label cleanup:
+  - `Needs reply` no longer surfaced as active derived label
+  - simplified visible labels toward: Needs follow-up, Waiting for patient,
+    Appointment booked, No appointment booked, Closed
+
+Why it changed:
+
+- simplify customer-facing copy
+- keep setup and account language consistent
+- separate real access rows from demo rows for safer interpretation
+- make workspace detail scanning faster and less noisy
+
+Files changed:
+
+- `app/setup/[token]/_components/ClinicForm.tsx`
+- `app/setup/[token]/_components/PageShell.tsx`
+- `app/page.tsx`
+- `app/setup/[token]/_components/BusinessProfile.tsx`
+- `app/setup/[token]/_components/AccountAccessCard.tsx` (renamed)
+- `app/setup/[token]/_components/TeamAccessCard.tsx`
+- `app/login/_components/LoginForm.tsx`
+- `app/workspace/_components/workspace-types.ts`
+- `app/workspace/_components/Workspace.tsx`
+- `app/globals.css`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/ONBOARDING-WORKFLOW-BUILD-GUIDE.md`
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md`
+- `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md`
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Side effects avoided:
+
+- no SMS sent
+- no outbound replies
+- no patient calls
+- no Twilio changes
+- no Stripe changes
+- no phone number purchase/reservation
+- no invite backend or invite email sending
+- no result persistence routes
+- no DB migrations
+- no sample data persisted
+- no secret/token/password logging
+- no public `docs/` marketing edits
+
+Commit hash: pending  
+Push status: pending
+
+Remaining risks:
+
+- Team invite lifecycle remains next-phase work
+- Workspace results remain non-persistent UI
+- Full RBAC completion remains next-phase work
+
+Next steps:
+
+1. Implement real team invite lifecycle (create/send/accept) with role-aware membership writes.
+2. Add server-backed workspace result persistence with guarded mutation endpoints.
+3. Complete route/API RBAC matrix enforcement for owner/front-desk/admin boundaries.
+
+Operations docs update needed: yes

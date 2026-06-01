@@ -221,3 +221,36 @@ Future analytics derivation (planned):
 Sample-domain policy:
 
 - any fake domains/emails in workspace examples must use `example.com` only.
+
+## 13. Workspace copy cleanup follow-up (2026-05-31)
+
+Focused cleanup in this pass:
+
+- sample request copy now uses neutral request types (cleaning appointment,
+  appointment question, reschedule request, callback request).
+- sample status labels are simplified for staff scanning:
+  - Needs follow-up
+  - Waiting for patient
+  - Appointment booked
+  - No appointment booked
+  - Closed
+- conversation is collapsed by default behind `View conversation`.
+- conversation remains message history only (patient/office + timestamps), with
+  no inferred outcomes.
+- sample result UI is now:
+  - `Appointment booked?` -> `Yes` / `No`
+  - `Note` (optional short note)
+  - `Save result` button
+
+Safety in this pass:
+
+- no workspace result persistence added
+- no result write routes added
+- no sample data storage
+- no analytics ingestion from sample UI
+
+Future analytics mapping (documented only):
+
+- `Yes` -> booked/recovered
+- `No` -> not booked/not recovered
+- blank -> still needs follow-up

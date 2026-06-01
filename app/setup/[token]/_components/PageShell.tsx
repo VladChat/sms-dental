@@ -11,7 +11,7 @@ export function PageShell({ children }: { children: ReactNode }) {
     >
       <header style={{ marginBottom: "var(--space-8)" }}>
         <p className="t-eyebrow">Missed Calls Dental</p>
-        <h1 className="t-h2" style={{ marginTop: "var(--space-2)" }}>Office setup</h1>
+        <h1 className="t-h2" style={{ marginTop: "var(--space-2)" }}>Account setup</h1>
       </header>
       {children}
     </main>

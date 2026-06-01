@@ -89,6 +89,8 @@ function SampleStateCallout() {
 }
 
 function RequestDetail({ card }: { card: PatientRequestCard }) {
+  const [showConversation, setShowConversation] = useState(false);
+
   return (
     <section className="card card-pad ws-detail" aria-labelledby="ws-detail-title">
       <header className="acct-section-head">
@@ -121,34 +123,40 @@ function RequestDetail({ card }: { card: PatientRequestCard }) {
         </div>
       )}
 
-      <div>
-        <h3 className="t-h4" style={{ marginBottom: "var(--space-3)" }}>Conversation</h3>
-        {card.timeline.length === 0 ? (
-          <p className="t-small" style={{ color: "var(--text-muted)" }}>No messages yet.</p>
-        ) : (
-          <div className="ws-timeline">
-            {card.timeline.map((t) => (
-              <div key={t.id} className={`ws-bubble${t.direction === "inbound" ? " is-inbound" : ""}`}>
-                <div className="ws-bubble-head">
-                  <span className="t-helper" style={{ fontWeight: 700, color: "var(--text-secondary)" }}>
-                    {t.direction === "inbound" ? "Patient" : "Your office"}
-                  </span>
-                  <span className="t-helper ws-meta">{formatDateTime(t.at)}</span>
-                </div>
-                <p className="t-small" style={{ margin: 0, color: "var(--text-body)", overflowWrap: "anywhere" }}>
-                  {t.body || NOT_PROVIDED}
-                </p>
+      <div className="ws-conversation">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowConversation((prev) => !prev)}
+        >
+          {showConversation ? "Hide conversation" : "View conversation"}
+        </button>
+        {showConversation && (
+          <div style={{ marginTop: "var(--space-4)" }}>
+            {card.timeline.length === 0 ? (
+              <p className="t-small" style={{ color: "var(--text-muted)" }}>No messages yet.</p>
+            ) : (
+              <div className="ws-timeline">
+                {card.timeline.map((t) => (
+                  <div key={t.id} className={`ws-bubble${t.direction === "inbound" ? " is-inbound" : ""}`}>
+                    <div className="ws-bubble-head">
+                      <span className="t-helper" style={{ fontWeight: 700, color: "var(--text-secondary)" }}>
+                        {t.direction === "inbound" ? "Patient" : "Your office"}
+                      </span>
+                      <span className="t-helper ws-meta">{formatDateTime(t.at)}</span>
+                    </div>
+                    <p className="t-small" style={{ margin: 0, color: "var(--text-body)", overflowWrap: "anywhere" }}>
+                      {t.body || NOT_PROVIDED}
+                    </p>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
 
       {card.isSample && <SampleResultPreview />}
-
-      <div className="ws-notes">
-        Internal notes and follow-up tools will appear here in a future update.
-      </div>
     </section>
   );
 }
@@ -164,58 +172,78 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function SampleResultPreview() {
-  const [result, setResult] = useState<string>("");
+  const [result, setResult] = useState<"" | "yes" | "no">("");
   const [note, setNote] = useState("");
+  const [showSaveModal, setShowSaveModal] = useState(false);
+
+  function onSave(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setShowSaveModal(true);
+  }
 
   return (
-    <section className="ws-result-preview" aria-labelledby="ws-result-preview-title">
-      <h3 id="ws-result-preview-title" className="t-h4">Result</h3>
-      <div className="ws-result-options">
-        <label className="check">
-          <input
-            type="radio"
-            name="sample_result"
-            value="Appointment booked"
-            checked={result === "Appointment booked"}
-            onChange={(event) => setResult(event.target.value)}
+    <>
+      <form className="ws-result-preview" aria-labelledby="ws-result-preview-title" onSubmit={onSave}>
+        <h3 id="ws-result-preview-title" className="t-h4">Appointment booked?</h3>
+        <div className="ws-result-options">
+          <label className="check">
+            <input
+              type="radio"
+              name="sample_result"
+              value="yes"
+              checked={result === "yes"}
+              onChange={(event) => setResult(event.target.value as "yes")}
+            />
+            <span>Yes</span>
+          </label>
+          <label className="check">
+            <input
+              type="radio"
+              name="sample_result"
+              value="no"
+              checked={result === "no"}
+              onChange={(event) => setResult(event.target.value as "no")}
+            />
+            <span>No</span>
+          </label>
+        </div>
+        <div className="field">
+          <label htmlFor="sample-result-note">Note</label>
+          <textarea
+            id="sample-result-note"
+            className="textarea"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Optional short note"
           />
-          <span>Appointment booked</span>
-        </label>
-        <label className="check">
-          <input
-            type="radio"
-            name="sample_result"
-            value="No appointment booked"
-            checked={result === "No appointment booked"}
-            onChange={(event) => setResult(event.target.value)}
-          />
-          <span>No appointment booked</span>
-        </label>
-        <label className="check">
-          <input
-            type="radio"
-            name="sample_result"
-            value="Could not reach patient"
-            checked={result === "Could not reach patient"}
-            onChange={(event) => setResult(event.target.value)}
-          />
-          <span>Could not reach patient</span>
-        </label>
-      </div>
-      <div className="field">
-        <label htmlFor="sample-result-note">Note</label>
-        <textarea
-          id="sample-result-note"
-          className="textarea"
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          placeholder="Optional short note"
-        />
-      </div>
-      <p className="t-helper" style={{ margin: 0 }}>
-        Preview only. Results are not saved in this phase.
-      </p>
-    </section>
+        </div>
+        <div>
+          <button type="submit" className="btn btn-primary">Save result</button>
+        </div>
+      </form>
+
+      {showSaveModal && (
+        <div className="acct-modal-backdrop" role="presentation" onClick={() => setShowSaveModal(false)}>
+          <div
+            className="acct-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ws-result-placeholder-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="ws-result-placeholder-title" className="t-h4">Result</h3>
+            <p className="t-small" style={{ margin: 0 }}>
+              Please contact support to save workspace results.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowSaveModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -247,10 +275,10 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     id: "sample-waiting-for-patient",
     callerPhone: "+1 (555) 010-1002",
     patientName: "Avery Chen",
-    requestType: "Tooth pain consult",
+    requestType: "Appointment question",
     preferredTime: "Next available",
     summary: "Office replied and is waiting for confirmation.",
-    latestMessage: "We can help. Does tomorrow at 10:00 AM work for you?",
+    latestMessage: "Does tomorrow at 10:00 AM work for you?",
     latestMessageDirection: "outbound",
     status: "waiting_for_patient",
     createdAt: "2026-05-24T13:10:00.000Z",
@@ -259,13 +287,13 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
       {
         id: "sample-waiting-for-patient-1",
         direction: "inbound",
-        body: "I have tooth pain and need an appointment.",
+        body: "I have an appointment question before scheduling.",
         at: "2026-05-24T13:18:00.000Z",
       },
       {
         id: "sample-waiting-for-patient-2",
         direction: "outbound",
-        body: "We can help. Does tomorrow at 10:00 AM work for you?",
+        body: "Does tomorrow at 10:00 AM work for you?",
         at: "2026-05-24T13:22:00.000Z",
       },
     ],
@@ -276,10 +304,10 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     id: "sample-booked",
     callerPhone: "+1 (555) 010-1003",
     patientName: "Taylor Brooks",
-    requestType: "New patient exam",
+    requestType: "Reschedule request",
     preferredTime: "Tuesday morning",
     summary: "Appointment confirmed.",
-    latestMessage: "Great, please put me down for Tuesday morning.",
+    latestMessage: "Great, Tuesday morning works for me.",
     latestMessageDirection: "inbound",
     status: "booked",
     createdAt: "2026-05-23T15:00:00.000Z",
@@ -288,13 +316,13 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
       {
         id: "sample-booked-1",
         direction: "outbound",
-        body: "We have Tuesday at 9:00 AM available.",
+        body: "We can move your visit to Tuesday at 9:00 AM.",
         at: "2026-05-23T15:11:00.000Z",
       },
       {
         id: "sample-booked-2",
         direction: "inbound",
-        body: "Great, please put me down for Tuesday morning.",
+        body: "Great, Tuesday morning works for me.",
         at: "2026-05-23T15:16:00.000Z",
       },
     ],
@@ -305,7 +333,7 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     id: "sample-no-book",
     callerPhone: "+1 (555) 010-1004",
     patientName: "Morgan Patel",
-    requestType: "Whitening consult",
+    requestType: "Callback request",
     preferredTime: "Not provided",
     summary: "Patient declined to schedule.",
     latestMessage: "Thanks, but I’m not ready to book yet.",
@@ -317,7 +345,7 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
       {
         id: "sample-no-book-1",
         direction: "outbound",
-        body: "Would you like to schedule a whitening consult this week?",
+        body: "Would you like us to call back to help schedule?",
         at: "2026-05-23T11:12:00.000Z",
       },
       {
@@ -331,22 +359,28 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     sampleNote: "Patient did not book an appointment.",
   },
   {
-    id: "sample-could-not-reach",
+    id: "sample-closed",
     callerPhone: "+1 (555) 010-1005",
     patientName: "Riley Nguyen",
-    requestType: "Follow-up call",
+    requestType: "Appointment question",
     preferredTime: "Afternoon",
-    summary: "No contact after follow-up attempts.",
-    latestMessage: "Left voicemail after two call attempts.",
-    latestMessageDirection: "outbound",
-    status: "could_not_reach_patient",
+    summary: "Conversation closed without booking.",
+    latestMessage: "Thanks for following up.",
+    latestMessageDirection: "inbound",
+    status: "closed",
     createdAt: "2026-05-22T16:20:00.000Z",
     lastActivityAt: "2026-05-22T16:44:00.000Z",
     timeline: [
       {
-        id: "sample-could-not-reach-1",
+        id: "sample-closed-1",
         direction: "outbound",
-        body: "Tried calling and left a voicemail.",
+        body: "Checking in if you still want help booking.",
+        at: "2026-05-22T16:35:00.000Z",
+      },
+      {
+        id: "sample-closed-2",
+        direction: "inbound",
+        body: "Thanks for following up.",
         at: "2026-05-22T16:44:00.000Z",
       },
     ],

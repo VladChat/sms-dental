@@ -6,7 +6,7 @@ import { BusinessProfileForm } from "./BusinessProfileForm";
 import { SmsApprovalForm } from "./SmsApprovalForm";
 import { AssignedNumberCard } from "./AssignedNumberCard";
 import { BillingCard } from "./BillingCard";
-import { AccountAccessCard } from "./SecurityCard";
+import { AccountAccessCard } from "./AccountAccessCard";
 import { TeamAccessCard } from "./TeamAccessCard";
 import type {
   BusinessProfileData,
@@ -58,9 +58,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
       <header className="acct-header">
         <p className="t-eyebrow">{clinicName}</p>
         <h1 className="t-h2" style={{ marginTop: "var(--space-2)" }}>Account</h1>
-        <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
-          Manage your account details and finish setup. Texting starts after approval.
-        </p>
+        <p className="t-small" style={{ marginTop: "var(--space-2)" }}>Texting starts after approval.</p>
       </header>
 
       <div className="acct-layout">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type TeamMember = {
   email: string;
@@ -18,20 +18,23 @@ type SampleMember = {
   email: string;
   access: string;
   status: string;
-  sample: true;
+  action: "Remove" | "Restore";
 };
 
 const SAMPLE_MEMBERS: SampleMember[] = [
-  { email: "frontdesk@example.com", access: "Front desk", status: "Invited", sample: true },
-  { email: "reception@example.com", access: "Front desk", status: "Active", sample: true },
-  { email: "oldstaff@example.com", access: "Front desk", status: "Access removed", sample: true },
+  { email: "frontdesk@example.com", access: "Front desk", status: "Invited", action: "Remove" },
+  { email: "reception@example.com", access: "Front desk", status: "Active", action: "Remove" },
+  { email: "oldstaff@example.com", access: "Front desk", status: "Access removed", action: "Restore" },
 ];
+const SAMPLE_VISIBILITY_KEY = "mcd_team_samples_hidden";
 
 export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showTeamActionModal, setShowTeamActionModal] = useState(false);
+  const [samplesHidden, setSamplesHidden] = useState(false);
 
   const workspaceLink = useMemo(() => {
     const base = (appBaseUrl || "https://app.missedcallsdental.com").replace(/\/+$/, "");
@@ -65,7 +68,13 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
     return rows;
   }, [members, normalizedOwnerEmail]);
 
-  const hasRealStaff = realMembers.some((member) => member.role !== "owner");
+  useEffect(() => {
+    try {
+      setSamplesHidden(window.localStorage.getItem(SAMPLE_VISIBILITY_KEY) === "1");
+    } catch {
+      setSamplesHidden(false);
+    }
+  }, []);
 
   async function copyWorkspaceLink() {
     setCopyMessage(null);
@@ -94,6 +103,24 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
       return;
     }
     setShowInviteModal(true);
+  }
+
+  function hideSampleBlock() {
+    setSamplesHidden(true);
+    try {
+      window.localStorage.setItem(SAMPLE_VISIBILITY_KEY, "1");
+    } catch {
+      // no-op when browser storage is unavailable
+    }
+  }
+
+  function showSampleBlock() {
+    setSamplesHidden(false);
+    try {
+      window.localStorage.removeItem(SAMPLE_VISIBILITY_KEY);
+    } catch {
+      // no-op when browser storage is unavailable
+    }
   }
 
   return (
@@ -188,21 +215,66 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
                   <td className="t-mono">{member.email}</td>
                   <td>{roleLabel(member.role)}</td>
                   <td>{member.status === "active" ? "Active" : member.status}</td>
-                  <td>—</td>
+                  <td>{teamActionLabel(member)}</td>
                 </tr>
               ))}
-              {!hasRealStaff &&
-                SAMPLE_MEMBERS.map((sample) => (
-                  <tr key={sample.email}>
-                    <td className="t-mono">{sample.email}</td>
-                    <td>{sample.access}</td>
-                    <td>{sample.status}</td>
-                    <td><span className="badge badge-info">Sample</span></td>
-                  </tr>
-                ))}
             </tbody>
           </table>
         </div>
+
+        {!samplesHidden ? (
+          <div className="acct-sample-block" style={{ marginTop: "var(--space-5)" }}>
+            <div className="acct-sample-head">
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}>
+                <h4 className="t-h4">Sample staff examples</h4>
+                <span className="badge badge-info">Sample</span>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={hideSampleBlock}>
+                Hide
+              </button>
+            </div>
+            <p className="t-small" style={{ margin: "var(--space-2) 0 0" }}>
+              These examples show how staff access works.
+            </p>
+
+            <div className="acct-team-table-wrap" style={{ marginTop: "var(--space-4)" }}>
+              <table className="acct-team-table">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Access</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {SAMPLE_MEMBERS.map((sample) => (
+                    <tr key={sample.email}>
+                      <td className="t-mono">{sample.email}</td>
+                      <td>{sample.access}</td>
+                      <td>{sample.status}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setShowTeamActionModal(true)}
+                        >
+                          {sample.action}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop: "var(--space-4)" }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={showSampleBlock}>
+              Show sample staff examples
+            </button>
+          </div>
+        )}
       </section>
 
       {showInviteModal && (
@@ -216,10 +288,32 @@ export function TeamAccessCard({ appBaseUrl, ownerEmail, members }: Props) {
           >
             <h3 id="team-invite-placeholder-title" className="t-h4">Team access</h3>
             <p className="t-small" style={{ margin: 0 }}>
-              Staff invitations will be available after team access is connected.
+              Please contact support to add staff access.
             </p>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowInviteModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTeamActionModal && (
+        <div className="acct-modal-backdrop" role="presentation" onClick={() => setShowTeamActionModal(false)}>
+          <div
+            className="acct-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="team-action-placeholder-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="team-action-placeholder-title" className="t-h4">Team access</h3>
+            <p className="t-small" style={{ margin: 0 }}>
+              Please contact support to update staff access.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowTeamActionModal(false)}>
                 Close
               </button>
             </div>
@@ -234,4 +328,10 @@ function roleLabel(role: "owner" | "front_desk" | "admin"): string {
   if (role === "owner") return "Owner";
   if (role === "front_desk") return "Front desk";
   return "Admin";
+}
+
+function teamActionLabel(member: TeamMember): string {
+  if (member.role === "owner") return "—";
+  if (member.status === "active") return "Remove";
+  return "Restore";
 }
