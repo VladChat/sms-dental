@@ -102,6 +102,16 @@ export type AdminClinicDetail = {
   stripeSubscriptionPresent: boolean;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  // Real saved payment-method presence + safe metadata (Stripe sandbox/test).
+  // Payment-method presence is keyed off stripePaymentMethodId, NOT the customer
+  // id. The payment-method id is an object reference, not a secret.
+  stripePaymentMethodPresent: boolean;
+  stripePaymentMethodId: string | null;
+  paymentMethodBrand: string | null;
+  paymentMethodLast4: string | null;
+  paymentMethodExpMonth: number | null;
+  paymentMethodExpYear: number | null;
+  paymentMethodAddedAt: string | null;
   // phone
   localNumberStatus: string;
   assignedPhoneMasked: string | null;

@@ -12,8 +12,13 @@ import { listProfilesByIds } from "../../lib/db/profiles";
 import { SetupInvalid } from "../setup/[token]/_components/SetupInvalid";
 import { ClinicForm } from "../setup/[token]/_components/ClinicForm";
 import { BusinessProfile, type BusinessProfileData } from "../setup/[token]/_components/BusinessProfile";
+import type {
+  PaymentMethodSetupResult,
+  PaymentMethodSummary,
+} from "../setup/[token]/_components/account-types";
 import { PageShell } from "../setup/[token]/_components/PageShell";
 import { phoneAreaCode } from "../../lib/twilio/numbers";
+import type { ClinicOnboardingRow } from "../../lib/db/clinics";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,9 +32,54 @@ export const metadata: Metadata = {
 const TRIAL_DAYS = 21;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Real saved-payment-method signal: keyed strictly off stripe_payment_method_id,
+// never the customer id or billing_status. Returns the safe summary too.
+function buildBilling(
+  clinic: ClinicOnboardingRow,
+  trialDaysRemaining: number,
+): BusinessProfileData["billing"] {
+  const hasPaymentMethod = Boolean(clinic.stripe_payment_method_id);
+  const paymentMethod: PaymentMethodSummary | null = hasPaymentMethod
+    ? {
+        brand: clinic.stripe_payment_method_brand,
+        last4: clinic.stripe_payment_method_last4,
+        expMonth: clinic.stripe_payment_method_exp_month,
+        expYear: clinic.stripe_payment_method_exp_year,
+        addedAt: clinic.stripe_payment_method_added_at
+          ? clinic.stripe_payment_method_added_at.toISOString()
+          : null,
+      }
+    : null;
+  return {
+    hasPaymentMethod,
+    paymentMethod,
+    trialDaysRemaining,
+    trialEnded: trialDaysRemaining <= 0,
+  };
+}
+
+// Parse the section / payment_method_setup query params from a Stripe return.
+function parseAccountSearch(sp: Record<string, string | string[] | undefined>): {
+  initialSection: string | null;
+  paymentMethodSetup: PaymentMethodSetupResult;
+} {
+  const sectionRaw = sp.section;
+  const section = (Array.isArray(sectionRaw) ? sectionRaw[0] : sectionRaw) ?? null;
+  const setupRaw = sp.payment_method_setup;
+  const setup = Array.isArray(setupRaw) ? setupRaw[0] : setupRaw;
+  const paymentMethodSetup: PaymentMethodSetupResult =
+    setup === "success" ? "success" : setup === "cancelled" ? "cancelled" : null;
+  return { initialSection: section, paymentMethodSetup };
+}
+
 // `/account` now prefers real authenticated session + clinic membership.
 // The setup-token cookie path is kept as temporary fallback during rollout.
-export default async function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { initialSection, paymentMethodSetup } = parseAccountSearch(await searchParams);
   // Primary access path: real authenticated session + clinic membership.
   const access = await resolveAuthClinicAccess();
   if (access.ok) {
@@ -78,6 +128,8 @@ export default async function AccountPage() {
       loginEmail: access.userEmail ?? clinic.owner_contact_email ?? "",
       publicBaseUrl,
       slug: clinic.slug,
+      initialSection,
+      paymentMethodSetup,
       businessProfile: {
         name: clinic.name,
         mainPhone: clinic.main_phone ?? "",
@@ -107,13 +159,7 @@ export default async function AccountPage() {
         areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
         postalCode: clinic.postal_code,
       },
-      billing: {
-        hasPaymentMethod:
-          Boolean(clinic.stripe_customer_id) ||
-          ["trialing", "active", "past_due"].includes(clinic.billing_status),
-        trialDaysRemaining,
-        trialEnded: trialDaysRemaining <= 0,
-      },
+      billing: buildBilling(clinic, trialDaysRemaining),
       security: {
         passwordEnabled: true,
       },
@@ -181,6 +227,8 @@ export default async function AccountPage() {
     loginEmail: setupRequest.owner_email,
     publicBaseUrl,
     slug: clinic.slug,
+    initialSection,
+    paymentMethodSetup,
     businessProfile: {
       name: clinic.name,
       mainPhone: clinic.main_phone ?? "",
@@ -210,13 +258,7 @@ export default async function AccountPage() {
       areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
       postalCode: clinic.postal_code,
     },
-    billing: {
-      hasPaymentMethod:
-        Boolean(clinic.stripe_customer_id) ||
-        ["trialing", "active", "past_due"].includes(clinic.billing_status),
-      trialDaysRemaining,
-      trialEnded: trialDaysRemaining <= 0,
-    },
+    billing: buildBilling(clinic, trialDaysRemaining),
     security: {
       passwordEnabled: true,
     },

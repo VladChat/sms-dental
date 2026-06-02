@@ -1,17 +1,61 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { StatusBadge, StatusRow } from "./AccountUI";
+import type { PaymentMethodSummary, PaymentMethodSetupResult } from "./account-types";
 
 export function BillingCard({
   hasPaymentMethod,
+  paymentMethod,
   trialDaysRemaining,
   trialEnded,
+  paymentMethodSetup,
 }: {
   hasPaymentMethod: boolean;
+  paymentMethod: PaymentMethodSummary | null;
   trialDaysRemaining: number;
   trialEnded: boolean;
+  paymentMethodSetup: PaymentMethodSetupResult;
 }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const dayLabel = `${trialDaysRemaining} ${trialDaysRemaining === 1 ? "day" : "days"}`;
+
+  // Start (or replace) the Stripe-hosted payment method via mode:"setup" Checkout.
+  // The browser is redirected to Stripe; no card fields are collected in this UI.
+  async function startSetup() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/account/billing/payment-method/setup", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; url?: string; error?: { message?: string } }
+        | null;
+      if (!res.ok || !json?.ok || !json.url) {
+        setError(json?.error?.message ?? "Could not start payment setup. Please try again.");
+        setLoading(false);
+        return;
+      }
+      // Keep the loading state while the full-page redirect happens.
+      window.location.href = json.url;
+    } catch {
+      setError("Could not start payment setup. Please try again.");
+      setLoading(false);
+    }
+  }
+
+  const expLabel =
+    paymentMethod?.expMonth && paymentMethod?.expYear
+      ? `${String(paymentMethod.expMonth).padStart(2, "0")}/${paymentMethod.expYear}`
+      : null;
+  const brandLabel = paymentMethod?.brand ? titleCase(paymentMethod.brand) : "Card";
 
   return (
     <div style={{ display: "grid", gap: "var(--space-5)" }}>
@@ -39,6 +83,28 @@ export function BillingCard({
         </StatusRow>
       </div>
 
+      {/* Returning from Stripe-hosted setup. Success is shown only when a real
+          payment method is present — never inferred from the query param alone. */}
+      {paymentMethodSetup === "success" && hasPaymentMethod && (
+        <div className="alert alert-success" role="status" aria-live="polite">
+          <span>Payment method added. You won&apos;t be charged today.</span>
+        </div>
+      )}
+      {paymentMethodSetup === "success" && !hasPaymentMethod && (
+        <div className="alert alert-info" role="status" aria-live="polite" style={{ alignItems: "center" }}>
+          <span style={{ flex: 1 }}>Payment setup is being confirmed. This can take a few seconds.</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => router.refresh()}>
+            Refresh
+          </button>
+        </div>
+      )}
+      {paymentMethodSetup === "cancelled" && (
+        <div className="alert alert-info" role="status" aria-live="polite">
+          <span>Payment setup was cancelled. No payment method was added.</span>
+        </div>
+      )}
+
+      {/* Saved-method summary, or the empty-state shell. */}
       <div className="acct-pay-shell">
         <span className="acct-pay-shell-icon" aria-hidden="true">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -46,22 +112,49 @@ export function BillingCard({
             <path d="M2 10h20" />
           </svg>
         </span>
-        <span className="t-small" style={{ color: "var(--text-muted)" }}>
-          {hasPaymentMethod ? "Payment method on file" : "No payment method on file"}
-        </span>
+        {hasPaymentMethod && paymentMethod ? (
+          <span style={{ display: "grid", gap: "2px" }}>
+            <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
+              {brandLabel} •••• {paymentMethod.last4 ?? "••••"}
+            </span>
+            {expLabel && (
+              <span className="t-helper" style={{ color: "var(--text-muted)" }}>Expires {expLabel}</span>
+            )}
+          </span>
+        ) : (
+          <span className="t-small" style={{ color: "var(--text-muted)" }}>No payment method on file</span>
+        )}
       </div>
 
-      {/* Stripe is not wired yet. Show an honest, disabled state instead of a
-          button that opens a fake payment modal. No Stripe call is made. */}
       <div style={{ display: "grid", gap: "var(--space-2)" }}>
-        <button type="button" className="btn btn-primary" disabled aria-disabled="true">
-          Payment setup not connected yet
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={startSetup}
+          disabled={loading}
+          aria-busy={loading}
+        >
+          {loading
+            ? "Starting secure setup…"
+            : hasPaymentMethod
+              ? "Update payment method"
+              : "Add payment method"}
         </button>
         <p className="t-small" style={{ color: "var(--text-muted)" }}>
-          Secure payment setup will be connected next. You will not be charged until
-          SMS recovery is active and your trial period ends.
+          Secure payment setup is handled by Stripe. You will not be charged today.
         </p>
+        {error && (
+          <div className="alert alert-error" role="alert" aria-live="polite">
+            <span>{error}</span>
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+// Title-case a Stripe card brand token (e.g. "visa" -> "Visa", "amex" -> "Amex").
+function titleCase(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

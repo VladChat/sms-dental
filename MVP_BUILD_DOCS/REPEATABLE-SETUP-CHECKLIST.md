@@ -631,3 +631,34 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       page, so a stale tab/re-POST cannot duplicate accounts or overwrite passwords.
 - [ ] Completed-state UI shows no password fields (so password managers do not see
       a new-password form) and offers a single Sign in action.
+
+---
+
+## Stripe payment-method collection (sandbox-first, reusable lessons)
+
+- [ ] Collect "save card for later" with a **Checkout Session in `mode:"setup"`**, not a
+      custom card form and not a PaymentIntent. No charge/subscription/invoice is created.
+- [ ] **Never pass `payment_method_types`** — omit it so dynamic payment methods (managed
+      in the Dashboard) apply.
+- [ ] Gate the server Stripe client to **test/sandbox keys** for pre-billing milestones:
+      refuse to initialize unless the secret key starts with `sk_test_`/`rk_test_`. This
+      makes accidental live charges impossible from that code path.
+- [ ] Keep webhook **signature verification** separate from the API-call client (two
+      helpers), and keep the secret key server-only; never expose it to the browser or put
+      it in committed runtime config.
+- [ ] Derive `hasPaymentMethod` from a **saved payment-method id**, not the customer id or
+      billing status (a customer can exist with no method).
+- [ ] Store only **safe metadata** (payment method id, brand, last4, exp month/year,
+      timestamps) — never raw card number/CVC. Add CHECK constraints (month 1..12, year
+      range, last4 length).
+- [ ] Process setup completion from BOTH `checkout.session.completed` (mode=setup) and
+      `setup_intent.succeeded` for resilience; key idempotency off the webhook event id and
+      make the DB write an idempotent UPDATE.
+- [ ] Carry `clinic_id` (or tenant id) only in Stripe **metadata / client_reference_id**;
+      the setup route must take no tenant id from the client and derive it from the session.
+- [ ] UI return states: open the Billing section via `?section=…`, show success only when
+      the method is actually present (never infer from the query param), and provide a
+      Refresh affordance for the brief webhook-processing delay.
+- [ ] Locally, forward the webhook (`stripe listen --forward-to …/api/webhooks/stripe`) or
+      the saved method never appears; verify the test Dashboard shows only a Customer +
+      PaymentMethod (no Subscription/Invoice/charge).

@@ -94,6 +94,15 @@ export type ClinicOnboardingRow = ClinicRow & {
   trial_ends_at: Date | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  // Saved payment method (Stripe sandbox/test mode). Safe, non-secret metadata
+  // only — Stripe holds the sensitive card data. No raw card number/CVC here.
+  stripe_payment_method_id: string | null;
+  stripe_payment_method_brand: string | null;
+  stripe_payment_method_last4: string | null;
+  stripe_payment_method_exp_month: number | null;
+  stripe_payment_method_exp_year: number | null;
+  stripe_payment_method_added_at: Date | null;
+  stripe_payment_method_updated_at: Date | null;
 };
 
 // Column list shared by every SELECT/RETURNING that builds a
@@ -109,6 +118,9 @@ const CLINIC_COLS = [
   "a2p_rep_email", "a2p_rep_phone", "a2p_authorized", "a2p_info_completed",
   "local_number_status", "sms_status", "billing_status",
   "trial_started_at", "trial_ends_at", "stripe_customer_id", "stripe_subscription_id",
+  "stripe_payment_method_id", "stripe_payment_method_brand", "stripe_payment_method_last4",
+  "stripe_payment_method_exp_month", "stripe_payment_method_exp_year",
+  "stripe_payment_method_added_at", "stripe_payment_method_updated_at",
 ] as const;
 
 // Look up the active clinic that owns a given E.164 phone number.
@@ -380,5 +392,60 @@ export async function setClinicSetupStatus(
     update public.clinics
     set setup_status = ${status}
     where id = ${id}
+  `;
+}
+
+/**
+ * Save the Stripe Customer id for a clinic. Used the first time we create a
+ * sandbox/test customer during payment-method setup. Does not change billing
+ * status, subscriptions, or any other lifecycle state.
+ */
+export async function updateStripeCustomerId(
+  clinicId: string,
+  stripeCustomerId: string,
+): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.clinics
+    set stripe_customer_id = ${stripeCustomerId}
+    where id = ${clinicId}
+  `;
+}
+
+// Safe, non-secret payment-method metadata persisted after Stripe-hosted setup.
+// No raw card number, CVC, or full card data — Stripe retains the sensitive data.
+export type StripePaymentMethodData = {
+  // Set the customer id too when known (e.g. created during setup).
+  stripeCustomerId?: string | null;
+  paymentMethodId: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+};
+
+/**
+ * Persist the saved payment-method metadata for a clinic. Idempotent: re-running
+ * with the same values produces the same row (used from the idempotent webhook).
+ * Sets stripe_payment_method_added_at once (first save) and bumps _updated_at on
+ * every save. Never enables billing, subscriptions, charges, or SMS recovery.
+ */
+export async function saveStripePaymentMethodForClinic(
+  clinicId: string,
+  data: StripePaymentMethodData,
+): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.clinics
+    set
+      stripe_customer_id = coalesce(${data.stripeCustomerId ?? null}, stripe_customer_id),
+      stripe_payment_method_id = ${data.paymentMethodId},
+      stripe_payment_method_brand = ${data.brand ?? null},
+      stripe_payment_method_last4 = ${data.last4 ?? null},
+      stripe_payment_method_exp_month = ${data.expMonth ?? null},
+      stripe_payment_method_exp_year = ${data.expYear ?? null},
+      stripe_payment_method_added_at = coalesce(stripe_payment_method_added_at, now()),
+      stripe_payment_method_updated_at = now()
+    where id = ${clinicId}
   `;
 }

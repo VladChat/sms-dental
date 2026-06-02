@@ -33,8 +33,9 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const clinicName = biz.name || "Your clinic";
 
   // Phone number is the customer's primary resource, so it is first and opens by
-  // default. We do NOT auto-jump to the first incomplete section.
-  const [active, setActive] = useState<SectionId>("phone");
+  // default. We do NOT auto-jump to the first incomplete section. The one
+  // exception: an explicit ?section=… (e.g. returning from Stripe billing setup).
+  const [active, setActive] = useState<SectionId>(() => resolveInitialSection(data.initialSection));
 
   const phoneStatus = phoneSectionStatus(data.number.localNumberStatus, smsStatus, hasPaymentMethod);
   const bizStatus: StatusKind = bizDone ? "complete" : "needs_setup";
@@ -176,8 +177,10 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
             >
               <BillingCard
                 hasPaymentMethod={hasPaymentMethod}
+                paymentMethod={data.billing.paymentMethod}
                 trialDaysRemaining={data.billing.trialDaysRemaining}
                 trialEnded={data.billing.trialEnded}
+                paymentMethodSetup={data.paymentMethodSetup ?? null}
               />
             </Section>
           )}
@@ -210,6 +213,19 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
       </div>
     </main>
   );
+}
+
+const VALID_SECTIONS: SectionId[] = [
+  "phone", "business", "sms", "billing", "account_access", "team_access",
+];
+
+// Map an optional ?section=… value to a known section. Defaults to "phone"
+// (the customer's primary resource) for anything missing or unrecognized.
+function resolveInitialSection(section: string | null | undefined): SectionId {
+  if (section && (VALID_SECTIONS as string[]).includes(section)) {
+    return section as SectionId;
+  }
+  return "phone";
 }
 
 function stripCompleted(b: BusinessProfileData["businessProfile"]): BusinessProfileFields {

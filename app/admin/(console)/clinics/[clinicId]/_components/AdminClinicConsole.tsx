@@ -59,6 +59,16 @@ const PHONE_ROLE_LABELS: Record<string, string> = { office_texting: "Office text
 function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString() : "—";
 }
+// Card brand label, e.g. "visa" -> "Visa". Falls back to "Card" when absent.
+function pmBrandLabel(brand: string | null): string {
+  if (!brand) return "Card";
+  return brand.charAt(0).toUpperCase() + brand.slice(1);
+}
+// "MM/YYYY" expiration label, or null when either part is missing.
+function pmExpLabel(month: number | null, year: number | null): string | null {
+  if (!month || !year) return null;
+  return `${String(month).padStart(2, "0")}/${year}`;
+}
 function fmtDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
 }
@@ -302,7 +312,17 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
               <Badge tone={billingTone(d.billingStatus)}>{billingStatusLabel(d.billingStatus)}</Badge>
             </div>
             <dl className="adm-rows">
-              <Row label="Payment method"><BoolBadge value={d.stripeCustomerPresent} yes="On file" no="None" /></Row>
+              <Row label="Payment method">
+                {d.stripePaymentMethodPresent ? <Badge tone="success">Added</Badge> : <Badge tone="neutral">None</Badge>}
+              </Row>
+              {d.stripePaymentMethodPresent && (
+                <Row label="Card">
+                  <span className="t-mono">{pmBrandLabel(d.paymentMethodBrand)} •••• {d.paymentMethodLast4 ?? "••••"}</span>
+                  {pmExpLabel(d.paymentMethodExpMonth, d.paymentMethodExpYear) && (
+                    <span className="t-small" style={{ color: "var(--text-muted)" }}> · Exp {pmExpLabel(d.paymentMethodExpMonth, d.paymentMethodExpYear)}</span>
+                  )}
+                </Row>
+              )}
               <Row label="Subscription"><BoolBadge value={d.stripeSubscriptionPresent} yes="Present" no="None" /></Row>
               <Row label="Trial">{d.trialStartedAt || d.trialEndsAt ? `${fmtDate(d.trialStartedAt)} → ${fmtDate(d.trialEndsAt)}` : "—"}</Row>
             </dl>
@@ -401,6 +421,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 <Row label="Country / timezone">{d.country} · {d.timezone ?? "—"}</Row>
                 <Row label="Setup status (raw)"><span className="t-mono">{d.setupStatus}</span></Row>
                 <Row label="Stripe customer ID">{d.stripeCustomerId ? <span className="t-mono">{d.stripeCustomerId}</span> : <Muted>Not available</Muted>}</Row>
+                <Row label="Stripe payment method ID">{d.stripePaymentMethodId ? <span className="t-mono">{d.stripePaymentMethodId}</span> : <Muted>Not available</Muted>}</Row>
                 <Row label="Stripe subscription ID">{d.stripeSubscriptionId ? <span className="t-mono">{d.stripeSubscriptionId}</span> : <Muted>Not available</Muted>}</Row>
                 {d.phoneNumbers.map((p) => (
                   <Row key={p.id} label={`Provider reference (${p.phoneE164 ?? "number"})`}>

@@ -3683,3 +3683,112 @@ Remaining risks:
   finish setup manually until payment setup and safe owner assignment backend
   behavior are connected.
 - Search result quality depends on the live phone-provider catalog.
+
+---
+
+## 2026-06-02 — Stripe sandbox payment-method setup (real, test-mode only)
+
+What changed:
+
+- Added real end-to-end Stripe payment-method collection for the owner/admin
+  account dashboard using **Stripe-hosted Checkout in `mode:"setup"`** (no card
+  form in our UI). Collects + saves a payment method for FUTURE billing only.
+- New migration `supabase/migrations/20260602000100_clinic_payment_method.sql`
+  adds safe, non-secret columns to `public.clinics`: `stripe_payment_method_id`,
+  `_brand`, `_last4`, `_exp_month`, `_exp_year`, `_added_at`, `_updated_at`, with
+  CHECK constraints (month 1..12, year 2000..2100, last4 ≤ 4 chars). Existing
+  `stripe_customer_id` / `stripe_subscription_id` preserved. **Apply with owner
+  approval before the live flow works.**
+- New `lib/stripe/server.ts`: lazy-cached Stripe API client that REFUSES to
+  initialize unless `STRIPE_SECRET_KEY` is a test/sandbox key (`sk_test_`/
+  `rk_test_`). Webhook signature verification stays separate in
+  `lib/stripe/webhook.ts`.
+- New `POST /api/account/billing/payment-method/setup`: auth-gated (owner/admin
+  only; `front_desk` rejected), creates a sandbox Stripe Customer once, then a
+  Checkout Session (`mode:"setup"`, no `payment_method_types`), returns the
+  hosted URL. Clinic identity comes only from the session — no client-supplied
+  clinic id. success/cancel URLs derive from runtime `appBaseUrl`.
+- Extended `app/api/webhooks/stripe/route.ts`: preserves signature verification +
+  idempotent `recordWebhookEvent`; now handles `checkout.session.completed`
+  (mode==="setup") and `setup_intent.succeeded` (fallback), saving safe card
+  metadata and setting the customer `invoice_settings.default_payment_method`.
+  No invoice/subscription/charge created. Duplicate events skipped.
+- Owner `/account`: `hasPaymentMethod` now derives strictly from
+  `stripe_payment_method_id` (NOT `stripe_customer_id`/`billing_status`).
+  `BillingCard` replaces the disabled placeholder with a real **Add / Update
+  payment method** button + success/confirming/cancelled return states.
+  `?section=billing` opens the Billing section after the Stripe redirect.
+- Admin console Billing shows real payment-method presence + brand/last4/exp;
+  payment method id shown in Technical details (object reference, not a secret).
+
+Why:
+
+- Payment-method collection is required before number activation/assignment UX
+  can proceed, and billing should behave like a real SaaS setup step — but paid
+  billing must not start yet. This wires the real Stripe surface in sandbox/test
+  mode with no charge.
+
+Files changed:
+
+- `supabase/migrations/20260602000100_clinic_payment_method.sql` (new)
+- `lib/stripe/server.ts` (new)
+- `app/api/account/billing/payment-method/setup/route.ts` (new)
+- `app/api/webhooks/stripe/route.ts`
+- `lib/db/clinics.ts`, `lib/db/admin/types.ts`, `lib/db/admin/clinics.ts`
+- `app/account/page.tsx`
+- `app/setup/[token]/_components/account-types.ts`
+- `app/setup/[token]/_components/BusinessProfile.tsx`
+- `app/setup/[token]/_components/BillingCard.tsx`
+- `app/admin/(console)/clinics/[clinicId]/_components/AdminClinicConsole.tsx`
+- `.env.local.example`
+- `MVP_BUILD_DOCS/{SETUP-LOG,OPERATIONS-RUNBOOK,REPEATABLE-SETUP-CHECKLIST,FIRST-CLINIC-ONBOARDING}.md`
+
+Stripe mode + endpoint:
+
+- **Sandbox/test only.** Webhook endpoint path: **`/api/webhooks/stripe`**.
+- Required env (names only): `STRIPE_SECRET_KEY` (must be `sk_test_…`),
+  `STRIPE_WEBHOOK_SECRET` (from the Stripe test/sandbox webhook endpoint).
+
+Manual Stripe setup needed:
+
+- Set `STRIPE_SECRET_KEY` to a Stripe **test** secret key (`sk_test_…`).
+- Create a Stripe **test/sandbox** webhook endpoint -> `/api/webhooks/stripe`;
+  set `STRIPE_WEBHOOK_SECRET` to its signing secret (`whsec_…`).
+- Subscribe to at least `checkout.session.completed` and `setup_intent.succeeded`.
+
+Safety:
+
+- No charge, no subscription, no invoice, no PaymentIntent charge.
+- No `payment_method_types` in Checkout. No card fields in our UI. No card data
+  stored in Supabase (only ids/brand/last4/exp/timestamps).
+- No Twilio number purchase, no SMS recovery enablement.
+- Secrets never logged, returned, displayed, or committed.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass (`/api/account/billing/payment-method/setup` compiled;
+  `/account` compiled)
+- Static safety grep: no PaymentIntent/subscription/invoice creation, no
+  `payment_method_types`, no raw card fields, no committed secrets.
+
+Commit:
+
+```txt
+__PENDING__ (feat: add Stripe sandbox payment method setup)
+```
+
+Push:
+
+```txt
+pending
+```
+
+Remaining risks:
+
+- Payment method appears only after the webhook is delivered + processed
+  (BillingCard has a Refresh affordance for the brief delay). Locally the webhook
+  needs `stripe listen` or a public tunnel to reach `/api/webhooks/stripe`.
+- The migration must be applied before the new columns exist, or `/account`
+  reads error.
+- Subscription/invoice billing remains intentionally unbuilt (later milestone).
