@@ -117,6 +117,17 @@ export type AdminClinicDetail = {
   assignedPhoneMasked: string | null;
   hasAssignedNumber: boolean;
   phoneNumbers: AdminClinicPhoneNumber[];
+  // Latest owner-requested number (owner preference for admin review). NOT an
+  // assigned/active number — purchase + assignment stay admin-controlled.
+  requestedNumber: {
+    phoneNumber: string;
+    friendlyName: string | null;
+    locality: string | null;
+    region: string | null;
+    status: string;
+    createdAt: string;
+    requestedByEmail: string | null;
+  } | null;
   // sms approval / a2p. Representative details (which the owner sees in /account)
   // are the A2P submission packet, shown in full to the operator.
   smsStatus: string;

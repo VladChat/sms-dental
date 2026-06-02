@@ -4,6 +4,7 @@ import { readAccountSessionToken } from "../../lib/onboarding/account-session";
 import { lookupSetupRequestByRawToken } from "../../lib/onboarding/verify";
 import { findClinicById } from "../../lib/db/clinics";
 import { findActiveOfficeTextingNumber } from "../../lib/db/clinic-phone-numbers";
+import { findLatestClinicNumberRequest } from "../../lib/db/clinic-number-requests";
 import { findMostRecentSetupRequestByClinicId } from "../../lib/db/setup-requests";
 import { getAppDomainsSafe } from "../../lib/env";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
@@ -15,6 +16,7 @@ import { BusinessProfile, type BusinessProfileData } from "../setup/[token]/_com
 import type {
   PaymentMethodSetupResult,
   PaymentMethodSummary,
+  RequestedNumberSummary,
 } from "../setup/[token]/_components/account-types";
 import { PageShell } from "../setup/[token]/_components/PageShell";
 import { phoneAreaCode } from "../../lib/twilio/numbers";
@@ -58,6 +60,21 @@ function buildBilling(
   };
 }
 
+// Map the latest owner number-request row to the safe owner-facing summary.
+function toRequestedSummary(
+  row: Awaited<ReturnType<typeof findLatestClinicNumberRequest>>,
+): RequestedNumberSummary | null {
+  if (!row) return null;
+  return {
+    phoneNumber: row.requested_phone_number,
+    friendlyName: row.friendly_name,
+    locality: row.locality,
+    region: row.region,
+    status: row.status,
+    createdAt: row.created_at ? row.created_at.toISOString() : null,
+  };
+}
+
 // Parse the section / payment_method_setup query params from a Stripe return.
 function parseAccountSearch(sp: Record<string, string | string[] | undefined>): {
   initialSection: string | null;
@@ -91,6 +108,10 @@ export default async function AccountPage({
     const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
     const assignedPhone = await findActiveOfficeTextingNumber(clinic.id)
       .then((row) => row?.phone_number ?? null)
+      .catch(() => null);
+    // Resilient to the table not yet existing in this environment.
+    const requestedNumber = await findLatestClinicNumberRequest(clinic.id)
+      .then(toRequestedSummary)
       .catch(() => null);
     const memberships = await listActiveMembershipsForClinic(clinic.id).catch(() => []);
     const profileIds = memberships.map((m) => m.profile_id);
@@ -158,6 +179,7 @@ export default async function AccountPage({
         assignedPhone,
         areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
         postalCode: clinic.postal_code,
+        requestedNumber,
       },
       billing: buildBilling(clinic, trialDaysRemaining),
       security: {
@@ -215,6 +237,9 @@ export default async function AccountPage({
   const assignedPhone = await findActiveOfficeTextingNumber(clinic.id)
     .then((row) => row?.phone_number ?? null)
     .catch(() => null);
+  const requestedNumber = await findLatestClinicNumberRequest(clinic.id)
+    .then(toRequestedSummary)
+    .catch(() => null);
 
   // Trial countdown from the safest available creation timestamp: the setup
   // request's created_at (the registration moment).
@@ -257,6 +282,7 @@ export default async function AccountPage({
       assignedPhone,
       areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
       postalCode: clinic.postal_code,
+      requestedNumber,
     },
     billing: buildBilling(clinic, trialDaysRemaining),
     security: {

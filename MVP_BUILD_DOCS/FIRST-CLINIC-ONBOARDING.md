@@ -540,6 +540,15 @@ Current onboarding defaults to automatic local number preparation/reservation.
 The customer should not manually choose from a broad number catalog as part of default onboarding.
 Toll-free can remain an alternate/reference path for special cases, but it is not the main MVP onboarding path.
 
+Owner number **preference** (2026-06-02): once a payment method is saved, the owner can
+search local numbers on `/account → Phone number` and click **Use this number** to record
+a **requested number** (`public.clinic_number_requests`, status `pending`) for admin
+review. This is a preference only — it does **not** purchase, reserve, assign, provision,
+or activate a number, and does not touch `clinic_phone_numbers` or `sms_recovery_enabled`.
+The platform admin reviews the requested number (shown in the admin clinic console) and
+finishes assignment through the existing gated admin **Add number** flow. Apply
+`supabase/migrations/20260602000200_clinic_number_requests.sql` before using it.
+
 ### Production safety still applies
 
 - `TWILIO_NUMBER_PURCHASE_ENABLED=true` is the only switch that

@@ -206,6 +206,39 @@ export async function getAdminClinicDetail(
     updatedAt: p.updated_at.toISOString(),
   }));
 
+  // Latest owner-requested number (owner preference for admin review). Resilient
+  // to the table not yet existing in this environment.
+  const requestRows = await sql<
+    {
+      requested_phone_number: string;
+      friendly_name: string | null;
+      locality: string | null;
+      region: string | null;
+      status: string;
+      created_at: Date;
+      requested_by_email: string | null;
+    }[]
+  >`
+    select requested_phone_number, friendly_name, locality, region, status,
+           created_at, requested_by_email
+    from public.clinic_number_requests
+    where clinic_id = ${clinicId}
+    order by created_at desc
+    limit 1
+  `.catch(() => []);
+  const rq = requestRows[0];
+  const requestedNumber = rq
+    ? {
+        phoneNumber: rq.requested_phone_number,
+        friendlyName: rq.friendly_name,
+        locality: rq.locality,
+        region: rq.region,
+        status: rq.status,
+        createdAt: rq.created_at.toISOString(),
+        requestedByEmail: rq.requested_by_email,
+      }
+    : null;
+
   return {
     id: r.id,
     name: r.name,
@@ -253,6 +286,7 @@ export async function getAdminClinicDetail(
     assignedPhoneMasked: maskPhone(r.assigned_phone),
     hasAssignedNumber: Boolean(r.assigned_phone),
     phoneNumbers,
+    requestedNumber,
     smsStatus: r.sms_status,
     a2pInfoCompleted: r.a2p_info_completed,
     a2pAuthorized: r.a2p_authorized,

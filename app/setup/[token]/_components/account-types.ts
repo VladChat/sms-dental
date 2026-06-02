@@ -41,6 +41,18 @@ export type PaymentMethodSummary = {
 // query param. Null when the page was not reached via a Stripe return.
 export type PaymentMethodSetupResult = "success" | "cancelled" | null;
 
+// Latest owner-requested number (preference awaiting admin review). This is NOT
+// an assigned/active number — assignment stays admin-controlled.
+export type RequestedNumberSummary = {
+  phoneNumber: string;
+  friendlyName: string | null;
+  locality: string | null;
+  region: string | null;
+  // 'pending' | 'reviewed' | 'fulfilled' | 'rejected' | 'cancelled'
+  status: string;
+  createdAt: string | null;
+};
+
 export type BusinessProfileData = {
   // Legacy setup token for token-scoped API routes. Null when authenticated
   // session routes are used (normal /login -> /account flow).
@@ -66,6 +78,8 @@ export type BusinessProfileData = {
     // Twilio-style filter form.
     areaCode: string | null;
     postalCode: string | null;
+    // Latest owner-requested number awaiting admin review, or null.
+    requestedNumber: RequestedNumberSummary | null;
   };
   billing: {
     // True only when a real payment method is saved (stripe_payment_method_id
