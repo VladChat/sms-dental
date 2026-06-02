@@ -5,6 +5,7 @@ import {
   type ClinicMembershipRole,
 } from "../db/clinic-memberships";
 import { createSupabaseServerClient } from "../supabase/server";
+import type { NextRequest } from "next/server";
 
 export type AuthClinicAccessResult =
   | { ok: false; reason: "no_session" | "no_membership" | "clinic_not_found" }
@@ -18,8 +19,12 @@ export type AuthClinicAccessResult =
 
 // Resolve the authenticated app session and its clinic membership. This is the
 // primary auth guard for owner/front-desk app routes.
-export async function resolveAuthClinicAccess(): Promise<AuthClinicAccessResult> {
-  const supabase = await createSupabaseServerClient();
+export async function resolveAuthClinicAccess(
+  request?: Pick<NextRequest, "cookies">,
+): Promise<AuthClinicAccessResult> {
+  const supabase = await createSupabaseServerClient(
+    request ? { request } : undefined,
+  );
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {
     return { ok: false, reason: "no_session" };

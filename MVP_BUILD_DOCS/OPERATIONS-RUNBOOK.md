@@ -1928,3 +1928,54 @@ Provider-neutral copy: external provider brand names were removed from user-visi
 admin/owner UI (e.g. "Provider reference", "Messaging brand/campaign reference",
 "Number purchase is disabled by environment flag.", "Location not specified"). Provider
 names remain only in code comments, env var names, and internal integration code.
+
+---
+
+## Owner Account Phone number search — 2026-06-02
+
+The owner `/account` -> Phone number section now lets clinic owners search and choose a
+preferred local number before payment setup is complete. This is a read-only search and
+selection workflow, not assignment.
+
+Owner-visible behavior:
+
+- Shows assigned phone number, Voice / Calls status, SMS / Texting status, Area code, and
+  ZIP code.
+- `Search local numbers` runs local U.S. search using saved clinic data only: area code
+  from `clinics.main_phone` and ZIP from `clinics.postal_code`.
+- The owner UI does not show number type, country, city, state, radius, results count,
+  capability checkboxes, or pattern fields.
+- Results are selectable with radio controls. Cards show friendly number, E.164 value,
+  locality/region when available, `Location not specified` when locality is missing, and
+  Voice/SMS badges.
+- If at least three returned numbers have locality metadata, no-location results are
+  hidden from the owner list.
+
+Payment blocker:
+
+- Owners may choose a number before a payment method exists.
+- Final use is blocked without payment method. The selected-number area shows
+  `Add a payment method to use this number` and an `Add payment method` button.
+- The button only moves the owner to the Billing section. It does not create a Stripe
+  session or fake payment setup; the Billing card remains the current truthful disabled
+  state until Stripe is wired.
+
+API:
+
+- `GET /api/account/phone-numbers/search`
+- Auth guard: `resolveAuthClinicAccess(req)`.
+- `front_desk` is rejected.
+- The route never accepts a clinic ID from the client.
+- Legacy account-cookie fallback is supported using `readAccountSessionToken()` ->
+  `lookupSetupRequestByRawToken()` -> `findClinicById()`, matching `/account`.
+- Search plan: `country=US`, saved main phone, derived area code, saved ZIP, saved state
+  region, Voice+SMS required, MMS not required, limit 10.
+- Read-only guarantee: no purchase, reservation, assignment, release, DB write, or
+  provider credential exposure.
+
+Current assignment status:
+
+- Owner final assignment is not wired in this change. If a payment method is present,
+  the UI can show `Use this number`, but the action remains neutral until a safe owner
+  assignment backend is implemented.
+- Admin Add number behavior and purchase gate are unchanged.

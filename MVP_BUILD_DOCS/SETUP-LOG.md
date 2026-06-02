@@ -3600,3 +3600,86 @@ purchase stays blocked until `TWILIO_NUMBER_PURCHASE_ENABLED` is enabled (human-
 The inline panel lives in the (kept-mounted, hidden-when-inactive) Phone tab, so switching
 sections preserves its open state; that is intentional. Adding a second number remains
 possible without a per-number role-management UI.
+
+---
+
+## 2026-06-02 — Owner account local-number search and selection
+
+What changed:
+
+- Added owner-facing local phone-number search inside `/account` -> Phone number.
+- The owner Phone number section still shows assigned phone number, Voice / Calls
+  and SMS / Texting status, and saved local search context (Area code + ZIP code).
+- Added `Search local numbers` using the saved clinic main-phone area code and
+  saved `postal_code`; the owner UI does not expose number type, country, city,
+  state, radius, result count, capabilities, or pattern fields.
+- Added selectable radio-style result cards showing friendly number, E.164 value,
+  location, and Voice/SMS badges. Missing locality displays
+  `Location not specified`; no-location results are hidden when enough better
+  locality results exist.
+- Owners can choose a preferred number before a payment method is on file.
+- Removed the old pre-search payment-method callout from the Phone number card
+  so payment is presented only at the final selected-number action.
+- When no payment method exists, the selected-number action area shows
+  `Add a payment method to use this number`, the selected number, the required
+  billing explanation, and an `Add payment method` button that switches to the
+  Billing section.
+
+Why:
+
+- The owner Account -> Phone number card had only static search context. Owners
+  needed to be able to search and choose a preferred local number without
+  creating an unsafe assignment path before payment setup.
+
+Files changed:
+
+- `app/api/account/phone-numbers/search/route.ts`
+- `app/setup/[token]/_components/OwnerLocalNumberSearch.tsx`
+- `app/setup/[token]/_components/AssignedNumberCard.tsx`
+- `app/setup/[token]/_components/BusinessProfile.tsx`
+- `app/globals.css`
+- `lib/auth/access.ts`
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Safety:
+
+- Search is read-only.
+- The owner search route accepts no clinic ID from the client.
+- Authenticated owner/admin membership is required; `front_desk` is rejected.
+- The legacy setup-token cookie fallback is supported using the same
+  `readAccountSessionToken()` -> `lookupSetupRequestByRawToken()` ->
+  `findClinicById()` path as `/account`.
+- No number is purchased, reserved, assigned, released, or stored from the owner
+  search route.
+- With no payment method, the UI does not call an assignment or purchase
+  endpoint.
+- With a payment method, the visible `Use this number` action remains neutral
+  and does not call a provider endpoint until a safe owner assignment backend is
+  implemented.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+- Static wording check confirmed the new owner Account phone-number UI does not
+  show "Buy", "Purchase", provider brand names, or extra search-filter fields.
+
+Commit:
+
+```txt
+pending; final commit hash reported after commit
+```
+
+Push:
+
+```txt
+pending
+```
+
+Remaining risks:
+
+- Owner final assignment is intentionally not wired in this change; staff can
+  finish setup manually until payment setup and safe owner assignment backend
+  behavior are connected.
+- Search result quality depends on the live phone-provider catalog.
