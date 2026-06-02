@@ -564,3 +564,57 @@ the dialog (stays open on failure). Confirm calls the existing
 `POST /api/admin/clinics/[clinicId]/action` (audit logging unchanged). Required for
 state-changing actions only — Pause clinic, Reactivate clinic, Launch service, Pause
 SMS sending — not for Save note.
+
+## 18. Clinic detail = owner-dashboard superset (read-only, 2026-06-01)
+
+`/admin/clinics/[clinicId]` was expanded into a true **superset of the owner `/account`
+dashboard**: everything the owner sees, plus admin-only internal detail, diagnostics,
+and audit context. Read-only/IA change only — **no** new external side effects, no
+migration, no auth/schema change. The data layer (`getAdminClinicDetail`) was extended
+to return **existing** columns only (no new fields invented).
+
+### Owner `/account` → admin mapping
+
+| Owner `/account` area | Admin section | Source (existing columns) |
+|---|---|---|
+| Phone number (AssignedNumberCard) | **Phone numbers** | `clinic_phone_numbers` (full E.164, full Twilio SID, role, active, assigned/updated ts) + `clinics.local_number_status`, `sms_recovery_enabled`, global `SMS_RECOVERY_MODE` (mode only) |
+| Business profile | **Business profile** | `clinics`: name, legal name, business type, main phone, address, timezone, website, owner contact name/phone, `business_info_completed` |
+| SMS approval | **A2P / SMS approval** | `clinics`: `sms_status`, `a2p_info_completed`, `a2p_authorized`, EIN, rep first/last/title/email/phone |
+| Billing | **Billing** | `clinics`: `billing_status`, trial start/end, `stripe_customer_id`/`stripe_subscription_id` (refs, not secrets) |
+| Compliance links (SmsApprovalForm) | **Public pages & compliance** | `clinics.slug` + `runtimeConfig` app base → `/business/{slug}`, `/privacy`, `/sms-terms` |
+| (owner sees behavior implicitly) | **SMS behavior** | code constants: recovery template, 24 h suppression, STOP/START/HELP keywords, clinic gate, global mode |
+| Account/Team access | covered by header **Owner** + Recent admin activity | `clinic_memberships`/`profiles` |
+
+### Admin-only additions
+Compact header metadata (Clinic ID, Owner, Setup status, Created/Updated); **Diagnostics**
+(active opt-outs, recent messages/calls with masked caller numbers, link to full
+`/events`); **Recent admin activity** (audit, incl. who/when for internal-note updates);
+**Admin controls** (unchanged working actions + confirmation dialog).
+
+### Honest "not available" (no invented columns)
+There are **no** `a2p_brand_sid` / `a2p_campaign_sid` / `a2p_submitted_at` /
+`rejection_reason` / per-clinic `messaging_service_sid` columns, so the A2P "Carrier
+submission" block renders `Not submitted` / `Not available` until the submission backend
+lands. No `/business/[slug]/sms-consent` route exists → consent is shown as "covered
+within SMS terms". Disabled placeholders: `Add phone number` → "Twilio purchase/assign
+backend required"; `Manage billing` → "Stripe billing backend required"; `Submit SMS
+approval` → "A2P submission backend required".
+
+### Data-exposure decision
+The platform admin is the operator who reviews/submits the A2P packet, so the clinic's
+**own** business-identity fields the owner already sees (office/owner/rep phones, EIN,
+Stripe object IDs) are shown **in full** to admins. Third-party **caller/patient**
+numbers in Diagnostics stay **masked** (via `getClinicEvents`). The admin console is
+gated to `PLATFORM_ADMIN_EMAILS` / `profiles.is_internal_admin`.
+
+### Two status axes (unchanged, still single-source)
+Clinic status (Active/Paused) in Status overview; Launch status (Launched / Ready to
+launch / Blocked) once in Status overview; Launch readiness card holds only the four
+prerequisite rows.
+
+### Next refactor step
+The owner side is interactive forms (`BusinessProfile` + `*Form` components), so a full
+shared component was not extracted in this task (too risky). Next: extract a read-only
+`<ClinicProfileView mode="owner"|"admin">` that both `/account` (read mode) and
+`/admin/clinics/[clinicId]` render, so field mappings live in one place. Then wire the
+first real gated admin action (Twilio number purchase/assign).

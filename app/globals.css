@@ -502,6 +502,22 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 /* Launch status headline (single source of the launch-status badge) */
 .adm-launch-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); margin-top:var(--space-3); }
 
+/* Subsection heading inside an admin card */
+.adm-subhead { font:650 1rem/1.3 var(--font-display); color:var(--text); }
+
+/* Compact internal metadata under the clinic name */
+.adm-meta { display:flex; flex-wrap:wrap; gap:var(--space-1) var(--space-4); margin:var(--space-3) 0 0; }
+.adm-meta-item { display:flex; align-items:baseline; gap:var(--space-2); }
+.adm-meta-label { font:var(--helper); color:var(--text-muted); }
+.adm-meta-value { margin:0; font:var(--body-sm); color:var(--text-secondary); overflow-wrap:anywhere; }
+
+/* Detailed phone-number cards */
+.adm-phone-card { padding:var(--space-4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
+.adm-phone-card-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); flex-wrap:wrap; margin-bottom:var(--space-2); }
+
+/* Compliance / link list */
+.adm-link-list { list-style:none; padding:0; margin:var(--space-3) 0 0; display:grid; gap:var(--space-2); }
+
 /* In-app confirmation modal (replaces native window.confirm) */
 .adm-modal-overlay { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:var(--space-5); background:rgba(12,43,42,.45); }
 .adm-modal { width:100%; max-width:440px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-xl); padding:var(--space-6); }

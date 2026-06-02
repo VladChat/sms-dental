@@ -94,10 +94,14 @@ type ClinicDetailRow = {
   state_region: string | null;
   postal_code: string | null;
   country: string;
+  timezone: string | null;
+  preferred_area_code: string | null;
   website: string | null;
   business_info_completed: boolean;
   owner_contact_email: string | null;
   owner_contact_name: string | null;
+  owner_contact_phone: string | null;
+  test_patient_phone: string | null;
   billing_status: string;
   trial_started_at: Date | null;
   trial_ends_at: Date | null;
@@ -107,7 +111,11 @@ type ClinicDetailRow = {
   sms_status: string;
   a2p_info_completed: boolean;
   a2p_authorized: boolean;
+  a2p_rep_first_name: string | null;
+  a2p_rep_last_name: string | null;
+  a2p_rep_business_title: string | null;
   a2p_rep_email: string | null;
+  a2p_rep_phone: string | null;
   setup_status: string;
   admin_internal_note: string | null;
   admin_provisioning_status: string | null;
@@ -127,12 +135,13 @@ export async function getAdminClinicDetail(
       c.id, c.name, c.slug, c.is_active, c.sms_recovery_enabled,
       c.legal_business_name, c.business_type, c.ein_tax_id, c.main_phone,
       c.street_address, c.address_line2, c.city, c.state_region, c.postal_code,
-      c.country, c.website, c.business_info_completed,
-      c.owner_contact_email, c.owner_contact_name,
+      c.country, c.timezone, c.preferred_area_code, c.website, c.business_info_completed,
+      c.owner_contact_email, c.owner_contact_name, c.owner_contact_phone, c.test_patient_phone,
       c.billing_status, c.trial_started_at, c.trial_ends_at,
       c.stripe_customer_id, c.stripe_subscription_id,
       c.local_number_status, c.sms_status, c.a2p_info_completed, c.a2p_authorized,
-      c.a2p_rep_email, c.setup_status,
+      c.a2p_rep_first_name, c.a2p_rep_last_name, c.a2p_rep_business_title,
+      c.a2p_rep_email, c.a2p_rep_phone, c.setup_status,
       c.admin_internal_note, c.admin_provisioning_status, c.admin_provisioning_note,
       c.created_at, c.updated_at,
       (select cpn.phone_number from public.clinic_phone_numbers cpn
@@ -168,9 +177,10 @@ export async function getAdminClinicDetail(
       is_active: boolean;
       twilio_phone_number_sid: string | null;
       created_at: Date;
+      updated_at: Date;
     }[]
   >`
-    select id, phone_number, role, is_active, twilio_phone_number_sid, created_at
+    select id, phone_number, role, is_active, twilio_phone_number_sid, created_at, updated_at
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
     order by is_active desc, created_at asc
@@ -178,10 +188,13 @@ export async function getAdminClinicDetail(
   const phoneNumbers: AdminClinicPhoneNumber[] = phoneRows.map((p) => ({
     id: p.id,
     phoneMasked: maskPhone(p.phone_number),
+    phoneE164: p.phone_number,
     role: p.role,
     isActive: p.is_active,
     sidTail: tailSid(p.twilio_phone_number_sid),
+    twilioSid: p.twilio_phone_number_sid,
     createdAt: p.created_at.toISOString(),
+    updatedAt: p.updated_at.toISOString(),
   }));
 
   return {
@@ -193,23 +206,31 @@ export async function getAdminClinicDetail(
     legalBusinessName: r.legal_business_name,
     businessType: r.business_type,
     einProvided: Boolean(r.ein_tax_id && r.ein_tax_id.trim().length > 0),
+    einTaxId: r.ein_tax_id,
     mainPhoneMasked: maskPhone(r.main_phone),
+    mainPhone: r.main_phone,
     street: r.street_address,
     addressLine2: r.address_line2,
     city: r.city,
     stateRegion: r.state_region,
     postalCode: r.postal_code,
     country: r.country,
+    timezone: r.timezone,
+    preferredAreaCode: r.preferred_area_code,
     website: r.website,
     businessInfoCompleted: r.business_info_completed,
     ownerContactEmail: r.owner_contact_email,
     ownerContactName: r.owner_contact_name,
+    ownerContactPhone: r.owner_contact_phone,
+    testPatientPhone: r.test_patient_phone,
     members,
     billingStatus: r.billing_status,
     trialStartedAt: r.trial_started_at ? r.trial_started_at.toISOString() : null,
     trialEndsAt: r.trial_ends_at ? r.trial_ends_at.toISOString() : null,
     stripeCustomerPresent: Boolean(r.stripe_customer_id),
     stripeSubscriptionPresent: Boolean(r.stripe_subscription_id),
+    stripeCustomerId: r.stripe_customer_id,
+    stripeSubscriptionId: r.stripe_subscription_id,
     localNumberStatus: r.local_number_status,
     assignedPhoneMasked: maskPhone(r.assigned_phone),
     hasAssignedNumber: Boolean(r.assigned_phone),
@@ -218,6 +239,11 @@ export async function getAdminClinicDetail(
     a2pInfoCompleted: r.a2p_info_completed,
     a2pAuthorized: r.a2p_authorized,
     a2pRepProvided: Boolean(r.a2p_rep_email),
+    a2pRepFirstName: r.a2p_rep_first_name,
+    a2pRepLastName: r.a2p_rep_last_name,
+    a2pRepBusinessTitle: r.a2p_rep_business_title,
+    a2pRepEmail: r.a2p_rep_email,
+    a2pRepPhone: r.a2p_rep_phone,
     setupStatus: r.setup_status,
     adminInternalNote: r.admin_internal_note,
     adminProvisioningStatus: r.admin_provisioning_status,

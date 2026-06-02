@@ -48,10 +48,17 @@ export type AdminClinicMember = {
 export type AdminClinicPhoneNumber = {
   id: string;
   phoneMasked: string | null;
+  // Full E.164 — the clinic's own office number (the owner sees it in /account);
+  // not a third-party/patient number, so it is shown unmasked to the operator.
+  phoneE164: string | null;
   role: string;
   isActive: boolean;
   sidTail: string | null;
+  // Full Twilio IncomingPhoneNumber SID (not a secret) so the operator can find
+  // the number in the Twilio console.
+  twilioSid: string | null;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type AdminClinicDetail = {
@@ -60,39 +67,57 @@ export type AdminClinicDetail = {
   slug: string | null;
   isActive: boolean;
   smsRecoveryEnabled: boolean;
-  // business identity (PII kept minimal: EIN shown as presence only)
+  // business identity. The platform admin is the operator who reviews/submits the
+  // A2P registration packet, so the clinic's own business identity fields (which
+  // the owner already sees in /account) are shown in full here. einProvided /
+  // mainPhoneMasked are kept for compact summaries; full values are also exposed.
   legalBusinessName: string | null;
   businessType: string | null;
   einProvided: boolean;
+  einTaxId: string | null;
   mainPhoneMasked: string | null;
+  mainPhone: string | null;
   street: string | null;
   addressLine2: string | null;
   city: string | null;
   stateRegion: string | null;
   postalCode: string | null;
   country: string;
+  timezone: string | null;
+  preferredAreaCode: string | null;
   website: string | null;
   businessInfoCompleted: boolean;
   // owner / members
   ownerContactEmail: string | null;
   ownerContactName: string | null;
+  ownerContactPhone: string | null;
+  testPatientPhone: string | null;
   members: AdminClinicMember[];
-  // billing readiness (presence only — no Stripe ids/secrets shown)
+  // billing readiness. Stripe ids are object references (e.g. cus_…/sub_…), not
+  // secrets; shown to the operator. Presence flags kept for compact summaries.
   billingStatus: string;
   trialStartedAt: string | null;
   trialEndsAt: string | null;
   stripeCustomerPresent: boolean;
   stripeSubscriptionPresent: boolean;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
   // phone
   localNumberStatus: string;
   assignedPhoneMasked: string | null;
   hasAssignedNumber: boolean;
   phoneNumbers: AdminClinicPhoneNumber[];
-  // sms approval / a2p (presence/flags only)
+  // sms approval / a2p. Representative details (which the owner sees in /account)
+  // are the A2P submission packet, shown in full to the operator.
   smsStatus: string;
   a2pInfoCompleted: boolean;
   a2pAuthorized: boolean;
   a2pRepProvided: boolean;
+  a2pRepFirstName: string | null;
+  a2pRepLastName: string | null;
+  a2pRepBusinessTitle: string | null;
+  a2pRepEmail: string | null;
+  a2pRepPhone: string | null;
   // lifecycle
   setupStatus: string;
   // internal-only operator fields
