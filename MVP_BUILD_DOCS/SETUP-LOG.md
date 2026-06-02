@@ -3329,3 +3329,54 @@ Validation:
 
 - `npm run typecheck` -> pass
 - `npm run build` -> pass
+
+---
+
+## 2026-06-02 — Improve onboarding Twilio local-number search fallback
+
+Goal: make automatic onboarding local-number preparation more reliable without asking
+customers for extra Step 1 fields.
+
+What changed:
+
+- `lib/twilio/numbers.ts` now supports `nearLatLong` for local-number search and applies
+  radius `distance` with either `nearNumber` or `nearLatLong`.
+- Twilio local searches now pass `beta=false`, `excludeAllAddressRequired=true`,
+  `excludeLocalAddressRequired=true`, and `excludeForeignAddressRequired=true` using the
+  installed SDK's typed local-number parameter surface.
+- `lib/onboarding/local-number.ts` now builds a named deterministic fallback plan:
+  `area_code_and_zip` → `zip_only` → `area_code_only` → optional ZIP radius attempts
+  (`25`, `50`, `100` miles) → optional `state_region`.
+- The onboarding plan never uses city/locality as an automatic search filter.
+- Radius fallback is structured but inactive until a committed ZIP-to-coordinate source is
+  added; onboarding does not call external geocoding services.
+
+Safety:
+
+- Search remains read-only. No Twilio number was purchased, reserved, released, or assigned.
+- Onboarding account creation remains non-blocking if Twilio search fails or returns zero
+  results.
+- Step 1 still asks only for clinic name, main office phone, ZIP code, and existing login
+  fields.
+
+Files changed:
+
+- `lib/twilio/numbers.ts`
+- `lib/onboarding/local-number.ts`
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Commit:
+
+```txt
+pending; final commit hash reported after commit
+```
+
+Remaining risk:
+
+- ZIP-radius fallback requires a committed ZIP coordinate lookup source before it can run.
