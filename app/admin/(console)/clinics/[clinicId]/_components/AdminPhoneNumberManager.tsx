@@ -68,18 +68,16 @@ function summarize(p: SearchParamsEcho): string {
 }
 
 function locationLabel(c: Candidate): string {
-  if (!c.locality) return "Location not specified by Twilio";
+  if (!c.locality) return "Location not specified";
   return [c.locality, c.region].filter(Boolean).join(", ");
 }
 
 export function AdminPhoneNumberManager({
   clinicId,
-  hasAssignedNumber,
   purchaseEnabled,
   defaults,
 }: {
   clinicId: string;
-  hasAssignedNumber: boolean;
   purchaseEnabled: boolean;
   defaults: PhoneSearchDefaults;
 }) {
@@ -103,8 +101,6 @@ export function AdminPhoneNumberManager({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
-
-  if (hasAssignedNumber) return null;
 
   function resetDefaults() {
     setType("local");
@@ -171,6 +167,8 @@ export function AdminPhoneNumberManager({
         return;
       }
       setConfirmOpen(false);
+      // Return to the clinic Phone number panel, which now shows the assignment.
+      router.push(`/admin/clinics/${clinicId}`);
       router.refresh();
     } catch {
       setPurchaseError("Could not purchase this number. Please try again.");
@@ -187,12 +185,11 @@ export function AdminPhoneNumberManager({
       : candidates;
 
   return (
-    <div style={{ marginTop: "var(--space-4)" }}>
-      <h3 className="adm-subhead">Assign a number</h3>
+    <div>
       {!purchaseEnabled && (
         <div className="adm-banner tone-warning" role="note" style={{ marginTop: "var(--space-2)" }}>
           <div className="adm-banner-main">
-            <span className="adm-banner-title">Twilio number purchase is disabled by environment flag.</span>
+            <span className="adm-banner-title">Number purchase is disabled by environment flag.</span>
             <span className="adm-banner-body">Search works; purchase is blocked until the operator enables it.</span>
           </div>
         </div>
@@ -302,7 +299,7 @@ export function AdminPhoneNumberManager({
       <AdminConfirmDialog
         open={confirmOpen}
         title="Purchase and assign number?"
-        body={`This purchases ${selected ?? "the selected number"} from Twilio, assigns it to this clinic, and configures its webhooks. It does not enable SMS recovery.`}
+        body={`This purchases ${selected ?? "the selected number"} from the phone provider, assigns it to this clinic, and configures its webhooks. It does not enable SMS recovery.`}
         confirmLabel="Purchase and assign"
         confirmTone="primary"
         busy={purchasing}

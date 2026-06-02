@@ -3497,3 +3497,43 @@ Remaining risk:
 
 - ZIP-radius fallback still requires a committed ZIP coordinate lookup source before it can
   run.
+
+---
+
+## 2026-06-01 — Admin add-number flow moved to a dedicated page + provider-neutral UI copy
+
+What changed:
+- `AdminPhoneNumberManager` no longer returns `null` when a clinic already has a number
+  and no longer takes `hasAssignedNumber`. The clinic detail Phone number panel no longer
+  embeds the search form inline; it shows current numbers + status + an always-visible
+  **Add number** button linking to a new dedicated screen.
+- New page `app/admin/(console)/clinics/[clinicId]/phone-numbers/new/page.tsx` (server
+  loader under the guarded `(console)` group) renders the search/assignment UI with a back
+  link to the Phone number panel. Visible controls stay simplified (Number type, Area
+  code, ZIP); the smart-fallback search runs underneath. Successful purchase routes back
+  to the clinic detail.
+- Removed external provider brand names from user-visible admin/owner copy:
+  `Twilio SID`→`Provider reference`, `Twilio Brand SID`→`Messaging brand reference`,
+  `Twilio Campaign SID`→`Messaging campaign reference`, the purchase-disabled banner →
+  `Number purchase is disabled by environment flag.`, `Location not specified by Twilio`→
+  `Location not specified`, confirm-dialog body → "…from the phone provider…", admin
+  diagnostics intro → "provider references", owner NumberSearch toll-free note → drop
+  "Twilio". Provider names kept only in comments/env names/integration code.
+
+Why: the inline form hid add-number when a number already existed (couldn't add a second
+number) and embedded a full form in the detail panel; moving it to a dedicated screen
+matches Twilio-Console-style "Buy a number" UX and keeps the panel clean. Brand-name
+removal keeps user-facing copy provider-neutral.
+
+Files: `app/admin/(console)/clinics/[clinicId]/_components/AdminPhoneNumberManager.tsx`,
+`.../_components/AdminClinicConsole.tsx`, `.../[clinicId]/page.tsx`,
+`.../[clinicId]/phone-numbers/new/page.tsx` (new), `.../[clinicId]/events/page.tsx`,
+`app/setup/[token]/_components/NumberSearch.tsx`, plus docs.
+
+Safety: no purchase/reserve/release performed; `TWILIO_NUMBER_PURCHASE_ENABLED` gate,
+confirm dialog, idempotency, webhook config, and audit unchanged. No migration, no auth
+change, no secrets exposed.
+
+Validation:
+- `npm run typecheck` -> pass
+- `npm run build` -> pass (`/admin/clinics/[clinicId]/phone-numbers/new` compiled)

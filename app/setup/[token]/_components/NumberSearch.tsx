@@ -241,7 +241,7 @@ export function NumberSearch({
             }}
           >
             Voice works immediately once assigned. SMS on toll-free numbers in the United
-            States and Canada requires Twilio toll-free verification before live patient
+            States and Canada requires toll-free verification before live patient
             messaging. We&rsquo;ll cover this step with you before go-live.
           </p>
           <p style={{ marginTop: 8, color: "#6b7280", fontSize: 13 }}>

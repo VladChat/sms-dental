@@ -22,7 +22,6 @@ import type {
 import { AdminClinicActions } from "./AdminClinicActions";
 import { AdminBusinessProfileForm } from "./AdminBusinessProfileForm";
 import { AdminA2pForm } from "./AdminA2pForm";
-import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
 
@@ -36,7 +35,6 @@ export type AdminConsoleData = {
   smsMode: string;
   appBaseUrl: string;
   purchaseEnabled: boolean;
-  phoneDefaults: PhoneSearchDefaults;
   recentActivity: { id: string; action: string; adminEmail: string; createdAt: string }[];
   events: AdminClinicEvents;
 };
@@ -181,7 +179,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                       </span>
                     </div>
                     <dl className="adm-rows">
-                      <Row label="Twilio SID">{p.sidTail ? <span className="t-mono">{p.sidTail}</span> : <Muted>Not available</Muted>}</Row>
+                      <Row label="Provider reference">{p.sidTail ? <span className="t-mono">{p.sidTail}</span> : <Muted>Not available</Muted>}</Row>
                       <Row label="Assigned">{fmtDateTime(p.createdAt)}</Row>
                     </dl>
                   </div>
@@ -195,15 +193,14 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             </dl>
             {!d.hasAssignedNumber && (
               <p className="t-small" style={{ color: "var(--warning)", marginTop: "var(--space-2)", fontWeight: 600 }}>
-                Blocker: no number assigned — purchase/assign one to continue launch.
+                Blocker: no number assigned — add one to continue launch.
               </p>
             )}
-            <AdminPhoneNumberManager
-              clinicId={d.id}
-              hasAssignedNumber={d.hasAssignedNumber}
-              purchaseEnabled={data.purchaseEnabled}
-              defaults={data.phoneDefaults}
-            />
+            <div style={{ marginTop: "var(--space-4)" }}>
+              <Link className="btn btn-primary btn-sm" href={`/admin/clinics/${d.id}/phone-numbers/new`}>
+                Add number
+              </Link>
+            </div>
           </Panel>
 
           {/* Business profile (editable — preserved) */}
@@ -255,8 +252,8 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Carrier submission</h3>
             <dl className="adm-rows">
               <Row label="Submission status"><Badge tone="neutral">Not submitted</Badge></Row>
-              <Row label="Twilio Brand SID"><Muted>Not available</Muted></Row>
-              <Row label="Twilio Campaign SID"><Muted>Not available</Muted></Row>
+              <Row label="Messaging brand reference"><Muted>Not available</Muted></Row>
+              <Row label="Messaging campaign reference"><Muted>Not available</Muted></Row>
             </dl>
             {publicBase && (
               <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
@@ -377,7 +374,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 <Row label="Stripe customer ID">{d.stripeCustomerId ? <span className="t-mono">{d.stripeCustomerId}</span> : <Muted>Not available</Muted>}</Row>
                 <Row label="Stripe subscription ID">{d.stripeSubscriptionId ? <span className="t-mono">{d.stripeSubscriptionId}</span> : <Muted>Not available</Muted>}</Row>
                 {d.phoneNumbers.map((p) => (
-                  <Row key={p.id} label={`Twilio SID (${p.phoneE164 ?? "number"})`}>
+                  <Row key={p.id} label={`Provider reference (${p.phoneE164 ?? "number"})`}>
                     {p.twilioSid ? <span className="t-mono">{p.twilioSid}</span> : <Muted>Not available</Muted>}
                   </Row>
                 ))}
