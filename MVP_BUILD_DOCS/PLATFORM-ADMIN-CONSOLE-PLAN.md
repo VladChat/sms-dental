@@ -534,3 +534,33 @@ The **Launch service** action mirrors the server preconditions exactly
 with the precise blocking reason until the gate clears, and writes `admin_audit_events`
 on success. Billing is shown as a readiness row but is **not** a hard launch gate in
 this MVP (Stripe backend not connected), so launch is never permanently impossible.
+
+## 17. Status de-dup + in-app confirmations (live-QA polish, 2026-06-01)
+
+Live QA after §16 surfaced two presentation issues; both fixed without any API,
+auth, or schema change.
+
+**Status de-duplication.** Clinic and launch status were appearing in three places at
+once (top badges + summary rows + controls), reading as contradictory (e.g. "Active"
+and "Blocked" together). Now there are exactly **two separate axes, each shown once**:
+
+- **Clinic status** — `clinics.is_active` → Active / Paused. Shown once in Clinic
+  summary. Action: Pause / Reactivate.
+- **Launch status** — derived → **Launched** / **Ready to launch** / **Blocked**.
+  Shown once as the **Launch readiness** headline badge with a one-line reason. The
+  prerequisite checklist rows below explain it; they no longer repeat a launch-status
+  badge.
+
+Removed (de-dup): the two top-of-page badges, the summary "Service state" row, and the
+readiness "Service launch" row. Admin controls now carry only action buttons — the
+disabled Launch button points to "launch readiness above" instead of re-printing the
+blocker. Human labels only; no technical status strings as primary UI.
+
+**In-app confirmations.** The native `window.confirm()` in `AdminClinicActions` was
+replaced by a reusable `AdminConfirmDialog` (`_components/AdminConfirmDialog.tsx`):
+`role="dialog"` + `aria-modal`, focus moved in on open and restored on close, Escape /
+Cancel / backdrop close, Tab trapped between Cancel and Confirm, error rendered inside
+the dialog (stays open on failure). Confirm calls the existing
+`POST /api/admin/clinics/[clinicId]/action` (audit logging unchanged). Required for
+state-changing actions only — Pause clinic, Reactivate clinic, Launch service, Pause
+SMS sending — not for Save note.

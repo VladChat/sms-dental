@@ -6,7 +6,6 @@ import {
   Badge,
   BoolBadge,
   CheckRow,
-  ReadyBadge,
   Row,
   billingTone,
   describeAuditAction,
@@ -63,13 +62,11 @@ export default async function AdminClinicDetailPage({
   const billingState: ReadyState = d.stripeCustomerPresent ? "ready" : "not_connected";
   const phoneState: ReadyState = d.hasAssignedNumber ? "ready" : "missing";
   const a2pState: ReadyState = d.a2pInfoCompleted && d.a2pAuthorized ? "ready" : "needs_action";
-  const launchState: ReadyState = d.smsRecoveryEnabled
-    ? "launched"
-    : launchBlockedReason
-      ? "blocked"
-      : "not_launched";
 
-  const service = currentServiceState(d.isActive, d.smsRecoveryEnabled, launchBlockedReason);
+  // Launch status is a SEPARATE axis from Clinic status (Active/Paused). It is
+  // shown once, here, as the Launch readiness headline — never repeated in the
+  // header or the admin controls.
+  const launch = launchStatus(d.smsRecoveryEnabled, launchBlockedReason);
 
   // Missing-field hint for the Business profile row (only when incomplete).
   const missingBusiness = [
@@ -89,10 +86,6 @@ export default async function AdminClinicDetailPage({
         <div>
           <p className="t-small"><Link className="link" href="/admin/clinics">← Clinics</Link></p>
           <h1 className="t-h2" style={{ marginTop: "var(--space-1)" }}>{d.name}</h1>
-          <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>
-            <BoolBadge value={d.isActive} yes="Active" no="Paused" noTone="warning" />
-            <Badge tone={service.tone}>{service.label}</Badge>
-          </div>
         </div>
         <div className="adm-detail-head-links">
           <Link className="btn btn-secondary btn-sm" href={`/admin/clinics/${d.id}/events`}>Diagnostics</Link>
@@ -100,23 +93,26 @@ export default async function AdminClinicDetailPage({
         </div>
       </header>
 
-      {/* A — Clinic summary */}
+      {/* A — Clinic summary. Clinic status (Active/Paused) is the master on/off
+          axis and is shown ONCE here. Launch status lives in Launch readiness. */}
       <section className="card card-pad">
         <h3 className="t-h4">Clinic summary</h3>
         <dl className="adm-rows">
           <Row label="Clinic name">{d.name}</Row>
           <Row label="Owner email"><span className="t-mono">{ownerEmail ?? "—"}</span></Row>
           <Row label="Clinic status"><BoolBadge value={d.isActive} yes="Active" no="Paused" noTone="warning" /></Row>
-          <Row label="Service state"><Badge tone={service.tone}>{service.label}</Badge></Row>
         </dl>
       </section>
 
-      {/* B — Launch readiness */}
+      {/* B — Launch readiness. Headline = the single Launch status badge; the rows
+          below explain the prerequisites behind it (no repeated status badge). */}
       <section className="card card-pad">
         <h3 className="t-h4">Launch readiness</h3>
-        <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
-          One row per real prerequisite. Launch the service from Admin controls below once the gate clears.
-        </p>
+        <div className="adm-launch-head">
+          <span className="adm-row-label">Launch status</span>
+          <Badge tone={launch.tone}>{launch.label}</Badge>
+        </div>
+        <p className="adm-check-hint" style={{ marginTop: "var(--space-1)" }}>{launch.detail}</p>
         <div style={{ marginTop: "var(--space-3)" }}>
           <CheckRow
             title="Business profile"
@@ -138,19 +134,6 @@ export default async function AdminClinicDetailPage({
             hint={a2pState === "ready" ? "Approval info complete and authorized" : "Approval info incomplete"}
             state={a2pState}
           />
-          <div className="adm-check">
-            <div className="adm-check-main">
-              <span className="adm-check-title">Service launch</span>
-              <span className="adm-check-hint">
-                {launchState === "launched"
-                  ? "Service is launched (SMS recovery gate on)"
-                  : launchState === "blocked"
-                    ? `Blocked: ${launchBlockedReason}`
-                    : "All prerequisites met — launch from Admin controls"}
-              </span>
-            </div>
-            <ReadyBadge state={launchState} />
-          </div>
         </div>
       </section>
 
@@ -250,15 +233,24 @@ export default async function AdminClinicDetailPage({
   );
 }
 
-function currentServiceState(
-  isActive: boolean,
+// Launch status: a separate axis from Clinic status (Active/Paused). Derived from
+// the launch gate only. A paused clinic surfaces as "Blocked" with the pause as
+// the reason (clinic on/off is shown separately in the summary).
+function launchStatus(
   launched: boolean,
   launchBlockedReason: string | null,
-): { label: string; tone: Tone } {
-  if (!isActive) return { label: "Paused", tone: "warning" };
-  if (launched) return { label: "Launched", tone: "success" };
-  if (launchBlockedReason) return { label: "Blocked", tone: "neutral" };
-  return { label: "Not launched", tone: "neutral" };
+): { label: string; tone: Tone; detail: string } {
+  if (launched) {
+    return { label: "Launched", tone: "success", detail: "Missed-call SMS recovery is on for this clinic." };
+  }
+  if (launchBlockedReason) {
+    return { label: "Blocked", tone: "warning", detail: launchBlockedReason };
+  }
+  return {
+    label: "Ready to launch",
+    tone: "info",
+    detail: "All prerequisites met — launch from Admin controls below.",
+  };
 }
 
 // Honest disabled placeholder: an essential future action whose backend is not
