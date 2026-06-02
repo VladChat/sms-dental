@@ -27,10 +27,7 @@ import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
 
 export type PhoneSearchDefaults = {
-  country: string;
   areaCode: string;
-  city: string;
-  state: string;
   postal: string;
 };
 

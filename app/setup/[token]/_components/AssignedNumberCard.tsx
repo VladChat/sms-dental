@@ -7,11 +7,15 @@ export function AssignedNumberCard({
   localNumberStatus,
   smsStatus,
   assignedPhone,
+  areaCode,
+  postalCode,
   hasPaymentMethod,
 }: {
   localNumberStatus: LocalNumberStatus;
   smsStatus: SmsStatus;
   assignedPhone: string | null;
+  areaCode: string | null;
+  postalCode: string | null;
   hasPaymentMethod: boolean;
 }) {
   const numberAssigned =
@@ -43,6 +47,20 @@ export function AssignedNumberCard({
             Not assigned yet
           </p>
         )}
+      </div>
+
+      <div className="acct-callout">
+        <p className="t-body" style={{ margin: 0 }}>
+          We&apos;ll look for a local number near your office.
+        </p>
+        <div style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-3)" }}>
+          <StatusRow label="Area code">
+            <span className="t-mono">{areaCode || "Not available"}</span>
+          </StatusRow>
+          <StatusRow label="ZIP code">
+            <span className="t-mono">{postalCode || "Not available"}</span>
+          </StatusRow>
+        </div>
       </div>
 
       <div>

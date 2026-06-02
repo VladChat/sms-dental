@@ -10,9 +10,7 @@ import {
 import { resolvePlatformAdmin } from "../../../../../../../lib/auth/platform-admin";
 import { findClinicById } from "../../../../../../../lib/db/clinics";
 import {
-  isSupportedCountry,
   searchAvailableTollFreeNumbers,
-  type SupportedCountry,
 } from "../../../../../../../lib/twilio/numbers";
 import {
   buildLocalNumberSearchPlan,
@@ -25,13 +23,6 @@ export const dynamic = "force-dynamic";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
-const ALLOWED_LIMITS = [10, 20, 50];
-
-function parseBool(v: string | null, fallback: boolean): boolean {
-  if (v === null) return fallback;
-  return v === "true" || v === "1";
-}
-
 // GET /api/admin/clinics/[clinicId]/phone-numbers/search
 //
 // Platform-admin-only, READ-ONLY Twilio available-number lookup. Local searches
@@ -41,11 +32,9 @@ function parseBool(v: string | null, fallback: boolean): boolean {
 //
 // Query params (all optional except defaults below):
 //   type=local|toll_free (default local)
-//   country=US|CA (default clinic country, else US; local smart search is US-only)
-//   area_code=NNN | locality metadata | region (2-letter) | postal_code
-//   contains=digits/* pattern
-//   voice|sms|mms = true|false (capability filters; default voice+sms)
-//   limit = 10|20|50 (default 10)
+//   area_code=NNN | postal_code=5-digit ZIP
+//
+// MVP defaults: country=US, Voice+SMS required, MMS not required, limit=10.
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ clinicId: string }> },
@@ -68,79 +57,38 @@ export async function GET(
     return jsonBadRequest("type must be 'local' or 'toll_free'.");
   }
 
-  // Country
-  const requestedCountry = q.get("country")?.trim().toUpperCase() ?? "";
-  let country: SupportedCountry;
-  if (requestedCountry) {
-    if (!isSupportedCountry(requestedCountry)) {
-      return jsonError(400, "country_not_supported", "Only US and CA are supported right now.");
-    }
-    country = requestedCountry;
-  } else if (isSupportedCountry(clinic.country)) {
-    country = clinic.country;
-  } else {
-    country = "US";
-  }
-
   // Area code (3-digit NANP)
   const areaCode = (q.get("area_code") ?? "").trim();
   if (areaCode && !/^\d{3}$/.test(areaCode)) {
     return jsonBadRequest("Area code must be a 3-digit number.");
   }
 
-  // Region (2-letter for US/CA)
-  const regionRaw = (q.get("region") ?? "").trim();
-  if (regionRaw && !/^[A-Za-z]{2}$/.test(regionRaw)) {
-    return jsonBadRequest("State/region must be a 2-letter code (e.g. IL).");
-  }
-  const region = regionRaw ? regionRaw.toUpperCase() : "";
-
-  const locality = (q.get("locality") ?? "").trim().slice(0, 80);
   const postalCode = (q.get("postal_code") ?? "").trim().slice(0, 16);
 
-  // Contains pattern: digits and `*` only.
-  const containsRaw = (q.get("contains") ?? "").trim();
-  const contains = containsRaw.replace(/[^\d*]/g, "").slice(0, 12);
-  if (containsRaw && !contains) {
-    return jsonBadRequest("Pattern must contain digits (and optional * wildcards).");
-  }
-
-  // Capabilities (default Voice + SMS)
-  const required = {
-    voice: parseBool(q.get("voice"), true),
-    sms: parseBool(q.get("sms"), true),
-    mms: parseBool(q.get("mms"), false),
-  };
-
-  // Limit
-  let limit = Number(q.get("limit") ?? "10");
-  if (!ALLOWED_LIMITS.includes(limit)) limit = 10;
+  const required = { voice: true, sms: true, mms: false };
+  const limit = 10;
+  const country = "US";
 
   try {
     if (type === "toll_free") {
-      const numbers = await searchAvailableTollFreeNumbers({ country, contains: contains || undefined, required, limit });
+      const numbers = await searchAvailableTollFreeNumbers({ country, required, limit });
       return jsonOk({
         ok: true,
         type,
         country,
-        params: { type, country, contains: contains || null, required, limit },
+        params: { type, country, required, limit },
         count: numbers.length,
         numbers,
         empty_reason: numbers.length === 0 ? "no_results" : null,
       });
     }
 
-    if (country !== "US") {
-      return jsonError(400, "country_not_supported", "Smart local number search is currently available for U.S. numbers only.");
-    }
-
     const attempts = buildLocalNumberSearchPlan({
-      country: "US",
+      country,
       mainPhone: clinic.main_phone,
       areaCode: areaCode || undefined,
       postalCode: postalCode || undefined,
-      stateRegion: region || undefined,
-      contains: contains || undefined,
+      stateRegion: clinic.state_region,
       required,
       limit,
     });
@@ -161,11 +109,10 @@ export async function GET(
         type,
         country: "US",
         area_code: areaCode || null,
-        locality: locality || null,
         locality_filter_used: false,
-        region: region || null,
+        region: null,
         postal_code: postalCode || null,
-        contains: contains || null,
+        contains: null,
         distance: radiusDistance(result.attemptLabel),
         required,
         limit,

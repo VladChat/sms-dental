@@ -1806,13 +1806,18 @@ Purchase gate and assignment behavior are unchanged (see the section above).
 
 Filter fields (clinic data prefilled as defaults only — never a hidden restriction):
 - Number type: Local / Toll-free
-- Country: US / CA (default clinic country)
-- Area code (local), City / locality metadata, State/region 2-letter (local), ZIP/postal
-  (local)
-- Contains / pattern (digits + `*` wildcards)
-- Required capabilities: Voice, SMS, MMS (default Voice + SMS)
-- Results: 10 / 20 / 50
+- Area code (local; prefilled from the clinic's main office phone, editable by admin)
+- ZIP code (local; prefilled from the clinic profile, editable by admin)
 - "Reset to clinic defaults" restores the prefilled values.
+
+Hidden defaults for admin search:
+
+- Country is fixed internally to `US` for MVP.
+- Local search requires Voice + SMS.
+- MMS and fax are not required.
+- Result limit is fixed internally at 10.
+- City/locality, state, radius, contains/pattern, country, capabilities, and result count
+  are not visible on the main form.
 
 Local search order:
 
@@ -1826,21 +1831,29 @@ Local search order:
 City/locality is never sent as `inLocality` during smart local search. It may appear as
 metadata on returned numbers only.
 
-`GET …/phone-numbers/search` validates every param server-side (country, area code
-3-digit, region 2-letter, contains digits/`*` capped, limit ∈ {10,20,50}, capability
-booleans) and echoes the winning `attempt_label`, attempted labels, fallback message, and
-`count`. Local search maps to Twilio Local available-number list through the shared smart
-planner; toll-free maps to TollFree. Results show E.164 + friendly number, type,
-locality/region/ZIP, Voice/SMS/MMS badges, and address requirement; a number is selectable
-for purchase only when it has both Voice and SMS.
+`GET …/phone-numbers/search` validates number type, area code, and ZIP, then echoes the
+winning `attempt_label`, attempted labels, fallback message, and `count`. Local search maps
+to Twilio Local available-number list through the shared smart planner; toll-free maps to
+TollFree. Results show E.164 + friendly number, type, locality/region when Twilio provides
+city metadata, Voice/SMS/MMS badges, and address requirement; a number is selectable for
+purchase only when it has both Voice and SMS.
+
+Location metadata handling:
+
+- Numbers with locality + region sort first.
+- Numbers with region but no locality sort after locality matches.
+- Numbers without locality are not marked Recommended unless they are the only usable result.
+- If Twilio omits locality, the UI says "Location not specified by Twilio."
+- If at least three returned local numbers have locality metadata, the admin list hides
+  no-locality results.
 
 Empty state: "No local numbers found after the smart fallback search. Try a broader area
 code, check the ZIP, or switch to toll-free." — the filter form stays visible to adjust and
 re-search.
 
-Safe test (purchase disabled): search by area code + ZIP with a city filled in; verify the
-request does not send `inLocality` to Twilio, fallback labels are tried, and a fallback
-message appears if a broader attempt wins. Select a number; attempt purchase → blocked with
+Safe test (purchase disabled): search by area code + ZIP; verify the request sends only
+`type`, `area_code`, and `postal_code`, fallback labels are tried, and a fallback message
+appears if a broader attempt wins. Select a number; attempt purchase → blocked with
 `Twilio number purchase is disabled by environment flag.`; no number purchased, no DB row.
 
 ---

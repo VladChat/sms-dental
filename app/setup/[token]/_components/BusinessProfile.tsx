@@ -117,6 +117,8 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 localNumberStatus={data.number.localNumberStatus}
                 smsStatus={smsStatus}
                 assignedPhone={data.number.assignedPhone}
+                areaCode={data.number.areaCode}
+                postalCode={data.number.postalCode}
                 hasPaymentMethod={hasPaymentMethod}
               />
             </Section>

@@ -180,12 +180,17 @@ function rankAndMap(params: {
       const voice = Boolean(n.capabilities?.voice);
       const sms = Boolean(n.capabilities?.SMS);
       let score = 0;
+      if (params.type === "local" && n.locality && n.region) {
+        score += 30;
+      } else if (params.type === "local" && n.region) {
+        score += 20;
+      }
       if (
         params.type === "local" &&
         params.preferredAreaCode &&
         phoneAreaCode(phone) === params.preferredAreaCode
       ) {
-        score += 10;
+        score += 5;
       }
       if (addressReq === "none") score += 2;
       const normalized: AvailableNumber = {
@@ -208,8 +213,14 @@ function rankAndMap(params: {
     .sort((a, b) => b.score - a.score);
 
   const items = ranked.map((r) => r.normalized);
-  // Recommend the top-ranked purchasable number.
-  const firstSelectable = items.find((i) => i.selectable);
+  // Recommend the top-ranked purchasable number with city metadata. If Twilio
+  // returns no city metadata for any usable local result, recommend only when
+  // there is exactly one usable option.
+  const selectable = items.filter((i) => i.selectable);
+  const firstSelectableWithLocality = selectable.find((i) => i.locality);
+  const firstSelectable =
+    firstSelectableWithLocality ??
+    (selectable.length === 1 ? selectable[0] : undefined);
   if (firstSelectable) firstSelectable.recommended = true;
   return items;
 }

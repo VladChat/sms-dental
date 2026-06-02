@@ -3421,7 +3421,76 @@ Validation:
 Commit:
 
 ```txt
+9bf0565add098e4e85739d3b90ab4d0c7b3f3140
+```
+
+Remaining risk:
+
+- ZIP-radius fallback still requires a committed ZIP coordinate lookup source before it can
+  run.
+
+---
+
+## 2026-06-02 — Simplify phone-number search UI
+
+Goal: stop showing Twilio Console-style controls to platform admins and clinic owners now
+that smart fallback search is implemented server-side.
+
+What changed:
+
+- Admin → Clinic → Phone number → Assign a number now shows only:
+  - Number type (Local / Toll-free)
+  - Area code (prefilled from clinic main office phone, editable by admin)
+  - ZIP code (prefilled from clinic profile, editable by admin)
+- Removed visible admin controls for country, city/locality, state/region, contains/pattern,
+  result count, radius, and Voice/SMS/MMS capability checkboxes.
+- Admin search API now fixes MVP defaults internally: `country=US`, Voice+SMS required, MMS
+  not required, limit 10.
+- Owner `/account` Phone number card now shows the saved local-number search context only:
+  "We'll look for a local number near your office", area code, and ZIP code. It does not
+  show number type or Twilio-style filters.
+- Twilio result ranking now prefers local numbers with locality + region metadata, then
+  region-only metadata, then no locality metadata.
+- A number without locality metadata is not marked Recommended unless it is the only usable
+  result. The admin result list displays "Location not specified by Twilio" when locality is
+  missing, and hides no-locality local results when at least three returned results have
+  locality metadata.
+
+Files changed:
+
+- `lib/twilio/numbers.ts`
+- `app/api/admin/clinics/[clinicId]/phone-numbers/search/route.ts`
+- `app/admin/(console)/clinics/[clinicId]/_components/AdminPhoneNumberManager.tsx`
+- `app/admin/(console)/clinics/[clinicId]/_components/AdminClinicConsole.tsx`
+- `app/admin/(console)/clinics/[clinicId]/page.tsx`
+- `app/account/page.tsx`
+- `app/setup/[token]/_components/account-types.ts`
+- `app/setup/[token]/_components/BusinessProfile.tsx`
+- `app/setup/[token]/_components/AssignedNumberCard.tsx`
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Safety:
+
+- Search remains read-only.
+- No Twilio number was purchased, reserved, released, or assigned.
+- Purchase behavior remains behind the existing `TWILIO_NUMBER_PURCHASE_ENABLED` gate.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Commit:
+
+```txt
 pending; final commit hash reported after commit
+```
+
+Push:
+
+```txt
+pending
 ```
 
 Remaining risk:
