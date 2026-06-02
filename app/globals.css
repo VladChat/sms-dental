@@ -538,6 +538,31 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .adm-tech > summary.adm-tech-summary::before { content:"▸"; display:inline-block; margin-right:var(--space-2); color:var(--text-muted); }
 .adm-tech[open] > summary.adm-tech-summary::before { content:"▾"; }
 
+/* Admin clinic console: tab nav (reuses .acct-nav* visuals) + focused panels */
+.acct-nav-item[aria-selected="true"] { background:var(--primary-soft); border-color:var(--primary-soft-border); color:var(--teal-700); }
+.acct-nav-item[role="tab"] { justify-content:space-between; }
+.adm-nav-status { font:var(--helper); flex:0 0 auto; white-space:nowrap; }
+.adm-nav-status.tone-success { color:var(--success); }
+.adm-nav-status.tone-warning { color:var(--warning); }
+.adm-nav-status.tone-info { color:var(--info); }
+.adm-nav-status.tone-neutral { color:var(--text-muted); }
+
+/* One compact launch banner under the header */
+.adm-banner { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); padding:var(--space-4) var(--space-5); border:1px solid var(--border); border-left:3px solid var(--border-strong); border-radius:var(--r-md); background:var(--surface-2); flex-wrap:wrap; }
+.adm-banner.tone-warning { border-left-color:var(--warning); }
+.adm-banner.tone-info { border-left-color:var(--info); }
+.adm-banner.tone-success { border-left-color:var(--success); }
+.adm-banner-main { display:grid; gap:2px; min-width:0; }
+.adm-banner-title { font:var(--body-sm); font-weight:700; color:var(--text); }
+.adm-banner-body { font:var(--helper); color:var(--text-muted); }
+
+/* Collapsible fold inside an admin panel */
+.adm-fold { border-top:1px solid var(--border); padding-top:var(--space-4); margin-top:var(--space-4); }
+.adm-fold > summary { cursor:pointer; font:600 .95rem/1.3 var(--font-display); color:var(--text); list-style:none; }
+.adm-fold > summary::-webkit-details-marker { display:none; }
+.adm-fold > summary::before { content:"▸"; display:inline-block; margin-right:var(--space-2); color:var(--text-muted); }
+.adm-fold[open] > summary::before { content:"▾"; }
+
 /* In-app confirmation modal (replaces native window.confirm) */
 .adm-modal-overlay { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:var(--space-5); background:rgba(12,43,42,.45); }
 .adm-modal { width:100%; max-width:440px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-xl); padding:var(--space-6); }
