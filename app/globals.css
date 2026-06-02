@@ -570,6 +570,13 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .adm-cand-meta { font:var(--body-sm); color:var(--text-secondary); overflow-wrap:anywhere; }
 .adm-cand-caps { display:flex; gap:var(--space-2); flex-wrap:wrap; }
 
+/* Manual phone-search filter form */
+.adm-filter { margin-top:var(--space-3); display:grid; gap:var(--space-4); }
+.adm-filter .field { margin:0; }
+.adm-filter-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:var(--space-3) var(--space-4); }
+.adm-caps { display:flex; align-items:center; gap:var(--space-4); flex-wrap:wrap; border:0; margin:0; padding:0; }
+.adm-caps legend { padding:0; margin:0 var(--space-2) 0 0; float:none; }
+
 /* Collapsible fold inside an admin panel */
 .adm-fold { border-top:1px solid var(--border); padding-top:var(--space-4); margin-top:var(--space-4); }
 .adm-fold > summary { cursor:pointer; font:600 .95rem/1.3 var(--font-display); color:var(--text); list-style:none; }

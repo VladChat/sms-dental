@@ -1796,3 +1796,38 @@ Rollback / manual cleanup if a wrong number is assigned:
 Remaining launch blockers after a number is assigned: A2P/SMS approval completion and the
 final launch action; billing is not a launch gate in this MVP. Number assignment alone
 does not launch SMS recovery.
+
+---
+
+## Admin manual Twilio number search filters — 2026-06-01
+
+The admin Phone number panel's single search button was replaced with a manual filter
+form (Twilio-Console-style "Buy a number"). Purchase gate and assignment behavior are
+unchanged (see the section above).
+
+Filter fields (clinic data prefilled as defaults only — never a hidden restriction):
+- Number type: Local / Toll-free
+- Country: US / CA (default clinic country)
+- Area code (local), City / locality (local), State/region 2-letter (local),
+  ZIP/postal (local)
+- Contains / pattern (digits + `*` wildcards)
+- Radius (miles, default 25) — geo search near the clinic's main phone; applied ONLY
+  when area code, city, state, and ZIP are all empty and the clinic has a valid US phone
+- Required capabilities: Voice, SMS, MMS (default Voice + SMS)
+- Results: 10 / 20 / 50
+- "Reset to clinic defaults" restores the prefilled values.
+
+`GET …/phone-numbers/search` validates every param server-side (country US/CA, area code
+3-digit, region 2-letter, contains digits/`*` capped, distance 1–500, limit ∈ {10,20,50},
+capability booleans) and echoes the parameters actually used plus a `count`. Local search
+maps to Twilio Local available-number list; toll-free to TollFree. Results show E.164 +
+friendly number, type, locality/region/ZIP, Voice/SMS/MMS badges, and address
+requirement; a number is selectable for purchase only when it has both Voice and SMS.
+
+Empty state: "No numbers found for these filters. Try removing area code, changing
+city/ZIP, or switching to toll-free." — the filter form stays visible to adjust and
+re-search.
+
+Safe test (purchase disabled): search by area code / city+state / ZIP / toll-free; verify
+the no-results guidance; select a number; attempt purchase → blocked with
+`Twilio number purchase is disabled by environment flag.`; no number purchased, no DB row.

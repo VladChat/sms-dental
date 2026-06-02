@@ -3287,3 +3287,45 @@ Validation:
 
 - `npm run typecheck` -> pass
 - `npm run build` -> pass (`/phone-numbers/search` + `/phone-numbers/purchase` compiled)
+
+---
+
+## 2026-06-01 — Manual Twilio number search filters (admin)
+
+Replaced the admin Phone number panel's single search button with a manual filter form
+(Twilio-Console-style). Purchase gate, confirm dialog, assignment, webhooks, and audit are
+unchanged. No migration, no auth change, no purchase performed (`TWILIO_NUMBER_PURCHASE_ENABLED`
+still committed `false`).
+
+- `lib/twilio/numbers.ts`: local + toll-free search now accept `contains`, `inLocality`,
+  `inRegion`, `inPostalCode`, `nearNumber`+`distance`, capability requireds (default
+  Voice+SMS), and limit (cap raised to 50). `AvailableNumber` gains `selectable`
+  (= Voice && SMS). Onboarding callers keep the historical Voice+SMS-required behavior.
+- `GET /api/admin/clinics/[clinicId]/phone-numbers/search`: parses + validates all filter
+  params server-side (country US/CA, area code 3-digit, region 2-letter, contains
+  digits/`*`, distance 1–500, limit ∈{10,20,50}, capability booleans), echoes the params
+  actually used + `count` + `empty_reason`. Geo radius applies only when area code / city /
+  state / ZIP are all empty and the clinic has a valid US main phone (near-number anchor).
+- `AdminPhoneNumberManager`: filter form (type, country, area code, city, state, ZIP,
+  contains, radius, capabilities, results) prefilled from clinic defaults, Search + Reset,
+  results summary, candidate radio list (selectable only when Voice+SMS), actionable empty
+  state, existing confirm-dialog purchase. Clinic defaults passed from `page.tsx`.
+
+Safe test with purchase disabled: search by area code / city+state / ZIP / toll-free works;
+empty state shows guidance and keeps the form; attempting purchase returns
+`Twilio number purchase is disabled by environment flag.`; no number purchased, no DB row.
+
+Files: `lib/twilio/numbers.ts`,
+`app/api/admin/clinics/[clinicId]/phone-numbers/search/route.ts`,
+`app/admin/(console)/clinics/[clinicId]/_components/AdminPhoneNumberManager.tsx`,
+`.../_components/AdminClinicConsole.tsx`, `app/admin/(console)/clinics/[clinicId]/page.tsx`,
+`app/globals.css`, plus docs.
+
+Side effects avoided: no SMS, no email, no Stripe call, no Twilio purchase/reserve/release
+(flag off; search is read-only), no A2P submission, no migration, no auth/schema change, no
+secrets printed/committed.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass

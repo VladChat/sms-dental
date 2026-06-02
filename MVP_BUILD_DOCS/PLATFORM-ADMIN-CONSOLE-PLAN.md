@@ -699,3 +699,27 @@ accessible `AdminConfirmDialog` (no `window.confirm`), loading/success/error sta
 
 Remaining blockers after assignment: A2P/SMS approval + the launch action. Next: wire
 A2P submission (or Stripe billing) behind the same guard+audit pattern.
+
+## 22. Manual Twilio number search filters (2026-06-01)
+
+The Phone number panel's one-button search became a manual filter form (Twilio-Console
+style). Purchase gate (`TWILIO_NUMBER_PURCHASE_ENABLED`), confirm dialog, assignment,
+webhooks, and audit are unchanged.
+
+- UI (`AdminPhoneNumberManager`): Number type (Local/Toll-free), Country (US/CA), Area
+  code, City, State, ZIP, Contains/pattern, Radius (default 25), Capabilities
+  (Voice/SMS/MMS, default Voice+SMS), Results (10/20/50), Search + Reset-to-clinic-
+  defaults. Clinic fields are prefilled defaults only, not hidden restrictions.
+- API (`GET …/phone-numbers/search`): validates every param server-side (country US/CA,
+  area code 3-digit, region 2-letter, contains digits/`*`, distance 1–500, limit
+  ∈{10,20,50}, capability booleans), echoes the params actually used + `count`, and
+  returns an `empty_reason` when no matches.
+- Helper (`lib/twilio/numbers.ts`): local/toll-free now accept contains, inLocality,
+  inRegion, inPostalCode, nearNumber+distance, capability requireds (default Voice+SMS),
+  limit (cap 50). Results carry `selectable` (= Voice && SMS); only selectable numbers
+  are purchasable. Onboarding callers keep the historical Voice+SMS-required behavior.
+- Empty state gives actionable guidance and keeps the form visible.
+
+Remaining blockers after assignment unchanged: A2P/SMS approval + the launch action.
+Next: geo radius needs a richer anchor (lat/long) for non-NANP, and wire A2P submission
+behind the same guard+audit pattern.
