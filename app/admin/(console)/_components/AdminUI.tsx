@@ -131,3 +131,55 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
 export function describeAuditAction(action: string): string {
   return AUDIT_ACTION_LABELS[action] ?? action;
 }
+
+// ---- human labels for raw status enums (no snake_case in primary UI) ----
+
+const SMS_STATUS_LABELS: Record<string, string> = {
+  preparing: "Preparing",
+  waiting_for_approval: "Waiting for approval",
+  active: "Active",
+};
+const LOCAL_NUMBER_STATUS_LABELS: Record<string, string> = {
+  preparing: "Preparing",
+  reserved: "Reserved",
+  assigned: "Assigned",
+};
+const BILLING_STATUS_LABELS: Record<string, string> = {
+  not_started: "Not started",
+  trialing: "Trialing",
+  active: "Active",
+  past_due: "Past due",
+  canceled: "Canceled",
+};
+const SETUP_STATUS_LABELS: Record<string, string> = {
+  setup_pending: "Setup pending",
+  clinic_details_completed: "Details completed",
+  number_assigned: "Number assigned",
+  qa_pending: "QA pending",
+  qa_passed: "QA passed",
+  ready_for_approval: "Ready for approval",
+  active: "Active",
+  cancelled: "Cancelled",
+  expired: "Expired",
+};
+
+// Title-case a snake_case/kebab token as a last-resort human label.
+export function humanizeToken(value: string | null | undefined): string {
+  if (!value) return "—";
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function smsStatusLabel(s: string): string {
+  return SMS_STATUS_LABELS[s] ?? humanizeToken(s);
+}
+export function localNumberStatusLabel(s: string): string {
+  return LOCAL_NUMBER_STATUS_LABELS[s] ?? humanizeToken(s);
+}
+export function billingStatusLabel(s: string): string {
+  return BILLING_STATUS_LABELS[s] ?? humanizeToken(s);
+}
+export function setupStatusLabel(s: string): string {
+  return SETUP_STATUS_LABELS[s] ?? humanizeToken(s);
+}

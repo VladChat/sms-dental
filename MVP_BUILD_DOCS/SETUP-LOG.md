@@ -3076,3 +3076,54 @@ Validation:
 
 - `npm run typecheck` -> pass
 - `npm run build` -> pass
+
+---
+
+## 2026-06-01 — Admin clinic detail = owner-dashboard superset (read-only)
+
+Expanded `/admin/clinics/[clinicId]` so the platform admin sees everything the clinic
+owner sees in `/account`, plus admin-only internal detail/diagnostics/audit. Read-only
++ information-architecture change. See `PLATFORM-ADMIN-CONSOLE-PLAN.md` §18 for the full
+owner→admin mapping.
+
+Data layer (existing columns only — no migration, no new fields invented):
+
+- `getAdminClinicDetail` / `AdminClinicDetail` extended with full business-identity and
+  billing values the owner already sees: `mainPhone`, `einTaxId`, `ownerContactPhone`,
+  `testPatientPhone`, `timezone`, `preferredAreaCode`, A2P rep first/last/title/phone,
+  `stripeCustomerId`, `stripeSubscriptionId`. Phone-number rows now include full E.164,
+  full Twilio SID, and assigned/updated timestamps.
+- New human-label helpers in `AdminUI` (`smsStatusLabel`, `localNumberStatusLabel`,
+  `billingStatusLabel`, `setupStatusLabel`, `humanizeToken`) so no raw snake_case shows
+  in primary UI.
+
+Page sections (in order): header + compact metadata (Clinic ID, Owner, Setup, Created,
+Updated) · Status overview (Clinic status + Launch status, each once) · Launch readiness
+(4 rows) · Phone numbers (detailed) · Business profile · A2P / SMS approval (detailed +
+carrier-submission block) · Billing · Public pages & compliance · SMS behavior · Admin
+controls · Diagnostics · Recent admin activity.
+
+Data-exposure decision: the operator reviews/submits the A2P packet, so the clinic's own
+business contacts the owner already sees (office/owner/rep phones, EIN, Stripe object
+IDs) are shown in full to admins; third-party caller/patient numbers in Diagnostics stay
+masked. Admin console remains gated to `PLATFORM_ADMIN_EMAILS` /
+`profiles.is_internal_admin`. No secrets surfaced.
+
+Honest gaps (no invented data): no `a2p_brand_sid`/`campaign_sid`/`submitted_at`/
+`rejection_reason`/per-clinic `messaging_service_sid` columns exist → carrier-submission
+fields render "Not submitted / Not available"; no `sms-consent` route → shown as covered
+within SMS terms. Disabled placeholders unchanged (Twilio purchase, Stripe billing, A2P
+submission), each with a precise blocker.
+
+Files: `app/admin/(console)/clinics/[clinicId]/page.tsx`,
+`app/admin/(console)/_components/AdminUI.tsx`, `lib/db/admin/clinics.ts`,
+`lib/db/admin/types.ts`, `app/globals.css`, plus docs.
+
+Side effects avoided: no SMS, no email, no Stripe call, no Twilio number
+purchase/reserve/release, no A2P submission, no migration, no auth/schema change, no
+secrets printed/committed.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
