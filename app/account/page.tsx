@@ -13,6 +13,7 @@ import { SetupInvalid } from "../setup/[token]/_components/SetupInvalid";
 import { ClinicForm } from "../setup/[token]/_components/ClinicForm";
 import { BusinessProfile, type BusinessProfileData } from "../setup/[token]/_components/BusinessProfile";
 import { PageShell } from "../setup/[token]/_components/PageShell";
+import { phoneAreaCode } from "../../lib/twilio/numbers";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -103,6 +104,8 @@ export default async function AccountPage() {
         localNumberStatus: clinic.local_number_status,
         smsStatus: clinic.sms_status,
         assignedPhone,
+        areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
+        postalCode: clinic.postal_code,
       },
       billing: {
         hasPaymentMethod:
@@ -204,6 +207,8 @@ export default async function AccountPage() {
       localNumberStatus: clinic.local_number_status,
       smsStatus: clinic.sms_status,
       assignedPhone,
+      areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
+      postalCode: clinic.postal_code,
     },
     billing: {
       hasPaymentMethod:

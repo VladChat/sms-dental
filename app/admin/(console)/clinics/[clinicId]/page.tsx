@@ -3,6 +3,7 @@ import { getAdminClinicDetail } from "../../../../../lib/db/admin/clinics";
 import { listAdminAuditEvents } from "../../../../../lib/db/admin/audit";
 import { getClinicEvents } from "../../../../../lib/db/admin/events";
 import { getAppDomainsSafe, getSmsRecoveryConfig, isTwilioNumberPurchaseEnabled } from "../../../../../lib/env";
+import { phoneAreaCode } from "../../../../../lib/twilio/numbers";
 import { AdminClinicConsole } from "./_components/AdminClinicConsole";
 
 export const dynamic = "force-dynamic";
@@ -45,15 +46,9 @@ export default async function AdminClinicDetailPage({
   // Phone-search defaults from clinic data (used as prefilled defaults only, not
   // hidden restrictions). Area code: preferred area code, else derived from a US
   // main phone (+1AAA…). No hardcoded area codes.
-  const derivedAreaCode =
-    d.mainPhone && d.mainPhone.startsWith("+1") && d.mainPhone.length >= 5
-      ? d.mainPhone.slice(2, 5)
-      : "";
+  const derivedAreaCode = d.mainPhone ? phoneAreaCode(d.mainPhone) ?? "" : "";
   const phoneDefaults = {
-    country: d.country || "US",
     areaCode: d.preferredAreaCode ?? derivedAreaCode,
-    city: d.city ?? "",
-    state: d.stateRegion ?? "",
     postal: d.postalCode ?? "",
   };
 

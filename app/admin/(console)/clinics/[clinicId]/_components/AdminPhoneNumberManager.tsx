@@ -25,7 +25,6 @@ type SearchParamsEcho = {
   type: string;
   country: string;
   area_code?: string | null;
-  locality?: string | null;
   locality_filter_used?: boolean;
   region?: string | null;
   postal_code?: string | null;
@@ -52,21 +51,6 @@ const TYPE_OPTIONS = [
   { value: "local", label: "Local" },
   { value: "toll_free", label: "Toll-free" },
 ];
-const COUNTRY_OPTIONS = [
-  { value: "US", label: "United States (US)" },
-  { value: "CA", label: "Canada (CA)" },
-];
-const LIMIT_OPTIONS = [
-  { value: "10", label: "10 results" },
-  { value: "20", label: "20 results" },
-  { value: "50", label: "50 results" },
-];
-
-function capsLabel(req: { voice: boolean; sms: boolean; mms: boolean }): string {
-  const parts = [req.voice && "Voice", req.sms && "SMS", req.mms && "MMS"].filter(Boolean);
-  return parts.length ? parts.join(" + ") : "any capability";
-}
-
 function summarize(p: SearchParamsEcho): string {
   const typeLabel = p.type === "toll_free" ? "Toll-free" : "Local";
   if (p.type === "local") {
@@ -80,9 +64,12 @@ function summarize(p: SearchParamsEcho): string {
   }
 
   const bits: string[] = [`${typeLabel} numbers in ${p.country}`];
-  if (p.contains) bits.push(`pattern ${p.contains}`);
-  bits.push(capsLabel(p.required));
   return `Showing ${bits.join(", ")}`;
+}
+
+function locationLabel(c: Candidate): string {
+  if (!c.locality) return "Location not specified by Twilio";
+  return [c.locality, c.region].filter(Boolean).join(", ");
 }
 
 export function AdminPhoneNumberManager({
@@ -100,16 +87,8 @@ export function AdminPhoneNumberManager({
 
   // Filter form state (prefilled from clinic defaults).
   const [type, setType] = useState<"local" | "toll_free">("local");
-  const [country, setCountry] = useState(defaults.country || "US");
   const [areaCode, setAreaCode] = useState(defaults.areaCode);
-  const [city, setCity] = useState(defaults.city);
-  const [state, setState] = useState(defaults.state);
   const [postal, setPostal] = useState(defaults.postal);
-  const [contains, setContains] = useState("");
-  const [capVoice, setCapVoice] = useState(true);
-  const [capSms, setCapSms] = useState(true);
-  const [capMms, setCapMms] = useState(false);
-  const [limit, setLimit] = useState("10");
 
   // Search/result state.
   const [searching, setSearching] = useState(false);
@@ -129,16 +108,8 @@ export function AdminPhoneNumberManager({
 
   function resetDefaults() {
     setType("local");
-    setCountry(defaults.country || "US");
     setAreaCode(defaults.areaCode);
-    setCity(defaults.city);
-    setState(defaults.state);
     setPostal(defaults.postal);
-    setContains("");
-    setCapVoice(true);
-    setCapSms(true);
-    setCapMms(false);
-    setLimit("10");
   }
 
   async function onSearch(e: React.FormEvent<HTMLFormElement>) {
@@ -150,17 +121,10 @@ export function AdminPhoneNumberManager({
     try {
       const p = new URLSearchParams();
       p.set("type", type);
-      p.set("country", country.trim().toUpperCase());
       if (type === "local") {
         if (areaCode.trim()) p.set("area_code", areaCode.trim());
-        if (state.trim()) p.set("region", state.trim());
         if (postal.trim()) p.set("postal_code", postal.trim());
       }
-      if (contains.trim()) p.set("contains", contains.trim());
-      p.set("voice", String(capVoice));
-      p.set("sms", String(capSms));
-      p.set("mms", String(capMms));
-      p.set("limit", limit);
 
       const res = await fetch(`/api/admin/clinics/${clinicId}/phone-numbers/search?${p.toString()}`, {
         method: "GET",
@@ -216,6 +180,11 @@ export function AdminPhoneNumberManager({
   }
 
   const isLocal = type === "local";
+  const localityCount = candidates.filter((c) => c.locality).length;
+  const displayedCandidates =
+    isLocal && localityCount >= 3
+      ? candidates.filter((c) => c.locality)
+      : candidates;
 
   return (
     <div style={{ marginTop: "var(--space-4)" }}>
@@ -233,22 +202,9 @@ export function AdminPhoneNumberManager({
       <form className="adm-filter" onSubmit={onSearch}>
         <div className="adm-filter-grid">
           <SelectField label="Number type" name="pn_type" value={type} onChange={(v) => setType(v === "toll_free" ? "toll_free" : "local")} options={TYPE_OPTIONS} />
-          <SelectField label="Country" name="pn_country" value={country} onChange={setCountry} options={COUNTRY_OPTIONS} />
           {isLocal && <Field label="Area code" name="pn_area" value={areaCode} onChange={setAreaCode} optional inputMode="numeric" placeholder="e.g. 312" />}
-          {isLocal && <Field label="City / locality" name="pn_city" value={city} onChange={setCity} optional placeholder="e.g. Chicago" helper="Shown as result metadata; smart search does not filter by city." />}
-          {isLocal && <Field label="State / region" name="pn_state" value={state} onChange={setState} optional placeholder="2-letter, e.g. IL" />}
-          {isLocal && <Field label="ZIP / postal" name="pn_zip" value={postal} onChange={setPostal} optional inputMode="numeric" />}
-          <Field label="Contains / pattern" name="pn_contains" value={contains} onChange={setContains} optional inputMode="numeric" placeholder="digits or 5*5" helper="Digits and * wildcards." />
-          <SelectField label="Results" name="pn_limit" value={limit} onChange={setLimit} options={LIMIT_OPTIONS} />
+          {isLocal && <Field label="ZIP code" name="pn_zip" value={postal} onChange={setPostal} optional inputMode="numeric" />}
         </div>
-
-        <fieldset className="adm-caps">
-          <legend className="t-label">Required capabilities</legend>
-          <label className="check"><input type="checkbox" checked={capVoice} onChange={(e) => setCapVoice(e.target.checked)} /><span>Voice</span></label>
-          <label className="check"><input type="checkbox" checked={capSms} onChange={(e) => setCapSms(e.target.checked)} /><span>SMS</span></label>
-          <label className="check"><input type="checkbox" checked={capMms} onChange={(e) => setCapMms(e.target.checked)} /><span>MMS</span></label>
-          <span className="t-helper">Purchase requires Voice + SMS.</span>
-        </fieldset>
 
         <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
           <button type="submit" className="btn btn-primary btn-sm" disabled={searching}>
@@ -270,7 +226,7 @@ export function AdminPhoneNumberManager({
       {searched && !searchError && summaryParams && (
         <div style={{ marginTop: "var(--space-3)" }}>
           <p className="t-small" style={{ color: "var(--text-secondary)", margin: 0 }}>
-            {summarize(summaryParams)} · {candidates.length} result{candidates.length === 1 ? "" : "s"}
+            {summarize(summaryParams)} · {displayedCandidates.length} result{displayedCandidates.length === 1 ? "" : "s"}
           </p>
           {fallbackMessage && (
             <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-1) 0 0" }}>
@@ -289,7 +245,7 @@ export function AdminPhoneNumberManager({
       {candidates.length > 0 && (
         <fieldset className="adm-cand-list" style={{ marginTop: "var(--space-3)" }}>
           <legend className="t-helper">Available numbers</legend>
-          {candidates.map((c) => (
+          {displayedCandidates.map((c) => (
             <label key={c.phone_number} className={`adm-cand${selected === c.phone_number ? " is-selected" : ""}${c.selectable ? "" : " is-disabled"}`}>
               <input
                 type="radio"
@@ -307,9 +263,7 @@ export function AdminPhoneNumberManager({
                 </span>
                 <span className="adm-cand-meta">
                   <span className="t-mono">{c.phone_number}</span>
-                  {(c.locality || c.region || c.postal_code) && (
-                    <span> · {[c.locality, c.region, c.postal_code].filter(Boolean).join(", ")}</span>
-                  )}
+                  <span> · {locationLabel(c)}</span>
                 </span>
                 <span className="adm-cand-caps">
                   {c.capabilities.voice && <span className="badge badge-success">Voice</span>}
