@@ -3537,3 +3537,12 @@ change, no secrets exposed.
 Validation:
 - `npm run typecheck` -> pass
 - `npm run build` -> pass (`/admin/clinics/[clinicId]/phone-numbers/new` compiled)
+
+Commit: `14f9962` (`fix: move admin add number flow to dedicated page`). Pushed to
+`origin/main`.
+
+Remaining risks: search result quality depends on the live phone-provider catalog;
+purchase stays intentionally blocked until `TWILIO_NUMBER_PURCHASE_ENABLED` is enabled
+with provider creds + Messaging Service + app base URL (human-approved). Adding a second
+number is now possible, but the launch gate still keys off "has an active number" and
+there is no per-number role-management UI yet.
