@@ -666,3 +666,36 @@ pills), one launch banner, left section nav, and a single focused panel.
   plus collapsible **Recent admin activity**, **Diagnostics** (masked), and **Technical
   details** (collapsed) — these are no longer full-width standalone sections.
 - Editable forms, save routes, validation, and audit behavior are unchanged.
+
+## 21. Implemented — admin Twilio number purchase/assign (2026-06-01)
+
+First real gated Twilio admin action. The Phone number panel's disabled placeholder is
+replaced by a search → select → confirm → purchase/assign workflow. Same Twilio
+architecture as onboarding (`purchaseNumberAndConfigure` + `upsertOfficeTextingNumber` +
+Messaging Service) — not a second one. **No migration** (`clinic_phone_numbers` already
+stores E.164 + IncomingPhoneNumber SID + role + active).
+
+Routes (platform-admin guarded, `resolvePlatformAdmin(req)`):
+- `GET …/phone-numbers/search` — read-only available-number lookup; returns only
+  Voice+SMS-capable numbers. Hint order: query `area_code` → `preferred_area_code` →
+  area code from `main_phone` → none; region/postal from clinic. No hardcoded area codes.
+- `POST …/phone-numbers/purchase` `{ phone_number }` — purchases + assigns.
+
+Hard gate `TWILIO_NUMBER_PURCHASE_ENABLED` (committed `false`): disabled →
+**503 `purchase_disabled`** "Twilio number purchase is disabled by environment flag.";
+no Twilio call, no DB write, no bypass. Preconditions: auth → clinic exists → not already
+assigned (409, one-number rule) → flag on → app base URL present → purchase.
+
+On success: configures Voice/SMS incoming + status webhooks on the number, best-effort
+attaches the Messaging Service, stores the mapping, writes `admin_audit_events`
+(`clinic.phone_number.purchase_assign`; after-state `{ phone_number, twilio_sid,
+area_code }`; no secrets), and the console refreshes so Phone number flips Missing →
+Assigned. **SMS recovery is not enabled**; `setup_status` unchanged.
+
+UI: `AdminPhoneNumberManager` (client) — "Search available numbers", candidate radio
+list (E.164 + friendly + locality/region + Voice/SMS/MMS + Local/Toll-free label,
+unusable numbers disabled), "Purchase and assign selected number" via the existing
+accessible `AdminConfirmDialog` (no `window.confirm`), loading/success/error states.
+
+Remaining blockers after assignment: A2P/SMS approval + the launch action. Next: wire
+A2P submission (or Stripe billing) behind the same guard+audit pattern.

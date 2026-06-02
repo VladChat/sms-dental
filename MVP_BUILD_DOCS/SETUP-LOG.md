@@ -3233,3 +3233,57 @@ Validation:
 
 - `npm run typecheck` -> pass
 - `npm run build` -> pass
+
+---
+
+## 2026-06-01 — Admin Twilio number purchase + assignment (first gated action)
+
+Wired the first real gated Twilio admin action into `/admin/clinics/[clinicId]` (Phone
+number panel). Search → select → confirm → purchase/assign. Reuses the onboarding Twilio
+architecture (`purchaseNumberAndConfigure` + `upsertOfficeTextingNumber` + Messaging
+Service); no second architecture. **No migration** — `clinic_phone_numbers` already
+stores E.164 + IncomingPhoneNumber SID + role + active. Runbook has the operator
+procedure + rollback; plan §21 has the design.
+
+New routes (platform-admin guarded):
+- `GET /api/admin/clinics/[clinicId]/phone-numbers/search` — read-only available-number
+  lookup; Voice+SMS-capable only; hint = query area_code → preferred_area_code → area
+  code from main_phone → none (no hardcoded codes); region/postal from clinic.
+- `POST /api/admin/clinics/[clinicId]/phone-numbers/purchase` `{ phone_number }`.
+
+Purchase gate: `TWILIO_NUMBER_PURCHASE_ENABLED`
+(`runtimeConfig.onboarding.twilioNumberPurchaseEnabled`, committed **false**). Disabled →
+HTTP 503 `purchase_disabled` "Twilio number purchase is disabled by environment flag." —
+no Twilio call, no DB write, no bypass. Preconditions: auth → clinic exists → not already
+assigned (409 `already_assigned`) → flag on → app base URL present → purchase.
+
+On success: sets the number's Voice/SMS incoming + status webhooks
+(`/api/webhooks/twilio/{voice,messaging}/{incoming,status}` from `appBaseUrl`),
+best-effort attaches the Messaging Service, upserts `clinic_phone_numbers`
+(role `office_texting`, active), writes `admin_audit_events`
+`clinic.phone_number.purchase_assign` (after `{ phone_number, twilio_sid, area_code }`,
+no secrets). SMS recovery NOT enabled; `setup_status` unchanged. Console refreshes →
+Phone number flips Missing → Assigned.
+
+UI: `AdminPhoneNumberManager` client component (candidate radio list, capability badges,
+existing accessible confirm dialog — no `window.confirm`, loading/success/error). Submit
+SMS approval and Manage billing remain disabled with their exact blockers.
+
+Safe test with purchase disabled (current state): searched candidates render; attempting
+purchase returns the 503 flag blocker in the confirm dialog; no number purchased, no DB
+row created, no Twilio purchase/reserve/release.
+
+Files: `app/api/admin/clinics/[clinicId]/phone-numbers/search/route.ts` (new),
+`.../phone-numbers/purchase/route.ts` (new),
+`app/admin/(console)/clinics/[clinicId]/_components/AdminPhoneNumberManager.tsx` (new),
+`.../_components/AdminClinicConsole.tsx`, `app/admin/(console)/clinics/[clinicId]/page.tsx`,
+`app/globals.css`, plus docs.
+
+Side effects avoided: no SMS, no email, no Stripe call, no Twilio number
+purchase/reserve/release (flag off), no A2P submission, no migration, no auth/schema
+change, no secrets printed/committed.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass (`/phone-numbers/search` + `/phone-numbers/purchase` compiled)
