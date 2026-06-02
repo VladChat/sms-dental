@@ -1,6 +1,7 @@
 "use client";
 
 import { StatusBadge, StatusRow, type StatusKind } from "./AccountUI";
+import { OwnerLocalNumberSearch } from "./OwnerLocalNumberSearch";
 import type { LocalNumberStatus, SmsStatus } from "./account-types";
 
 export function AssignedNumberCard({
@@ -10,6 +11,7 @@ export function AssignedNumberCard({
   areaCode,
   postalCode,
   hasPaymentMethod,
+  onGoToBilling,
 }: {
   localNumberStatus: LocalNumberStatus;
   smsStatus: SmsStatus;
@@ -17,6 +19,7 @@ export function AssignedNumberCard({
   areaCode: string | null;
   postalCode: string | null;
   hasPaymentMethod: boolean;
+  onGoToBilling: () => void;
 }) {
   const numberAssigned =
     localNumberStatus === "assigned" || localNumberStatus === "reserved" || Boolean(assignedPhone);
@@ -63,6 +66,11 @@ export function AssignedNumberCard({
         </div>
       </div>
 
+      <OwnerLocalNumberSearch
+        hasPaymentMethod={hasPaymentMethod}
+        onGoToBilling={onGoToBilling}
+      />
+
       <div>
         <StatusRow label="Voice / Calls">
           <StatusBadge kind={voiceKind} />
@@ -71,17 +79,6 @@ export function AssignedNumberCard({
           <StatusBadge kind={smsKind} />
         </StatusRow>
       </div>
-
-      {!hasPaymentMethod && (
-        <div className="acct-callout">
-          <p className="t-body" style={{ margin: 0 }}>
-            Add a payment method to receive your phone number.
-          </p>
-          <p className="t-small" style={{ margin: 0, color: "var(--text-muted)" }}>
-            You will not be charged until SMS recovery is active and your trial period ends.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
