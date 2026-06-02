@@ -3027,3 +3027,52 @@ Validation:
 
 - `npm run typecheck` -> pass
 - `npm run build` -> pass
+
+---
+
+## 2026-06-01 — Polish admin clinic status + confirmations (live-QA fixes)
+
+Follow-up to commit `878ce59` after live QA on `/admin/clinics/[clinicId]`.
+
+Finding 1 — duplicated/contradictory status. The page showed clinic and launch
+status in three places (top badges, summary rows, controls), so a clinic could read
+as both "Active" and "Blocked" at once. Fixed by keeping exactly two separate axes,
+each shown once:
+
+- **Clinic status** (`clinics.is_active`) → Active / Paused, shown once in Clinic
+  summary; action stays Pause / Reactivate.
+- **Launch status** (derived) → Launched / Ready to launch / Blocked, shown once as
+  the **Launch readiness** headline with a one-line reason. The duplicate "Service
+  state" summary row, the two top-of-page badges, and the readiness "Service launch"
+  row were removed. The admin controls now carry only the action buttons (no repeated
+  status badge); the disabled Launch button points to "launch readiness above" instead
+  of re-printing the blocker text.
+
+Finding 2 — native browser confirm looked unprofessional
+(`app.missedcallsdental.com says … OK/Cancel`). Removed the single `window.confirm`
+in `AdminClinicActions` and added a reusable in-app dialog
+`app/admin/(console)/clinics/[clinicId]/_components/AdminConfirmDialog.tsx`:
+
+- `role="dialog"` + `aria-modal`, labelled/described by title/body ids.
+- Focus moves to the confirm button on open and is restored to the trigger on close.
+- Escape / Cancel / backdrop click close it; Tab is trapped between Cancel and Confirm.
+- Confirm calls the existing `POST /api/admin/clinics/[clinicId]/action` path (audit
+  logging unchanged); errors render inside the dialog, which stays open on failure.
+- Confirmation is required for state-changing actions only: Pause clinic, Reactivate
+  clinic, Launch service, Pause SMS sending. Save note saves directly (low impact).
+
+Actions verified unchanged: deactivate → `is_active=false`, reactivate →
+`is_active=true`, enable_sms (launch, gated) / disable_sms, update_note. Every
+state-changing action still writes `admin_audit_events`. No API/auth/schema change.
+
+Files: `app/admin/(console)/clinics/[clinicId]/page.tsx`,
+`.../_components/AdminClinicActions.tsx`, `.../_components/AdminConfirmDialog.tsx` (new),
+`app/globals.css` (`.adm-modal*`, `.adm-launch-head`), plus docs.
+
+Side effects avoided: no SMS, no email, no Stripe call, no Twilio number
+purchase/reserve/release, no A2P submission, no migration, no secrets.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
