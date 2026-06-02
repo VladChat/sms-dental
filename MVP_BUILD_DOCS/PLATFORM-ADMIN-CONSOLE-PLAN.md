@@ -1,42 +1,54 @@
 # Platform Admin Console — Architecture & Implementation Plan
 
-Status: v1 IMPLEMENTED (2026-06-01) — see §15. This document remains the spec +
-roadmap for later phases.
+Status: v2 PRODUCT DIRECTION UPDATE (2026-06-01) — read-only clinic detail is
+deprecated as the target UX. The admin clinic detail page must become an editable
+super-admin clinic management console: owner-level controls scoped by clinicId,
+plus platform-only controls, diagnostics, audit, internal notes, and launch
+operations.
 Last updated: 2026-06-01
-Scope: architecture/spec plus the implemented v1 (access guard, `/admin/login`,
-console pages, audit log, safe clinic actions). Phases 3–6 (Stripe billing, Twilio
-number purchase, A2P submission, manage-admins) remain future work and are shown
-in `/admin` as blocked-with-reason, never faked.
+Scope: architecture/spec plus implemented foundations (platform-admin auth guard,
+`/admin/login`, console pages, audit log, safe clinic actions). Cross-tenant admin
+auth remains mandatory for all `/admin` pages and `/api/admin/*` routes. Twilio
+purchase, A2P submission, and Stripe management remain blocked-with-reason until
+their real backends exist.
 
 > Three distinct surfaces — do not mix:
 > - `/account` — **clinic owner/admin** setup & account dashboard (per-clinic).
 > - `/workspace` — **front-desk staff** operational view (per-clinic).
 > - `/admin` — **platform owner/operator** console (cross-tenant). ← this plan.
 
+## Product decision: clinic detail is an editable super-admin management console
+
+- `/account` is the owner-facing dashboard.
+- `/admin/clinics/[clinicId]` must expose the same practical owner controls
+  directly inside admin, scoped by `clinicId`.
+- Platform admins must be able to edit existing Business Profile fields and
+  existing A2P/representative fields from admin.
+- Platform admins must see and manage phone number state, billing state, SMS
+  approval state, SMS behavior state, launch readiness, and operational blockers
+  from the same admin page.
+- Admin-only tools live in the same console but below/around the owner-level
+  management workflow: launch controls, pause/reactivate, diagnostics, audit log,
+  internal notes, technical IDs.
+- Technical data must be compact and secondary, not the main page experience.
+- The page must not become a long read-only database dump.
+
 ---
 
 ## 1. Executive summary
 
-Build a separate, cross-tenant internal console at `/admin` for the SaaS
-operator to see and control the operational state of every clinic: onboarding,
-business-profile completeness, billing readiness, trial state, phone-number
-state, voice/SMS readiness, A2P/compliance status, SMS-recovery enable state, the
-active/inactive kill switch, and recent calls/messages/webhook diagnostics — with
-server-side admin checks, an audit trail, and confirmed/idempotent dangerous
-actions.
+`/admin` is the platform owner/operator console, and
+`/admin/clinics/[clinicId]` is not an inspection page. It is the editable
+super-admin clinic management console.
 
-**Good news from the audit:** the database already supports a genuinely useful
-**read-only** admin console with **no migration** — `clinics` carries all the
-status/lifecycle/billing/A2P fields, and `messages`/`call_events`/`webhook_events`
-/`opt_outs`/`clinic_memberships`/`profiles` cover diagnostics. The only new schema
-needed is for **writes**: an `admin_audit_events` table (+ a small internal-note
-field). `profiles.is_internal_admin` already exists and is currently unused — it
-is the natural durable anchor for platform-admin identity.
+The admin must be able to manage clinics directly from this page using owner-level
+editable controls (Business Profile fields and A2P/SMS approval fields) plus
+platform-only controls for launch operations, diagnostics, audit history, internal
+notes, and compact technical context.
 
-**Recommended path:** ship a real read-only console first (Phase 1, no migration),
-then add the audit table and a few genuinely-safe writes (Phase 2). Billing,
-number purchase, and live-SMS actions stay blocked behind their real
-integrations and are clearly marked, never faked.
+Dangerous integrations remain gated until real backends exist. Twilio number
+purchase/provisioning, A2P carrier submission, and Stripe management must stay
+disabled with exact blocker reasons; they must never be simulated.
 
 ---
 
@@ -190,15 +202,15 @@ and must never be implied by owning one clinic.
 
 All under `app/admin/**`, server components, `force-dynamic`, `runtime=nodejs`,
 `robots: noindex`. Guarded by the admin layout. Data via service-role `getDb()`
-through new **read-only** `lib/db/admin/*` helpers (cross-tenant), never exposing
-secrets/raw payloads.
+through `lib/db/admin/*` helpers (cross-tenant), never exposing secrets/raw
+payloads.
 
 | Route | Purpose | Data sources | Key UI | Filters | Actions | Access |
 |---|---|---|---|---|---|---|
 | `/admin/login` | Platform-admin sign-in (Supabase Auth) | Supabase Auth | email + password form, correct `autocomplete`, forgot-password link | — | sign in → `/admin` (only if platform-admin authorized) | public page; non-admins are signed in but not authorized → denied at `/admin` |
 | `/admin` | Operations overview | aggregate counts over `clinics`, recent `messages`/`call_events`/`webhook_events` failures | KPI cards (total clinics, needs-action, SMS active/disabled, billing-ready, phone pending, trial ending), recent-errors list | time range | none (links only) | platform admin |
 | `/admin/clinics` | All clinics | `clinics` (+ joined latest phone/membership counts) | searchable/sortable table: name, slug, setup_status, sms_status, billing_status, local_number_status, is_active, trial_ends_at | search (name/email/slug), status filters, active/inactive | row → detail | platform admin |
-| `/admin/clinics/[clinicId]` | Clinic detail + actions | `clinics`, `clinic_phone_numbers`, `clinic_memberships`+`profiles`, recent `call_events`/`messages`/`opt_outs`, latest `setup_requests` | sections: Business info, Owner/members, Billing, Phone, SMS approval/A2P, SMS-recovery, recent activity, internal note, **Action panel** | activity type | see action matrix (§6) | platform admin |
+| `/admin/clinics/[clinicId]` | Editable super-admin clinic management console | `clinics`, `clinic_phone_numbers`, `clinic_memberships`+`profiles`, recent `call_events`/`messages`/`opt_outs`, latest `setup_requests` | launch checklist; editable Business Profile; editable A2P/SMS approval data; Phone Number management; Billing management state; SMS behavior/settings state; admin controls; diagnostics; audit; technical details | activity type | edit existing owner-level fields; save audited admin changes; pause/reactivate; launch/pause SMS when gates pass; future gated actions for number purchase, A2P submit, Stripe management | platform admin |
 | `/admin/clinics/[clinicId]/events` | Operational diagnostics | `webhook_events` (redacted), `call_events`, `messages` (redacted bodies optional) | event log table with type/status/time, expandable **redacted** detail | provider/type/status/date | none (read) | platform admin |
 | `/admin/audit` | Platform admin audit log | `admin_audit_events` (Phase 2) | table: time, actor, action, target, summary | actor/action/clinic/date | none | platform admin |
 | `/admin/settings` | Platform settings (reserved) | config + `PLATFORM_ADMIN_EMAILS`; later manage-admins | read-only config view; later: grant/revoke admin | — | (Phase 6) | platform admin |
@@ -230,15 +242,16 @@ data fetch).
 Indexes: `(created_at desc)`, `(clinic_id, created_at desc)`, `(action)`.
 Constraints: RLS enabled; no policies (service-role only).
 Sensitivity: medium — never store secrets/tokens/raw payloads/patient bodies in
-`metadata`. **Blocks write-action v1** (read-only v1 does not need it). Append-only
-by convention (no update/delete from app).
+`metadata`. **In the historical v1 implementation**, this table was only required
+once write actions were introduced. Append-only by convention
+(no update/delete from app).
 
 ### 5.2 `clinics.admin_internal_note` (NEW field) — category B (small)
 - `add column if not exists admin_internal_note text;`
 - `add column if not exists admin_internal_note_updated_at timestamptz;`
 - Purpose: operator notes not visible to the clinic. Sensitivity: low/medium (not
-  customer-facing). Needed for the "update internal admin note" action. Not
-  blocking read-only v1.
+  customer-facing). Needed for the "update internal admin note" action. In the
+  historical v1 implementation, it was not required for pure read paths.
 
 ### 5.3 Optional `clinics.provisioning_review boolean default false` — category B
 - Flags "phone provisioning needs review". Optional; can also be expressed as an
@@ -259,11 +272,15 @@ blocked on A2P/carrier submission · **F** keep manual.
 > All write actions require: admin guard → preconditions → idempotency → explicit
 > confirmation (typed confirmation for destructive) → `admin_audit_events` row →
 > documented rollback. Read actions require the guard + redaction only.
+> Owner-level data edits from admin are real management actions and must be
+> audited.
 
 | Action | Category | Purpose | Preconditions | Server validation | Idempotency | Confirm | Audit event | Rollback | Customer effect | In v1? |
 |---|---|---|---|---|---|---|---|---|---|---|
 | View clinic diagnostics (calls/SMS/webhooks) | A | Triage | admin | read-only, redact payloads/bodies | n/a | no | optional `*.viewed` | n/a | none | **Yes (read)** |
 | View public business/compliance pages | A | Verify pages | admin; clinic has slug | link to `/business/{slug}` | n/a | no | none | n/a | none | **Yes** |
+| Update business profile from admin | B | Real clinic management from `/admin/clinics/[clinicId]` | admin; clinic exists | validate against existing owner field rules; update existing `clinics` business/profile columns only unless a later migration is explicitly approved | no-op if payload is unchanged | yes | `clinic.business_profile.update` | restore previous values from audit metadata | updates owner-facing profile data | Next milestone |
+| Update A2P/representative data from admin | B | Real compliance-data management from `/admin/clinics/[clinicId]` | admin; clinic exists | validate against existing owner field rules; update existing A2P/representative columns only unless a later migration is explicitly approved | no-op if payload is unchanged | yes | `clinic.a2p_profile.update` | restore previous values from audit metadata | updates owner-facing A2P data | Next milestone |
 | Update internal admin note | B | Ops memory | admin; note col exists | trim, length cap | last-write-wins; no-op if unchanged | no | `clinic.note.update` | restore previous (in audit metadata) | none | Phase 2 |
 | Mark phone provisioning review | B | Flag for follow-up | admin; flag col | boolean set | idempotent set | no | `clinic.provisioning_review.set` | unset | none | Phase 2 (optional) |
 | Deactivate clinic (`is_active=false`) | B | Kill switch (stops lookups/SMS) | admin; currently active | set false; safe-direction | no-op if already inactive | **yes (typed)** | `clinic.deactivate` | reactivate | recovery stops immediately | Phase 2 |
@@ -284,38 +301,29 @@ blocked on A2P/carrier submission · **F** keep manual.
 
 ---
 
-## 7. Production-near v1 scope
+## 7. Production-near scope
 
-**Admin v1 — implement now (real, not a shell):**
-- Access guard (`resolvePlatformAdmin`, env allowlist + `is_internal_admin`) — no
-  migration.
-- Read-only console: `/admin` overview, `/admin/clinics` list (search/filter),
-  `/admin/clinics/[clinicId]` detail (all real status data + owner/members +
-  recent activity + redacted diagnostics), `/admin/clinics/[clinicId]/events`.
-- New read-only cross-tenant helpers under `lib/db/admin/*`.
-- This is genuinely useful immediately (operator can see the whole fleet) and
-  needs **no migration**.
+Production-near admin clinic detail must become a real management console before
+Twilio purchase, A2P submission, and Stripe billing are connected. The next admin
+UX milestone is editable owner-level management inside
+`/admin/clinics/[clinicId]`.
 
-**Phase 2 — safe writes + audit (one small migration: 5.1 + 5.2):**
-- `admin_audit_events` + `clinics.admin_internal_note`.
-- Real, low-blast-radius actions: update internal note; deactivate/reactivate
-  clinic; **disable** SMS recovery; resend setup link (rate-limited); assign an
-  already-owned number (mapping). All audited + confirmed.
-- `/admin/audit` page.
+Implement now in production-near scope:
+- keep strict platform-admin guard for `/admin` and all `/api/admin/*`;
+- keep `/admin/clinics/[clinicId]` as the direct management surface;
+- add audited admin save paths for existing owner-level editable fields
+  (Business Profile + A2P/representative) using existing columns/validation;
+- keep diagnostics, audit, internal notes, launch controls, and compact technical
+  context in the same page.
 
-**After Stripe payment-method collection (C):** billing-ready views become
-meaningful; start/pause billing.
+Remain blocked (disabled with explicit blockers, never faked):
+- Twilio number purchase/provisioning actions stay blocked until the real backend
+  exists.
+- A2P carrier submission/sync actions stay blocked until the real backend exists.
+- Stripe billing management actions stay blocked until the real backend exists.
 
-**After Twilio purchase flow (D):** purchase number; release in Twilio.
-
-**After A2P/carrier submission flow (E):** real submitted/approved sync; **enable**
-SMS recovery.
-
-**Keep manual for MVP (F):** actual carrier paperwork, number porting, financial
-disputes.
-
-**Do not** ship any `/admin` control that cannot perform its real function — block
-it with a disabled state + reason, exactly as the account-dashboard trust-fix did.
+Rule: if the owner can edit a field in `/account` today and the backend path
+already exists, admin clinic detail should not remain read-only for that field.
 
 ---
 
@@ -406,7 +414,7 @@ platform admin with **no** clinic membership is allowed.
 
 | Phase | Title | Objective | Files likely touched | Migration | Validation | Manual QA | Risk | Commit message |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Read-only platform admin console + `/admin/login` | Cross-tenant visibility, no writes; role-specific admin sign-in with strict server-side redirect | `lib/auth/platform-admin.ts`, `app/admin/{layout,page}.tsx`, `app/admin/login/*`, `app/admin/clinics/*`, `lib/db/admin/*`, `config/runtime.config.ts` (adminEmails), `app/globals.css` | none | typecheck, build | owner/front-desk denied at `/admin`; admin (no membership) allowed; `/admin/login` signs in then authorizes; data correct; redaction verified | medium | `feat: add read-only platform admin console` |
+| 1 | Platform admin console foundation + `/admin/login` | Cross-tenant visibility + server-side platform-admin auth baseline | `lib/auth/platform-admin.ts`, `app/admin/{layout,page}.tsx`, `app/admin/login/*`, `app/admin/clinics/*`, `lib/db/admin/*`, `config/runtime.config.ts` (adminEmails), `app/globals.css` | none | typecheck, build | owner/front-desk denied at `/admin`; admin (no membership) allowed; `/admin/login` signs in then authorizes; data correct; redaction verified | medium | `feat: add platform admin console foundation` |
 | 2 | Audit log + safe clinic actions | Note, deactivate/reactivate, disable SMS, resend link, assign-owned-number | `supabase/migrations/<ts>_admin_audit_and_notes.sql`, `lib/db/admin/*`, `app/api/admin/clinics/[id]/*`, `app/admin/audit/page.tsx` | **yes** (5.1+5.2) | typecheck, build; apply migration in staging first | each action: precondition block, confirm, audit row, idempotent no-op, rollback | high | `feat: add admin audit log and safe clinic actions` |
 | 3 | Billing admin (after Stripe) | Billing-ready views; start/pause | `app/admin/clinics/[id]/*`, `app/api/admin/.../billing`, `lib/stripe/*` | maybe | typecheck, build | no charge before SMS active | high | `feat: add admin billing controls` |
 | 4 | Number provisioning admin (after Twilio purchase) | Purchase/release | `app/api/admin/.../number`, `lib/twilio/*` | maybe | typecheck, build | idempotent purchase; webhooks set | high | `feat: add admin number provisioning` |
@@ -435,11 +443,11 @@ platform admin with **no** clinic membership is allowed.
 7. Is a dedicated `platform_admins` table wanted later (roles/scopes), or is the flag+allowlist sufficient long-term?
 
 ### Recommended next implementation prompt title
-**"feat: read-only platform admin console + /admin/login (access guard + clinics overview/detail/events)"**
-— Phase 1 above: no migration, real cross-tenant visibility, strict server-side
-admin guard, `/admin/login` role-specific sign-in (one Supabase Auth system),
-redacted diagnostics. Separate `/workspace/login` and the clinic-owner login entry
-follow per the §3 role-specific login decision.
+**"feat: rebuild /admin/clinics/[clinicId] as editable super-admin management console"**
+— implement owner-level editable controls (Business Profile + A2P/representative)
+inside admin with audited save paths scoped by `clinicId`; keep Twilio purchase,
+A2P carrier submission, and Stripe management disabled with exact blockers until
+their real backends exist.
 
 ---
 
@@ -479,6 +487,9 @@ Phase 1 + the first safe write actions are built (production-near, real — not 
 - **Next:** `/workspace/login` role-specific login (front desk).
 
 ## 16. Clinic detail page simplified — operator workflow (2026-06-01)
+
+> Historical implementation snapshot. Superseded as target UX by §18 product
+> correction (editable super-admin management console).
 
 `/admin/clinics/[clinicId]` was rebuilt around the real launch workflow instead of a
 status dump. The page is now a single ordered flow: **A** Clinic summary → **B**
@@ -565,56 +576,27 @@ the dialog (stays open on failure). Confirm calls the existing
 state-changing actions only — Pause clinic, Reactivate clinic, Launch service, Pause
 SMS sending — not for Save note.
 
-## 18. Clinic detail = owner-dashboard superset (read-only, 2026-06-01)
+## 18. Clinic detail product correction: editable super-admin console (2026-06-01)
 
-`/admin/clinics/[clinicId]` was expanded into a true **superset of the owner `/account`
-dashboard**: everything the owner sees, plus admin-only internal detail, diagnostics,
-and audit context. Read-only/IA change only — **no** new external side effects, no
-migration, no auth/schema change. The data layer (`getAdminClinicDetail`) was extended
-to return **existing** columns only (no new fields invented).
+The prior "owner-dashboard superset" read-only direction was useful as a data
+audit step, but it is deprecated as the target admin UX.
 
-### Owner `/account` → admin mapping
+Correct product direction:
+- `/admin/clinics/[clinicId]` is an editable super-admin clinic management console.
+- The platform admin manages the clinic directly from this page.
+- This is not an impersonation flow and not a separate "manage as owner" button.
+- The main experience must not be a long passive report.
 
-| Owner `/account` area | Admin section | Source (existing columns) |
-|---|---|---|
-| Phone number (AssignedNumberCard) | **Phone numbers** | `clinic_phone_numbers` (full E.164, full Twilio SID, role, active, assigned/updated ts) + `clinics.local_number_status`, `sms_recovery_enabled`, global `SMS_RECOVERY_MODE` (mode only) |
-| Business profile | **Business profile** | `clinics`: name, legal name, business type, main phone, address, timezone, website, owner contact name/phone, `business_info_completed` |
-| SMS approval | **A2P / SMS approval** | `clinics`: `sms_status`, `a2p_info_completed`, `a2p_authorized`, EIN, rep first/last/title/email/phone |
-| Billing | **Billing** | `clinics`: `billing_status`, trial start/end, `stripe_customer_id`/`stripe_subscription_id` (refs, not secrets) |
-| Compliance links (SmsApprovalForm) | **Public pages & compliance** | `clinics.slug` + `runtimeConfig` app base → `/business/{slug}`, `/privacy`, `/sms-terms` |
-| (owner sees behavior implicitly) | **SMS behavior** | code constants: recovery template, 24 h suppression, STOP/START/HELP keywords, clinic gate, global mode |
-| Account/Team access | covered by header **Owner** + Recent admin activity | `clinic_memberships`/`profiles` |
+Direct management actions required from admin:
+- edit/save Business Profile fields
+- edit/save A2P/SMS approval data
+- manage Phone Number state when backend exists
+- manage Billing state when backend exists
+- manage SMS behavior/settings when backend exists
+- use admin-only launch, diagnostics, audit, and internal-note controls
 
-### Admin-only additions
-Compact header metadata (Clinic ID, Owner, Setup status, Created/Updated); **Diagnostics**
-(active opt-outs, recent messages/calls with masked caller numbers, link to full
-`/events`); **Recent admin activity** (audit, incl. who/when for internal-note updates);
-**Admin controls** (unchanged working actions + confirmation dialog).
+Presentation rule:
+- technical details remain available but must move into compact/collapsible
+  admin-only areas so management workflows stay primary.
 
-### Honest "not available" (no invented columns)
-There are **no** `a2p_brand_sid` / `a2p_campaign_sid` / `a2p_submitted_at` /
-`rejection_reason` / per-clinic `messaging_service_sid` columns, so the A2P "Carrier
-submission" block renders `Not submitted` / `Not available` until the submission backend
-lands. No `/business/[slug]/sms-consent` route exists → consent is shown as "covered
-within SMS terms". Disabled placeholders: `Add phone number` → "Twilio purchase/assign
-backend required"; `Manage billing` → "Stripe billing backend required"; `Submit SMS
-approval` → "A2P submission backend required".
-
-### Data-exposure decision
-The platform admin is the operator who reviews/submits the A2P packet, so the clinic's
-**own** business-identity fields the owner already sees (office/owner/rep phones, EIN,
-Stripe object IDs) are shown **in full** to admins. Third-party **caller/patient**
-numbers in Diagnostics stay **masked** (via `getClinicEvents`). The admin console is
-gated to `PLATFORM_ADMIN_EMAILS` / `profiles.is_internal_admin`.
-
-### Two status axes (unchanged, still single-source)
-Clinic status (Active/Paused) in Status overview; Launch status (Launched / Ready to
-launch / Blocked) once in Status overview; Launch readiness card holds only the four
-prerequisite rows.
-
-### Next refactor step
-The owner side is interactive forms (`BusinessProfile` + `*Form` components), so a full
-shared component was not extracted in this task (too risky). Next: extract a read-only
-`<ClinicProfileView mode="owner"|"admin">` that both `/account` (read mode) and
-`/admin/clinics/[clinicId]` render, so field mappings live in one place. Then wire the
-first real gated admin action (Twilio number purchase/assign).
+Next implementation step: rebuild /admin/clinics/[clinicId] as an editable super-admin clinic management console using the owner /account controls and validation as the functional baseline, scoped by clinicId, with audited admin save paths for existing editable fields. Keep Twilio purchase, A2P carrier submission, and Stripe management as disabled gated actions until their real backends exist.
