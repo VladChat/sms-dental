@@ -1799,37 +1799,48 @@ does not launch SMS recovery.
 
 ---
 
-## Admin manual Twilio number search filters — 2026-06-01
+## Admin smart Twilio number search filters — updated 2026-06-02
 
-The admin Phone number panel's single search button was replaced with a manual filter
-form (Twilio-Console-style "Buy a number"). Purchase gate and assignment behavior are
-unchanged (see the section above).
+The admin Phone number panel uses smart fallback search for local U.S. numbers by default.
+Purchase gate and assignment behavior are unchanged (see the section above).
 
 Filter fields (clinic data prefilled as defaults only — never a hidden restriction):
 - Number type: Local / Toll-free
 - Country: US / CA (default clinic country)
-- Area code (local), City / locality (local), State/region 2-letter (local),
-  ZIP/postal (local)
+- Area code (local), City / locality metadata, State/region 2-letter (local), ZIP/postal
+  (local)
 - Contains / pattern (digits + `*` wildcards)
-- Radius (miles, default 25) — geo search near the clinic's main phone; applied ONLY
-  when area code, city, state, and ZIP are all empty and the clinic has a valid US phone
 - Required capabilities: Voice, SMS, MMS (default Voice + SMS)
 - Results: 10 / 20 / 50
 - "Reset to clinic defaults" restores the prefilled values.
 
-`GET …/phone-numbers/search` validates every param server-side (country US/CA, area code
-3-digit, region 2-letter, contains digits/`*` capped, distance 1–500, limit ∈ {10,20,50},
-capability booleans) and echoes the parameters actually used plus a `count`. Local search
-maps to Twilio Local available-number list; toll-free to TollFree. Results show E.164 +
-friendly number, type, locality/region/ZIP, Voice/SMS/MMS badges, and address
-requirement; a number is selectable for purchase only when it has both Voice and SMS.
+Local search order:
 
-Empty state: "No numbers found for these filters. Try removing area code, changing
-city/ZIP, or switching to toll-free." — the filter form stays visible to adjust and
+1. area code + ZIP
+2. ZIP only
+3. area code only
+4. ZIP radius using `nearLatLong` at 25 / 50 / 100 miles, only when a committed ZIP
+   coordinate lookup source exists
+5. state/region fallback
+
+City/locality is never sent as `inLocality` during smart local search. It may appear as
+metadata on returned numbers only.
+
+`GET …/phone-numbers/search` validates every param server-side (country, area code
+3-digit, region 2-letter, contains digits/`*` capped, limit ∈ {10,20,50}, capability
+booleans) and echoes the winning `attempt_label`, attempted labels, fallback message, and
+`count`. Local search maps to Twilio Local available-number list through the shared smart
+planner; toll-free maps to TollFree. Results show E.164 + friendly number, type,
+locality/region/ZIP, Voice/SMS/MMS badges, and address requirement; a number is selectable
+for purchase only when it has both Voice and SMS.
+
+Empty state: "No local numbers found after the smart fallback search. Try a broader area
+code, check the ZIP, or switch to toll-free." — the filter form stays visible to adjust and
 re-search.
 
-Safe test (purchase disabled): search by area code / city+state / ZIP / toll-free; verify
-the no-results guidance; select a number; attempt purchase → blocked with
+Safe test (purchase disabled): search by area code + ZIP with a city filled in; verify the
+request does not send `inLocality` to Twilio, fallback labels are tried, and a fallback
+message appears if a broader attempt wins. Select a number; attempt purchase → blocked with
 `Twilio number purchase is disabled by environment flag.`; no number purchased, no DB row.
 
 ---
@@ -1854,7 +1865,8 @@ Search order for U.S. local onboarding preparation:
 
 Twilio local searches require Voice + SMS, do not require MMS or fax, use `beta=false`, and
 exclude all/local/foreign address-required numbers when supported by the SDK. City/locality
-is metadata only for onboarding; do not use `inLocality` as an automatic filter.
+is metadata only for onboarding/admin smart search; do not use `inLocality` as an automatic
+filter.
 
 Current radius status: inactive. The code path exists, but no committed ZIP-to-coordinate
 source is present, and onboarding must not call external geocoding services without an

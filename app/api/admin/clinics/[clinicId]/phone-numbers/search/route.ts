@@ -9,13 +9,15 @@ import {
 } from "../../../../../../../lib/http/responses";
 import { resolvePlatformAdmin } from "../../../../../../../lib/auth/platform-admin";
 import { findClinicById } from "../../../../../../../lib/db/clinics";
-import { isValidE164 } from "../../../../../../../lib/phone/normalize";
 import {
   isSupportedCountry,
-  searchAvailableLocalNumbers,
   searchAvailableTollFreeNumbers,
   type SupportedCountry,
 } from "../../../../../../../lib/twilio/numbers";
+import {
+  buildLocalNumberSearchPlan,
+  runLocalNumberSearchPlan,
+} from "../../../../../../../lib/twilio/local-number-search-plan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,15 +34,16 @@ function parseBool(v: string | null, fallback: boolean): boolean {
 
 // GET /api/admin/clinics/[clinicId]/phone-numbers/search
 //
-// Platform-admin-only, READ-ONLY Twilio available-number lookup with manual
-// filters (mirrors Twilio Console "Buy a number"). Never purchases. Clinic data
-// is used only as defaults supplied by the caller — never as a hidden restriction.
+// Platform-admin-only, READ-ONLY Twilio available-number lookup. Local searches
+// use the same smart fallback plan as onboarding by default. Never purchases.
+// Clinic data is used only as defaults supplied by the caller — never as a
+// hidden restriction.
 //
 // Query params (all optional except defaults below):
 //   type=local|toll_free (default local)
-//   country=US|CA (default clinic country, else US)
-//   area_code=NNN | locality | region (2-letter) | postal_code
-//   contains=digits/* pattern | distance=miles (geo radius near clinic phone)
+//   country=US|CA (default clinic country, else US; local smart search is US-only)
+//   area_code=NNN | locality metadata | region (2-letter) | postal_code
+//   contains=digits/* pattern
 //   voice|sms|mms = true|false (capability filters; default voice+sms)
 //   limit = 10|20|50 (default 10)
 export async function GET(
@@ -102,17 +105,6 @@ export async function GET(
     return jsonBadRequest("Pattern must contain digits (and optional * wildcards).");
   }
 
-  // Distance (miles) — only used as a geo radius near the clinic phone.
-  const distanceRaw = (q.get("distance") ?? "").trim();
-  let distance: number | undefined;
-  if (distanceRaw) {
-    const n = Number(distanceRaw);
-    if (!Number.isFinite(n) || n < 1 || n > 500) {
-      return jsonBadRequest("Distance must be between 1 and 500 miles.");
-    }
-    distance = Math.floor(n);
-  }
-
   // Capabilities (default Voice + SMS)
   const required = {
     voice: parseBool(q.get("voice"), true),
@@ -123,15 +115,6 @@ export async function GET(
   // Limit
   let limit = Number(q.get("limit") ?? "10");
   if (!ALLOWED_LIMITS.includes(limit)) limit = 10;
-
-  // Geo radius applies only when no explicit local filters are set and the clinic
-  // has a usable phone to anchor on.
-  const mainPhone = clinic.main_phone ?? "";
-  const canNear =
-    type === "local" &&
-    Boolean(distance) &&
-    !areaCode && !region && !postalCode && !locality &&
-    isValidE164(mainPhone);
 
   try {
     if (type === "toll_free") {
@@ -147,40 +130,78 @@ export async function GET(
       });
     }
 
-    const numbers = await searchAvailableLocalNumbers({
-      country,
+    if (country !== "US") {
+      return jsonError(400, "country_not_supported", "Smart local number search is currently available for U.S. numbers only.");
+    }
+
+    const attempts = buildLocalNumberSearchPlan({
+      country: "US",
+      mainPhone: clinic.main_phone,
       areaCode: areaCode || undefined,
+      postalCode: postalCode || undefined,
+      stateRegion: region || undefined,
       contains: contains || undefined,
-      inLocality: locality || undefined,
-      inRegion: region || undefined,
-      inPostalCode: postalCode || undefined,
-      nearNumber: canNear ? mainPhone : undefined,
-      distance: canNear ? distance : undefined,
       required,
       limit,
     });
+    const result = await runLocalNumberSearchPlan(attempts);
+    const exactAttempt = attempts[0]?.label ?? null;
+    const fallbackUsed = Boolean(result.attemptLabel && exactAttempt && result.attemptLabel !== exactAttempt);
 
     return jsonOk({
       ok: true,
       type,
-      country,
+      country: "US",
+      search_mode: "smart_fallback",
+      attempt_label: result.attemptLabel,
+      attempted_labels: attempts.map((a) => a.label),
+      fallback_used: fallbackUsed,
+      fallback_message: fallbackMessage(result.attemptLabel, exactAttempt),
       params: {
         type,
-        country,
+        country: "US",
         area_code: areaCode || null,
         locality: locality || null,
+        locality_filter_used: false,
         region: region || null,
         postal_code: postalCode || null,
         contains: contains || null,
-        distance: canNear ? distance : null,
+        distance: radiusDistance(result.attemptLabel),
         required,
         limit,
       },
-      count: numbers.length,
-      numbers,
-      empty_reason: numbers.length === 0 ? "no_results" : null,
+      count: result.numbers.length,
+      numbers: result.numbers,
+      empty_reason: result.numbers.length === 0 ? "no_results_after_fallback" : null,
     });
   } catch {
     return jsonError(502, "search_failed", "Could not search available numbers. Please adjust filters and try again.");
   }
+}
+
+function radiusDistance(attemptLabel: string | null): number | null {
+  const match = /^zip_radius_(\d+)_miles$/.exec(attemptLabel ?? "");
+  return match ? Number(match[1]) : null;
+}
+
+function fallbackMessage(attemptLabel: string | null, exactAttempt: string | null): string | null {
+  if (!attemptLabel || !exactAttempt || attemptLabel === exactAttempt) return null;
+  if (exactAttempt === "area_code_and_zip") {
+    if (attemptLabel === "zip_only") {
+      return "No exact ZIP + area-code match found. Showing ZIP matches.";
+    }
+    if (attemptLabel === "area_code_only") {
+      return "No exact ZIP + area-code match found. Showing area-code matches.";
+    }
+    if (attemptLabel.startsWith("zip_radius_")) {
+      return "No exact ZIP + area-code match found. Showing nearby ZIP-radius matches.";
+    }
+    if (attemptLabel === "state_region") {
+      return "No exact ZIP + area-code match found. Showing state matches.";
+    }
+  }
+  if (exactAttempt === "zip_only" && attemptLabel === "state_region") {
+    return "No ZIP-only match found. Showing state matches.";
+  }
+  return "No exact match found. Showing the best fallback matches.";
 }
