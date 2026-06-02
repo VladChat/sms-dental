@@ -643,3 +643,26 @@ required". Per-clinic SMS settings remain read-only (no settings backend).
 ### Next production step
 Wire the first real gated backend action — **Twilio number purchase/assign** — behind the
 existing platform-admin guard + audit, replacing that disabled placeholder.
+
+## 20. Console layout — owner-dashboard IA (2026-06-01)
+
+Layout-only restructure of `/admin/clinics/[clinicId]` (no backend change). The long
+linear page became an owner-`/account`-style dashboard: compact header (no status
+pills), one launch banner, left section nav, and a single focused panel.
+
+- New client component `AdminClinicConsole` renders the tabbed dashboard; `page.tsx`
+  is now a thin server data-loader that fetches (detail, audit, events, SMS mode, app
+  base URL) and passes serializable props.
+- Sections (default **Phone number**, the current blocker): Phone number · Business
+  profile · SMS approval · Billing · SMS behavior · Admin tools. Nav reuses the owner
+  `.acct-layout`/`.acct-nav` visuals with a small per-section status word
+  (Missing/Complete/Ready/Waiting/Not connected/Read-only).
+- Accessible tabs: `role="tablist"`/`tab`/`tabpanel`, roving `tabIndex`, Arrow/Home/End
+  keys, `aria-selected`. **Panels stay mounted**; inactive ones use the `hidden`
+  attribute so the editable Business Profile / SMS Approval forms keep unsaved input.
+- Removed the header `Active`/`Blocked` pills (redundant). Launch state is conveyed
+  once by the banner.
+- Admin tools panel holds the existing `AdminClinicActions` (confirm dialog preserved)
+  plus collapsible **Recent admin activity**, **Diagnostics** (masked), and **Technical
+  details** (collapsed) — these are no longer full-width standalone sections.
+- Editable forms, save routes, validation, and audit behavior are unchanged.

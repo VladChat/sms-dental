@@ -3196,3 +3196,40 @@ Validation:
 
 - `npm run typecheck` -> pass
 - `npm run build` -> pass (`/api/admin/clinics/[clinicId]/business-profile` + `/a2p` compiled)
+
+---
+
+## 2026-06-01 — Admin clinic console restructured to owner-dashboard layout
+
+UI/IA only (no backend change). `/admin/clinics/[clinicId]` was a long linear page; it is
+now an owner-`/account`-style dashboard: compact header, one launch banner, left section
+nav, single focused panel. See `PLATFORM-ADMIN-CONSOLE-PLAN.md` §20.
+
+- New client component
+  `app/admin/(console)/clinics/[clinicId]/_components/AdminClinicConsole.tsx` renders the
+  tabbed dashboard. `page.tsx` is now a thin server data-loader (fetches detail/audit/
+  events/SMS-mode/app-base-url and passes serializable props).
+- Sections: Phone number (default — current blocker) · Business profile · SMS approval ·
+  Billing · SMS behavior · Admin tools. Left nav reuses `.acct-layout`/`.acct-nav` with a
+  small per-section status word. Accessible tabs (`role=tablist/tab/tabpanel`, roving
+  tabindex, Arrow/Home/End, `aria-selected`); panels stay mounted via the `hidden`
+  attribute so the editable forms keep unsaved input.
+- Removed the header `Active`/`Blocked` pills (redundant); launch state shown once by the
+  banner.
+- Diagnostics, Recent admin activity, and Technical details moved into collapsible
+  `<details>` blocks inside Admin tools (Technical details collapsed by default).
+- Preserved unchanged: `AdminBusinessProfileForm`, `AdminA2pForm`, the
+  `/business-profile` + `/a2p` admin save routes, validation, audit, and the accessible
+  confirmation dialog in `AdminClinicActions`.
+
+Files: `app/admin/(console)/clinics/[clinicId]/page.tsx`,
+`.../_components/AdminClinicConsole.tsx` (new), `app/globals.css`, plus docs.
+
+Side effects avoided: no SMS, no email, no Stripe call, no Twilio number
+purchase/reserve/release, no A2P submission, no migration, no auth/schema change, no
+secrets printed/committed.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
