@@ -19,7 +19,7 @@ export default async function AdminClinicEventsPage({
         <p className="t-small"><Link className="link" href={`/admin/clinics/${clinicId}`}>← Clinic detail</Link></p>
         <h1 className="t-h2" style={{ marginTop: "var(--space-1)" }}>Diagnostics</h1>
         <p className="t-small" style={{ marginTop: "var(--space-2)", color: "var(--text-secondary)" }}>
-          Recent calls and messages. Phone numbers are masked; Twilio SIDs show a short tail only; no raw payloads.
+          Recent calls and messages. Phone numbers are masked; provider references show a short tail only; no raw payloads.
         </p>
       </header>
 

@@ -1894,3 +1894,28 @@ Troubleshooting:
   2-letter state code; do not add state collection to Step 1 for this alone.
 - If radius fallback is needed, add a committed ZIP coordinate lookup source first, then
   verify `nearLatLong` attempts appear in the plan.
+
+---
+
+## Admin "Add number" moved to a dedicated page — 2026-06-01
+
+The number search/assignment form is no longer embedded in the clinic detail Phone
+number panel. The panel now shows current numbers + status and an **Add number** button.
+
+- Panel (`/admin/clinics/[clinicId]`, Phone number tab): shows assigned numbers (or
+  "No tracking number is assigned to this clinic yet."), status rows, the launch blocker,
+  and an **Add number** button. The button shows whether or not a number is already
+  assigned (clinics can have more than one number).
+- Add-number screen: **`/admin/clinics/[clinicId]/phone-numbers/new`** (under the
+  `(console)` group, so the platform-admin guard applies). Back link returns to the Phone
+  number panel. Visible controls before results: Number type, Area code, ZIP code; the
+  smart-fallback search pipeline runs underneath. On a successful purchase the operator is
+  returned to the clinic Phone number panel, which shows the new assignment.
+- Purchase safety unchanged: `TWILIO_NUMBER_PURCHASE_ENABLED` still gates purchase
+  (search works when disabled; purchase returns the env-flag block). The confirm dialog,
+  one-number-at-a-time idempotency, webhook config, and audit are unchanged.
+
+Provider-neutral copy: external provider brand names were removed from user-visible
+admin/owner UI (e.g. "Provider reference", "Messaging brand/campaign reference",
+"Number purchase is disabled by environment flag.", "Location not specified"). Provider
+names remain only in code comments, env var names, and internal integration code.

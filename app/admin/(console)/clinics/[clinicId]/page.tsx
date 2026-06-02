@@ -3,7 +3,6 @@ import { getAdminClinicDetail } from "../../../../../lib/db/admin/clinics";
 import { listAdminAuditEvents } from "../../../../../lib/db/admin/audit";
 import { getClinicEvents } from "../../../../../lib/db/admin/events";
 import { getAppDomainsSafe, getSmsRecoveryConfig, isTwilioNumberPurchaseEnabled } from "../../../../../lib/env";
-import { phoneAreaCode } from "../../../../../lib/twilio/numbers";
 import { AdminClinicConsole } from "./_components/AdminClinicConsole";
 
 export const dynamic = "force-dynamic";
@@ -43,15 +42,6 @@ export default async function AdminClinicDetailPage({
     createdAt: new Date(e.created_at).toISOString(),
   }));
 
-  // Phone-search defaults from clinic data (used as prefilled defaults only, not
-  // hidden restrictions). Area code: preferred area code, else derived from a US
-  // main phone (+1AAA…). No hardcoded area codes.
-  const derivedAreaCode = d.mainPhone ? phoneAreaCode(d.mainPhone) ?? "" : "";
-  const phoneDefaults = {
-    areaCode: d.preferredAreaCode ?? derivedAreaCode,
-    postal: d.postalCode ?? "",
-  };
-
   return (
     <AdminClinicConsole
       data={{
@@ -59,7 +49,6 @@ export default async function AdminClinicDetailPage({
         smsMode: getSmsRecoveryConfig().mode, // mode only — never the allowlist
         appBaseUrl: getAppDomainsSafe()?.appBaseUrl ?? "",
         purchaseEnabled: isTwilioNumberPurchaseEnabled(),
-        phoneDefaults,
         recentActivity,
         events,
       }}
