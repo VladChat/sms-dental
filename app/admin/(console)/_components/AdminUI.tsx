@@ -125,6 +125,8 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   "clinic.sms_recovery.enable": "Launched service",
   "clinic.sms_recovery.disable": "Paused SMS sending",
   "clinic.note.update": "Updated internal note",
+  "clinic.business_profile.update": "Edited business profile",
+  "clinic.a2p.update": "Edited SMS approval info",
   "clinic.provisioning.update": "Updated provisioning (legacy)",
 };
 

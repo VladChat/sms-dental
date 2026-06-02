@@ -600,3 +600,46 @@ Presentation rule:
   admin-only areas so management workflows stay primary.
 
 Next implementation step: rebuild /admin/clinics/[clinicId] as an editable super-admin clinic management console using the owner /account controls and validation as the functional baseline, scoped by clinicId, with audited admin save paths for existing editable fields. Keep Twilio purchase, A2P carrier submission, and Stripe management as disabled gated actions until their real backends exist.
+
+## 19. Implemented — editable management console v1 (2026-06-01)
+
+`/admin/clinics/[clinicId]` is now an **editable super-admin management console**
+(milestone 1 of §18). No impersonation, no "manage as owner" — the admin page is the
+console. No migration, no auth change, no new external side effects.
+
+### Editable owner-level sections (new)
+- **Business profile** — `AdminBusinessProfileForm` (same fields + client validation as
+  owner `BusinessProfileForm`) → `POST /api/admin/clinics/[clinicId]/business-profile`.
+- **A2P / SMS approval** — `AdminA2pForm` (same fields as owner `SmsApprovalForm`) →
+  `POST /api/admin/clinics/[clinicId]/a2p`. Saving stores data only; never submits to a
+  carrier.
+
+Both new API routes: `resolvePlatformAdmin(req)` guard → mirror the owner Zod schema +
+`normalizePhone`/`isValidE164`/`isSafeHttpsUrl`/`BUSINESS_TYPES` → reuse the existing
+`updateBusinessInformation` / `updateA2pInformation` helpers (existing columns only,
+scoped to the one `clinicId`) → write `admin_audit_events`
+(`clinic.business_profile.update` / `clinic.a2p.update`). **No-op detection**: when no
+field changed and the section is already complete, the route skips the DB write and the
+audit row. Audit metadata stores **changed field names only** + completion flags — never
+raw EIN/phone/email values. Forms show loading/success/error and `router.refresh()` on
+save so the checklist/state update.
+
+### Page structure (management console)
+Header (clinic + launch state + short blocker + compact metadata) · **Launch checklist**
+(Business profile / Phone number / A2P / Billing / SMS launch — status + reason + jump
+action) · editable **Business profile** · editable **A2P / SMS approval** (+ carrier
+submission "Not submitted/Not available", compliance links, disabled `Submit SMS
+approval`) · **Phone number** (state + disabled `Purchase and assign number`) · **Billing**
+(state + disabled `Manage billing`) · **SMS behavior** (read-only "not editable yet") ·
+admin-only: **Admin controls** (Pause/Reactivate/Launch/Pause SMS/Internal note via the
+accessible confirm dialog) · **Diagnostics** (masked) · **Recent admin activity** ·
+collapsible **Technical details** (IDs/SIDs/timestamps).
+
+### Still blocked (disabled, exact reason — never simulated)
+`Purchase and assign number` → "Twilio purchase/assign backend required"; `Manage billing`
+→ "Stripe billing backend required"; `Submit SMS approval` → "A2P submission backend
+required". Per-clinic SMS settings remain read-only (no settings backend).
+
+### Next production step
+Wire the first real gated backend action — **Twilio number purchase/assign** — behind the
+existing platform-admin guard + audit, replacing that disabled placeholder.

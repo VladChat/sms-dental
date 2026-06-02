@@ -3146,3 +3146,53 @@ Validation:
 
 - `npm run typecheck` -> pass
 - `npm run build` -> pass
+
+---
+
+## 2026-06-01 — Admin clinic page rebuilt as editable management console
+
+Implemented the product correction in `PLATFORM-ADMIN-CONSOLE-PLAN.md` §18/§19:
+`/admin/clinics/[clinicId]` is now an **editable super-admin management console**, not a
+read-only report. No impersonation / "manage as owner". No migration, no auth/schema
+change, no new external side effects.
+
+Editable owner-level sections added (existing columns only):
+
+- **Business profile** form (`AdminBusinessProfileForm`) →
+  `POST /api/admin/clinics/[clinicId]/business-profile`.
+- **A2P / SMS approval** form (`AdminA2pForm`) →
+  `POST /api/admin/clinics/[clinicId]/a2p`. Stores data only; no carrier submission.
+
+Both routes: platform-admin guard (`resolvePlatformAdmin(req)`), same Zod validation +
+phone/website normalizers as the owner endpoints, reuse `updateBusinessInformation` /
+`updateA2pInformation` (target clinic only), and write `admin_audit_events`
+(`clinic.business_profile.update` / `clinic.a2p.update`). No-op saves skip the DB write
+and audit. Audit metadata = changed field NAMES + completion flags only; never raw
+EIN/phone/email. Forms reuse the owner `Field`/`SelectField`/`SaveBar` primitives
+(loading/success/error, accessible labels) and `router.refresh()` after save.
+
+Page now leads with a **Launch checklist** (Business profile / Phone number / A2P /
+Billing / SMS launch — status + reason + jump-to-section action), then the two editable
+sections, then action-oriented Phone/Billing, read-only SMS behavior, and admin-only
+tools (controls, diagnostics with masked caller numbers, recent admin activity) with
+**Technical details** moved into a collapsible `<details>`.
+
+Still blocked with exact reasons (never simulated): `Purchase and assign number`
+("Twilio purchase/assign backend required"), `Manage billing` ("Stripe billing backend
+required"), `Submit SMS approval` ("A2P submission backend required").
+
+Files: `app/api/admin/clinics/[clinicId]/business-profile/route.ts` (new),
+`app/api/admin/clinics/[clinicId]/a2p/route.ts` (new),
+`app/admin/(console)/clinics/[clinicId]/_components/AdminBusinessProfileForm.tsx` (new),
+`.../_components/AdminA2pForm.tsx` (new),
+`app/admin/(console)/clinics/[clinicId]/page.tsx`,
+`app/admin/(console)/_components/AdminUI.tsx`, `app/globals.css`, plus docs.
+
+Side effects avoided: no SMS, no email, no Stripe call, no Twilio number
+purchase/reserve/release, no A2P submission, no migration, no auth/schema change, no
+secrets printed/committed.
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass (`/api/admin/clinics/[clinicId]/business-profile` + `/a2p` compiled)
