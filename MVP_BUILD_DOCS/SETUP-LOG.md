@@ -3950,7 +3950,7 @@ secrets. Front-desk rejected; clinic derived from session (no client clinic id).
 
 Validation: `npm run typecheck` pass; `npm run build` pass
 (`/api/account/phone-numbers/request` compiled); safety grep clean (matches are
-comments only). Commit `__PENDING__`; pushed to `origin/main`.
+comments only). Commit `4969814`; pushed to `origin/main`.
 
 Remaining: apply the migration to production (hand-applied) before the flow works
 live; admin "Approve" remains the existing manual Add number flow (no auto-purchase).
