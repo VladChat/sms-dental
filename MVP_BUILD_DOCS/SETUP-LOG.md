@@ -3896,7 +3896,7 @@ Fix: added `currency: "usd"` to the Checkout Session in
 only scopes eligible dynamic payment methods — it does **not** create a charge.
 Key prefix is `sk_test_` (Standard test key), so no key replacement was needed.
 
-Validation: `npm run typecheck` pass; `npm run build` pass. Commit `__PENDING__`;
+Validation: `npm run typecheck` pass; `npm run build` pass. Commit `4709cfa`;
 pushed to `origin/main` (auto-deploys production). Post-deploy: `/api/health` 200;
 `/account` 200; unauth `POST …/payment-method/setup` → 401 (auth before Stripe);
 deployed Stripe call now matches the locally-verified working call. Final
