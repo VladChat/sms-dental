@@ -3593,7 +3593,7 @@ Validation:
   `/admin/clinics/[clinicId]/phone-numbers/new` still compiled; both phone-number API
   routes intact)
 
-Commit: `__PENDING__` (`fix: make admin add number flow inline`). Pushed to `origin/main`.
+Commit: `67011c5` (`fix: make admin add number flow inline`). Pushed to `origin/main`.
 
 Remaining risks: search result quality still depends on the live phone-provider catalog;
 purchase stays blocked until `TWILIO_NUMBER_PURCHASE_ENABLED` is enabled (human-approved).
