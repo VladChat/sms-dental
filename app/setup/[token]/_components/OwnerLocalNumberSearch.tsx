@@ -29,9 +29,13 @@ type SearchResponse = {
 export function OwnerLocalNumberSearch({
   hasPaymentMethod,
   onGoToBilling,
+  requestedNumberE164,
 }: {
   hasPaymentMethod: boolean;
   onGoToBilling: () => void;
+  // The owner's already-requested number (E.164), if any. Used to reflect an
+  // existing pending request and to avoid duplicate submits for the same number.
+  requestedNumberE164?: string | null;
 }) {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -40,6 +44,9 @@ export function OwnerLocalNumberSearch({
   const [selected, setSelected] = useState<string | null>(null);
   const [fallbackMessage, setFallbackMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  // The number we have already saved as a request (this session or on load).
+  const [savedNumber, setSavedNumber] = useState<string | null>(requestedNumberE164 ?? null);
 
   const displayedCandidates = useMemo(() => {
     const sorted = [...candidates].sort((a, b) => locationRank(b) - locationRank(a));
@@ -85,10 +92,42 @@ export function OwnerLocalNumberSearch({
     }
   }
 
-  function useSelectedNumber() {
-    setActionError(
-      "Number assignment is not available yet. Our team can finish setup for you.",
-    );
+  // Save the selected candidate as a pending owner request for admin review.
+  // This never purchases, reserves, or assigns a number.
+  async function requestSelectedNumber() {
+    if (!selectedCandidate) return;
+    setRequesting(true);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/account/phone-numbers/request", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          phone_number: selectedCandidate.phone_number,
+          friendly_name: selectedCandidate.friendly_name,
+          locality: selectedCandidate.locality,
+          region: selectedCandidate.region,
+          postal_code: selectedCandidate.postal_code,
+          capabilities: selectedCandidate.capabilities,
+          type: selectedCandidate.type,
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; error?: { message?: string } }
+        | null;
+      if (!res.ok || !json?.ok) {
+        setActionError(
+          json?.error?.message ?? "Could not save your requested number. Please try again.",
+        );
+        return;
+      }
+      setSavedNumber(selectedCandidate.phone_number);
+    } catch {
+      setActionError("Could not save your requested number. Please try again.");
+    } finally {
+      setRequesting(false);
+    }
   }
 
   return (
@@ -184,13 +223,28 @@ export function OwnerLocalNumberSearch({
                 </button>
               </div>
             </div>
+          ) : savedNumber && selectedCandidate.phone_number === savedNumber ? (
+            <div style={{ display: "grid", gap: "var(--space-2)", justifyItems: "start" }}>
+              <div className="alert alert-success" role="status" aria-live="polite">
+                <span>Requested number saved. Our team will review it before assignment.</span>
+              </div>
+              <p className="t-small" style={{ margin: 0, color: "var(--text-muted)" }}>
+                No number has been purchased or assigned yet.
+              </p>
+            </div>
           ) : (
             <div style={{ display: "grid", gap: "var(--space-2)", justifyItems: "start" }}>
-              <button type="button" className="btn btn-primary" onClick={useSelectedNumber}>
-                Use this number
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void requestSelectedNumber()}
+                disabled={requesting}
+                aria-busy={requesting}
+              >
+                {requesting ? "Saving…" : "Use this number"}
               </button>
               {actionError && (
-                <div className="alert alert-info" role="status" aria-live="polite">
+                <div className="alert alert-error" role="alert" aria-live="polite">
                   <span>{actionError}</span>
                 </div>
               )}

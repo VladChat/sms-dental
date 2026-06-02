@@ -2,7 +2,7 @@
 
 import { StatusBadge, StatusRow, type StatusKind } from "./AccountUI";
 import { OwnerLocalNumberSearch } from "./OwnerLocalNumberSearch";
-import type { LocalNumberStatus, SmsStatus } from "./account-types";
+import type { LocalNumberStatus, SmsStatus, RequestedNumberSummary } from "./account-types";
 
 export function AssignedNumberCard({
   localNumberStatus,
@@ -12,6 +12,7 @@ export function AssignedNumberCard({
   postalCode,
   hasPaymentMethod,
   onGoToBilling,
+  requestedNumber,
 }: {
   localNumberStatus: LocalNumberStatus;
   smsStatus: SmsStatus;
@@ -20,6 +21,7 @@ export function AssignedNumberCard({
   postalCode: string | null;
   hasPaymentMethod: boolean;
   onGoToBilling: () => void;
+  requestedNumber: RequestedNumberSummary | null;
 }) {
   const numberAssigned =
     localNumberStatus === "assigned" || localNumberStatus === "reserved" || Boolean(assignedPhone);
@@ -52,6 +54,26 @@ export function AssignedNumberCard({
         )}
       </div>
 
+      {requestedNumber && (
+        <div className="acct-number">
+          <span className="t-eyebrow">Requested number</span>
+          <p className="t-h4 t-mono" style={{ margin: "var(--space-1) 0 0" }}>
+            {formatUsPhone(requestedNumber.phoneNumber)}
+          </p>
+          {requestedNumber.locality && (
+            <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
+              {[requestedNumber.locality, requestedNumber.region].filter(Boolean).join(", ")}
+            </p>
+          )}
+          <div style={{ marginTop: "var(--space-2)" }}>
+            <StatusBadge kind={requestedStatusKind(requestedNumber.status)} label={requestedStatusLabel(requestedNumber.status)} />
+          </div>
+          <p className="t-helper" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+            No number has been purchased or assigned yet.
+          </p>
+        </div>
+      )}
+
       <div className="acct-callout">
         <p className="t-body" style={{ margin: 0 }}>
           We&apos;ll look for a local number near your office.
@@ -69,6 +91,7 @@ export function AssignedNumberCard({
       <OwnerLocalNumberSearch
         hasPaymentMethod={hasPaymentMethod}
         onGoToBilling={onGoToBilling}
+        requestedNumberE164={requestedNumber?.phoneNumber ?? null}
       />
 
       <div>
@@ -81,4 +104,30 @@ export function AssignedNumberCard({
       </div>
     </div>
   );
+}
+
+// Format a +1NXXNXXXXXX number as (NXX) NXX-XXXX for display; pass through otherwise.
+function formatUsPhone(e164: string): string {
+  const m = e164.match(/^\+1(\d{3})(\d{3})(\d{4})$/);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : e164;
+}
+
+function requestedStatusLabel(status: string): string {
+  switch (status) {
+    case "pending": return "Pending review";
+    case "reviewed": return "In review";
+    case "fulfilled": return "Completed";
+    case "rejected": return "Not available";
+    case "cancelled": return "Superseded";
+    default: return status;
+  }
+}
+
+function requestedStatusKind(status: string): StatusKind {
+  switch (status) {
+    case "fulfilled": return "complete";
+    case "rejected":
+    case "cancelled": return "not_active";
+    default: return "waiting";
+  }
 }

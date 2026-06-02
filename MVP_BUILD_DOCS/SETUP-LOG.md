@@ -3901,3 +3901,56 @@ pushed to `origin/main` (auto-deploys production). Post-deploy: `/api/health` 20
 `/account` 200; unauth `POST …/payment-method/setup` → 401 (auth before Stripe);
 deployed Stripe call now matches the locally-verified working call. Final
 authenticated Checkout redirect still needs an owner browser session to click.
+
+---
+
+## 2026-06-02 — feat: owner-requested phone number (preference for admin review)
+
+What changed:
+
+- Owners can now save a selected local number as a **pending request** for admin
+  review. On `/account → Phone number`, with a saved payment method, clicking
+  **Use this number** POSTs the selected candidate to a new owner route; the UI
+  shows "Requested number saved. Our team will review it before assignment." plus
+  "No number has been purchased or assigned yet." The Phone number card shows a
+  compact **Requested number / (formatted) / Pending review** status that persists
+  on reload (assigned number stays a separate line).
+- The admin clinic console **Phone number** panel shows the latest **Owner
+  requested number** (E.164, status, location, requested timestamp, requester
+  email) with the note "This is an owner preference only. Purchase and assignment
+  remain admin-controlled.", plus a hint near the existing **Add number** flow.
+- **No purchase/reserve/assign/provision/activate.** Nothing writes
+  `clinic_phone_numbers`, changes `local_number_status`, or enables SMS recovery.
+  Real number purchase/assignment stays admin-only via the existing gated flow.
+- Payment method remains a prerequisite: the owner UI gates the action, and the
+  API also rejects the request (400 `payment_method_required`) when no saved
+  `stripe_payment_method_id` exists.
+
+Why: now that sandbox payment-method setup works, the owner "Use this number"
+action should capture the owner's preferred number for the operator to review and
+finish manually — without granting owners any provisioning power.
+
+Files: `supabase/migrations/20260602000200_clinic_number_requests.sql` (new),
+`lib/db/clinic-number-requests.ts` (new),
+`app/api/account/phone-numbers/request/route.ts` (new),
+`app/setup/[token]/_components/{account-types.ts,OwnerLocalNumberSearch.tsx,AssignedNumberCard.tsx,BusinessProfile.tsx}`,
+`app/account/page.tsx`, `lib/db/admin/{types.ts,clinics.ts}`,
+`app/admin/(console)/clinics/[clinicId]/_components/AdminClinicConsole.tsx`, docs.
+
+Schema: new table `public.clinic_number_requests` (clinic_id FK, requested
+number + friendly_name/locality/region/postal/number_type/capabilities, status
+enum `pending|reviewed|fulfilled|rejected|cancelled`, requester + review fields).
+Helper supersedes prior pending requests and de-dupes identical repeat clicks.
+**Apply migration with owner approval** — reads are defensive (`.catch`) so
+`/account` and the admin console do not error before it is applied.
+
+Safety: no Twilio purchase/reserve/assign; no `clinic_phone_numbers` write; no
+`sms_recovery_enabled` change; no charge/subscription/invoice/PaymentIntent; no
+secrets. Front-desk rejected; clinic derived from session (no client clinic id).
+
+Validation: `npm run typecheck` pass; `npm run build` pass
+(`/api/account/phone-numbers/request` compiled); safety grep clean (matches are
+comments only). Commit `__PENDING__`; pushed to `origin/main`.
+
+Remaining: apply the migration to production (hand-applied) before the flow works
+live; admin "Approve" remains the existing manual Add number flow (no auto-purchase).

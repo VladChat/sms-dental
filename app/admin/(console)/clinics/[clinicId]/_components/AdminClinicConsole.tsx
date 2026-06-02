@@ -69,6 +69,25 @@ function pmExpLabel(month: number | null, year: number | null): string | null {
   if (!month || !year) return null;
   return `${String(month).padStart(2, "0")}/${year}`;
 }
+// Owner-requested-number status → label + badge tone.
+function requestLabel(status: string): string {
+  switch (status) {
+    case "pending": return "Pending review";
+    case "reviewed": return "In review";
+    case "fulfilled": return "Completed";
+    case "rejected": return "Not available";
+    case "cancelled": return "Superseded";
+    default: return humanizeToken(status);
+  }
+}
+function requestTone(status: string): Tone {
+  switch (status) {
+    case "fulfilled": return "success";
+    case "rejected": return "warning";
+    case "cancelled": return "neutral";
+    default: return "info";
+  }
+}
 function fmtDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
 }
@@ -211,8 +230,44 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 Blocker: no number assigned — add one to continue launch.
               </p>
             )}
+
+            {d.requestedNumber && (
+              <div
+                style={{
+                  marginTop: "var(--space-4)",
+                  padding: "var(--space-4)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--r-md)",
+                  background: "var(--surface-sunken)",
+                }}
+              >
+                <div className="adm-section-head">
+                  <h3 className="adm-subhead">Owner requested number</h3>
+                  <Badge tone={requestTone(d.requestedNumber.status)}>{requestLabel(d.requestedNumber.status)}</Badge>
+                </div>
+                <dl className="adm-rows" style={{ marginTop: "var(--space-2)" }}>
+                  <Row label="Number"><span className="t-mono">{d.requestedNumber.phoneNumber}</span></Row>
+                  {(d.requestedNumber.locality || d.requestedNumber.region) && (
+                    <Row label="Location">{[d.requestedNumber.locality, d.requestedNumber.region].filter(Boolean).join(", ")}</Row>
+                  )}
+                  <Row label="Requested">{fmtDateTime(d.requestedNumber.createdAt)}</Row>
+                  {d.requestedNumber.requestedByEmail && (
+                    <Row label="Requested by"><span className="t-mono">{d.requestedNumber.requestedByEmail}</span></Row>
+                  )}
+                </dl>
+                <p className="t-helper" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+                  This is an owner preference only. Purchase and assignment remain admin-controlled.
+                </p>
+              </div>
+            )}
+
             {!isAddingNumber ? (
               <div style={{ marginTop: "var(--space-4)" }}>
+                {d.requestedNumber && d.requestedNumber.status === "pending" && (
+                  <p className="t-small" style={{ margin: "0 0 var(--space-2)", color: "var(--text-secondary)" }}>
+                    Requested by owner: <span className="t-mono">{d.requestedNumber.phoneNumber}</span> — review, then add it through the normal flow.
+                  </p>
+                )}
                 <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsAddingNumber(true)}>
                   Add number
                 </button>

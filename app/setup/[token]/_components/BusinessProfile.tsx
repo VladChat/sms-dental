@@ -122,6 +122,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 postalCode={data.number.postalCode}
                 hasPaymentMethod={hasPaymentMethod}
                 onGoToBilling={() => setActive("billing")}
+                requestedNumber={data.number.requestedNumber}
               />
             </Section>
           )}

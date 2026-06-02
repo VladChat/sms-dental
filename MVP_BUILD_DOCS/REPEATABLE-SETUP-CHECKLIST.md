@@ -674,3 +674,22 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       a generic "Unauthorized" = secret missing. Safe (rejected before any side effect).
 - [ ] Confirm a Stripe key is genuinely test-mode with a read-only `GET /v1/balance` →
       `livemode:false` (creates nothing); don't rely on the prefix alone.
+
+---
+
+## Separating "owner request" from "operator provisioning" (reusable lessons)
+
+- [ ] When a customer selects a provider resource (phone number, etc.) but provisioning must
+      stay operator-controlled, store the choice as a **request row** in its own table
+      (`*_requests`, status enum `pending|reviewed|fulfilled|rejected|cancelled`) — never write
+      the live provisioning table or flip lifecycle/status columns from the customer path.
+- [ ] The customer write route must: require auth, reject lower roles, derive tenant id from
+      the session (never from the client), validate the payload (E.164, required capabilities)
+      with zod, and make **zero** provider API calls.
+- [ ] De-dupe repeat submits: if the latest pending request already matches, return it; else
+      supersede prior pending rows (→ `cancelled`) and insert one new `pending`.
+- [ ] Make new-table reads **defensive** (`.catch(() => null/[])`) in page/console loaders so
+      the app still renders before the hand-applied migration lands (avoids a repeat of the
+      "missing column/table → 500" outage).
+- [ ] Keep the operator's existing gated provisioning flow unchanged; surface the request as a
+      review hint only (no auto-approve, no bypass of the purchase gate).

@@ -2025,3 +2025,36 @@ Verify (Stripe test Dashboard): a **Customer** and a **PaymentMethod** exist; th
 
 Migration: apply `supabase/migrations/20260602000100_clinic_payment_method.sql` (owner
 approval) before using the flow, or `/account` reads will error on the missing columns.
+
+---
+
+## Owner-requested phone number (preference for admin review) — 2026-06-02
+
+Owners select a local number on `/account → Phone number` and click **Use this number**
+to save it as a **pending request**. This is a preference only — it never purchases,
+reserves, assigns, provisions, or activates a number, never writes
+`clinic_phone_numbers`, and never enables SMS recovery. Real purchase/assignment stays
+admin-only via the existing gated **Add number** flow.
+
+How it works:
+
+- Owner UI → `POST /api/account/phone-numbers/request` (auth owner/admin only;
+  `front_desk` rejected; clinic from session, no client clinic id). A saved payment
+  method is required (else `400 payment_method_required`).
+- Stored in `public.clinic_number_requests` (status `pending`). A new request supersedes
+  prior pending ones for the clinic; an identical repeat click is de-duped.
+- Owner sees a persistent **Requested number / Pending review** status; admin clinic
+  console **Phone number** panel shows **Owner requested number** (E.164, status,
+  location, timestamp, requester email) with a hint by the Add number button.
+
+Operator action: review the owner's requested number, then add it through the normal
+admin **Add number** flow (search → confirm → purchase/assign), which is unchanged and
+still gated by `TWILIO_NUMBER_PURCHASE_ENABLED`. There is no auto-approve / auto-purchase.
+
+Verify (after a request): `clinic_number_requests` has a `pending` row for the clinic;
+**no** new `clinic_phone_numbers` row; `clinics.local_number_status` and
+`sms_recovery_enabled` unchanged; no Stripe/Twilio side effects.
+
+Migration: apply `supabase/migrations/20260602000200_clinic_number_requests.sql` (owner
+approval). Reads are defensive, so `/account` and the admin console still load before it
+is applied, but saving a request fails until the table exists.
