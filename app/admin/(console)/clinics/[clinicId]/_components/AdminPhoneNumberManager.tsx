@@ -76,10 +76,17 @@ export function AdminPhoneNumberManager({
   clinicId,
   purchaseEnabled,
   defaults,
+  onCancel,
+  onAssigned,
 }: {
   clinicId: string;
   purchaseEnabled: boolean;
   defaults: PhoneSearchDefaults;
+  // Inline usage (clinic console): collapse the panel / refresh after assignment.
+  // When omitted (dedicated deep-link page), the component falls back to routing
+  // back to the clinic detail page itself.
+  onCancel?: () => void;
+  onAssigned?: () => void;
 }) {
   const router = useRouter();
 
@@ -102,10 +109,14 @@ export function AdminPhoneNumberManager({
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
-  function resetDefaults() {
-    setType("local");
-    setAreaCode(defaults.areaCode);
-    setPostal(defaults.postal);
+  function handleCancel() {
+    if (onCancel) {
+      // Inline: parent collapses the panel; unmounting clears transient state.
+      onCancel();
+      return;
+    }
+    // Deep-link page fallback: return to the clinic Phone number panel.
+    router.push(`/admin/clinics/${clinicId}`);
   }
 
   async function onSearch(e: React.FormEvent<HTMLFormElement>) {
@@ -167,9 +178,15 @@ export function AdminPhoneNumberManager({
         return;
       }
       setConfirmOpen(false);
-      // Return to the clinic Phone number panel, which now shows the assignment.
-      router.push(`/admin/clinics/${clinicId}`);
-      router.refresh();
+      if (onAssigned) {
+        // Inline: parent collapses the panel and refreshes the clinic data so the
+        // new assignment shows in the same Phone number section.
+        onAssigned();
+      } else {
+        // Deep-link page fallback: return to the clinic Phone number panel.
+        router.push(`/admin/clinics/${clinicId}`);
+        router.refresh();
+      }
     } catch {
       setPurchaseError("Could not purchase this number. Please try again.");
     } finally {
@@ -207,8 +224,8 @@ export function AdminPhoneNumberManager({
           <button type="submit" className="btn btn-primary btn-sm" disabled={searching}>
             {searching ? "Searching…" : "Search numbers"}
           </button>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={resetDefaults} disabled={searching}>
-            Reset to clinic defaults
+          <button type="button" className="btn btn-secondary btn-sm" onClick={handleCancel} disabled={searching || purchasing}>
+            Cancel
           </button>
         </div>
       </form>

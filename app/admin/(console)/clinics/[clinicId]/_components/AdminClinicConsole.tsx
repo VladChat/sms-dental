@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Badge,
   BoolBadge,
@@ -22,6 +23,7 @@ import type {
 import { AdminClinicActions } from "./AdminClinicActions";
 import { AdminBusinessProfileForm } from "./AdminBusinessProfileForm";
 import { AdminA2pForm } from "./AdminA2pForm";
+import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
 
@@ -35,6 +37,7 @@ export type AdminConsoleData = {
   smsMode: string;
   appBaseUrl: string;
   purchaseEnabled: boolean;
+  phoneDefaults: PhoneSearchDefaults;
   recentActivity: { id: string; action: string; adminEmail: string; createdAt: string }[];
   events: AdminClinicEvents;
 };
@@ -62,7 +65,9 @@ function fmtDateTime(iso: string | null): string {
 
 export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
   const d = data.detail;
+  const router = useRouter();
   const [active, setActive] = useState<SectionId>("phone");
+  const [isAddingNumber, setIsAddingNumber] = useState(false);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const launchBlockedReason = !d.isActive
@@ -196,11 +201,35 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 Blocker: no number assigned — add one to continue launch.
               </p>
             )}
-            <div style={{ marginTop: "var(--space-4)" }}>
-              <Link className="btn btn-primary btn-sm" href={`/admin/clinics/${d.id}/phone-numbers/new`}>
-                Add number
-              </Link>
-            </div>
+            {!isAddingNumber ? (
+              <div style={{ marginTop: "var(--space-4)" }}>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsAddingNumber(true)}>
+                  Add number
+                </button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  marginTop: "var(--space-4)",
+                  padding: "var(--space-4)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--r-md)",
+                  background: "var(--surface-sunken)",
+                }}
+              >
+                <h3 className="adm-subhead">Add a number</h3>
+                <p className="t-helper" style={{ margin: "var(--space-1) 0 var(--space-2)" }}>
+                  Search for an available tracking number for this clinic.
+                </p>
+                <AdminPhoneNumberManager
+                  clinicId={d.id}
+                  purchaseEnabled={data.purchaseEnabled}
+                  defaults={data.phoneDefaults}
+                  onCancel={() => setIsAddingNumber(false)}
+                  onAssigned={() => { setIsAddingNumber(false); router.refresh(); }}
+                />
+              </div>
+            )}
           </Panel>
 
           {/* Business profile (editable — preserved) */}
