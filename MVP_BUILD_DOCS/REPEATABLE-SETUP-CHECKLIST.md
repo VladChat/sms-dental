@@ -662,3 +662,15 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 - [ ] Locally, forward the webhook (`stripe listen --forward-to …/api/webhooks/stripe`) or
       the saved method never appears; verify the test Dashboard shows only a Customer +
       PaymentMethod (no Subscription/Invoice/charge).
+- [ ] Vercel injects env vars at **deploy-create time** — after adding/changing a secret you
+      MUST redeploy (redeploy the existing commit via API `POST /v13/deployments` with
+      `deploymentId`; no code change needed). The old running deployment keeps the old snapshot.
+- [ ] Add secrets without exposing values: read from local `.env.local` in-process, POST to
+      `…/v10/projects/{id}/env?upsert=true` with `type:"sensitive"` (can't be read back), and
+      print only key/target/type from the response. Confirm prefixes (`sk_test_`, `whsec_`)
+      locally, never echo the value.
+- [ ] Verify a webhook signing secret is wired WITHOUT a real event: POST a bogus
+      `stripe-signature` to the endpoint. "Invalid Stripe signature" = secret present & used;
+      a generic "Unauthorized" = secret missing. Safe (rejected before any side effect).
+- [ ] Confirm a Stripe key is genuinely test-mode with a read-only `GET /v1/balance` →
+      `livemode:false` (creates nothing); don't rely on the prefix alone.

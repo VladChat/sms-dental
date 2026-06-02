@@ -3792,3 +3792,86 @@ Remaining risks:
 - The migration must be applied before the new columns exist, or `/account`
   reads error.
 - Subscription/invoice billing remains intentionally unbuilt (later milestone).
+
+### 2026-06-02 — migration APPLIED to production (incident fix)
+
+`/account` was returning a 500 server-side exception in production after the
+`558e749` deploy because the migration columns did not exist yet. Confirmed from
+Vercel runtime logs (deployment `dpl_2rscdrYGGaq3wK6ATsbejiSesS54`): three
+`GET /account → 500` entries, message `column "stripe_payment_m… does not exist`.
+
+Applied `supabase/migrations/20260602000100_clinic_payment_method.sql` to the
+production Supabase project `qfjpvbvfvhbtebwivcdc` via the **Management API**
+`POST /v1/projects/{ref}/database/query` (token from local `.env.local`, never
+printed), using **curl** (Cloudflare blocks other clients — see 2026-06-01 note).
+Response HTTP 201.
+
+Verified (Management API queries against production):
+- BEFORE: `information_schema` returned **0** `stripe_payment_method%` columns.
+- AFTER: all **7** columns present with correct types; all **3** CHECK
+  constraints present (`clinics_stripe_pm_exp_month_check`,
+  `_exp_year_check`, `_last4_len_check`).
+- `GET /api/health` → 200 `{"ok":true,...}`.
+- `GET https://app.missedcallsdental.com/account` → 200, renders the
+  sign-in gate (unauthenticated path); no "server-side exception" / digest in
+  the HTML.
+- Post-fix Vercel error logs for the production deployment: none in the window
+  after apply (last 500 was 16:49:42, before the apply).
+
+Note: `/api/internal/health` is NOT an implemented route (empty local dir, no
+`route.ts`, not in git) — production correctly 404s; unrelated to this incident.
+No code changed (migration was already committed; only applied). Idempotent
+migration — safe to re-run.
+
+### 2026-06-02 — Stripe sandbox secrets added to Vercel Production + verified
+
+Cause of the "Billing is not available in this environment." error: Vercel
+Production had **no** `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` (only
+`STRIPE_ACCOUNT_ID` existed). The setup route's sandbox gate threw on Stripe-client
+init. Deployed code was correct (reads `process.env` via `getStripeServerEnv()`);
+this was purely missing env config — no code change.
+
+Env vars added to Vercel **Production** (names only; values from local `.env.local`,
+never printed/committed; `type: sensitive` to match the project secret convention;
+Production-only since the project has no strict all-env-match rule):
+- `STRIPE_SECRET_KEY`  (verified locally as a **test** key `sk_test_…`/`rk_test_…`,
+  not `sk_live_…`)
+- `STRIPE_WEBHOOK_SECRET`  (verified locally as `whsec_…`)
+
+Added via Vercel REST API `POST /v10/projects/{id}/env?upsert=true` with the local
+`VERCEL_TOKEN` (HTTP 201 each). Redeployed the current production commit so the new
+env is snapshotted (Vercel injects env at deploy-create time).
+
+Redeploy: `POST /v13/deployments` with `deploymentId` of the prior prod deploy →
+new deployment **`dpl_8M2uj8UWbj28NVecbNd5jyxch6mr`** (commit `558e749`, target
+production), reached **READY**; alias `app.missedcallsdental.com`.
+
+Verified:
+- Vercel env listing (names only): Production now has `STRIPE_SECRET_KEY` +
+  `STRIPE_WEBHOOK_SECRET` (+ existing `STRIPE_ACCOUNT_ID`).
+- `GET /api/health` → 200.
+- `GET /account` → 200 (sign-in gate; no server-side exception).
+- `POST /api/account/billing/payment-method/setup` unauth → **401** "Please sign in"
+  (route healthy; the prior 500 "environment" error is gone). The auth check runs
+  before Stripe init, so the authenticated Checkout redirect still needs an owner
+  session to fully exercise.
+- Webhook secret wiring proven via a bogus-signature probe to
+  `POST /api/webhooks/stripe` → **401 "Invalid Stripe signature"** (the
+  `invalid_signature` path, i.e. secret present & used — a missing secret would
+  return the generic "Unauthorized"). Confirmed in Vercel runtime logs for the new
+  deployment. No side effects (rejected before any DB write).
+- Stripe read-only `GET /v1/balance` with the key → `livemode: false` (valid
+  **test-mode** key; no objects created).
+
+Safety: no charge, subscription, invoice, or PaymentIntent created; key confirmed
+test-mode (`livemode:false`); no live key; no secrets printed/committed; no Twilio
+purchase; SMS recovery unchanged.
+
+Remaining (operator, needs authenticated owner browser session — not doable from
+the repo CLI): click `/account → Billing → Add payment method`, confirm redirect to
+Stripe-hosted Checkout (setup mode), complete with test card `4242 4242 4242 4242`,
+then confirm the Billing card shows the saved method, the `clinics` row has
+`stripe_customer_id` + `stripe_payment_method_id`, and the Stripe **test** Dashboard
+shows only a Customer + PaymentMethod (no Subscription/Invoice/charge). Ensure the
+Stripe test webhook endpoint targets `/api/webhooks/stripe` with
+`checkout.session.completed` + `setup_intent.succeeded` so the save completes.
