@@ -1,6 +1,7 @@
 import {
   searchAvailableLocalNumbers,
   type AvailableNumber,
+  type SearchAvailableLocalNumbersInput,
 } from "../twilio/numbers";
 import { phoneAreaCode } from "../twilio/numbers";
 import {
@@ -22,42 +23,155 @@ import {
 
 export type LocalNumberPrepResult = {
   candidate: AvailableNumber | null;
+  attemptLabel: string | null;
+  numbers: AvailableNumber[];
 };
+
+export type LocalNumberSearchAttempt = {
+  label: string;
+  input: SearchAvailableLocalNumbersInput;
+};
+
+export type LocalNumberSearchPlanResult = {
+  candidate: AvailableNumber | null;
+  attemptLabel: string | null;
+  numbers: AvailableNumber[];
+};
+
+const LOCAL_NUMBER_SEARCH_LIMIT = 10;
+const RADIUS_SEARCH_MILES = [25, 50, 100] as const;
 
 export async function prepareLocalNumber(
   clinic: ClinicOnboardingRow,
 ): Promise<LocalNumberPrepResult> {
-  const areaCode = clinic.main_phone
-    ? phoneAreaCode(clinic.main_phone) ?? undefined
-    : undefined;
-  const postalCode = clinic.postal_code ?? undefined;
-
-  let candidate: AvailableNumber | null = null;
+  let result: LocalNumberSearchPlanResult = {
+    candidate: null,
+    attemptLabel: null,
+    numbers: [],
+  };
   try {
-    // Prefer ZIP-scoped results; if none, retry with just the area code.
-    let numbers = await searchAvailableLocalNumbers({
-      country: "US",
-      areaCode,
-      inPostalCode: postalCode,
-      limit: 5,
-    });
-    if (numbers.length === 0 && (areaCode || postalCode)) {
-      numbers = await searchAvailableLocalNumbers({
-        country: "US",
-        areaCode,
-        limit: 5,
-      });
-    }
-    candidate = numbers[0] ?? null;
+    result = await runLocalNumberSearchPlan(buildLocalNumberSearchPlan(clinic));
   } catch {
     // Twilio search is best-effort here. A failure must not block office
     // profile creation; the status simply stays "preparing".
-    candidate = null;
+    result = { candidate: null, attemptLabel: null, numbers: [] };
   }
 
   // We do not reserve or purchase here. Status stays "preparing" until the
   // purchase gate is enabled and the owner explicitly approves a purchase.
   await setLocalNumberStatus(clinic.id, "preparing");
 
-  return { candidate };
+  return result;
+}
+
+export function buildLocalNumberSearchPlan(
+  clinic: ClinicOnboardingRow,
+): LocalNumberSearchAttempt[] {
+  if (clinic.country !== "US") return [];
+
+  const areaCode = clinic.main_phone
+    ? phoneAreaCode(clinic.main_phone) ?? undefined
+    : undefined;
+  const postalCode = normalizeUsZip(clinic.postal_code);
+  const stateRegion = normalizeUsStateRegion(clinic.state_region);
+  const zipCoordinates = resolveUsZipCoordinates(postalCode);
+
+  const attempts: LocalNumberSearchAttempt[] = [];
+
+  if (areaCode && postalCode) {
+    attempts.push({
+      label: "area_code_and_zip",
+      input: baseLocalSearchInput({ areaCode, inPostalCode: postalCode }),
+    });
+  }
+
+  if (postalCode) {
+    attempts.push({
+      label: "zip_only",
+      input: baseLocalSearchInput({ inPostalCode: postalCode }),
+    });
+  }
+
+  if (areaCode) {
+    attempts.push({
+      label: "area_code_only",
+      input: baseLocalSearchInput({ areaCode }),
+    });
+  }
+
+  if (zipCoordinates) {
+    const nearLatLong = formatNearLatLong(zipCoordinates);
+    for (const distance of RADIUS_SEARCH_MILES) {
+      attempts.push({
+        label: `zip_radius_${distance}_miles`,
+        input: baseLocalSearchInput({ nearLatLong, distance }),
+      });
+    }
+  }
+
+  if (stateRegion) {
+    attempts.push({
+      label: "state_region",
+      input: baseLocalSearchInput({ inRegion: stateRegion }),
+    });
+  }
+
+  return attempts;
+}
+
+export async function runLocalNumberSearchPlan(
+  attempts: LocalNumberSearchAttempt[],
+): Promise<LocalNumberSearchPlanResult> {
+  for (const attempt of attempts) {
+    let numbers: AvailableNumber[];
+    try {
+      numbers = await searchAvailableLocalNumbers(attempt.input);
+    } catch {
+      continue;
+    }
+    if (numbers.length > 0) {
+      return {
+        candidate: numbers[0] ?? null,
+        attemptLabel: attempt.label,
+        numbers,
+      };
+    }
+  }
+
+  return { candidate: null, attemptLabel: null, numbers: [] };
+}
+
+function baseLocalSearchInput(
+  input: Omit<SearchAvailableLocalNumbersInput, "country" | "limit">,
+): SearchAvailableLocalNumbersInput {
+  return {
+    country: "US",
+    ...input,
+    limit: LOCAL_NUMBER_SEARCH_LIMIT,
+  };
+}
+
+function normalizeUsZip(value: string | null): string | undefined {
+  const trimmed = value?.trim() ?? "";
+  const match = /^(\d{5})(?:-\d{4})?$/.exec(trimmed);
+  return match?.[1];
+}
+
+function normalizeUsStateRegion(value: string | null): string | undefined {
+  const trimmed = value?.trim().toUpperCase() ?? "";
+  return /^[A-Z]{2}$/.test(trimmed) ? trimmed : undefined;
+}
+
+type ZipCoordinates = { latitude: number; longitude: number };
+
+function resolveUsZipCoordinates(zip: string | undefined): ZipCoordinates | null {
+  if (!zip) return null;
+  // Radius fallback intentionally requires a committed ZIP coordinate source.
+  // Onboarding must not call an external geocoder or ask the customer for
+  // location fields just to run Twilio search.
+  return null;
+}
+
+function formatNearLatLong(coords: ZipCoordinates): string {
+  return `${coords.latitude},${coords.longitude}`;
 }

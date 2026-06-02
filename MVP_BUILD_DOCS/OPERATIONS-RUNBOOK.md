@@ -1831,3 +1831,41 @@ re-search.
 Safe test (purchase disabled): search by area code / city+state / ZIP / toll-free; verify
 the no-results guidance; select a number; attempt purchase → blocked with
 `Twilio number purchase is disabled by environment flag.`; no number purchased, no DB row.
+
+---
+
+## Onboarding local-number fallback search — 2026-06-02
+
+Onboarding Step 1 stays minimal: clinic name, main office phone, ZIP code, and the existing
+login/password fields only. Do not add city, state, latitude/longitude, or number-catalog
+fields to this step just to improve Twilio search.
+
+Automatic local-number preparation is read-only and never purchases, reserves, stores, or
+assigns a number. Purchase/assignment remains behind the existing operator purchase gate.
+
+Search order for U.S. local onboarding preparation:
+
+1. area code from `clinics.main_phone` + `clinics.postal_code`
+2. ZIP only
+3. area code only
+4. ZIP radius using `nearLatLong` at 25, 50, then 100 miles, only if the ZIP can be resolved
+   from a committed lookup source
+5. state fallback using `clinics.state_region`, only when already available
+
+Twilio local searches require Voice + SMS, do not require MMS or fax, use `beta=false`, and
+exclude all/local/foreign address-required numbers when supported by the SDK. City/locality
+is metadata only for onboarding; do not use `inLocality` as an automatic filter.
+
+Current radius status: inactive. The code path exists, but no committed ZIP-to-coordinate
+source is present, and onboarding must not call external geocoding services without an
+approved/configured provider.
+
+Troubleshooting:
+
+- Inspect `buildLocalNumberSearchPlan(clinic)` to confirm the planned labels and filters.
+- If ZIP+area returns no results, confirm ZIP-only and area-only attempts are present before
+  investigating Twilio inventory.
+- If state fallback is missing, confirm `clinics.state_region` is already populated with a
+  2-letter state code; do not add state collection to Step 1 for this alone.
+- If radius fallback is needed, add a committed ZIP coordinate lookup source first, then
+  verify `nearLatLong` attempts appear in the plan.

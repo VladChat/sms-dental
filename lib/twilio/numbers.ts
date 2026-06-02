@@ -1,5 +1,6 @@
 import { getTwilioClient } from "./client";
 import { getTwilioMessagingEnv } from "../env";
+import type { LocalListInstanceOptions } from "twilio/lib/rest/api/v2010/account/availablePhoneNumberCountry/local";
 
 // Server-side Twilio available-number search and purchase helpers.
 //
@@ -57,7 +58,9 @@ export type SearchAvailableLocalNumbersInput = {
   inPostalCode?: string;
   /** Geo-radius anchor: an E.164 number to search near (Twilio `nearNumber`). */
   nearNumber?: string;
-  /** Geo-radius distance in miles; only applied with `nearNumber`. */
+  /** Geo-radius anchor: "lat,long" pair to search near (Twilio `nearLatLong`). */
+  nearLatLong?: string;
+  /** Geo-radius distance in miles; only applied with `nearNumber` or `nearLatLong`. */
   distance?: number;
   /** Capability filters. Defaults to Voice + SMS. */
   required?: Partial<RequiredCapabilities>;
@@ -71,9 +74,10 @@ export async function searchAvailableLocalNumbers(
   const areaCodeNumber = input.areaCode ? Number(input.areaCode) : undefined;
   const limit = clampLimit(input.limit, 10);
   const required = { ...DEFAULT_REQUIRED, ...(input.required ?? {}) };
-  const useNear = Boolean(input.nearNumber) && !areaCodeNumber;
+  const useNearNumber = Boolean(input.nearNumber) && !areaCodeNumber;
+  const useNearLatLong = Boolean(input.nearLatLong) && !areaCodeNumber && !useNearNumber;
 
-  const list = await client.availablePhoneNumbers(input.country).local.list({
+  const params: LocalListInstanceOptions = {
     // Capability filters: only constrain when required.
     ...(required.voice ? { voiceEnabled: true } : {}),
     ...(required.sms ? { smsEnabled: true } : {}),
@@ -82,14 +86,21 @@ export async function searchAvailableLocalNumbers(
     ...(typeof areaCodeNumber === "number" && Number.isFinite(areaCodeNumber)
       ? { areaCode: areaCodeNumber }
       : {}),
-    ...(useNear ? { nearNumber: input.nearNumber, distance: input.distance ?? 25 } : {}),
+    ...(useNearNumber ? { nearNumber: input.nearNumber } : {}),
+    ...(useNearLatLong ? { nearLatLong: input.nearLatLong } : {}),
+    ...(useNearNumber || useNearLatLong ? { distance: input.distance ?? 25 } : {}),
     ...(input.contains ? { contains: input.contains } : {}),
     ...(input.inLocality ? { inLocality: input.inLocality } : {}),
     ...(input.inRegion ? { inRegion: input.inRegion } : {}),
     ...(input.inPostalCode ? { inPostalCode: input.inPostalCode } : {}),
     limit,
     excludeAllAddressRequired: true,
-  });
+    excludeLocalAddressRequired: true,
+    excludeForeignAddressRequired: true,
+    beta: false,
+  };
+
+  const list = await client.availablePhoneNumbers(input.country).local.list(params);
 
   return rankAndMap({
     list,
