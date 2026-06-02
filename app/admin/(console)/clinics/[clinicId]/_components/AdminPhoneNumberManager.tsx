@@ -26,6 +26,7 @@ type SearchParamsEcho = {
   country: string;
   area_code?: string | null;
   locality?: string | null;
+  locality_filter_used?: boolean;
   region?: string | null;
   postal_code?: string | null;
   contains?: string | null;
@@ -39,6 +40,11 @@ type SearchResponse = {
   count?: number;
   numbers?: Candidate[];
   params?: SearchParamsEcho;
+  search_mode?: "smart_fallback" | string;
+  attempt_label?: string | null;
+  attempted_labels?: string[];
+  fallback_used?: boolean;
+  fallback_message?: string | null;
   error?: { message?: string };
 };
 
@@ -63,13 +69,18 @@ function capsLabel(req: { voice: boolean; sms: boolean; mms: boolean }): string 
 
 function summarize(p: SearchParamsEcho): string {
   const typeLabel = p.type === "toll_free" ? "Toll-free" : "Local";
+  if (p.type === "local") {
+    const bits: string[] = [];
+    if (p.area_code) bits.push(`area code ${p.area_code}`);
+    if (p.postal_code) bits.push(`ZIP ${p.postal_code}`);
+    if (!p.area_code && !p.postal_code && p.region) bits.push(p.region);
+    if (p.contains) bits.push(`pattern ${p.contains}`);
+    const suffix = bits.length > 0 ? ` for ${bits.join(" / ")}` : "";
+    return `Showing best available local numbers${suffix}`;
+  }
+
   const bits: string[] = [`${typeLabel} numbers in ${p.country}`];
-  if (p.area_code) bits.push(`area code ${p.area_code}`);
-  if (p.region) bits.push(p.region);
-  if (p.locality) bits.push(p.locality);
-  if (p.postal_code) bits.push(`ZIP ${p.postal_code}`);
   if (p.contains) bits.push(`pattern ${p.contains}`);
-  if (p.distance) bits.push(`within ${p.distance} mi`);
   bits.push(capsLabel(p.required));
   return `Showing ${bits.join(", ")}`;
 }
@@ -95,7 +106,6 @@ export function AdminPhoneNumberManager({
   const [state, setState] = useState(defaults.state);
   const [postal, setPostal] = useState(defaults.postal);
   const [contains, setContains] = useState("");
-  const [distance, setDistance] = useState("25");
   const [capVoice, setCapVoice] = useState(true);
   const [capSms, setCapSms] = useState(true);
   const [capMms, setCapMms] = useState(false);
@@ -107,6 +117,7 @@ export function AdminPhoneNumberManager({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [summaryParams, setSummaryParams] = useState<SearchParamsEcho | null>(null);
+  const [fallbackMessage, setFallbackMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
 
   // Purchase state.
@@ -124,7 +135,6 @@ export function AdminPhoneNumberManager({
     setState(defaults.state);
     setPostal(defaults.postal);
     setContains("");
-    setDistance("25");
     setCapVoice(true);
     setCapSms(true);
     setCapMms(false);
@@ -135,6 +145,7 @@ export function AdminPhoneNumberManager({
     e.preventDefault();
     setSearching(true);
     setSearchError(null);
+    setFallbackMessage(null);
     setSelected(null);
     try {
       const p = new URLSearchParams();
@@ -142,10 +153,8 @@ export function AdminPhoneNumberManager({
       p.set("country", country.trim().toUpperCase());
       if (type === "local") {
         if (areaCode.trim()) p.set("area_code", areaCode.trim());
-        if (city.trim()) p.set("locality", city.trim());
         if (state.trim()) p.set("region", state.trim());
         if (postal.trim()) p.set("postal_code", postal.trim());
-        if (distance.trim()) p.set("distance", distance.trim());
       }
       if (contains.trim()) p.set("contains", contains.trim());
       p.set("voice", String(capVoice));
@@ -162,14 +171,17 @@ export function AdminPhoneNumberManager({
         setSearchError(json?.error?.message ?? "Could not search available numbers.");
         setCandidates([]);
         setSummaryParams(null);
+        setFallbackMessage(null);
         setSearched(true);
         return;
       }
       setCandidates(json.numbers ?? []);
       setSummaryParams(json.params ?? null);
+      setFallbackMessage(json.fallback_message ?? null);
       setSearched(true);
     } catch {
       setSearchError("Could not search available numbers. Please try again.");
+      setFallbackMessage(null);
       setSearched(true);
     } finally {
       setSearching(false);
@@ -223,11 +235,10 @@ export function AdminPhoneNumberManager({
           <SelectField label="Number type" name="pn_type" value={type} onChange={(v) => setType(v === "toll_free" ? "toll_free" : "local")} options={TYPE_OPTIONS} />
           <SelectField label="Country" name="pn_country" value={country} onChange={setCountry} options={COUNTRY_OPTIONS} />
           {isLocal && <Field label="Area code" name="pn_area" value={areaCode} onChange={setAreaCode} optional inputMode="numeric" placeholder="e.g. 312" />}
-          {isLocal && <Field label="City / locality" name="pn_city" value={city} onChange={setCity} optional placeholder="e.g. Chicago" />}
+          {isLocal && <Field label="City / locality" name="pn_city" value={city} onChange={setCity} optional placeholder="e.g. Chicago" helper="Shown as result metadata; smart search does not filter by city." />}
           {isLocal && <Field label="State / region" name="pn_state" value={state} onChange={setState} optional placeholder="2-letter, e.g. IL" />}
           {isLocal && <Field label="ZIP / postal" name="pn_zip" value={postal} onChange={setPostal} optional inputMode="numeric" />}
           <Field label="Contains / pattern" name="pn_contains" value={contains} onChange={setContains} optional inputMode="numeric" placeholder="digits or 5*5" helper="Digits and * wildcards." />
-          {isLocal && <Field label="Radius (miles)" name="pn_distance" value={distance} onChange={setDistance} optional inputMode="numeric" helper="Used only when area code, city, state and ZIP are all empty." />}
           <SelectField label="Results" name="pn_limit" value={limit} onChange={setLimit} options={LIMIT_OPTIONS} />
         </div>
 
@@ -257,14 +268,21 @@ export function AdminPhoneNumberManager({
       )}
 
       {searched && !searchError && summaryParams && (
-        <p className="t-small" style={{ color: "var(--text-secondary)", marginTop: "var(--space-3)" }}>
-          {summarize(summaryParams)} · {candidates.length} result{candidates.length === 1 ? "" : "s"}
-        </p>
+        <div style={{ marginTop: "var(--space-3)" }}>
+          <p className="t-small" style={{ color: "var(--text-secondary)", margin: 0 }}>
+            {summarize(summaryParams)} · {candidates.length} result{candidates.length === 1 ? "" : "s"}
+          </p>
+          {fallbackMessage && (
+            <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-1) 0 0" }}>
+              {fallbackMessage}
+            </p>
+          )}
+        </div>
       )}
 
       {searched && !searchError && candidates.length === 0 && (
         <p className="t-small" style={{ color: "var(--text-muted)", marginTop: "var(--space-2)" }}>
-          No numbers found for these filters. Try removing area code, changing city/ZIP, or switching to toll-free.
+          No local numbers found after the smart fallback search. Try a broader area code, check the ZIP, or switch to toll-free.
         </p>
       )}
 

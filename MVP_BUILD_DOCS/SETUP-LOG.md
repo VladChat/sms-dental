@@ -3374,9 +3374,57 @@ Validation:
 Commit:
 
 ```txt
-pending; final commit hash reported after commit
+65b2a6baa46281e9e6e051b413e6d5f2d58de70a
 ```
 
 Remaining risk:
 
 - ZIP-radius fallback requires a committed ZIP coordinate lookup source before it can run.
+
+---
+
+## 2026-06-02 — Use smart fallback for admin Twilio local-number search
+
+Problem: Admin → Clinic → Phone number → Search numbers still sent strict combined Twilio
+filters (`areaCode` + `inLocality` + `inRegion` + `inPostalCode`). In production this
+returned 0 results for area code 224 / IL / Buffalo Grove / ZIP 60089 even though broader
+fallback inventory could exist.
+
+What changed:
+
+- Extracted shared smart local-number search planning to
+  `lib/twilio/local-number-search-plan.ts`.
+- `lib/onboarding/local-number.ts` now uses that shared planner instead of owning a
+  duplicate fallback implementation.
+- `app/api/admin/clinics/[clinicId]/phone-numbers/search/route.ts` now uses the shared
+  plan for U.S. local search: `area_code_and_zip` → `zip_only` → `area_code_only` →
+  optional ZIP radius attempts → `state_region` fallback.
+- Admin local smart search no longer sends `inLocality` to Twilio. City/locality remains
+  result metadata only.
+- `AdminPhoneNumberManager` no longer sends the city field on default Search, labels it as
+  metadata-only, removes the misleading manual radius input, and shows fallback summary
+  copy when a broader attempt is used.
+
+Safety:
+
+- Search remains read-only. No Twilio number was purchased, reserved, released, or assigned.
+- Purchase behavior remains behind the existing `TWILIO_NUMBER_PURCHASE_ENABLED` gate.
+- Default local search remains Voice + SMS required, MMS not required, and uses the shared
+  Twilio local-number safety filters (`beta=false`, address-required exclusions where
+  supported).
+
+Validation:
+
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+
+Commit:
+
+```txt
+pending; final commit hash reported after commit
+```
+
+Remaining risk:
+
+- ZIP-radius fallback still requires a committed ZIP coordinate lookup source before it can
+  run.
