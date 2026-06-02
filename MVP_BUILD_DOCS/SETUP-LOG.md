@@ -3875,3 +3875,29 @@ then confirm the Billing card shows the saved method, the `clinics` row has
 shows only a Customer + PaymentMethod (no Subscription/Invoice/charge). Ensure the
 Stripe test webhook endpoint targets `/api/webhooks/stripe` with
 `checkout.session.completed` + `setup_intent.succeeded` so the save completes.
+
+### 2026-06-02 — fix: `currency` required for setup-mode Checkout (code defect)
+
+After the env was correct (`sk_test_` key, verified `livemode:false`), the button
+then failed with "Could not start payment setup." (`billing.setup.failed`). Root
+cause was a **code defect**, not env: `checkout.sessions.create({ mode:"setup" })`
+**omits `payment_method_types`** (intentional — dynamic payment methods), and Stripe
+**requires `currency`** in that configuration. Reproduced with the same `sk_test_`
+key (no Vercel logs needed):
+- `customers.create` → ok (`livemode:false`).
+- `checkout.sessions.create` (no currency) → `StripeInvalidRequestError`
+  `parameter_missing` param=`currency`, 400 **"Missing required param: currency."**
+- Same call **with `currency:"usd"`** → ok, `mode:"setup"`, returned a hosted URL.
+  (Throwaway test Customer deleted after each repro; only a SetupIntent could be
+  created — no charge/PaymentIntent/subscription/invoice.)
+
+Fix: added `currency: "usd"` to the Checkout Session in
+`app/api/account/billing/payment-method/setup/route.ts`. `currency` in setup mode
+only scopes eligible dynamic payment methods — it does **not** create a charge.
+Key prefix is `sk_test_` (Standard test key), so no key replacement was needed.
+
+Validation: `npm run typecheck` pass; `npm run build` pass. Commit `__PENDING__`;
+pushed to `origin/main` (auto-deploys production). Post-deploy: `/api/health` 200;
+`/account` 200; unauth `POST …/payment-method/setup` → 401 (auth before Stripe);
+deployed Stripe call now matches the locally-verified working call. Final
+authenticated Checkout redirect still needs an owner browser session to click.

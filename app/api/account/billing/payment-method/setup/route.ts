@@ -71,9 +71,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // mode:"setup" saves a payment method for future billing. No charge, no
     // subscription, no invoice. payment_method_types is intentionally OMITTED so
-    // Stripe uses dynamic payment methods configured in the Dashboard.
+    // Stripe uses dynamic payment methods configured in the Dashboard. When
+    // payment_method_types is omitted, Stripe requires `currency` in setup mode
+    // to resolve eligible dynamic payment methods — it does NOT create a charge.
     const session = await stripe.checkout.sessions.create({
       mode: "setup",
+      currency: "usd",
       customer: customerId,
       client_reference_id: clinic.id,
       success_url: successUrl,
