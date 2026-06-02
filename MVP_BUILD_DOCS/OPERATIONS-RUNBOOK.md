@@ -1733,3 +1733,66 @@ gone; one internal note; no duplicate status/SMS controls; Pause/Reactivate, Lau
 service, and Save note all succeed and write `admin_audit_events`; the three disabled
 placeholders show their reasons; no SMS/email sent, no Stripe call, no Twilio number
 purchase, no A2P submission. `npm run typecheck` and `npm run build` pass.
+
+---
+
+## Admin Twilio number purchase + assignment — 2026-06-01
+
+The admin Phone number panel (`/admin/clinics/[clinicId]`) can search, select, and
+purchase/assign a Twilio number for a clinic. Same Twilio architecture as onboarding
+(`purchaseNumberAndConfigure` + `upsertOfficeTextingNumber`) — not a second one.
+
+Routes (platform-admin guarded):
+- `GET /api/admin/clinics/[clinicId]/phone-numbers/search?type=local|toll_free&country=US|CA&area_code=NNN`
+  — read-only Twilio available-number lookup; returns Voice+SMS-capable numbers only.
+- `POST /api/admin/clinics/[clinicId]/phone-numbers/purchase` body `{ phone_number }`
+  — purchases + assigns the selected number.
+
+Search hint order (no hardcoded area codes): explicit `area_code` query →
+`clinics.preferred_area_code` → area code derived from `clinics.main_phone` → none;
+region/postal from the clinic. No results → clear no-results state.
+
+Purchase gate (hard, no bypass): `TWILIO_NUMBER_PURCHASE_ENABLED`
+(`runtimeConfig.onboarding.twilioNumberPurchaseEnabled`). When **false/missing** the
+purchase route returns **HTTP 503 `purchase_disabled`** with
+`Twilio number purchase is disabled by environment flag.` and the UI shows that blocker —
+no Twilio call, no DB write. Precondition order: auth → clinic exists → not already
+assigned (409 `already_assigned`, one number per clinic) → flag on → app base URL present
+→ purchase.
+
+Assignment + webhooks: on success, `purchaseNumberAndConfigure` sets the purchased
+number's Voice incoming `/api/webhooks/twilio/voice/incoming`, Voice status
+`/api/webhooks/twilio/voice/status`, SMS incoming
+`/api/webhooks/twilio/messaging/incoming`, SMS status
+`/api/webhooks/twilio/messaging/status` (base from `runtimeConfig.app.appBaseUrl`), and
+best-effort attaches the number to the Twilio Messaging Service
+(`TWILIO_MESSAGING_SERVICE_SID`) for outbound SMS. The mapping is stored in
+`clinic_phone_numbers` (role `office_texting`, `is_active=true`, E.164 + IncomingPhoneNumber
+SID). **SMS recovery is NOT enabled** here; `setup_status` is left unchanged.
+
+Audit: `admin_audit_events` action `clinic.phone_number.purchase_assign`, after-state
+`{ phone_number, twilio_sid, area_code }`, actor email + auth source. No Twilio secrets.
+
+Safe test with purchase disabled (current committed default `false`):
+1. Confirm `runtimeConfig.onboarding.twilioNumberPurchaseEnabled === false`.
+2. Open `/admin/clinics/[clinicId]` (Phone number is the default panel).
+3. "Search available numbers" — read-only lookup; candidates may appear.
+4. Select one → "Purchase and assign selected number" → confirm dialog → Purchase.
+5. Expect the dialog error `Twilio number purchase is disabled by environment flag.`;
+   no number purchased, no `clinic_phone_numbers` row created, no Twilio purchase/reserve.
+
+Enable purchase (production): set the runtime-config flag true and ensure Twilio creds +
+Messaging Service SID + `appBaseUrl` are configured. Do not click final purchase without
+explicit human approval — it spends money and provisions a real number.
+
+Rollback / manual cleanup if a wrong number is assigned:
+- DB: set the `clinic_phone_numbers` row `is_active=false` (or delete it) for that clinic;
+  the panel then shows Missing again.
+- Twilio: release the IncomingPhoneNumber in the Twilio console (this code never
+  releases numbers). Use the SID from the audit event / Technical details.
+- If purchase succeeded but the DB save failed, the route returns
+  `assignment_save_failed` with the purchased number + SID so the operator can reconcile.
+
+Remaining launch blockers after a number is assigned: A2P/SMS approval completion and the
+final launch action; billing is not a launch gate in this MVP. Number assignment alone
+does not launch SMS recovery.

@@ -22,6 +22,7 @@ import type {
 import { AdminClinicActions } from "./AdminClinicActions";
 import { AdminBusinessProfileForm } from "./AdminBusinessProfileForm";
 import { AdminA2pForm } from "./AdminA2pForm";
+import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
 
@@ -29,6 +30,7 @@ export type AdminConsoleData = {
   detail: AdminClinicDetail;
   smsMode: string;
   appBaseUrl: string;
+  purchaseEnabled: boolean;
   recentActivity: { id: string; action: string; adminEmail: string; createdAt: string }[];
   events: AdminClinicEvents;
 };
@@ -190,7 +192,11 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 Blocker: no number assigned — purchase/assign one to continue launch.
               </p>
             )}
-            <DisabledAction label="Purchase and assign number" reason="Twilio purchase/assign backend required" />
+            <AdminPhoneNumberManager
+              clinicId={d.id}
+              hasAssignedNumber={d.hasAssignedNumber}
+              purchaseEnabled={data.purchaseEnabled}
+            />
           </Panel>
 
           {/* Business profile (editable — preserved) */}

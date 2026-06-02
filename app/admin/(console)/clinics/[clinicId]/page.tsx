@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getAdminClinicDetail } from "../../../../../lib/db/admin/clinics";
 import { listAdminAuditEvents } from "../../../../../lib/db/admin/audit";
 import { getClinicEvents } from "../../../../../lib/db/admin/events";
-import { getAppDomainsSafe, getSmsRecoveryConfig } from "../../../../../lib/env";
+import { getAppDomainsSafe, getSmsRecoveryConfig, isTwilioNumberPurchaseEnabled } from "../../../../../lib/env";
 import { AdminClinicConsole } from "./_components/AdminClinicConsole";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +48,7 @@ export default async function AdminClinicDetailPage({
         detail: d,
         smsMode: getSmsRecoveryConfig().mode, // mode only — never the allowlist
         appBaseUrl: getAppDomainsSafe()?.appBaseUrl ?? "",
+        purchaseEnabled: isTwilioNumberPurchaseEnabled(),
         recentActivity,
         events,
       }}
