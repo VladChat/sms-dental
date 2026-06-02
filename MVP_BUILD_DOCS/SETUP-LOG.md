@@ -1712,6 +1712,25 @@ Validation:
 - `npm run typecheck` -> pass
 - `npm run build` -> pass
 
+---
+
+## 2026-06-01 — Admin clinic detail product correction: read-only report deprecated
+
+The prior "owner-dashboard superset (read-only)" direction made
+`/admin/clinics/[clinicId]` look too much like a passive technical report.
+
+Vlad clarified the canonical product direction:
+
+- Platform admin must manage the clinic directly from `/admin/clinics/[clinicId]`.
+- The target is an editable super-admin clinic management console.
+- Owner-level controls must exist directly in admin, scoped by `clinicId`.
+- Admin-only tools remain in the same console: diagnostics, audit, internal
+  notes, launch controls, and compact technical details.
+- Twilio number purchase, A2P carrier submission, and Stripe billing remain
+  gated until their real backends exist.
+- The next code task is rebuilding the admin clinic page around editable
+  management workflows, not expanding read-only data display.
+
 Manual QA status:
 
 - Local static/type/build validation complete.
