@@ -72,6 +72,12 @@ The Business Profile onboarding is implemented:
   and state that Missed Calls Dental / Dental SMS acts as the technology/service provider.
 - Billing stays **Not started**; the 21-day trial baseline begins only after SMS recovery is
   activated, and the trial countdown does not start while approval is pending.
+- The Billing card now supports **saving a payment method** via Stripe-hosted Checkout in
+  `mode:"setup"` (Stripe **sandbox/test mode** only). This collects a card for future billing
+  and does **not** charge, create a subscription/invoice, or change `billing_status`.
+  `hasPaymentMethod` is keyed off the saved `stripe_payment_method_id`. Requires
+  `STRIPE_SECRET_KEY` (`sk_test_…`) + `STRIPE_WEBHOOK_SECRET` for the `/api/webhooks/stripe`
+  test endpoint, and `supabase/migrations/20260602000100_clinic_payment_method.sql` applied.
 - New columns added by `supabase/migrations/20260528000100_business_profile_onboarding.sql`
   (EIN/Tax ID, business type, street address, website, A2P rep fields, status/lifecycle fields).
   This migration must be applied with owner approval before the live flow works.

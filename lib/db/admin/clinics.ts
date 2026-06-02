@@ -107,6 +107,12 @@ type ClinicDetailRow = {
   trial_ends_at: Date | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  stripe_payment_method_id: string | null;
+  stripe_payment_method_brand: string | null;
+  stripe_payment_method_last4: string | null;
+  stripe_payment_method_exp_month: number | null;
+  stripe_payment_method_exp_year: number | null;
+  stripe_payment_method_added_at: Date | null;
   local_number_status: string;
   sms_status: string;
   a2p_info_completed: boolean;
@@ -139,6 +145,9 @@ export async function getAdminClinicDetail(
       c.owner_contact_email, c.owner_contact_name, c.owner_contact_phone, c.test_patient_phone,
       c.billing_status, c.trial_started_at, c.trial_ends_at,
       c.stripe_customer_id, c.stripe_subscription_id,
+      c.stripe_payment_method_id, c.stripe_payment_method_brand,
+      c.stripe_payment_method_last4, c.stripe_payment_method_exp_month,
+      c.stripe_payment_method_exp_year, c.stripe_payment_method_added_at,
       c.local_number_status, c.sms_status, c.a2p_info_completed, c.a2p_authorized,
       c.a2p_rep_first_name, c.a2p_rep_last_name, c.a2p_rep_business_title,
       c.a2p_rep_email, c.a2p_rep_phone, c.setup_status,
@@ -231,6 +240,15 @@ export async function getAdminClinicDetail(
     stripeSubscriptionPresent: Boolean(r.stripe_subscription_id),
     stripeCustomerId: r.stripe_customer_id,
     stripeSubscriptionId: r.stripe_subscription_id,
+    stripePaymentMethodPresent: Boolean(r.stripe_payment_method_id),
+    stripePaymentMethodId: r.stripe_payment_method_id,
+    paymentMethodBrand: r.stripe_payment_method_brand,
+    paymentMethodLast4: r.stripe_payment_method_last4,
+    paymentMethodExpMonth: r.stripe_payment_method_exp_month,
+    paymentMethodExpYear: r.stripe_payment_method_exp_year,
+    paymentMethodAddedAt: r.stripe_payment_method_added_at
+      ? r.stripe_payment_method_added_at.toISOString()
+      : null,
     localNumberStatus: r.local_number_status,
     assignedPhoneMasked: maskPhone(r.assigned_phone),
     hasAssignedNumber: Boolean(r.assigned_phone),

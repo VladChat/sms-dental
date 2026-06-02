@@ -1979,3 +1979,49 @@ Current assignment status:
   the UI can show `Use this number`, but the action remains neutral until a safe owner
   assignment backend is implemented.
 - Admin Add number behavior and purchase gate are unchanged.
+
+---
+
+## Stripe payment-method setup (sandbox/test only) — 2026-06-02
+
+Owners/admins can save a card on `/account` -> Billing via **Stripe-hosted Checkout in
+`mode:"setup"`**. This collects a payment method for FUTURE billing. It never charges,
+never creates a subscription/invoice/PaymentIntent, and never enables SMS recovery.
+
+How it works:
+
+- `BillingCard` -> `POST /api/account/billing/payment-method/setup` returns a Stripe
+  Checkout URL; the browser is redirected to Stripe (no card fields in our UI).
+- The route is owner/admin-only (`front_desk` rejected), takes no client clinic id,
+  creates a sandbox Stripe Customer once (saved to `clinics.stripe_customer_id`), then a
+  Checkout Session with `clinic_id`/`purpose`/`environment` metadata.
+- On completion Stripe calls **`/api/webhooks/stripe`**; the handler verifies the
+  signature, records the event idempotently, then on `checkout.session.completed`
+  (mode=setup) / `setup_intent.succeeded` saves safe card metadata to `clinics`
+  (`stripe_payment_method_id`, brand, last4, exp) and sets the customer
+  `invoice_settings.default_payment_method`.
+- `/account` returns to `?section=billing&payment_method_setup=success|cancelled`.
+  Success shows the saved card only when the method is actually present (a Refresh
+  button covers the brief webhook delay); the green state is never inferred from the
+  query param alone.
+
+Required env (test/sandbox):
+
+- `STRIPE_SECRET_KEY` must be a Stripe **test** key (`sk_test_…`). The server helper
+  `lib/stripe/server.ts` refuses to run if it is not a test/sandbox key.
+- `STRIPE_WEBHOOK_SECRET` must be the signing secret (`whsec_…`) of the Stripe
+  **test/sandbox** webhook endpoint pointing to `/api/webhooks/stripe`. Subscribe to at
+  least `checkout.session.completed` and `setup_intent.succeeded`.
+
+Local testing:
+
+- Use `stripe listen --forward-to localhost:3000/api/webhooks/stripe` (or a public
+  tunnel) so the webhook reaches the app; otherwise the saved card never appears.
+- Use a Stripe **test card** (e.g. `4242 4242 4242 4242`, any future expiry/CVC/ZIP).
+
+Verify (Stripe test Dashboard): a **Customer** and a **PaymentMethod** exist; there is
+**no** Subscription, Invoice, PaymentIntent charge, or live payment. In Supabase, the
+`clinics` row has `stripe_customer_id` + `stripe_payment_method_id` populated.
+
+Migration: apply `supabase/migrations/20260602000100_clinic_payment_method.sql` (owner
+approval) before using the flow, or `/account` reads will error on the missing columns.

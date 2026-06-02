@@ -26,6 +26,21 @@ export type SmsApprovalFields = {
 export type LocalNumberStatus = "preparing" | "reserved" | "assigned";
 export type SmsStatus = "preparing" | "waiting_for_approval" | "active";
 
+// Safe, non-secret saved payment-method summary surfaced to the owner UI. No raw
+// card data — Stripe holds the sensitive values.
+export type PaymentMethodSummary = {
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+  // ISO timestamp when the method was first saved, or null.
+  addedAt: string | null;
+};
+
+// Result of returning from Stripe-hosted setup, read from the ?payment_method_setup
+// query param. Null when the page was not reached via a Stripe return.
+export type PaymentMethodSetupResult = "success" | "cancelled" | null;
+
 export type BusinessProfileData = {
   // Legacy setup token for token-scoped API routes. Null when authenticated
   // session routes are used (normal /login -> /account flow).
@@ -35,6 +50,11 @@ export type BusinessProfileData = {
   // Absolute base URL for the public /business/{slug} pages.
   publicBaseUrl: string;
   slug: string | null;
+  // Section to open on load (e.g. "billing" after returning from Stripe). When
+  // null/unknown the default section (Phone number) opens.
+  initialSection?: string | null;
+  // Outcome of a returning Stripe payment-method setup redirect, if any.
+  paymentMethodSetup?: PaymentMethodSetupResult;
   businessProfile: BusinessProfileFields & { completed: boolean };
   smsApproval: SmsApprovalFields & { completed: boolean };
   number: {
@@ -48,9 +68,11 @@ export type BusinessProfileData = {
     postalCode: string | null;
   };
   billing: {
-    // True once a payment method is on file (derived server-side from the
-    // Stripe customer / billing status). No raw card data is ever stored.
+    // True only when a real payment method is saved (stripe_payment_method_id
+    // present). NOT derived from the Stripe customer id or billing_status.
     hasPaymentMethod: boolean;
+    // Safe saved-method summary, or null when none is on file.
+    paymentMethod: PaymentMethodSummary | null;
     // Days left in the 21-day trial, counted from setup creation. 0 when ended.
     trialDaysRemaining: number;
     trialEnded: boolean;
