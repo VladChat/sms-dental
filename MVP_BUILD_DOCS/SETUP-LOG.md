@@ -3546,3 +3546,57 @@ purchase stays intentionally blocked until `TWILIO_NUMBER_PURCHASE_ENABLED` is e
 with provider creds + Messaging Service + app base URL (human-approved). Adding a second
 number is now possible, but the launch gate still keys off "has an active number" and
 there is no per-number role-management UI yet.
+
+---
+
+## 2026-06-02 — Admin add-number flow made inline (expandable panel)
+
+What changed:
+- The add-number search/assignment flow is now an **inline expandable panel inside the
+  clinic detail Phone number section**, instead of a separate page. The operator stays on
+  the clinic page.
+- `AdminClinicConsole` gained `isAddingNumber` local state. The Phone number panel shows
+  an always-visible **Add number** button (whether or not a number is assigned). Clicking
+  it expands an inline sub-panel (title "Add a number", helper "Search for an available
+  tracking number for this clinic.") that renders `AdminPhoneNumberManager` in place. The
+  button no longer navigates to `/phone-numbers/new`.
+- `AdminPhoneNumberManager` gained optional `onCancel` and `onAssigned` props. Inline:
+  Cancel collapses the panel (unmount clears transient search state); a successful purchase
+  calls `onAssigned`, which collapses the panel and `router.refresh()`es the clinic data so
+  the new assignment shows in the same section. The "Reset to clinic defaults" button was
+  replaced by **Cancel** (buttons are now Search numbers + Cancel).
+- The detail page loader (`[clinicId]/page.tsx`) again computes `phoneDefaults` (preferred
+  area code, else derived from the US main phone; no hardcoded codes) and passes it to the
+  console so the inline manager can prefill the form.
+- The dedicated page `app/admin/(console)/clinics/[clinicId]/phone-numbers/new/page.tsx` is
+  **kept as a deep-link fallback only** (renders the same component with no `onCancel`/
+  `onAssigned`, so it falls back to routing back to the clinic detail). It is no longer the
+  primary path; nothing links to it from the main UI.
+
+Why: leaving the clinic detail context for a separate page weakened the operator UX. The
+operator should see current assigned numbers/statuses and expand the Add number form
+in place. Keeping the route as a deep-link fallback avoids breaking bookmarks/build routes.
+
+Files: `app/admin/(console)/clinics/[clinicId]/_components/AdminClinicConsole.tsx`,
+`.../_components/AdminPhoneNumberManager.tsx`, `.../[clinicId]/page.tsx`, plus docs
+(`OPERATIONS-RUNBOOK.md`, this log). The dedicated `phone-numbers/new/page.tsx` is
+unchanged (still compiles via the now-optional props).
+
+Safety: no purchase/reserve/release performed; `TWILIO_NUMBER_PURCHASE_ENABLED` gate,
+confirm dialog, idempotency, webhook config, and audit unchanged. No migration, no auth
+change, no schema change, no secrets exposed. Provider brand names not reintroduced in
+visible admin/owner UI.
+
+Validation:
+- `npm run typecheck` -> pass
+- `npm run build` -> pass (`/admin/clinics/[clinicId]` 8.35 kB; deep-link fallback
+  `/admin/clinics/[clinicId]/phone-numbers/new` still compiled; both phone-number API
+  routes intact)
+
+Commit: `__PENDING__` (`fix: make admin add number flow inline`). Pushed to `origin/main`.
+
+Remaining risks: search result quality still depends on the live phone-provider catalog;
+purchase stays blocked until `TWILIO_NUMBER_PURCHASE_ENABLED` is enabled (human-approved).
+The inline panel lives in the (kept-mounted, hidden-when-inactive) Phone tab, so switching
+sections preserves its open state; that is intentional. Adding a second number remains
+possible without a per-number role-management UI.

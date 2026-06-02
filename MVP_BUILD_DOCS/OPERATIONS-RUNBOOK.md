@@ -1897,20 +1897,29 @@ Troubleshooting:
 
 ---
 
-## Admin "Add number" moved to a dedicated page — 2026-06-01
+## Admin "Add number" — inline expandable panel — 2026-06-02
 
-The number search/assignment form is no longer embedded in the clinic detail Phone
-number panel. The panel now shows current numbers + status and an **Add number** button.
+The number search/assignment flow is an **inline expandable panel inside the clinic
+detail Phone number section** (updated 2026-06-02). The operator no longer leaves the
+clinic page to add a number. (Earlier — 2026-06-01 — this flow lived on a dedicated page;
+that page is retained only as a deep-link fallback, see below.)
 
 - Panel (`/admin/clinics/[clinicId]`, Phone number tab): shows assigned numbers (or
   "No tracking number is assigned to this clinic yet."), status rows, the launch blocker,
   and an **Add number** button. The button shows whether or not a number is already
   assigned (clinics can have more than one number).
-- Add-number screen: **`/admin/clinics/[clinicId]/phone-numbers/new`** (under the
-  `(console)` group, so the platform-admin guard applies). Back link returns to the Phone
-  number panel. Visible controls before results: Number type, Area code, ZIP code; the
-  smart-fallback search pipeline runs underneath. On a successful purchase the operator is
-  returned to the clinic Phone number panel, which shows the new assignment.
+- Clicking **Add number** expands an inline sub-panel inside the same Phone number card
+  (title "Add a number", helper "Search for an available tracking number for this
+  clinic."). Visible controls before results: Number type, Area code, ZIP code; the
+  smart-fallback search pipeline runs underneath. Buttons: **Search numbers** and
+  **Cancel** (Cancel collapses the panel and clears transient search state). On a
+  successful purchase the panel collapses and the clinic data refreshes in place, so the
+  new assignment shows in the same Phone number section — the operator stays on the page.
+- Deep-link fallback: **`/admin/clinics/[clinicId]/phone-numbers/new`** still exists (under
+  the `(console)` group, so the platform-admin guard applies) and renders the same
+  search/assignment component. The main **Add number** button does **not** navigate there;
+  the route is kept only for direct/bookmarked access. On that page, Cancel and a
+  successful purchase route back to the clinic Phone number panel.
 - Purchase safety unchanged: `TWILIO_NUMBER_PURCHASE_ENABLED` still gates purchase
   (search works when disabled; purchase returns the env-flag block). The confirm dialog,
   one-number-at-a-time idempotency, webhook config, and audit are unchanged.
