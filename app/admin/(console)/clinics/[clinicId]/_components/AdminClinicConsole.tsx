@@ -26,11 +26,20 @@ import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
 
+export type PhoneSearchDefaults = {
+  country: string;
+  areaCode: string;
+  city: string;
+  state: string;
+  postal: string;
+};
+
 export type AdminConsoleData = {
   detail: AdminClinicDetail;
   smsMode: string;
   appBaseUrl: string;
   purchaseEnabled: boolean;
+  phoneDefaults: PhoneSearchDefaults;
   recentActivity: { id: string; action: string; adminEmail: string; createdAt: string }[];
   events: AdminClinicEvents;
 };
@@ -196,6 +205,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
               clinicId={d.id}
               hasAssignedNumber={d.hasAssignedNumber}
               purchaseEnabled={data.purchaseEnabled}
+              defaults={data.phoneDefaults}
             />
           </Panel>
 

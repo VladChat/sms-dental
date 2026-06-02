@@ -42,6 +42,21 @@ export default async function AdminClinicDetailPage({
     createdAt: new Date(e.created_at).toISOString(),
   }));
 
+  // Phone-search defaults from clinic data (used as prefilled defaults only, not
+  // hidden restrictions). Area code: preferred area code, else derived from a US
+  // main phone (+1AAA…). No hardcoded area codes.
+  const derivedAreaCode =
+    d.mainPhone && d.mainPhone.startsWith("+1") && d.mainPhone.length >= 5
+      ? d.mainPhone.slice(2, 5)
+      : "";
+  const phoneDefaults = {
+    country: d.country || "US",
+    areaCode: d.preferredAreaCode ?? derivedAreaCode,
+    city: d.city ?? "",
+    state: d.stateRegion ?? "",
+    postal: d.postalCode ?? "",
+  };
+
   return (
     <AdminClinicConsole
       data={{
@@ -49,6 +64,7 @@ export default async function AdminClinicDetailPage({
         smsMode: getSmsRecoveryConfig().mode, // mode only — never the allowlist
         appBaseUrl: getAppDomainsSafe()?.appBaseUrl ?? "",
         purchaseEnabled: isTwilioNumberPurchaseEnabled(),
+        phoneDefaults,
         recentActivity,
         events,
       }}

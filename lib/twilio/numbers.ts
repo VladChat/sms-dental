@@ -33,17 +33,34 @@ export type AvailableNumber = {
   capabilities: { voice: boolean; sms: boolean; mms: boolean };
   address_requirements: string;
   recommended: boolean;
+  /** Purchasable for this product: requires both Voice and SMS. */
+  selectable: boolean;
   /** "local" or "toll_free" — lets the UI label cards correctly. */
   type: NumberType;
   /** ISO country the number belongs to (US or CA in this MVP). */
   country: SupportedCountry;
 };
 
+// Which capabilities a result must have to appear. Defaults to Voice + SMS (the
+// product minimum); callers that pass nothing get the historical behavior.
+export type RequiredCapabilities = { voice: boolean; sms: boolean; mms: boolean };
+const DEFAULT_REQUIRED: RequiredCapabilities = { voice: true, sms: true, mms: false };
+
 export type SearchAvailableLocalNumbersInput = {
   country: SupportedCountry;
   areaCode?: string;
+  /** Twilio `contains` pattern (digits, optional `*` wildcards). */
+  contains?: string;
+  /** City / locality filter (Twilio `inLocality`). */
+  inLocality?: string;
   inRegion?: string;
   inPostalCode?: string;
+  /** Geo-radius anchor: an E.164 number to search near (Twilio `nearNumber`). */
+  nearNumber?: string;
+  /** Geo-radius distance in miles; only applied with `nearNumber`. */
+  distance?: number;
+  /** Capability filters. Defaults to Voice + SMS. */
+  required?: Partial<RequiredCapabilities>;
   limit?: number;
 };
 
@@ -53,13 +70,21 @@ export async function searchAvailableLocalNumbers(
   const client = getTwilioClient();
   const areaCodeNumber = input.areaCode ? Number(input.areaCode) : undefined;
   const limit = clampLimit(input.limit, 10);
+  const required = { ...DEFAULT_REQUIRED, ...(input.required ?? {}) };
+  const useNear = Boolean(input.nearNumber) && !areaCodeNumber;
 
   const list = await client.availablePhoneNumbers(input.country).local.list({
-    smsEnabled: true,
-    voiceEnabled: true,
+    // Capability filters: only constrain when required.
+    ...(required.voice ? { voiceEnabled: true } : {}),
+    ...(required.sms ? { smsEnabled: true } : {}),
+    ...(required.mms ? { mmsEnabled: true } : {}),
+    // Area code and geo-radius are mutually exclusive; area code wins.
     ...(typeof areaCodeNumber === "number" && Number.isFinite(areaCodeNumber)
       ? { areaCode: areaCodeNumber }
       : {}),
+    ...(useNear ? { nearNumber: input.nearNumber, distance: input.distance ?? 25 } : {}),
+    ...(input.contains ? { contains: input.contains } : {}),
+    ...(input.inLocality ? { inLocality: input.inLocality } : {}),
     ...(input.inRegion ? { inRegion: input.inRegion } : {}),
     ...(input.inPostalCode ? { inPostalCode: input.inPostalCode } : {}),
     limit,
@@ -71,6 +96,7 @@ export async function searchAvailableLocalNumbers(
     type: "local",
     country: input.country,
     preferredAreaCode: input.areaCode,
+    required,
   });
 }
 
@@ -78,6 +104,10 @@ export type SearchAvailableTollFreeNumbersInput = {
   country: SupportedCountry;
   /** Optional toll-free prefix filter (800, 833, 844, 855, 866, 877, 888). */
   prefix?: string;
+  /** Twilio `contains` pattern (digits, optional `*` wildcards). Wins over prefix. */
+  contains?: string;
+  /** Capability filters. Defaults to Voice + SMS. */
+  required?: Partial<RequiredCapabilities>;
   limit?: number;
 };
 
@@ -86,11 +116,13 @@ export async function searchAvailableTollFreeNumbers(
 ): Promise<AvailableNumber[]> {
   const client = getTwilioClient();
   const limit = clampLimit(input.limit, 10);
-  const contains = formatTollFreeContains(input.prefix);
+  const contains = input.contains?.trim() || formatTollFreeContains(input.prefix);
+  const required = { ...DEFAULT_REQUIRED, ...(input.required ?? {}) };
 
   const list = await client.availablePhoneNumbers(input.country).tollFree.list({
-    smsEnabled: true,
-    voiceEnabled: true,
+    ...(required.voice ? { voiceEnabled: true } : {}),
+    ...(required.sms ? { smsEnabled: true } : {}),
+    ...(required.mms ? { mmsEnabled: true } : {}),
     ...(contains ? { contains } : {}),
     limit,
     excludeAllAddressRequired: true,
@@ -100,6 +132,7 @@ export async function searchAvailableTollFreeNumbers(
     list,
     type: "toll_free",
     country: input.country,
+    required,
   });
 }
 
@@ -118,19 +151,23 @@ function rankAndMap(params: {
   type: NumberType;
   country: SupportedCountry;
   preferredAreaCode?: string;
+  required: RequiredCapabilities;
 }): AvailableNumber[] {
-  const filtered = params.list.filter(
-    (n) =>
-      Boolean(n.capabilities?.voice) &&
-      Boolean(n.capabilities?.SMS) &&
-      typeof n.phoneNumber === "string" &&
-      n.phoneNumber.length > 0,
-  );
+  const req = params.required;
+  const filtered = params.list.filter((n) => {
+    if (typeof n.phoneNumber !== "string" || n.phoneNumber.length === 0) return false;
+    if (req.voice && !n.capabilities?.voice) return false;
+    if (req.sms && !n.capabilities?.SMS) return false;
+    if (req.mms && !n.capabilities?.MMS) return false;
+    return true;
+  });
 
   const ranked = filtered
     .map((n) => {
       const phone = n.phoneNumber!;
       const addressReq = (n.addressRequirements ?? "none").toString();
+      const voice = Boolean(n.capabilities?.voice);
+      const sms = Boolean(n.capabilities?.SMS);
       let score = 0;
       if (
         params.type === "local" &&
@@ -146,13 +183,12 @@ function rankAndMap(params: {
         locality: (n.locality as string | null) ?? null,
         region: (n.region as string | null) ?? null,
         postal_code: (n.postalCode as string | null) ?? null,
-        capabilities: {
-          voice: Boolean(n.capabilities?.voice),
-          sms: Boolean(n.capabilities?.SMS),
-          mms: Boolean(n.capabilities?.MMS),
-        },
+        capabilities: { voice, sms, mms: Boolean(n.capabilities?.MMS) },
         address_requirements: addressReq,
         recommended: false,
+        // Product rule: a number is purchasable only with both Voice and SMS,
+        // regardless of which capability filters were applied to the search.
+        selectable: voice && sms,
         type: params.type,
         country: params.country,
       };
@@ -161,7 +197,9 @@ function rankAndMap(params: {
     .sort((a, b) => b.score - a.score);
 
   const items = ranked.map((r) => r.normalized);
-  if (items.length > 0) items[0]!.recommended = true;
+  // Recommend the top-ranked purchasable number.
+  const firstSelectable = items.find((i) => i.selectable);
+  if (firstSelectable) firstSelectable.recommended = true;
   return items;
 }
 
@@ -243,5 +281,5 @@ export function phoneAreaCode(e164: string): string | null {
 
 function clampLimit(raw: number | undefined, fallback: number): number {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return fallback;
-  return Math.max(1, Math.min(20, Math.floor(raw)));
+  return Math.max(1, Math.min(50, Math.floor(raw)));
 }
