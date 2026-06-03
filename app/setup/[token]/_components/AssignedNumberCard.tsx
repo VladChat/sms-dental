@@ -11,6 +11,7 @@ export function AssignedNumberCard({
   hasPaymentMethod,
   onGoToBilling,
   requestedNumber,
+  onRequestedNumberSaved,
 }: {
   assignedPhone: string | null;
   areaCode: string | null;
@@ -18,6 +19,7 @@ export function AssignedNumberCard({
   hasPaymentMethod: boolean;
   onGoToBilling: () => void;
   requestedNumber: RequestedNumberSummary | null;
+  onRequestedNumberSaved: (requestedNumber: RequestedNumberSummary) => void;
 }) {
   return (
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
@@ -57,6 +59,7 @@ export function AssignedNumberCard({
         requestedNumberE164={requestedNumber?.phoneNumber ?? null}
         initialAreaCode={areaCode}
         initialPostalCode={postalCode}
+        onRequestedNumberSaved={onRequestedNumberSaved}
       />
     </div>
   );
