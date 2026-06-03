@@ -30,13 +30,19 @@ export function OwnerLocalNumberSearch({
   hasPaymentMethod,
   onGoToBilling,
   requestedNumberE164,
+  initialAreaCode,
+  initialPostalCode,
 }: {
   hasPaymentMethod: boolean;
   onGoToBilling: () => void;
   // The owner's already-requested number (E.164), if any. Used to reflect an
   // existing pending request and to avoid duplicate submits for the same number.
   requestedNumberE164?: string | null;
+  initialAreaCode?: string | null;
+  initialPostalCode?: string | null;
 }) {
+  const [areaCode, setAreaCode] = useState(initialAreaCode ?? "");
+  const [postalCode, setPostalCode] = useState(initialPostalCode ?? "");
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -69,7 +75,13 @@ export function OwnerLocalNumberSearch({
     setFallbackMessage(null);
     setSelected(null);
     try {
-      const res = await fetch("/api/account/phone-numbers/search", {
+      const params = new URLSearchParams();
+      const cleanAreaCode = areaCode.trim();
+      const cleanPostalCode = postalCode.trim();
+      if (cleanAreaCode) params.set("area_code", cleanAreaCode);
+      if (cleanPostalCode) params.set("postal_code", cleanPostalCode);
+      const query = params.toString();
+      const res = await fetch(`/api/account/phone-numbers/search${query ? `?${query}` : ""}`, {
         method: "GET",
         credentials: "include",
       });
@@ -132,9 +144,40 @@ export function OwnerLocalNumberSearch({
 
   return (
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
-      <button type="button" className="btn btn-primary" onClick={() => void search()} disabled={searching}>
-        {searching ? "Searching…" : "Search local numbers"}
-      </button>
+      <div className="acct-search-form">
+        <h3 className="t-h4">Search local numbers</h3>
+        <div className="acct-grid-2">
+          <div className="field">
+            <label htmlFor="owner-local-area-code">Area code</label>
+            <input
+              id="owner-local-area-code"
+              name="area_code"
+              className="input t-mono"
+              value={areaCode}
+              onChange={(e) => setAreaCode(digitsOnly(e.target.value).slice(0, 3))}
+              inputMode="numeric"
+              autoComplete="off"
+              pattern="[0-9]{3}"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="owner-local-postal-code">ZIP code</label>
+            <input
+              id="owner-local-postal-code"
+              name="postal_code"
+              className="input t-mono"
+              value={postalCode}
+              onChange={(e) => setPostalCode(digitsOnly(e.target.value).slice(0, 5))}
+              inputMode="numeric"
+              autoComplete="postal-code"
+              pattern="[0-9]{5}"
+            />
+          </div>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={() => void search()} disabled={searching}>
+          {searching ? "Searching…" : "Search local numbers"}
+        </button>
+      </div>
 
       {searchError && (
         <div className="alert alert-error" role="alert" aria-live="polite">
@@ -228,9 +271,6 @@ export function OwnerLocalNumberSearch({
               <div className="alert alert-success" role="status" aria-live="polite">
                 <span>Requested number saved. Our team will review it before assignment.</span>
               </div>
-              <p className="t-small" style={{ margin: 0, color: "var(--text-muted)" }}>
-                No number has been purchased or assigned yet.
-              </p>
             </div>
           ) : (
             <div style={{ display: "grid", gap: "var(--space-2)", justifyItems: "start" }}>
@@ -254,6 +294,10 @@ export function OwnerLocalNumberSearch({
       )}
     </div>
   );
+}
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, "");
 }
 
 function locationRank(c: Candidate): number {

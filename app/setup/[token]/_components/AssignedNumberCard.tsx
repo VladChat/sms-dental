@@ -43,18 +43,20 @@ export function AssignedNumberCard({
 
   return (
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
-      <div className="acct-number">
-        <span className="t-eyebrow">Assigned phone number</span>
-        {assignedPhone ? (
+      {assignedPhone ? (
+        <div className="acct-number">
+          <span className="t-eyebrow">Assigned phone number</span>
           <p className="t-h3 t-mono" style={{ margin: "var(--space-1) 0 0" }}>{assignedPhone}</p>
-        ) : (
+        </div>
+      ) : requestedNumber ? null : (
+        <div className="acct-number">
           <p className="t-body" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
             Not assigned yet
           </p>
-        )}
-      </div>
+        </div>
+      )}
 
-      {requestedNumber && (
+      {!assignedPhone && requestedNumber && (
         <div className="acct-number">
           <span className="t-eyebrow">Requested number</span>
           <p className="t-h4 t-mono" style={{ margin: "var(--space-1) 0 0" }}>
@@ -68,30 +70,15 @@ export function AssignedNumberCard({
           <div style={{ marginTop: "var(--space-2)" }}>
             <StatusBadge kind={requestedStatusKind(requestedNumber.status)} label={requestedStatusLabel(requestedNumber.status)} />
           </div>
-          <p className="t-helper" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
-            No number has been purchased or assigned yet.
-          </p>
         </div>
       )}
-
-      <div className="acct-callout">
-        <p className="t-body" style={{ margin: 0 }}>
-          We&apos;ll look for a local number near your office.
-        </p>
-        <div style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-3)" }}>
-          <StatusRow label="Area code">
-            <span className="t-mono">{areaCode || "Not available"}</span>
-          </StatusRow>
-          <StatusRow label="ZIP code">
-            <span className="t-mono">{postalCode || "Not available"}</span>
-          </StatusRow>
-        </div>
-      </div>
 
       <OwnerLocalNumberSearch
         hasPaymentMethod={hasPaymentMethod}
         onGoToBilling={onGoToBilling}
         requestedNumberE164={requestedNumber?.phoneNumber ?? null}
+        initialAreaCode={areaCode}
+        initialPostalCode={postalCode}
       />
 
       <div>

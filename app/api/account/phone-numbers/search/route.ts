@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import {
+  jsonBadRequest,
   jsonError,
   jsonForbidden,
   jsonOk,
@@ -21,9 +22,9 @@ export const dynamic = "force-dynamic";
 
 // GET /api/account/phone-numbers/search
 //
-// Owner/admin account route. Searches available local numbers using only saved
-// clinic data. This is read-only: never purchases, reserves, assigns, releases,
-// or stores a phone number.
+// Owner/admin account route. Searches available local numbers using the
+// authenticated clinic plus optional area/ZIP search inputs. This is read-only:
+// never purchases, reserves, assigns, releases, or stores a phone number.
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const access = await resolveAuthClinicAccess(req);
   let clinic: ClinicOnboardingRow | null = null;
@@ -43,9 +44,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const country = "US";
+  const requestedAreaCode = parseOptionalDigitsParam(
+    req.nextUrl.searchParams.get("area_code"),
+    3,
+    "Area code",
+  );
+  if (!requestedAreaCode.ok) return jsonBadRequest(requestedAreaCode.message);
+  const requestedPostalCode = parseOptionalDigitsParam(
+    req.nextUrl.searchParams.get("postal_code"),
+    5,
+    "ZIP code",
+  );
+  if (!requestedPostalCode.ok) return jsonBadRequest(requestedPostalCode.message);
+
   const mainPhone = clinic.main_phone;
-  const areaCode = mainPhone ? phoneAreaCode(mainPhone) : null;
-  const postalCode = clinic.postal_code;
+  const areaCode = requestedAreaCode.value ?? (mainPhone ? phoneAreaCode(mainPhone) : null);
+  const postalCode = requestedPostalCode.value ?? clinic.postal_code;
   const required = { voice: true, sms: true, mms: false };
   const limit = 10;
 
@@ -121,4 +135,19 @@ function fallbackMessage(attemptLabel: string | null, exactAttempt: string | nul
     return "No ZIP match found. Showing state matches.";
   }
   return "No exact match found. Showing the best available local numbers.";
+}
+
+function parseOptionalDigitsParam(
+  value: string | null,
+  length: number,
+  label: string,
+):
+  | { ok: true; value: string | null }
+  | { ok: false; message: string } {
+  if (value === null || value.trim() === "") return { ok: true, value: null };
+  const trimmed = value.trim();
+  if (!new RegExp(`^\\d{${length}}$`).test(trimmed)) {
+    return { ok: false, message: `${label} must be exactly ${length} digits.` };
+  }
+  return { ok: true, value: trimmed };
 }

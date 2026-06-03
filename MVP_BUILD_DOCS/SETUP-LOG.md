@@ -3982,3 +3982,23 @@ No app code changed (migration was already committed; only applied). Idempotent 
 safe to re-run. Authenticated owner-click verification (request saved → pending row
 → admin console display) is the operator's final step (no owner browser session in
 the repo CLI; no row fabricated).
+
+---
+
+## 2026-06-03 — fix: simplify owner phone number search UI
+
+What changed:
+
+- `/account → Phone number` owner UI was simplified.
+- Requested number now replaces the empty assigned-number state when no number is
+  assigned.
+- Redundant "No number has been purchased or assigned yet." copy was removed from
+  the owner Phone number UI.
+- Search area now uses editable **Area code** + **ZIP code** fields, prefilled from
+  the current clinic context.
+- Search remains read-only and does not buy, reserve, assign, release, provision,
+  or store a phone number.
+
+Safety: owner search still derives the clinic from authenticated owner/admin access
+or the legacy account session fallback, rejects front desk access, never accepts a
+client `clinic_id`, and never writes `clinic_phone_numbers`.
