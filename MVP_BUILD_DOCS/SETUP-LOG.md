@@ -4017,3 +4017,17 @@ What changed:
   number cards.
 
 Safety: no behavior, billing, Twilio, SMS, or database changes.
+
+---
+
+## 2026-06-03 — fix: move owner number action into selected result
+
+What changed:
+
+- Owner Phone numbers search is collapsed behind **Add number**.
+- Expanded search has a small **Hide** action.
+- Selected-number action now appears inside the selected result card.
+- Duplicate bottom **Selected number** block was removed.
+
+Safety: behavior remains admin-review-only. No purchase, reserve, assign,
+release, provision, `clinic_phone_numbers` write, or SMS recovery change.
