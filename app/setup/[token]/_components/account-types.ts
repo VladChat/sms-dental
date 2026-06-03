@@ -74,8 +74,8 @@ export type BusinessProfileData = {
     smsStatus: SmsStatus;
     // The assigned office number in E.164 when one exists, else null.
     assignedPhone: string | null;
-    // Search context comes from the saved office profile, not a customer-facing
-    // Twilio-style filter form.
+    // Initial local-number search values come from the saved office profile.
+    // Editing them in the Phone number search does not update the profile.
     areaCode: string | null;
     postalCode: string | null;
     // Latest owner-requested number awaiting admin review, or null.

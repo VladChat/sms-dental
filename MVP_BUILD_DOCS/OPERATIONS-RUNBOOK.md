@@ -1931,7 +1931,7 @@ names remain only in code comments, env var names, and internal integration code
 
 ---
 
-## Owner Account Phone number search — 2026-06-02
+## Owner Account Phone number search — updated 2026-06-03
 
 The owner `/account` -> Phone number section now lets clinic owners search and choose a
 preferred local number before payment setup is complete. This is a read-only search and
@@ -1941,8 +1941,12 @@ Owner-visible behavior:
 
 - Shows assigned phone number, Voice / Calls status, SMS / Texting status, Area code, and
   ZIP code.
-- `Search local numbers` runs local U.S. search using saved clinic data only: area code
-  from `clinics.main_phone` and ZIP from `clinics.postal_code`.
+- If no number is assigned but the owner has requested a number, the requested-number
+  block is the primary number state. The empty "Not assigned yet" state is not shown at
+  the same time.
+- `Search local numbers` runs local U.S. search from a compact editable Area code + ZIP
+  code form. Initial values come from `clinics.main_phone` and `clinics.postal_code`, but
+  edits affect only the read-only search request and do not update the clinic profile.
 - The owner UI does not show number type, country, city, state, radius, results count,
   capability checkboxes, or pattern fields.
 - Results are selectable with radio controls. Cards show friendly number, E.164 value,
@@ -1968,16 +1972,19 @@ API:
 - The route never accepts a clinic ID from the client.
 - Legacy account-cookie fallback is supported using `readAccountSessionToken()` ->
   `lookupSetupRequestByRawToken()` -> `findClinicById()`, matching `/account`.
-- Search plan: `country=US`, saved main phone, derived area code, saved ZIP, saved state
-  region, Voice+SMS required, MMS not required, limit 10.
+- Optional query params: `area_code` (exactly 3 digits) and `postal_code` (exactly 5
+  digits). Valid provided params override saved clinic search values; missing params fall
+  back to `clinics.main_phone` / `clinics.postal_code`.
+- Search plan: `country=US`, main phone for fallback, effective area code, effective ZIP,
+  saved state region, Voice+SMS required, MMS not required, limit 10.
 - Read-only guarantee: no purchase, reservation, assignment, release, DB write, or
   provider credential exposure.
 
 Current assignment status:
 
-- Owner final assignment is not wired in this change. If a payment method is present,
-  the UI can show `Use this number`, but the action remains neutral until a safe owner
-  assignment backend is implemented.
+- `Use this number` saves a pending owner request for admin review only. It does not
+  purchase, reserve, assign, provision, store a phone-number mapping, or enable SMS
+  recovery.
 - Admin Add number behavior and purchase gate are unchanged.
 
 ---
