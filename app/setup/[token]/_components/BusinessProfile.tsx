@@ -111,12 +111,10 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
           {active === "phone" && (
             <Section
               id="phone-number"
-              title="Phone number"
-              description="Your office number for calls and texting."
+              title="Phone numbers"
+              description="Your business numbers for calls and texting."
             >
               <AssignedNumberCard
-                localNumberStatus={data.number.localNumberStatus}
-                smsStatus={smsStatus}
                 assignedPhone={data.number.assignedPhone}
                 areaCode={data.number.areaCode}
                 postalCode={data.number.postalCode}

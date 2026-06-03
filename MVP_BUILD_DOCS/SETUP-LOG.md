@@ -4002,3 +4002,18 @@ What changed:
 Safety: owner search still derives the clinic from authenticated owner/admin access
 or the legacy account session fallback, rejects front desk access, never accepts a
 client `clinic_id`, and never writes `clinic_phone_numbers`.
+
+---
+
+## 2026-06-03 — fix: simplify owner phone numbers copy
+
+What changed:
+
+- Owner Phone number section renamed to **Phone numbers**.
+- Description changed to "Your business numbers for calls and texting."
+- Search copy shortened to "Search number."
+- Owner search results limited to 5.
+- Owner Voice/SMS service rows removed because capabilities belong on individual
+  number cards.
+
+Safety: no behavior, billing, Twilio, SMS, or database changes.

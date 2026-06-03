@@ -145,7 +145,7 @@ export function OwnerLocalNumberSearch({
   return (
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
       <div className="acct-search-form">
-        <h3 className="t-h4">Search local numbers</h3>
+        <h3 className="t-h4">Search number</h3>
         <div className="acct-grid-2">
           <div className="field">
             <label htmlFor="owner-local-area-code">Area code</label>
@@ -175,7 +175,7 @@ export function OwnerLocalNumberSearch({
           </div>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => void search()} disabled={searching}>
-          {searching ? "Searching…" : "Search local numbers"}
+          {searching ? "Searching…" : "Search number"}
         </button>
       </div>
 
