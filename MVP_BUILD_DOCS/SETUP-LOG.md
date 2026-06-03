@@ -3954,3 +3954,31 @@ comments only). Commit `4969814`; pushed to `origin/main`.
 
 Remaining: apply the migration to production (hand-applied) before the flow works
 live; admin "Approve" remains the existing manual Add number flow (no auto-purchase).
+
+### 2026-06-03 — migration APPLIED to production
+
+Owner "Use this number" was failing with "Could not save your requested number"
+because the table did not exist yet. Applied
+`supabase/migrations/20260602000200_clinic_number_requests.sql` to the production
+Supabase project `qfjpvbvfvhbtebwivcdc` via the **Management API**
+`POST /v1/projects/{ref}/database/query` (token from local `.env.local`, never
+printed), using **curl** (same pattern as the payment-method migration). HTTP 201.
+
+Verified (Management API queries against production):
+- BEFORE: `to_regclass('public.clinic_number_requests')` → `null` (root cause).
+- AFTER: table exists; constraints present —
+  `clinic_number_requests_status_check`, `clinic_number_requests_number_type_check`,
+  `clinic_number_requests_phone_nonempty_check` (plus FK + PK); indexes present —
+  `clinic_number_requests_clinic_created_idx`,
+  `clinic_number_requests_clinic_pending_idx` (plus PK); 1 user trigger
+  (updated_at); RLS enabled.
+- `GET /api/health` → 200; `GET /account` → 200 (sign-in gate; no exception).
+- Baseline rows: `clinic_number_requests` = 0 (empty, queryable);
+  `clinic_phone_numbers` = 1 (untouched — the migration only creates the new
+  table, so `local_number_status`, `sms_recovery_enabled`, and Twilio config are
+  unaffected).
+
+No app code changed (migration was already committed; only applied). Idempotent —
+safe to re-run. Authenticated owner-click verification (request saved → pending row
+→ admin console display) is the operator's final step (no owner browser session in
+the repo CLI; no row fabricated).
