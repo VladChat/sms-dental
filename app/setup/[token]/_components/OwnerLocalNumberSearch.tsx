@@ -161,7 +161,7 @@ export function OwnerLocalNumberSearch({
   return (
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
       {!expanded ? (
-        <button type="button" className="btn btn-primary acct-inline-action" onClick={() => setExpanded(true)}>
+        <button type="button" className="btn btn-primary acct-primary-action" onClick={() => setExpanded(true)}>
           Add number
         </button>
       ) : (
@@ -201,7 +201,12 @@ export function OwnerLocalNumberSearch({
                 />
               </div>
             </div>
-            <button type="button" className="btn btn-primary" onClick={() => void search()} disabled={searching}>
+            <button
+              type="button"
+              className="btn btn-primary acct-primary-action"
+              onClick={() => void search()}
+              disabled={searching}
+            >
               {searching ? "Searching…" : "Search number"}
             </button>
           </div>
@@ -274,7 +279,7 @@ export function OwnerLocalNumberSearch({
                               You can choose a number now, but a payment method is required before it can be assigned to your clinic. You won’t be charged today. Billing starts only after SMS recovery is active and your trial period ends.
                             </p>
                             <div style={{ marginTop: "var(--space-2)" }}>
-                              <button type="button" className="btn btn-primary" onClick={onGoToBilling}>
+                              <button type="button" className="btn btn-primary acct-primary-action" onClick={onGoToBilling}>
                                 Add payment method
                               </button>
                             </div>
@@ -287,7 +292,7 @@ export function OwnerLocalNumberSearch({
                           <>
                             <button
                               type="button"
-                              className="btn btn-primary"
+                              className="btn btn-primary acct-primary-action"
                               onClick={() => void requestSelectedNumber()}
                               disabled={requesting}
                               aria-busy={requesting}

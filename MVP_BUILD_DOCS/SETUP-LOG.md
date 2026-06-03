@@ -4031,3 +4031,17 @@ What changed:
 
 Safety: behavior remains admin-review-only. No purchase, reserve, assign,
 release, provision, `clinic_phone_numbers` write, or SMS recovery change.
+
+---
+
+## 2026-06-03 — fix: standardize account setup action buttons
+
+What changed:
+
+- Owner account setup primary buttons were standardized to match the Billing
+  panel style.
+- Affected buttons: **Save business profile**, **Save approval information**,
+  **Add number**, **Search number**, and **Use this number**.
+- Secondary actions such as **Hide** remain visually quiet.
+
+Safety: no behavior, API, billing, Twilio, SMS, or database changes.
