@@ -283,18 +283,18 @@ export function SaveBar({
   error: string | null;
 }) {
   return (
-    <div style={{ display: "grid", gap: "var(--space-3)" }}>
+    <div className="acct-action-stack">
       {error && (
         <div className="alert alert-error" role="alert" aria-live="polite">
           <span>{error}</span>
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
-        <button type="submit" className="btn btn-primary" disabled={saving}>
+      <div className="acct-action-stack">
+        <button type="submit" className="btn btn-primary acct-primary-action" disabled={saving}>
           {saving ? "Saving…" : label}
         </button>
         {savedAt && !error && (
-          <span role="status" aria-live="polite" className="t-small" style={{ color: "var(--success-text)" }}>
+          <span role="status" aria-live="polite" className="t-small acct-savebar-status">
             Saved · {savedAt}
           </span>
         )}
