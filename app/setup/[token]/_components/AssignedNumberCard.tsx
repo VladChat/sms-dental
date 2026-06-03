@@ -1,12 +1,10 @@
 "use client";
 
-import { StatusBadge, StatusRow, type StatusKind } from "./AccountUI";
+import { StatusBadge, type StatusKind } from "./AccountUI";
 import { OwnerLocalNumberSearch } from "./OwnerLocalNumberSearch";
-import type { LocalNumberStatus, SmsStatus, RequestedNumberSummary } from "./account-types";
+import type { RequestedNumberSummary } from "./account-types";
 
 export function AssignedNumberCard({
-  localNumberStatus,
-  smsStatus,
   assignedPhone,
   areaCode,
   postalCode,
@@ -14,8 +12,6 @@ export function AssignedNumberCard({
   onGoToBilling,
   requestedNumber,
 }: {
-  localNumberStatus: LocalNumberStatus;
-  smsStatus: SmsStatus;
   assignedPhone: string | null;
   areaCode: string | null;
   postalCode: string | null;
@@ -23,24 +19,6 @@ export function AssignedNumberCard({
   onGoToBilling: () => void;
   requestedNumber: RequestedNumberSummary | null;
 }) {
-  const numberAssigned =
-    localNumberStatus === "assigned" || localNumberStatus === "reserved" || Boolean(assignedPhone);
-
-  const voiceKind: StatusKind = numberAssigned
-    ? "active"
-    : hasPaymentMethod
-      ? "pending"
-      : "not_active";
-
-  const smsKind: StatusKind =
-    smsStatus === "active"
-      ? "active"
-      : smsStatus === "waiting_for_approval"
-        ? "waiting"
-        : numberAssigned || hasPaymentMethod
-          ? "pending"
-          : "not_active";
-
   return (
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
       {assignedPhone ? (
@@ -80,15 +58,6 @@ export function AssignedNumberCard({
         initialAreaCode={areaCode}
         initialPostalCode={postalCode}
       />
-
-      <div>
-        <StatusRow label="Voice / Calls">
-          <StatusBadge kind={voiceKind} />
-        </StatusRow>
-        <StatusRow label="SMS / Texting">
-          <StatusBadge kind={smsKind} />
-        </StatusRow>
-      </div>
     </div>
   );
 }

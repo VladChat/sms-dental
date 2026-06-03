@@ -61,7 +61,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const areaCode = requestedAreaCode.value ?? (mainPhone ? phoneAreaCode(mainPhone) : null);
   const postalCode = requestedPostalCode.value ?? clinic.postal_code;
   const required = { voice: true, sms: true, mms: false };
-  const limit = 10;
+  const limit = 5;
 
   try {
     const attempts = buildLocalNumberSearchPlan({
