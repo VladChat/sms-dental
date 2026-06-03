@@ -2,6 +2,8 @@
 
 import { useMemo, useRef, useState } from "react";
 
+import type { RequestedNumberSummary } from "./account-types";
+
 type Candidate = {
   phone_number: string;
   friendly_name: string;
@@ -26,12 +28,25 @@ type SearchResponse = {
   error?: { message?: string };
 };
 
+type RequestNumberResponse = {
+  ok?: boolean;
+  requestedNumber?: {
+    phoneNumber: string;
+    friendlyName: string | null;
+    locality: string | null;
+    region: string | null;
+    status: string;
+  };
+  error?: { message?: string };
+};
+
 export function OwnerLocalNumberSearch({
   hasPaymentMethod,
   onGoToBilling,
   requestedNumberE164,
   initialAreaCode,
   initialPostalCode,
+  onRequestedNumberSaved,
 }: {
   hasPaymentMethod: boolean;
   onGoToBilling: () => void;
@@ -40,6 +55,7 @@ export function OwnerLocalNumberSearch({
   requestedNumberE164?: string | null;
   initialAreaCode?: string | null;
   initialPostalCode?: string | null;
+  onRequestedNumberSaved: (requestedNumber: RequestedNumberSummary) => void;
 }) {
   const searchRunId = useRef(0);
   const [expanded, setExpanded] = useState(false);
@@ -64,9 +80,9 @@ export function OwnerLocalNumberSearch({
       : sorted;
   }, [candidates]);
 
-  function hideSearch() {
+  function clearSearchUi(collapse: boolean) {
     searchRunId.current += 1;
-    setExpanded(false);
+    if (collapse) setExpanded(false);
     setSearching(false);
     setSearched(false);
     setSearchError(null);
@@ -74,6 +90,10 @@ export function OwnerLocalNumberSearch({
     setSelected(null);
     setFallbackMessage(null);
     setActionError(null);
+  }
+
+  function hideSearch() {
+    clearSearchUi(true);
   }
 
   async function search() {
@@ -141,16 +161,20 @@ export function OwnerLocalNumberSearch({
           type: selectedCandidate.type,
         }),
       });
-      const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; error?: { message?: string } }
-        | null;
+      const json = (await res.json().catch(() => null)) as RequestNumberResponse | null;
       if (!res.ok || !json?.ok) {
         setActionError(
           json?.error?.message ?? "Could not save your requested number. Please try again.",
         );
         return;
       }
-      setSavedNumber(selectedCandidate.phone_number);
+      const savedRequestedNumber = normalizeRequestedNumberResponse(
+        json.requestedNumber,
+        selectedCandidate,
+      );
+      setSavedNumber(savedRequestedNumber.phoneNumber);
+      onRequestedNumberSaved(savedRequestedNumber);
+      clearSearchUi(true);
     } catch {
       setActionError("Could not save your requested number. Please try again.");
     } finally {
@@ -317,6 +341,20 @@ export function OwnerLocalNumberSearch({
       )}
     </div>
   );
+}
+
+function normalizeRequestedNumberResponse(
+  requestedNumber: RequestNumberResponse["requestedNumber"] | undefined,
+  selectedCandidate: Candidate,
+): RequestedNumberSummary {
+  return {
+    phoneNumber: requestedNumber?.phoneNumber ?? selectedCandidate.phone_number,
+    friendlyName: requestedNumber?.friendlyName ?? selectedCandidate.friendly_name ?? null,
+    locality: requestedNumber?.locality ?? selectedCandidate.locality,
+    region: requestedNumber?.region ?? selectedCandidate.region,
+    status: requestedNumber?.status ?? "pending",
+    createdAt: null,
+  };
 }
 
 function digitsOnly(value: string): string {

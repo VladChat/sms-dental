@@ -11,6 +11,7 @@ import { TeamAccessCard } from "./TeamAccessCard";
 import type {
   BusinessProfileData,
   BusinessProfileFields,
+  RequestedNumberSummary,
   SmsApprovalFields,
   SmsStatus,
 } from "./account-types";
@@ -28,6 +29,9 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [sms, setSms] = useState<SmsApprovalFields>(() => withRepDefaults(data));
   const [smsDone, setSmsDone] = useState(data.smsApproval.completed);
   const [smsStatus, setSmsStatus] = useState<SmsStatus>(data.number.smsStatus);
+  const [requestedNumber, setRequestedNumber] = useState<RequestedNumberSummary | null>(
+    data.number.requestedNumber,
+  );
 
   const hasPaymentMethod = data.billing.hasPaymentMethod;
   const clinicName = biz.name || "Your clinic";
@@ -120,7 +124,8 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 postalCode={data.number.postalCode}
                 hasPaymentMethod={hasPaymentMethod}
                 onGoToBilling={() => setActive("billing")}
-                requestedNumber={data.number.requestedNumber}
+                requestedNumber={requestedNumber}
+                onRequestedNumberSaved={setRequestedNumber}
               />
             </Section>
           )}

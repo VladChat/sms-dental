@@ -4045,3 +4045,17 @@ What changed:
 - Secondary actions such as **Hide** remain visually quiet.
 
 Safety: no behavior, API, billing, Twilio, SMS, or database changes.
+
+---
+
+## 2026-06-03 — fix: sync requested number after owner save
+
+What changed:
+
+- Owner requested-number save now updates the top **Requested number** panel
+  immediately from the save response.
+- Search collapses after a successful save so **Add number** is visible again.
+- This is UI state synchronization only.
+
+Safety: no Twilio purchase, reserve, assign, release, or provision; no
+`clinic_phone_numbers` write; no SMS recovery change; no Stripe billing change.
