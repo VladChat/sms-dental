@@ -107,6 +107,10 @@ type ClinicDetailRow = {
   trial_ends_at: Date | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  phone_number_purchases_enabled: boolean;
+  phone_number_limit: number;
+  phone_number_purchase_suspended_reason: string | null;
+  paid_plan_started_at: Date | null;
   stripe_payment_method_id: string | null;
   stripe_payment_method_brand: string | null;
   stripe_payment_method_last4: string | null;
@@ -145,6 +149,8 @@ export async function getAdminClinicDetail(
       c.owner_contact_email, c.owner_contact_name, c.owner_contact_phone, c.test_patient_phone,
       c.billing_status, c.trial_started_at, c.trial_ends_at,
       c.stripe_customer_id, c.stripe_subscription_id,
+      c.phone_number_purchases_enabled, c.phone_number_limit,
+      c.phone_number_purchase_suspended_reason, c.paid_plan_started_at,
       c.stripe_payment_method_id, c.stripe_payment_method_brand,
       c.stripe_payment_method_last4, c.stripe_payment_method_exp_month,
       c.stripe_payment_method_exp_year, c.stripe_payment_method_added_at,
@@ -187,9 +193,17 @@ export async function getAdminClinicDetail(
       twilio_phone_number_sid: string | null;
       created_at: Date;
       updated_at: Date;
+      source: string;
+      billing_class: string;
+      monthly_unit_amount_cents: number;
+      activated_at: Date | null;
+      suspended_at: Date | null;
+      suspension_reason: string | null;
     }[]
   >`
-    select id, phone_number, role, is_active, twilio_phone_number_sid, created_at, updated_at
+    select id, phone_number, role, is_active, twilio_phone_number_sid, created_at, updated_at,
+           source, billing_class, monthly_unit_amount_cents, activated_at,
+           suspended_at, suspension_reason
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
     order by is_active desc, created_at asc
@@ -204,7 +218,52 @@ export async function getAdminClinicDetail(
     twilioSid: p.twilio_phone_number_sid,
     createdAt: p.created_at.toISOString(),
     updatedAt: p.updated_at.toISOString(),
+    source: p.source,
+    billingClass: p.billing_class,
+    monthlyUnitAmountCents: p.monthly_unit_amount_cents,
+    activatedAt: p.activated_at ? p.activated_at.toISOString() : null,
+    suspendedAt: p.suspended_at ? p.suspended_at.toISOString() : null,
+    suspensionReason: p.suspension_reason,
   }));
+
+  // Recent purchase attempts (durable audit) + held-attempt count for the limit.
+  const attemptRows = await sql<
+    {
+      id: string;
+      requested_phone_number: string;
+      source: string;
+      slot_class: string;
+      status: string;
+      twilio_phone_number_sid: string | null;
+      error_code: string | null;
+      created_at: Date;
+    }[]
+  >`
+    select id, requested_phone_number, source, slot_class, status,
+           twilio_phone_number_sid, error_code, created_at
+    from public.clinic_phone_number_purchase_attempts
+    where clinic_id = ${clinicId}
+    order by created_at desc
+    limit 10
+  `.catch(() => []);
+  const recentPurchaseAttempts = attemptRows.map((a) => ({
+    id: a.id,
+    requestedPhoneNumber: a.requested_phone_number,
+    source: a.source,
+    slotClass: a.slot_class,
+    status: a.status,
+    twilioSid: a.twilio_phone_number_sid,
+    errorCode: a.error_code,
+    createdAt: a.created_at.toISOString(),
+  }));
+  const heldAttemptRows = await sql<{ n: number }[]>`
+    select count(*)::int as n from public.clinic_phone_number_purchase_attempts
+    where clinic_id = ${clinicId}
+      and status in ('twilio_purchased', 'billing_pending', 'reconciliation_required')
+  `.catch(() => [{ n: 0 }]);
+  const activeNumberCount = phoneRows.filter((p) => p.is_active).length;
+  const additionalBilledQuantity = phoneRows.filter((p) => p.billing_class === "additional").length;
+  const heldNumberCount = phoneRows.length + (heldAttemptRows[0]?.n ?? 0);
 
   // All open owner-requested numbers (pending/reviewed) + their pricing/consent
   // snapshot. Resilient to the table/columns not yet existing in an environment.
@@ -298,6 +357,14 @@ export async function getAdminClinicDetail(
     paymentMethodAddedAt: r.stripe_payment_method_added_at
       ? r.stripe_payment_method_added_at.toISOString()
       : null,
+    phoneNumberPurchasesEnabled: r.phone_number_purchases_enabled,
+    phoneNumberLimit: r.phone_number_limit,
+    phoneNumberPurchaseSuspendedReason: r.phone_number_purchase_suspended_reason,
+    heldNumberCount,
+    activeNumberCount,
+    additionalBilledQuantity,
+    paidPlanStartedAt: r.paid_plan_started_at ? r.paid_plan_started_at.toISOString() : null,
+    recentPurchaseAttempts,
     localNumberStatus: r.local_number_status,
     assignedPhoneMasked: maskPhone(r.assigned_phone),
     hasAssignedNumber: Boolean(r.assigned_phone),

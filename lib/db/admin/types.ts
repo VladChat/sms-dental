@@ -59,6 +59,25 @@ export type AdminClinicPhoneNumber = {
   twilioSid: string | null;
   createdAt: string;
   updatedAt: string;
+  // self-service-numbers snapshot
+  source: string;
+  billingClass: string;
+  monthlyUnitAmountCents: number;
+  activatedAt: string | null;
+  suspendedAt: string | null;
+  suspensionReason: string | null;
+};
+
+export type AdminPurchaseAttempt = {
+  id: string;
+  requestedPhoneNumber: string;
+  source: string;
+  slotClass: string;
+  status: string;
+  // Twilio SID is always shown to the operator for reconciliation_required.
+  twilioSid: string | null;
+  errorCode: string | null;
+  createdAt: string;
 };
 
 export type AdminClinicDetail = {
@@ -112,6 +131,15 @@ export type AdminClinicDetail = {
   paymentMethodExpMonth: number | null;
   paymentMethodExpYear: number | null;
   paymentMethodAddedAt: string | null;
+  // number-purchase controls + counts (self-service-numbers)
+  phoneNumberPurchasesEnabled: boolean;
+  phoneNumberLimit: number;
+  phoneNumberPurchaseSuspendedReason: string | null;
+  heldNumberCount: number;
+  activeNumberCount: number;
+  additionalBilledQuantity: number;
+  paidPlanStartedAt: string | null;
+  recentPurchaseAttempts: AdminPurchaseAttempt[];
   // phone
   localNumberStatus: string;
   assignedPhoneMasked: string | null;
