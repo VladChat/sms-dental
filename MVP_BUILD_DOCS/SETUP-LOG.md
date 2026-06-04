@@ -4213,4 +4213,4 @@ number IS found is preserved. No Twilio call, no Stripe change, no
 `clinic_phone_numbers` write, no `sms_recovery_enabled` change, no migration.
 
 Validation: `npm run typecheck` pass; `npm run build` pass (purchase route
-compiled); `git diff --check` clean. Commit `__PENDING__`; pushed to `origin/main`.
+compiled); `git diff --check` clean. Commit `7f17bc1`; pushed to `origin/main`.
