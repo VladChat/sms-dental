@@ -21,13 +21,14 @@ Do not create or install new instruction systems during cleanup unless Vlad expl
 When project values conflict, use this priority:
 
 1. `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`
-2. `MVP_BUILD_DOCS/OWNER-SETTINGS.md`
-3. `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
-4. `MVP_BUILD_DOCS/SETUP-LOG.md`
-5. `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md`
-6. `config/runtime.config.ts`
-7. `Skills/missed-calls-dental-product-context.md`
-8. relevant `.claude/skills/*/SKILL.md`
+2. `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` for pricing, billing, usage, subscriptions, and number-purchase policy
+3. `MVP_BUILD_DOCS/OWNER-SETTINGS.md`
+4. `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+5. `MVP_BUILD_DOCS/SETUP-LOG.md`
+6. `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md`
+7. `config/runtime.config.ts`
+8. `Skills/missed-calls-dental-product-context.md`
+9. relevant `.claude/skills/*/SKILL.md`
 
 ## Required Reading Before Coding
 
@@ -121,7 +122,7 @@ Never write secrets, passwords, full database URLs with passwords, API keys, tok
 - Public support email: `support@missedcallsdental.com`
 - Public price: `$99/month`
 - Trial baseline: `21-day free trial`
-- Billing activation rule: `billing starts only after SMS recovery is active; do not charge while SMS approval is pending`
+- Current billing and number-purchase rule: first business number purchase is self-service and included with the base plan; no charge occurs on first-number purchase; the current backend starts the trial after first successful number assignment; paid plan starts only through explicit Stripe Checkout and webhook-confirmed active subscription; additional numbers require active paid subscription and explicit `$20/month` consent; SMS recovery enablement is separate and never automatic.
 
 ## Security Rules
 

@@ -21,7 +21,7 @@ This document covers the practical steps to safely onboard the first real clinic
 - Intent detection or reply routing.
 - Callback bridge.
 - Dashboard or inbox UI.
-- Stripe billing gate.
+- Live Stripe billing rollout.
 - A2P/10DLC campaign management.
 
 For the full future onboarding vision, see `08-compliance-and-onboarding.md`.
@@ -38,7 +38,7 @@ Scope rule: ask only for information required for the next immediate onboarding 
 |---|---|
 | Main clinic phone number | The number patients currently call |
 | Clinic name | Public-facing practice name used in SMS and voice greeting |
-| ZIP code | Used to prepare/reserve the best local office texting number |
+| ZIP code | Used for local business-number search |
 
 Later Business Profile cards collect details only when needed:
 
@@ -57,9 +57,8 @@ The Business Profile onboarding is implemented:
 - Screen 1 **Create office profile** (`app/setup/[token]` → `ClinicForm`): three fields only —
   clinic name, main office phone (normalized to E.164), ZIP code. Button: **Create office profile**.
 - On save, the backend (`POST /api/onboarding/[token]/clinic`) generates the public business
-  `slug` and runs **automatic local-number preparation** (read-only Twilio candidate search; status
-  shows **Preparing**). No number is purchased/reserved unless `TWILIO_NUMBER_PURCHASE_ENABLED=true`
-  and the owner explicitly approves via the existing purchase route.
+  `slug`. The owner completes number selection/purchase from `/account` after saving a
+  payment method.
 - Screen 2 **Business Profile** page (`BusinessProfile` component) shows a top status strip
   (Local number / SMS / Billing) and cards: Business Information, A2P Approval Information,
   Public Business Page, Billing, Billing History, Login & Security, Support. There is **no**
@@ -70,8 +69,9 @@ The Business Profile onboarding is implemented:
   to Twilio.
 - Public pages render at `/business/{slug}`, `/business/{slug}/privacy`, `/business/{slug}/sms-terms`
   and state that Missed Calls Dental / Dental SMS acts as the technology/service provider.
-- Billing stays **Not started**; the 21-day trial baseline begins only after SMS recovery is
-  activated, and the trial countdown does not start while approval is pending.
+- The current backend starts the 21-day trial after the first successful number assignment
+  (`clinics.trial_started_at` / `clinics.trial_ends_at`). Do not document trial start after
+  payment as current behavior unless backend behavior changes in a later task.
 - The Billing card now supports **saving a payment method** via Stripe-hosted Checkout in
   `mode:"setup"` (Stripe **sandbox/test mode** only). This collects a card for future billing
   and does **not** charge, create a subscription/invoice, or change `billing_status`.
@@ -144,7 +144,10 @@ Publish the assigned Twilio number directly in one or more channels:
 
 ### Current MVP Recommendation
 
-Use **system-prepared local number** by default for onboarding, plus conditional forwarding where clinic phone operations require it. Do not require customer-facing manual number selection from a catalog.
+Use owner self-service number purchase from `/account` for the first business number, plus
+conditional forwarding where clinic phone operations require it. The first purchase requires a
+saved payment method, does not require admin approval, and does not charge that day. Real Twilio
+purchase still requires `TWILIO_NUMBER_PURCHASE_ENABLED=true`.
 
 ---
 
@@ -459,7 +462,7 @@ Short checklist for the operator or agent running this onboarding. Run in order.
 
 ---
 
-## Automated Onboarding Path (added 2026-05-26)
+## Automated Onboarding Path (current)
 
 The system now supports an automated onboarding flow for new clinics
 end-to-end. The manual operator path below remains valid as a fallback,
@@ -485,17 +488,16 @@ but the default for any new clinic is the automated flow.
    test patient phone, setup mode) are collected later only when they are
    actually required for the next step. See `AGENTS.md` →
    "Form and Onboarding Scope Rule".
-5. App searches Twilio for available local US numbers with Voice + SMS
-   capability, using the ZIP code and/or the area code derived from the
-   main office phone.
-6. Owner picks an "office texting number" and clicks **Use this
-   number**.
-7. App purchases the chosen Twilio number (only when
-   `TWILIO_NUMBER_PURCHASE_ENABLED=true`), configures voice + SMS
-   webhooks, and stores the mapping in `clinic_phone_numbers` with
-   `role='office_texting'`.
-8. App shows the **Your office texting number is ready** status page
-   with forwarding and QA instructions.
+5. Owner saves a payment method in `/account` through Stripe-hosted Checkout
+   in test mode.
+6. Owner searches local US numbers with Voice + SMS capability from `/account`,
+   using ZIP code and/or area code from the clinic profile as defaults.
+7. Owner purchases the first business number through the shared provisioning service.
+   The first number is included with the $99/month plan, does not require admin
+   approval, and does not charge that day.
+8. Current backend starts the 21-day trial after the first successful assignment.
+9. Real Twilio purchase still requires `TWILIO_NUMBER_PURCHASE_ENABLED=true`; while
+   the flag is false, purchase attempts cancel safely and no Twilio number is bought.
 
 SMS remains disabled at this point. Live customer SMS still requires:
 
@@ -534,32 +536,26 @@ Automated setup is currently available for U.S. clinics only.
 
 International onboarding can be added later as separate modules.
 
-### Local number default (no customer catalog)
+### Current phone-number onboarding
 
-Current onboarding defaults to automatic local number preparation/reservation.
-The customer should not manually choose from a broad number catalog as part of default onboarding.
-Toll-free can remain an alternate/reference path for special cases, but it is not the main MVP onboarding path.
+Once a payment method is saved, the owner searches local numbers on `/account -> Phone numbers`
+and purchases directly. The first/included number is purchased and assigned automatically
+(no admin approval), starts the 21-day trial on assignment, and does not charge that day.
+Additional numbers require a webhook-confirmed active paid subscription and explicit
+$20/month authorization, and only activate after Stripe quantity sync succeeds. Default
+limit: 5 held numbers per clinic.
 
-Owner number purchasing (2026-06-03, branch `feat/self-service-numbers`, not yet deployed —
-**supersedes the request workflow above**): once a payment method is saved, the owner
-searches local numbers on `/account → Phone numbers` and **purchases directly** —
-**Purchase and assign number** (first/included; starts the 21-day trial on assignment, no
-charge today) or, after starting the paid plan, **Purchase additional number** ($20/mo,
-requires the explicit authorization checkbox). The first number is purchased + assigned
-automatically (no admin approval); additional numbers require a webhook-confirmed active
-paid subscription and only activate after the Stripe quantity sync succeeds. Default limit:
-5 held numbers per clinic. `POST /api/account/phone-numbers/request` is **retired (410)** —
-`clinic_number_requests` rows remain as legacy data (admin "Legacy number requests"), never
-auto-purchased/billed. Real purchase still requires `TWILIO_NUMBER_PURCHASE_ENABLED=true`.
-See `BILLING-AND-USAGE-POLICY.md` v2 + SETUP-LOG 2026-06-03. Apply migration
-`supabase/migrations/20260603000200_self_service_number_purchasing.sql` (and set the two
-`STRIPE_*_PRICE_ID` env vars) before deploying.
+`POST /api/account/phone-numbers/request` is retired (410). Existing
+`clinic_number_requests` rows remain as legacy data under admin "Legacy number requests";
+they are never auto-purchased or billed. Real Twilio purchase still requires
+`TWILIO_NUMBER_PURCHASE_ENABLED=true`. The self-service migration is applied and the
+Stripe test-mode Price ID env vars are set in production.
 
 ### Production safety still applies
 
 - `TWILIO_NUMBER_PURCHASE_ENABLED=true` is the only switch that
   permits a real purchase. Keep it `false` for dry runs.
-- Onboarding never sets `clinic.sms_recovery_enabled=true`.
+- Onboarding and number assignment never set `clinic.sms_recovery_enabled=true`.
 - The Toll-Free Verification submission packet lives in
   `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
 
@@ -569,9 +565,9 @@ Plan/pricing is documented in `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` and
 sourced from `config/billing.config.ts`: $99/mo includes 1 business number +
 1,000 call minutes + 1,000 SMS segments (shared); additional numbers $20/mo each
 (billed only after activation); overage $0.07/min, $0.06/SMS segment. An owner may
-hold several assigned numbers and several open requests; the first is included and
-each extra requires an explicit $20/mo authorization (stored as a consent
-snapshot). Pending requests are never charged, and a requested number is never
-purchased/assigned until the operator completes the gated admin Add number flow.
-Live Stripe subscription/usage billing remains a later milestone — no
-charge/subscription/invoice is created here.
+hold several assigned numbers; the first is included and each extra requires an
+active paid subscription plus explicit $20/mo authorization (stored as a consent
+snapshot). Existing request rows are legacy only, never charged, and never
+purchased/assigned by the retired request workflow. Current self-service
+additional-number purchases activate only after Stripe quantity sync. Live Stripe
+billing remains test-mode only until a future approved live rollout.

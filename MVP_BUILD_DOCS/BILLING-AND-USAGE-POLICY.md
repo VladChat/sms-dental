@@ -4,9 +4,11 @@ Plan pricing, included usage, and additional-number consent are defined once in
 code at **`config/billing.config.ts`** and rendered everywhere from there (owner
 UI, API validation, consent text, DB snapshots). Do not duplicate these amounts.
 
-> Status: **pricing + consent foundation only.** Live Stripe subscription &
-> usage billing are NOT enabled yet — see "Remaining milestone" below. Payment
-> methods are still collected in Stripe **sandbox/test setup mode** with no charge.
+> Status: **current canonical policy.** Self-service number purchasing and
+> Stripe-hosted subscription Checkout are deployed in production code, with Stripe
+> **test-mode only** Price IDs and secret key. Real Twilio purchases remain gated
+> by `TWILIO_NUMBER_PURCHASE_ENABLED=false`, so production is safe to test but is
+> not live for real number purchases or live Stripe charges.
 
 ## Plan
 
@@ -26,17 +28,16 @@ to owners via an accessible question-mark tooltip in the Billing panel.)
 
 (`additionalBusinessNumber.monthlyUnitAmountCents = 2000`)
 
-- Billing for an additional number starts **only after** it is approved and
-  activated by the operator. A **pending request is never charged.**
+- Additional numbers require a webhook-confirmed active paid subscription.
 - The owner must explicitly authorize the additional $20/month **before** an
-  additional-number request can be saved. Consent text version:
+  additional number can be purchased. Consent text version:
   `additional-business-number-v1`.
 - Exact consent text (rendered from config):
   > "I authorize Missed Calls Dental to add $20/month to my monthly bill when
   > this number is activated."
 - The checkbox is unchecked by default, required **only** for an additional
   number, enforced by the **server** (not just the client), and stored as a
-  durable audit snapshot on `clinic_number_requests`
+  durable audit snapshot on the phone-number purchase/assignment records
   (`billing_class`, `monthly_unit_amount_cents`, `currency`,
   `billing_consent_text_version`, `billing_consent_text`,
   `billing_consent_authorized_at`, `billing_consent_authorized_by_profile_id`,
@@ -46,24 +47,33 @@ to owners via an accessible question-mark tooltip in the Billing panel.)
 
 - **$0.07** per additional call minute (`overage.callMinuteUnitAmountCents = 7`)
 - **$0.06** per additional SMS segment (`overage.smsSegmentUnitAmountCents = 6`)
+- Overage values are documented in config, but usage metering and usage billing
+  are not implemented as live billing behavior yet.
 
 ## Number lifecycle guarantees (non-negotiable)
 
 - A purchased/assigned business number is **never** replaced, cancelled,
   released, or hidden because the owner requests another number.
 - "Add number" always means **adding another** number, never replacing.
-- Multiple assigned numbers and multiple open requested numbers can coexist and
-  are all displayed.
-- Requesting a new number does **not** cancel an older different open request.
-- The server classifies each request as `included` or `additional` from live DB
-  state (active assigned numbers + open requests vs `includedBusinessNumbers`),
-  inside a clinic-locked transaction. The client never decides the price.
-- Real additional-number **purchase** stays blocked
-  (`additional_number_billing_not_ready`) until subscription billing exists.
+- Multiple assigned numbers can coexist and are all displayed.
+- Suspended numbers still count toward the account limit and Stripe additional-number quantity.
+- The server classifies purchases as `included` or `additional` from live DB
+  state and entitlement rules inside a clinic-locked flow. The client never
+  decides the price or entitlement.
+- Legacy `clinic_number_requests` rows are historical only and are not billable.
 
-## Future Stripe catalog (document only — not created yet)
+## Stripe catalog
 
-Names chosen so invoices / the Customer Portal read clearly:
+Stripe test-mode Price IDs are configured for the deployed flow:
+
+- Base plan $99/month: `price_1TegbY4ZSHLicmejTDngrrYT`
+- Additional business number $20/month: `price_1TegbZ4ZSHLicmejnCGGpOEQ`
+
+The current `STRIPE_SECRET_KEY` is test-mode, not live. No live Stripe charge can
+occur until a future live billing rollout explicitly replaces test-mode Stripe
+configuration with approved live-mode resources.
+
+Product names chosen so invoices / the Customer Portal read clearly:
 
 - **Missed Calls Dental — Monthly plan** — one base monthly subscription item.
 - **Additional business number** — one recurring item with **quantity** = number
@@ -74,21 +84,23 @@ Names chosen so invoices / the Customer Portal read clearly:
 Stripe Price IDs (test vs live differ) live in Stripe + non-secret runtime/billing
 wiring, **never** hard-coded next to the amounts in `billing.config.ts`.
 
-## Remaining milestone
+## Current deployed-but-gated reality
 
-Live billing activation is a **separate** milestone: create the Stripe products /
-prices / subscription, wire activation-time revalidation of the request snapshot,
-and turn on usage reporting. Until then: no subscription, invoice, charge,
-PaymentIntent, meter, or meter event is created; payment-method collection stays
-in sandbox/test setup mode; `sms_recovery_enabled` is unaffected.
+- Supabase migration `20260603000200_self_service_number_purchasing.sql` has been applied and verified.
+- `STRIPE_BASE_PLAN_PRICE_ID` and `STRIPE_ADDITIONAL_NUMBER_PRICE_ID` are set in Vercel Production with test-mode Price IDs.
+- Stripe subscription Checkout exists in test mode.
+- Real Twilio purchases are still blocked by `TWILIO_NUMBER_PURCHASE_ENABLED=false`.
+- No live Stripe charge can occur while Stripe remains test-mode.
+- SMS recovery enablement is separate and is not changed by payment-method setup, first-number assignment, or subscription status.
+- Usage metering/reporting remains a future billing milestone.
 
 ---
 
-## v2 — Self-service number purchasing + paid-plan conversion (2026-06-03)
+## Self-service number purchasing + paid-plan conversion (current, 2026-06-03)
 
-This supersedes the owner "request a number for admin review" workflow. Built on
-branch `feat/self-service-numbers` (Stripe **sandbox/test only**;
-`TWILIO_NUMBER_PURCHASE_ENABLED` stays false; not yet deployed).
+This supersedes the old owner "request a number for admin review" workflow.
+Production code is deployed, Stripe remains **sandbox/test only**, and
+`TWILIO_NUMBER_PURCHASE_ENABLED` stays false.
 
 **First number (included).** When an owner selects their first number, the app
 **purchases and assigns the real Twilio number automatically** — no admin
@@ -131,8 +143,16 @@ attempts, and reconciliation issues. Legacy `clinic_number_requests` remain visi
 under "Legacy number requests" (retired; never auto-purchased/billed/cancelled;
 optional admin Dismiss).
 
-**Live rollout (still gated, separate approval):** set `STRIPE_BASE_PLAN_PRICE_ID`
-+ `STRIPE_ADDITIONAL_NUMBER_PRICE_ID` (test IDs created), apply migration
-`20260603000200_self_service_number_purchasing.sql`, deploy, and only later flip
-`TWILIO_NUMBER_PURCHASE_ENABLED` to perform real purchases. Until then the flow is
-fully built but no real Twilio number or live charge occurs.
+**Real-purchase go-live (still gated, separate approval):** only a deliberate
+future change to `TWILIO_NUMBER_PURCHASE_ENABLED=true` permits real Twilio
+purchases. Live Stripe billing requires a separate approved live-mode rollout.
+Until then the flow is fully built and deployed for safe testing, but no real
+Twilio number or live Stripe charge occurs.
+
+## Historical note
+
+The earlier 2026-06-02 request/consent foundation stored owner number preferences
+in `clinic_number_requests` for operator review. That workflow is retired for new
+owner actions: `POST /api/account/phone-numbers/request` now returns 410. Existing
+rows remain visible as legacy data for admin view/dismiss only and are never
+auto-purchased, billed, cancelled, or treated as current entitlement.

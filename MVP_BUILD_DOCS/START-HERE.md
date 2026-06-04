@@ -6,7 +6,7 @@ Ignore previous stage ZIP files, patch ZIP files, and older versions.
 
 ---
 
-## Current Source of Truth — May 2026
+## Current Source of Truth — June 2026
 
 Start with `PROJECT-CONTEXT.md`. It is the master context file for the current repository state, product goal, hosting plan, safety boundaries, phone event strategy, and current implementation step.
 
@@ -20,7 +20,11 @@ Current implementation state:
 - Backend Foundation v1 is deployed and can reach Supabase.
 - Twilio webhooks are configured by API.
 - Inbound SMS webhook has been verified.
-- Inbound voice verification is pending because Twilio Trial account restrictions block realistic inbound voice testing from unverified callers.
+- Inbound voice has been verified end-to-end after the Twilio account upgrade.
+- Self-service owner number purchasing is merged and deployed, but real Twilio purchases remain gated by `TWILIO_NUMBER_PURCHASE_ENABLED=false`.
+- Supabase migration `20260603000200_self_service_number_purchasing.sql` is applied and verified.
+- Stripe test-mode subscription Checkout and webhooks exist; Stripe remains test-mode and no live charge can occur.
+- SMS recovery is not automatically enabled.
 
 ---
 
@@ -44,7 +48,7 @@ clinic main number -> no-answer/busy/after-hours forwarding -> assigned Twilio r
 Local number path:
 
 ```txt
-system prepares/reserves the best local number -> clinic can route/publish that number where needed -> backend webhook
+owner searches/selects a business number in /account -> shared provisioning service assigns it when purchase is enabled -> clinic can route/publish that number where needed -> backend webhook
 ```
 
 Future versions may add direct provider integrations.
@@ -57,7 +61,8 @@ automatic SMS recovery flow after approval/configuration
 inbound SMS handling
 recovery inbox later
 manual booked/lost outcome tracking later
-Stripe billing later
+Stripe test-mode subscription Checkout and webhooks
+usage metering/billing later
 Supabase database/auth
 Vercel deployment
 ```

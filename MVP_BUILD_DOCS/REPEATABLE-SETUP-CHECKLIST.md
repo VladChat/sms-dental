@@ -551,9 +551,10 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       No legal name, owner phone, timezone, test patient phone, or
       setup mode is asked here. See `AGENTS.md` →
       "Form and Onboarding Scope Rule".
-- [ ] Use local number preparation/reservation as the default MVP path.
-      The customer should not manually choose from a broad number list.
-      Toll-free may remain an alternate/reference option, not the main onboarding path.
+- [ ] For Missed Calls Dental, use owner self-service number search/purchase through
+      the shared provisioning service as the current account flow. A request/review
+      pattern is only for products that intentionally require operator-controlled
+      provisioning.
 - [ ] Number purchase remains gated by `TWILIO_NUMBER_PURCHASE_ENABLED`.
       Keep it `false` for dry runs; flip to `true` only when the owner
       explicitly approves a real purchase.
@@ -580,8 +581,9 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 - [ ] Public pages render at `/business/{slug}`, `/business/{slug}/privacy`,
       `/business/{slug}/sms-terms` and name Missed Calls Dental / Dental SMS as
       the technology/service provider.
-- [ ] Billing stays **Not started**; the 21-day trial baseline starts only after
-      SMS recovery activation and does not count down while approval is pending.
+- [ ] Billing details live in `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md`. Current
+      Missed Calls Dental backend starts the 21-day trial after first successful
+      number assignment; SMS recovery activation remains separately gated.
 
 ---
 
@@ -677,8 +679,11 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 
 ---
 
-## Separating "owner request" from "operator provisioning" (reusable lessons)
+## Separating "owner request" from "operator provisioning" (conditional reusable lessons)
 
+- [ ] Use this pattern only when the product intentionally keeps provider provisioning
+      operator-controlled. Current Missed Calls Dental does **not** use this as the main
+      account flow; it uses self-service purchase through the shared provisioning service.
 - [ ] When a customer selects a provider resource (phone number, etc.) but provisioning must
       stay operator-controlled, store the choice as a **request row** in its own table
       (`*_requests`, status enum `pending|reviewed|fulfilled|rejected|cancelled`) — never write

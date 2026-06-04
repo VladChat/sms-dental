@@ -794,10 +794,10 @@ Customer-facing UI strings used verbatim:
 - Title: “Choose your office texting number”
 - Subtitle: “This is an additional number for missed-call text follow-ups.
   It will not replace your existing office phone number.”
-- Button: “Use this number”
+- Historical button: use-number action
 - Success title: “Your office texting number is ready”
-- Status explanation: “Use this number for missed-call forwarding or
-  tracking. Your existing office phone number does not change.”
+- Historical status explanation: use the selected number for missed-call forwarding or
+  tracking. Your existing office phone number does not change.
 
 Safety rules followed:
 
@@ -1015,7 +1015,7 @@ Safe next step for owner-only dry run:
 5. On the number search step, switch between the **Local** and
    **Toll-free** tabs to confirm both lists load and that each card
    shows its `Local` or `Toll-free` chip.
-6. Click **Use this number** on either list. Expect a `503
+6. Click the historical use-number action on either list. Expect a `503
    purchase_disabled` response — that is the correct safe outcome
    while `TWILIO_NUMBER_PURCHASE_ENABLED=false`. No Twilio number is
    purchased. No SMS is sent.
@@ -1057,7 +1057,7 @@ Result:
   - Business Profile is the next required stage (Business Information + A2P Approval Information).
   - Local number preparation/reservation is the default MVP path.
   - Customer-facing manual number catalogs are not required in default onboarding.
-  - Trial baseline set to 21 days; billing starts only after SMS recovery is active.
+  - Historical trial/billing wording set the trial baseline to 21 days and tied billing to SMS recovery activation.
 - Updated `config/runtime.config.ts` billing baseline:
   - `trialDaysAfterActivation: 21`.
 - Preserved SMS safety rules:
@@ -3654,7 +3654,7 @@ Safety:
   search route.
 - With no payment method, the UI does not call an assignment or purchase
   endpoint.
-- With a payment method, the visible `Use this number` action remains neutral
+- With a payment method, the visible historical use-number action remains neutral
   and does not call a provider endpoint until a safe owner assignment backend is
   implemented.
 
@@ -3909,8 +3909,8 @@ authenticated Checkout redirect still needs an owner browser session to click.
 What changed:
 
 - Owners can now save a selected local number as a **pending request** for admin
-  review. On `/account → Phone number`, with a saved payment method, clicking
-  **Use this number** POSTs the selected candidate to a new owner route; the UI
+  review. On `/account → Phone number`, with a saved payment method, the historical
+  use-number action POSTs the selected candidate to a new owner route; the UI
   shows "Requested number saved. Our team will review it before assignment." plus
   "No number has been purchased or assigned yet." The Phone number card shows a
   compact **Requested number / (formatted) / Pending review** status that persists
@@ -3926,7 +3926,7 @@ What changed:
   API also rejects the request (400 `payment_method_required`) when no saved
   `stripe_payment_method_id` exists.
 
-Why: now that sandbox payment-method setup works, the owner "Use this number"
+Why: now that sandbox payment-method setup works, the historical owner use-number
 action should capture the owner's preferred number for the operator to review and
 finish manually — without granting owners any provisioning power.
 
@@ -3957,7 +3957,7 @@ live; admin "Approve" remains the existing manual Add number flow (no auto-purch
 
 ### 2026-06-03 — migration APPLIED to production
 
-Owner "Use this number" was failing with "Could not save your requested number"
+The historical owner use-number action was failing with "Could not save your requested number"
 because the table did not exist yet. Applied
 `supabase/migrations/20260602000200_clinic_number_requests.sql` to the production
 Supabase project `qfjpvbvfvhbtebwivcdc` via the **Management API**
@@ -4041,7 +4041,7 @@ What changed:
 - Owner account setup primary buttons were standardized to match the Billing
   panel style.
 - Affected buttons: **Save business profile**, **Save approval information**,
-  **Add number**, **Search number**, and **Use this number**.
+  **Add number**, **Search number**, and the historical use-number action.
 - Secondary actions such as **Hide** remain visually quiet.
 
 Safety: no behavior, API, billing, Twilio, SMS, or database changes.
@@ -4171,7 +4171,7 @@ Follow-up safety/accessibility/doc cleanup. No migration, no Stripe, no Twilio c
   replaced the "supersede prior pending rows" lesson with the additive-resource
   rule (allow multiple different open requests; de-dupe same tenant+resource;
   never silently cancel a different older request). FIRST-CLINIC-ONBOARDING —
-  replaced the owner button wording "Use this number" with "Request this number" /
+  replaced the historical owner use-number button wording with "Request this number" /
   "Request additional number" and clarified it saves a request for admin review.
 
 Safety preserved: second-number block kept (now stricter); first-number path
@@ -4183,7 +4183,7 @@ Validation: `npm run typecheck` pass; `npm run build` pass
 (`/api/admin/clinics/[clinicId]/phone-numbers/purchase` compiled); `git diff --check`
 clean. Static checks: gate is role-agnostic; `findActiveOfficeTextingNumber` intact
 with 2 existing callers; tooltip hit target ≥44px with small visible icon; docs no
-longer say different open requests are superseded and no longer use "Use this number".
+longer say different open requests are superseded and no longer use the historical use-number wording.
 
 Commit `1c591a3`; pushed to `origin/main`. (Production auto-deploys; no
 authenticated owner browser session in the repo CLI, so tooltip tap QA on a live
@@ -4217,13 +4217,13 @@ compiled); `git diff --check` clean. Commit `7f17bc1`; pushed to `origin/main`.
 
 ---
 
-## 2026-06-03 — Self-service number purchasing milestone (branch `feat/self-service-numbers`, NOT yet applied/deployed)
+## 2026-06-03 — Self-service number purchasing milestone built for rollout (historical pre-deploy entry)
 
 Major billing + provisioning milestone built in validated phases on a feature
-branch, off `main` @ `5940aec`. **HELD for explicit approval:** prod migration
-apply, Vercel env vars, and push/deploy. Stripe **sandbox/test only**;
-`TWILIO_NUMBER_PURCHASE_ENABLED` unchanged (false); no real Twilio purchase or live
-charge performed.
+branch, off `main` @ `5940aec`. At the time of this historical entry, prod migration
+apply, Vercel env vars, and push/deploy were held for explicit approval. Stripe
+**sandbox/test only**; `TWILIO_NUMBER_PURCHASE_ENABLED` unchanged (false); no real
+Twilio purchase or live charge performed.
 
 What changed (by phase / commit):
 - **P1 `cddd389`** — `config/billing.config.ts` `productPolicy.defaultSelfServiceBusinessNumberLimit=5`;
@@ -4262,9 +4262,39 @@ in Vercel at deploy): `STRIPE_BASE_PLAN_PRICE_ID=price_1TegbY4ZSHLicmejTDngrrYT`
 Validation (branch): `npm run typecheck` pass; `npm run build` pass; `git diff
 --check` clean; no Twilio release code (grep clean).
 
-**Apply/deploy order when approved (expand-before-deploy):** (1) apply migration to
-prod Supabase via Management API; (2) set the two `STRIPE_*_PRICE_ID` env vars in
-Vercel Production; (3) merge branch → push `main` (auto-deploys); (4) verify health
-+ `/account`. The migration MUST be applied before the deploy (the code SELECTs the
-new columns). Keep `TWILIO_NUMBER_PURCHASE_ENABLED` false until a deliberate
-go-live; a real owner purchase requires it true.
+Historical apply/deploy order used for approval: (1) apply migration to prod Supabase
+via Management API; (2) set the two `STRIPE_*_PRICE_ID` env vars in Vercel Production;
+(3) merge branch -> push `main` (auto-deploys); (4) verify health + `/account`.
+The migration had to be applied before the deploy because the code SELECTs the new
+columns. Keep `TWILIO_NUMBER_PURCHASE_ENABLED` false until a deliberate go-live; a
+real owner purchase requires it true.
+
+---
+
+## 2026-06-03 — Self-service number purchasing final production rollout
+
+Final production rollout completed after approval.
+
+- Supabase migration `20260603000200_self_service_number_purchasing.sql` was applied
+  and verified in production.
+- Vercel Production env vars were set:
+  - `STRIPE_BASE_PLAN_PRICE_ID`
+  - `STRIPE_ADDITIONAL_NUMBER_PRICE_ID`
+- Non-secret Stripe test-mode Price IDs configured:
+  - Base plan $99/month: `price_1TegbY4ZSHLicmejTDngrrYT`
+  - Additional number $20/month: `price_1TegbZ4ZSHLicmejnCGGpOEQ`
+- `main` was pushed to `627a560`.
+- `main == origin/main == 627a560`.
+- Production deployment reached READY.
+- `GET https://app.missedcallsdental.com/api/health` returned 200.
+- `GET https://app.missedcallsdental.com/account` returned 200 sign-in gate with no
+  server-side exception.
+- `TWILIO_NUMBER_PURCHASE_ENABLED` remains false.
+- `STRIPE_SECRET_KEY` remains test-mode, not live.
+- No real Twilio purchase occurred.
+- No live Stripe charge occurred.
+- SMS recovery is not automatically enabled.
+
+Result: self-service number purchasing is merged and deployed for safe production
+testing, with real Twilio purchasing and live Stripe charging still gated for a
+separate explicit go-live decision.

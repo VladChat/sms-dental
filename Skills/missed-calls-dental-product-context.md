@@ -38,10 +38,13 @@ Primary MVP connection modes:
    - The clinic or phone provider forwards no-answer, busy, unavailable, or after-hours calls to the assigned Twilio recovery number.
    - The forwarded call must preserve the patient's caller ID for SMS recovery to work correctly.
 
-2. Prepared local-number path (default onboarding path)
-   - The system prepares/reserves the best local number automatically from clinic context.
-   - The customer is not required to manually choose from a number catalog during default onboarding.
-   - The prepared local number can later be used for direct routing/campaign needs where appropriate.
+2. Owner self-service business number path (current account flow)
+   - The owner searches local numbers from `/account` and chooses a business number.
+   - The first number is included with the $99/month plan and requires a saved payment method.
+   - The current backend starts the 21-day trial after the first successful number assignment.
+   - Real Twilio purchasing remains gated by `TWILIO_NUMBER_PURCHASE_ENABLED`.
+   - Additional numbers require a webhook-confirmed active paid plan and explicit $20/month consent.
+   - The assigned number can be used for conditional forwarding, direct routing, or campaign needs where appropriate.
 
 Future connection mode:
 - Direct integrations with phone providers or dental communication platforms may be added later.
@@ -49,8 +52,8 @@ Future connection mode:
 - This is not required for the first MVP.
 
 Core workflow:
-1. Patient calls the clinic's main number or prepared local number path.
-2. The call reaches our system through conditional forwarding or local direct routing.
+1. Patient calls the clinic's main number or assigned business number path.
+2. The call reaches our system through conditional forwarding or direct routing to the assigned number.
 3. Twilio sends a signed webhook to the backend.
 4. Dental SMS records the event idempotently.
 5. The system checks opt-out and duplicate rules.
@@ -90,5 +93,5 @@ Compliance:
 Business requirement:
 The site must be good enough for Stripe verification, Twilio review, and real clinic customers.
 
-Current onboarding source of truth:
-Create office profile (clinic name, main office phone, ZIP code) first, then Business Profile cards for Business Information and A2P Approval Information. Billing starts only after SMS recovery is active.
+Current onboarding/account source of truth:
+Create office profile (clinic name, main office phone, ZIP code) first, then Business Profile cards for Business Information and A2P Approval Information. Owners purchase the first business number through `/account` after saving a payment method; the first number is included and does not charge that day. Paid plan conversion is explicit through Stripe Checkout and webhook-confirmed subscription status. SMS recovery remains separately gated by compliance, QA, owner approval, runtime mode, and clinic settings; it is never enabled automatically.
