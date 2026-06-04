@@ -4,6 +4,8 @@
    These use the global design-system classes (.card, .field, .input, .btn,
    .badge, .alert) so the dashboard matches the rest of the product. */
 
+import { useEffect, useId, useRef, useState } from "react";
+
 export type BadgeTone = "neutral" | "brand" | "success" | "warning" | "info" | "error";
 
 /* -------------------------------------------------- unified status system */
@@ -315,4 +317,64 @@ export function StatusRow({ label, children }: { label: string; children: React.
 
 export function nowLabel(): string {
   return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+/**
+ * A small circular question-mark info control with an accessible tooltip. Works
+ * with mouse hover, keyboard focus, and click/tap (not hover-only). Closes on
+ * Escape and on outside click. The visible icon is small but the hit target stays
+ * touch-friendly. Uses semantic design tokens (no hard-coded colors).
+ */
+export function InfoTooltip({ label, text }: { label: string; text: string }) {
+  const [open, setOpen] = useState(false);
+  const tooltipId = useId();
+  const wrapRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocPointer(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocPointer);
+    return () => document.removeEventListener("mousedown", onDocPointer);
+  }, [open]);
+
+  return (
+    <span
+      className="acct-tooltip"
+      ref={wrapRef}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        className="acct-tooltip-btn"
+        aria-label={label}
+        aria-expanded={open}
+        aria-describedby={open ? tooltipId : undefined}
+        onClick={() => setOpen((o) => !o)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setOpen(false);
+            e.currentTarget.blur();
+          }
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3" />
+          <path d="M12 17h.01" />
+        </svg>
+      </button>
+      {open && (
+        <span role="tooltip" id={tooltipId} className="acct-tooltip-pop">
+          {text}
+        </span>
+      )}
+    </span>
+  );
 }

@@ -693,3 +693,25 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       "missing column/table → 500" outage).
 - [ ] Keep the operator's existing gated provisioning flow unchanged; surface the request as a
       review hint only (no auto-approve, no bypass of the purchase gate).
+
+---
+
+## Plan pricing + per-unit consent (reusable lessons)
+
+- [ ] Put plan price, included usage, per-unit add-on prices, and consent text/version in ONE
+      client+server-safe config (no secrets/env) and render everything from it. Never re-type
+      `$99`/`$20`/`1000`/`0.07` in UI/API code; provide `formatUsdFromCents`/`formatInteger`.
+- [ ] Classify paid vs included on the SERVER from live DB state inside a per-tenant locked
+      transaction (`select ... for update`); never accept price/billing-class/quantity from the
+      client. Re-validate at activation time before any real charge.
+- [ ] For a recurring add-on, require an explicit unchecked-by-default consent checkbox, enforce
+      it server-side, and persist a durable consent snapshot (text + version + who + when). Reset
+      the checkbox on selection change / new search / collapse.
+- [ ] CHECK-constrain the snapshot so `included` rows have amount 0 and `additional` rows have
+      amount > 0 + full consent — and confirm existing rows satisfy the `included` branch so the
+      additive migration never makes legacy rows billable or demands retroactive consent.
+- [ ] Add a partial unique index for OPEN statuses only after a production preflight confirms no
+      conflicting duplicate open rows; stop and report if duplicates exist (don't mutate silently).
+- [ ] Accessible info tooltip: a real `<button>` with `aria-label` + `aria-expanded` +
+      `aria-describedby`, popup `role="tooltip"`, works on hover/focus/tap, closes on Escape +
+      outside click, constrained width so it never causes mobile horizontal overflow.

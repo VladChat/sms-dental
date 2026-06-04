@@ -24,6 +24,7 @@ import { AdminClinicActions } from "./AdminClinicActions";
 import { AdminBusinessProfileForm } from "./AdminBusinessProfileForm";
 import { AdminA2pForm } from "./AdminA2pForm";
 import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
+import { formatUsdFromCents } from "../../../../../../config/billing.config";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
 
@@ -231,41 +232,73 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
               </p>
             )}
 
-            {d.requestedNumber && (
-              <div
-                style={{
-                  marginTop: "var(--space-4)",
-                  padding: "var(--space-4)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--r-md)",
-                  background: "var(--surface-sunken)",
-                }}
-              >
-                <div className="adm-section-head">
-                  <h3 className="adm-subhead">Owner requested number</h3>
-                  <Badge tone={requestTone(d.requestedNumber.status)}>{requestLabel(d.requestedNumber.status)}</Badge>
-                </div>
-                <dl className="adm-rows" style={{ marginTop: "var(--space-2)" }}>
-                  <Row label="Number"><span className="t-mono">{d.requestedNumber.phoneNumber}</span></Row>
-                  {(d.requestedNumber.locality || d.requestedNumber.region) && (
-                    <Row label="Location">{[d.requestedNumber.locality, d.requestedNumber.region].filter(Boolean).join(", ")}</Row>
-                  )}
-                  <Row label="Requested">{fmtDateTime(d.requestedNumber.createdAt)}</Row>
-                  {d.requestedNumber.requestedByEmail && (
-                    <Row label="Requested by"><span className="t-mono">{d.requestedNumber.requestedByEmail}</span></Row>
-                  )}
-                </dl>
-                <p className="t-helper" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
-                  This is an owner preference only. Purchase and assignment remain admin-controlled.
-                </p>
+            {d.requestedNumbers.length > 0 && (
+              <div style={{ marginTop: "var(--space-4)", display: "grid", gap: "var(--space-3)" }}>
+                {d.requestedNumbers.map((r) => {
+                  const additional = r.billingClass === "additional";
+                  return (
+                    <div
+                      key={r.id}
+                      style={{
+                        padding: "var(--space-4)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--r-md)",
+                        background: "var(--surface-sunken)",
+                      }}
+                    >
+                      <div className="adm-section-head">
+                        <h3 className="adm-subhead">Owner requested number</h3>
+                        <Badge tone={requestTone(r.status)}>{requestLabel(r.status)}</Badge>
+                      </div>
+                      <dl className="adm-rows" style={{ marginTop: "var(--space-2)" }}>
+                        <Row label="Number"><span className="t-mono">{r.phoneNumber}</span></Row>
+                        {(r.locality || r.region) && (
+                          <Row label="Location">{[r.locality, r.region].filter(Boolean).join(", ")}</Row>
+                        )}
+                        <Row label="Billing">
+                          {additional
+                            ? `Additional business number · ${formatUsdFromCents(r.monthlyUnitAmountCents)}/month`
+                            : "Included with plan"}
+                        </Row>
+                        <Row label="Requested">{fmtDateTime(r.createdAt)}</Row>
+                        {r.requestedByEmail && (
+                          <Row label="Requested by"><span className="t-mono">{r.requestedByEmail}</span></Row>
+                        )}
+                        {additional && (
+                          <Row label="Billing consent">
+                            {r.billingConsentAuthorizedAt ? (
+                              <span>Authorized · {fmtDateTime(r.billingConsentAuthorizedAt)}</span>
+                            ) : (
+                              <Muted>Not recorded</Muted>
+                            )}
+                          </Row>
+                        )}
+                      </dl>
+                      {additional ? (
+                        <>
+                          <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text)", fontWeight: 600 }}>
+                            Owner authorized {formatUsdFromCents(r.monthlyUnitAmountCents)}/month when this number is activated.
+                          </p>
+                          <p className="t-helper" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
+                            Additional-number purchase remains blocked until Stripe subscription billing is implemented.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="t-helper" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+                          This is an owner preference only. Purchase and assignment remain admin-controlled.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
             {!isAddingNumber ? (
               <div style={{ marginTop: "var(--space-4)" }}>
-                {d.requestedNumber && d.requestedNumber.status === "pending" && (
+                {d.requestedNumbers.length > 0 && (
                   <p className="t-small" style={{ margin: "0 0 var(--space-2)", color: "var(--text-secondary)" }}>
-                    Requested by owner: <span className="t-mono">{d.requestedNumber.phoneNumber}</span> — review, then add it through the normal flow.
+                    Owner requested {d.requestedNumbers.length === 1 ? "a number" : `${d.requestedNumbers.length} numbers`} — review, then add through the normal flow.
                   </p>
                 )}
                 <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsAddingNumber(true)}>

@@ -12,6 +12,23 @@ export type ClinicPhoneNumberRow = {
 };
 
 /**
+ * Returns ALL phone-number rows for a clinic (active first, then oldest first).
+ * Read-only listing for the owner/admin "all business numbers" views. Does not
+ * delete, hide, release, or modify any row or Twilio configuration.
+ */
+export async function listClinicPhoneNumbersForClinic(
+  clinicId: string,
+): Promise<ClinicPhoneNumberRow[]> {
+  const sql = getDb();
+  return sql<ClinicPhoneNumberRow[]>`
+    select *
+    from public.clinic_phone_numbers
+    where clinic_id = ${clinicId}
+    order by is_active desc, created_at asc
+  `;
+}
+
+/**
  * Returns the active office texting number for the clinic, if any.
  * Used to enforce idempotent purchase at the clinic level.
  */

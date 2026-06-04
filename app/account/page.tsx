@@ -3,8 +3,14 @@ import { redirect } from "next/navigation";
 import { readAccountSessionToken } from "../../lib/onboarding/account-session";
 import { lookupSetupRequestByRawToken } from "../../lib/onboarding/verify";
 import { findClinicById } from "../../lib/db/clinics";
-import { findActiveOfficeTextingNumber } from "../../lib/db/clinic-phone-numbers";
-import { findLatestClinicNumberRequest } from "../../lib/db/clinic-number-requests";
+import {
+  listClinicPhoneNumbersForClinic,
+  type ClinicPhoneNumberRow,
+} from "../../lib/db/clinic-phone-numbers";
+import {
+  listOpenClinicNumberRequestsForClinic,
+  type ClinicNumberRequestRow,
+} from "../../lib/db/clinic-number-requests";
 import { findMostRecentSetupRequestByClinicId } from "../../lib/db/setup-requests";
 import { getAppDomainsSafe } from "../../lib/env";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
@@ -14,6 +20,7 @@ import { SetupInvalid } from "../setup/[token]/_components/SetupInvalid";
 import { ClinicForm } from "../setup/[token]/_components/ClinicForm";
 import { BusinessProfile, type BusinessProfileData } from "../setup/[token]/_components/BusinessProfile";
 import type {
+  AssignedBusinessNumberSummary,
   PaymentMethodSetupResult,
   PaymentMethodSummary,
   RequestedNumberSummary,
@@ -60,18 +67,34 @@ function buildBilling(
   };
 }
 
-// Map the latest owner number-request row to the safe owner-facing summary.
-function toRequestedSummary(
-  row: Awaited<ReturnType<typeof findLatestClinicNumberRequest>>,
-): RequestedNumberSummary | null {
-  if (!row) return null;
+// Map an assigned phone-number row to the safe owner-facing summary.
+function toAssignedSummary(row: ClinicPhoneNumberRow): AssignedBusinessNumberSummary {
   return {
+    id: row.id,
+    phoneNumber: row.phone_number,
+    role: row.role,
+    isActive: row.is_active,
+    createdAt: row.created_at ? row.created_at.toISOString() : null,
+  };
+}
+
+// Map an owner number-request row to the safe owner-facing summary (incl. the
+// pricing/consent snapshot). No secrets.
+function toRequestedSummary(row: ClinicNumberRequestRow): RequestedNumberSummary {
+  return {
+    id: row.id,
     phoneNumber: row.requested_phone_number,
     friendlyName: row.friendly_name,
     locality: row.locality,
     region: row.region,
     status: row.status,
     createdAt: row.created_at ? row.created_at.toISOString() : null,
+    billingClass: row.billing_class,
+    monthlyUnitAmountCents: row.monthly_unit_amount_cents,
+    currency: row.currency,
+    billingConsentAuthorizedAt: row.billing_consent_authorized_at
+      ? row.billing_consent_authorized_at.toISOString()
+      : null,
   };
 }
 
@@ -106,13 +129,14 @@ export default async function AccountPage({
 
     const clinic = access.clinic;
     const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
-    const assignedPhone = await findActiveOfficeTextingNumber(clinic.id)
-      .then((row) => row?.phone_number ?? null)
-      .catch(() => null);
-    // Resilient to the table not yet existing in this environment.
-    const requestedNumber = await findLatestClinicNumberRequest(clinic.id)
-      .then(toRequestedSummary)
-      .catch(() => null);
+    // All assigned business numbers + all open requested numbers (resilient to a
+    // table not yet existing in this environment).
+    const assignedNumbers = await listClinicPhoneNumbersForClinic(clinic.id)
+      .then((rows) => rows.map(toAssignedSummary))
+      .catch(() => []);
+    const requestedNumbers = await listOpenClinicNumberRequestsForClinic(clinic.id)
+      .then((rows) => rows.map(toRequestedSummary))
+      .catch(() => []);
     const memberships = await listActiveMembershipsForClinic(clinic.id).catch(() => []);
     const profileIds = memberships.map((m) => m.profile_id);
     const profiles = await listProfilesByIds(profileIds).catch(() => []);
@@ -176,10 +200,10 @@ export default async function AccountPage({
       number: {
         localNumberStatus: clinic.local_number_status,
         smsStatus: clinic.sms_status,
-        assignedPhone,
+        assignedNumbers,
         areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
         postalCode: clinic.postal_code,
-        requestedNumber,
+        requestedNumbers,
       },
       billing: buildBilling(clinic, trialDaysRemaining),
       security: {
@@ -234,12 +258,12 @@ export default async function AccountPage({
   }
 
   const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
-  const assignedPhone = await findActiveOfficeTextingNumber(clinic.id)
-    .then((row) => row?.phone_number ?? null)
-    .catch(() => null);
-  const requestedNumber = await findLatestClinicNumberRequest(clinic.id)
-    .then(toRequestedSummary)
-    .catch(() => null);
+  const assignedNumbers = await listClinicPhoneNumbersForClinic(clinic.id)
+    .then((rows) => rows.map(toAssignedSummary))
+    .catch(() => []);
+  const requestedNumbers = await listOpenClinicNumberRequestsForClinic(clinic.id)
+    .then((rows) => rows.map(toRequestedSummary))
+    .catch(() => []);
 
   // Trial countdown from the safest available creation timestamp: the setup
   // request's created_at (the registration moment).
@@ -279,10 +303,10 @@ export default async function AccountPage({
     number: {
       localNumberStatus: clinic.local_number_status,
       smsStatus: clinic.sms_status,
-      assignedPhone,
+      assignedNumbers,
       areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
       postalCode: clinic.postal_code,
-      requestedNumber,
+      requestedNumbers,
     },
     billing: buildBilling(clinic, trialDaysRemaining),
     security: {

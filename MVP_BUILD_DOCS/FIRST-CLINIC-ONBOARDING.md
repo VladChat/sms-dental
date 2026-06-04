@@ -556,3 +556,16 @@ finishes assignment through the existing gated admin **Add number** flow. Apply
 - Onboarding never sets `clinic.sms_recovery_enabled=true`.
 - The Toll-Free Verification submission packet lives in
   `TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md`.
+
+### Pricing + additional numbers (2026-06-03)
+
+Plan/pricing is documented in `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` and
+sourced from `config/billing.config.ts`: $99/mo includes 1 business number +
+1,000 call minutes + 1,000 SMS segments (shared); additional numbers $20/mo each
+(billed only after activation); overage $0.07/min, $0.06/SMS segment. An owner may
+hold several assigned numbers and several open requests; the first is included and
+each extra requires an explicit $20/mo authorization (stored as a consent
+snapshot). Pending requests are never charged, and a requested number is never
+purchased/assigned until the operator completes the gated admin Add number flow.
+Live Stripe subscription/usage billing remains a later milestone — no
+charge/subscription/invoice is created here.
