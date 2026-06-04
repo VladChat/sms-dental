@@ -13,22 +13,24 @@ Current live state:
 
 - Backend Foundation v1 is built, committed, pushed, deployed, and reachable at `https://app.missedcallsdental.com`.
 - Supabase foundation migration has been applied.
+- Supabase migration `20260603000200_self_service_number_purchasing.sql` has been applied and verified.
 - Vercel production backend can reach Supabase through the Supabase transaction pooler.
 - `PUBLIC_WEBHOOK_BASE_URL` is set to `https://app.missedcallsdental.com`.
 - Twilio webhooks are configured by API.
 - Inbound SMS webhook has been verified.
-- Inbound voice webhook configuration is correct, but full real-call verification is pending because the Twilio account is still Trial and blocks voice webhook testing from unverified caller IDs.
+- Inbound voice webhook is verified end-to-end.
+- Self-service owner number purchasing is deployed in code; real Twilio purchasing remains disabled by `TWILIO_NUMBER_PURCHASE_ENABLED=false`.
+- Stripe test-mode subscription Checkout, webhook handling, and production test Price ID env vars exist. Stripe remains test-mode.
+- SMS recovery remains separately gated and is not automatically enabled by number assignment or billing.
 - `docs/` remains the GitHub Pages marketing website and must stay untouched unless explicitly requested.
 
-Current active milestone:
+Current operational status / next safe work:
 
-- Finish Twilio voice verification by upgrading Twilio to paid or testing from a verified caller ID.
-- Keep outbound SMS disabled.
-- Define and test the MVP phone event strategy:
-  - conditional forwarding mode
-  - local-number default path (system-prepared/reserved local number)
-- Do not build a full CRM, recovery inbox, or broad dashboard yet. Build only the narrow Business Profile setup page needed for onboarding.
-- Do not create Stripe resources yet.
+- Owner/admin production browser QA for the deployed self-service number purchase flow.
+- UI cleanup and documentation/source-of-truth cleanup.
+- Deliberate go-live decision before flipping `TWILIO_NUMBER_PURCHASE_ENABLED=true` for real Twilio number purchases.
+- Future live Stripe rollout requires explicit approval; current Stripe resources and keys are test-mode only.
+- Do not build a full CRM, recovery inbox, or broad dashboard unless explicitly scoped.
 
 If this file conflicts with `PROJECT-CONTEXT.md`, `OPERATIONS-RUNBOOK.md`, `SETUP-LOG.md`, `backend-foundation-handoff.md`, or `.env.local.example`, use the newer/current source for the current implementation step.
 

@@ -86,12 +86,14 @@ A call event reaches the system by one of these supported MVP paths:
    - Clinic/provider forwards no-answer, busy, unavailable, or after-hours calls to the assigned Twilio recovery number.
    - The forwarded call should preserve original caller ID.
 
-2. System-prepared local-number path
-   - The system prepares/reserves the best local number automatically from the clinic context.
-   - The customer is not required to manually choose from a number catalog during default onboarding.
-   - The prepared local number can later be used for direct routing or campaign needs where appropriate.
+2. Owner self-service business-number path
+   - The owner searches/selects a local business number from `/account`.
+   - The first number is included with the base plan and requires a saved payment method.
+   - The shared provisioning service purchases/assigns the number only when `TWILIO_NUMBER_PURCHASE_ENABLED=true`.
+   - Additional numbers require a webhook-confirmed active paid subscription and explicit $20/month consent.
+   - The assigned number can be used for direct routing, campaign needs, or as the forwarding destination.
 
-Tracking-number usage may remain an alternate operational use case, but it is not the default customer onboarding path.
+Tracking-number usage may remain an alternate operational use case.
 
 Future versions may add direct integrations with phone providers or dental communication platforms.
 
@@ -982,16 +984,15 @@ returns 503 instead of contacting Twilio.
    ```
    Expect a JSON response containing a `setup_url`.
 5. Open the returned setup URL in a browser. Fill out the 3-field
-   Step 1 form (clinic name, main office phone, ZIP code), then verify
-   the system prepares a local number for reservation.
-6. Click **Use this number**. Expect a 503 `purchase_disabled` response
-   — this is the safe expected outcome with
-   `TWILIO_NUMBER_PURCHASE_ENABLED=false`. No Twilio number is
-   purchased. No SMS is sent.
+   Step 1 form (clinic name, main office phone, ZIP code), then continue to
+   `/account` for owner number search/purchase QA.
+6. In `/account`, choose a number and attempt the purchase action. Expect the
+   safe disabled-purchase response while `TWILIO_NUMBER_PURCHASE_ENABLED=false`.
+   No Twilio number is purchased. No SMS is sent.
 
-Only after that dry run is clean should the owner consider flipping
-`TWILIO_NUMBER_PURCHASE_ENABLED=true` and rerunning the same flow with
-a real number purchase.
+Only after owner/admin browser QA is clean and the owner makes a deliberate
+go-live decision should anyone consider flipping `TWILIO_NUMBER_PURCHASE_ENABLED=true`
+and rerunning the same flow with a real number purchase.
 
 ---
 
@@ -999,7 +1000,7 @@ a real number purchase.
 
 Current onboarding source of truth:
 
-`Create office profile (clinic name, main office phone, ZIP code) -> Business Profile (Business Information + A2P Approval Information) -> local number preparing/reserved -> SMS waiting for approval -> billing starts after SMS recovery is active`
+`Create office profile (clinic name, main office phone, ZIP code) -> Business Profile (Business Information + A2P Approval Information) -> save payment method -> owner self-service first number assignment -> trial starts after successful assignment -> SMS remains separately gated`
 
 No customer-facing Review & Submit step is required in this flow.
 
@@ -1032,9 +1033,9 @@ The flow above is implemented:
   `/business/{slug}/sms-terms` (View / Copy link). All three render from one
   source of truth (the `clinics` row) with shared header/footer nav; the single
   public service name is "Missed Calls Dental".
-- Billing requires a payment method before a phone number is prepared/assigned;
-  the 21-day trial starts only after SMS recovery activation and does not count
-  down while approval is pending. No raw card data is collected or stored.
+- Billing requires a payment method before first self-service number assignment.
+  The current backend starts the 21-day trial after first successful number assignment.
+  No raw card data is collected or stored.
 - Schema: `supabase/migrations/20260528000100_business_profile_onboarding.sql`
   + `20260528000200_clinic_address_line2.sql` (adds `address_line2`). Both are
   applied. Field mapping: `SMS-APPROVAL-FIELD-MAPPING.md`.
@@ -1066,13 +1067,11 @@ Automated setup is currently available for U.S. clinics only.
 Expanding internationally later is a separate module decision, not a
 one-line config flip.
 
-### Local number default (no customer number catalog)
+### Local business-number path
 
-Use local numbers as the default MVP path.
-
-The system should prepare/reserve the best local number automatically from the clinic's main phone + ZIP context.
-
-Do not require customers to manually choose from a list of numbers during default onboarding.
+Use local numbers as the default MVP path. The current account flow lets the owner
+search/select a local business number in `/account`; the shared provisioning service
+assigns it only when the real-purchase flag allows it.
 
 ### Toll-free reference note
 
@@ -1931,7 +1930,12 @@ names remain only in code comments, env var names, and internal integration code
 
 ---
 
-## Owner Account Phone number search — updated 2026-06-03
+## Owner account phone number search — historical pre-self-service state (2026-06-03)
+
+This section records the retired request-for-review behavior before the
+self-service purchasing rollout. It is not the current owner assignment flow.
+For current behavior, use the "Self-service number purchasing + paid plan" section
+below.
 
 The owner `/account` -> Phone number section now lets clinic owners search and choose a
 preferred local number before payment setup is complete. This is a read-only search and
@@ -1980,12 +1984,12 @@ API:
 - Read-only guarantee: no purchase, reservation, assignment, release, DB write, or
   provider credential exposure.
 
-Current assignment status:
+Historical assignment status:
 
-- `Use this number` saves a pending owner request for admin review only. It does not
+- The old owner action saved a pending request awaiting admin review only. It did not
   purchase, reserve, assign, provision, store a phone-number mapping, or enable SMS
   recovery.
-- Admin Add number behavior and purchase gate are unchanged.
+- Admin Add number behavior and purchase gate were unchanged in that historical flow.
 
 ---
 
@@ -2035,13 +2039,14 @@ approval) before using the flow, or `/account` reads will error on the missing c
 
 ---
 
-## Owner-requested phone number (preference for admin review) — 2026-06-02
+## Owner-requested phone number (legacy preference for admin review) — 2026-06-02
 
-Owners select a local number on `/account → Phone number` and click **Use this number**
-to save it as a **pending request**. This is a preference only — it never purchases,
-reserves, assigns, provisions, or activates a number, never writes
-`clinic_phone_numbers`, and never enables SMS recovery. Real purchase/assignment stays
-admin-only via the existing gated **Add number** flow.
+This is the retired flow kept for historical context only. Owners previously selected a
+local number on `/account -> Phone number` and saved it as a **pending request**.
+That preference-only action never purchased, reserved, assigned, provisioned, or
+activated a number, never wrote `clinic_phone_numbers`, and never enabled SMS
+recovery. New owner actions use self-service purchase instead, and
+`POST /api/account/phone-numbers/request` returns 410.
 
 How it works:
 
@@ -2059,9 +2064,10 @@ How it works:
   console **Phone number** panel shows **Owner requested number** (E.164, status,
   location, timestamp, requester email) with a hint by the Add number button.
 
-Operator action: review the owner's requested number, then add it through the normal
-admin **Add number** flow (search → confirm → purchase/assign), which is unchanged and
-still gated by `TWILIO_NUMBER_PURCHASE_ENABLED`. There is no auto-approve / auto-purchase.
+Historical operator action: review the owner's requested number, then add it through
+the normal admin **Add number** flow (search -> confirm -> purchase/assign), which
+was still gated by `TWILIO_NUMBER_PURCHASE_ENABLED`. There was no auto-approve /
+auto-purchase in this retired flow.
 
 Verify (after a request): `clinic_number_requests` has a `pending` row for the clinic;
 **no** new `clinic_phone_numbers` row; `clinics.local_number_status` and
@@ -2113,12 +2119,12 @@ absent until then.
 
 ---
 
-## Self-service number purchasing + paid plan — 2026-06-03 (branch, not yet deployed)
+## Self-service number purchasing + paid plan — current deployed behavior (2026-06-03)
 
 The owner "request a number for admin review" flow is **retired**
-(`POST /api/account/phone-numbers/request` → 410). New model (branch
-`feat/self-service-numbers`; Stripe sandbox/test only; `TWILIO_NUMBER_PURCHASE_
-ENABLED` false; see SETUP-LOG 2026-06-03 and BILLING-AND-USAGE-POLICY v2):
+(`POST /api/account/phone-numbers/request` -> 410). Current model (deployed;
+Stripe sandbox/test only; `TWILIO_NUMBER_PURCHASE_ENABLED=false`; see SETUP-LOG
+2026-06-03 and BILLING-AND-USAGE-POLICY):
 
 - Owner self-service: first number is purchased+assigned automatically (included,
   no admin approval), starting the 21-day trial from `clinics.trial_ends_at`.
@@ -2137,7 +2143,17 @@ ENABLED` false; see SETUP-LOG 2026-06-03 and BILLING-AND-USAGE-POLICY v2):
   number was bought but billing/assignment didn't complete — the SID is preserved
   for manual reconciliation; nothing is auto-released.
 
-**Apply/deploy order (expand-before-deploy):** apply migration
-`20260603000200_self_service_number_purchasing.sql` → set `STRIPE_BASE_PLAN_PRICE_ID`
-+ `STRIPE_ADDITIONAL_NUMBER_PRICE_ID` (Vercel Production) → deploy. Keep
-`TWILIO_NUMBER_PURCHASE_ENABLED` false until deliberate go-live.
+Safe operating notes:
+
+- Migration `20260603000200_self_service_number_purchasing.sql` is applied and verified.
+- Vercel Production has `STRIPE_BASE_PLAN_PRICE_ID` and `STRIPE_ADDITIONAL_NUMBER_PRICE_ID`
+  set to Stripe test-mode Price IDs.
+- With `TWILIO_NUMBER_PURCHASE_ENABLED=false`, purchase attempts cancel safely and no
+  Twilio number is bought.
+- Before real go-live, owner/admin browser QA is required.
+- Flipping `TWILIO_NUMBER_PURCHASE_ENABLED=true` is the deliberate go-live switch for real
+  Twilio purchase.
+- Stripe remains test-mode unless a future live billing rollout is explicitly approved.
+- If a purchase attempt is `reconciliation_required`, do not retry blindly. Inspect the
+  Twilio SID/attempt details first; the system intentionally preserves the SID and does not
+  auto-release the number.

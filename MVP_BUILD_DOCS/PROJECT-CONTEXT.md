@@ -117,7 +117,8 @@ The MVP should include:
 - simple front desk recovery inbox later
 - manual booked/lost outcome tracking later
 - Supabase/Postgres database
-- Stripe billing later
+- Stripe test-mode subscription Checkout and webhooks for paid-plan conversion
+- usage metering/billing later
 - Vercel-hosted Next.js app/backend
 
 The MVP should not include:
@@ -190,7 +191,7 @@ The project uses or plans to use:
 
 - **Twilio** — Phone number, call webhooks, SMS sending, inbound SMS, and delivery status callbacks.
 - **Supabase / Postgres** — Database, future auth, clinic records, messages, webhook events, and app data.
-- **Stripe** — Billing and subscriptions later.
+- **Stripe** — Test-mode payment-method setup, subscription Checkout, webhooks, and future live billing/usage metering.
 - **Vercel** — Next.js app/backend hosting.
 - **GitHub** — Source control.
 - **Namecheap** — DNS for `missedcallsdental.com`.
@@ -263,7 +264,7 @@ Live Twilio message status callback:
 
 - `https://app.missedcallsdental.com/api/webhooks/twilio/messaging/status`
 
-Future Stripe webhook:
+Live Stripe webhook:
 
 - `https://app.missedcallsdental.com/api/webhooks/stripe`
 
@@ -347,14 +348,26 @@ Always follow these rules:
 > `MVP_BUILD_DOCS/PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md` (canonical). The
 > onboarding-alignment note below is retained for phone-strategy context.
 
-The immediate next product/technical step is to align onboarding around the current source-of-truth flow:
+Current operational status:
 
-`Create office profile (clinic name, main office phone, ZIP code) -> Business Profile (Business Information + A2P Approval Information) -> local number prepared/reserved -> SMS approval readiness -> billing starts only after SMS recovery is active`
+- Production app/backend is live at `https://app.missedcallsdental.com`.
+- Main and `origin/main` are at `627a560` after the self-service number purchasing rollout.
+- Self-service owner number purchasing is deployed in code, with production migration `20260603000200_self_service_number_purchasing.sql` applied and verified.
+- Owners search and select business numbers from `/account`; the first assigned number is included with the $99/month base plan and requires a saved payment method.
+- The old owner request workflow is retired: `POST /api/account/phone-numbers/request` returns 410, and `clinic_number_requests` remains legacy data for admin view/dismiss only.
+- Stripe test-mode subscription Checkout and webhooks exist. Paid entitlement is granted only by webhook-confirmed active subscription.
+- Stripe Price IDs configured in production are test-mode only. `STRIPE_SECRET_KEY` remains test-mode, so no live Stripe charge can occur.
+- `TWILIO_NUMBER_PURCHASE_ENABLED=false` remains the real-purchase gate. No real Twilio number purchase can occur while that flag is false.
+- SMS recovery remains separately gated by compliance, QA, owner approval, runtime mode, and `clinics.sms_recovery_enabled`; it is not enabled automatically by number assignment or billing.
 
-Current blockers/notes:
+Current backend trial behavior:
 
-- Inbound SMS webhook has been verified.
-- Inbound voice webhook is configured but real calls from unverified caller IDs are blocked by Twilio Trial account restrictions.
-- To fully test inbound voice, upgrade Twilio to a paid account or test from a verified caller ID.
-- Local phone numbers are the default MVP path; the system should prepare/reserve the best local number automatically.
-- Do not require a customer-facing manual number catalog as a default onboarding step.
+- The trial starts after first successful number assignment (`clinics.trial_started_at` / `clinics.trial_ends_at`).
+- Do not document trial start after payment as current behavior unless backend behavior changes in a later task. If discussed, mark it as a future product decision/TODO only.
+
+Next safe work:
+
+- Production owner/admin browser QA.
+- UI cleanup and documentation cleanup.
+- A deliberate go-live decision before enabling real Twilio purchasing.
+- Live Stripe billing rollout only after explicit future approval.
