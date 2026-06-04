@@ -4122,8 +4122,17 @@ setup stays sandbox-mode; no Twilio purchase/reserve/assign/provision; no
 recovery change. New policy doc: `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md`.
 
 Validation: `npm run typecheck` pass; `npm run build` pass; `git diff --check`
-clean; price-duplication grep clean. Commit `__PENDING__`; migration apply +
-production verify recorded below after push.
+clean; price-duplication grep clean. Commit `d894d2f`.
+
+Migration APPLIED to production (`qfjpvbvfvhbtebwivcdc`, Management API
+`database/query` via curl, HTTP 201):
+- Preflight: duplicate open `(clinic_id, requested_phone_number)` rows = **none**
+  (`[]`); 4 total requests (1 open) pre-existing.
+- AFTER: all 8 billing/consent columns present; 4 CHECK constraints present
+  (`billing_class`, `billing_consistency`, `currency_nonempty`, `monthly_amount`);
+  partial unique index `clinic_number_requests_open_unique_idx` present.
+- Legacy safety: `non_included_rows = 0` — all 4 existing rows are `included` /
+  amount 0 (non-billable, no retroactive consent).
 
 Remaining milestone: live Stripe subscription + usage billing (base item,
 additional-number quantity item, usage-based overage items) and activation-time
