@@ -449,3 +449,60 @@ export async function saveStripePaymentMethodForClinic(
     where id = ${clinicId}
   `;
 }
+
+// Resolve a clinic id from trusted stored Stripe references (used by the webhook
+// to map a subscription/invoice back to a clinic when metadata is absent).
+export async function findClinicIdByStripeCustomerId(
+  customerId: string,
+): Promise<string | null> {
+  const sql = getDb();
+  const rows = await sql<{ id: string }[]>`
+    select id from public.clinics where stripe_customer_id = ${customerId} limit 1
+  `;
+  return rows[0]?.id ?? null;
+}
+
+export async function findClinicIdByStripeSubscriptionId(
+  subscriptionId: string,
+): Promise<string | null> {
+  const sql = getDb();
+  const rows = await sql<{ id: string }[]>`
+    select id from public.clinics where stripe_subscription_id = ${subscriptionId} limit 1
+  `;
+  return rows[0]?.id ?? null;
+}
+
+// Subscription billing state persisted from verified Stripe webhook events.
+// Subscription/item ids and timestamp are coalesced (null leaves existing); the
+// billing_status is mapped conservatively by the caller. Idempotent.
+export type ClinicSubscriptionState = {
+  stripeSubscriptionId: string | null;
+  baseSubscriptionItemId: string | null;
+  additionalSubscriptionItemId: string | null;
+  billingStatus: BillingStatus;
+  // Set paid_plan_started_at once, the first time the plan becomes active.
+  markPaidPlanStarted: boolean;
+};
+
+/**
+ * Persist subscription/billing state for a clinic from a verified webhook event.
+ * Idempotent and additive (ids coalesce). Never creates a charge/invoice and
+ * never enables SMS recovery. Throws on DB error so the webhook can fail closed.
+ */
+export async function saveClinicSubscriptionState(
+  clinicId: string,
+  s: ClinicSubscriptionState,
+): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.clinics set
+      stripe_subscription_id = coalesce(${s.stripeSubscriptionId ?? null}, stripe_subscription_id),
+      stripe_base_subscription_item_id = coalesce(${s.baseSubscriptionItemId ?? null}, stripe_base_subscription_item_id),
+      stripe_additional_number_subscription_item_id = coalesce(${s.additionalSubscriptionItemId ?? null}, stripe_additional_number_subscription_item_id),
+      billing_status = ${s.billingStatus},
+      paid_plan_started_at = case
+        when ${s.markPaidPlanStarted} and paid_plan_started_at is null then now()
+        else paid_plan_started_at end
+    where id = ${clinicId}
+  `;
+}

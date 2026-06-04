@@ -2,15 +2,36 @@ import { NextRequest } from "next/server";
 import type Stripe from "stripe";
 import {
   jsonBadRequest,
+  jsonInternalError,
   jsonOk,
   jsonUnauthorized,
 } from "@/lib/http/responses";
 import { verifyStripeWebhook } from "@/lib/stripe/webhook";
 import { getStripeServerClient } from "@/lib/stripe/server";
 import { recordWebhookEvent } from "@/lib/db/webhook-events";
-import { saveStripePaymentMethodForClinic } from "@/lib/db/clinics";
+import {
+  findClinicById,
+  findClinicIdByStripeCustomerId,
+  findClinicIdByStripeSubscriptionId,
+  saveClinicSubscriptionState,
+  saveStripePaymentMethodForClinic,
+  type BillingStatus,
+} from "@/lib/db/clinics";
+import { getStripeBillingEnv, hasStripeBillingPriceIds } from "@/lib/env";
 import { isDatabaseConfigured } from "@/lib/db/client";
 import { logger } from "@/lib/logging/logger";
+
+// Subscription-lifecycle events that carry paid-plan entitlement. Their DB
+// writes are idempotent and fail CLOSED (a persistence failure returns non-2xx
+// so Stripe retries — entitlement is never granted from an unsaved event).
+const BILLING_EVENT_TYPES = new Set<string>([
+  "checkout.session.completed",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "invoice.paid",
+  "invoice.payment_failed",
+]);
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,6 +108,24 @@ export async function POST(request: NextRequest) {
         eventType: event.type,
         message: err instanceof Error ? err.message : "unknown",
       });
+    }
+  }
+
+  // Billing-critical events run on EVERY delivery (idempotent) and FAIL CLOSED:
+  // if the entitlement write throws, return 5xx so Stripe retries — we never ack
+  // a paid-plan event whose DB write failed. (Running regardless of isDuplicate
+  // is required: the event row is recorded before the write, so a retry after a
+  // failed write would otherwise be skipped as a duplicate.)
+  if (BILLING_EVENT_TYPES.has(event.type)) {
+    try {
+      await handleStripeBillingEvent(event);
+    } catch (err) {
+      logger.error("stripe.webhook.billing_handler_failed", {
+        eventId: event.id,
+        eventType: event.type,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+      return jsonInternalError("Webhook processing failed");
     }
   }
 
@@ -203,4 +242,175 @@ function idOf(
 ): string | null {
   if (!ref) return null;
   return typeof ref === "string" ? ref : ref.id;
+}
+
+// ── Subscription billing lifecycle (fail-closed) ─────────────────────────────
+
+// Conservative status map: ONLY 'active' unlocks additional-number purchasing.
+function mapSubscriptionStatus(status: Stripe.Subscription.Status): BillingStatus {
+  switch (status) {
+    case "active":
+      return "active";
+    case "trialing":
+      return "trialing";
+    case "canceled":
+    case "incomplete_expired":
+      return "canceled";
+    case "past_due":
+    case "unpaid":
+    case "incomplete":
+    case "paused":
+    default:
+      return "past_due";
+  }
+}
+
+function extractSubscriptionItemIds(
+  sub: Stripe.Subscription,
+  basePriceId: string,
+  additionalPriceId: string,
+): { baseItemId: string | null; additionalItemId: string | null } {
+  let baseItemId: string | null = null;
+  let additionalItemId: string | null = null;
+  for (const item of sub.items?.data ?? []) {
+    const priceId = item.price?.id ?? null;
+    if (priceId && priceId === basePriceId) baseItemId = item.id;
+    else if (priceId && priceId === additionalPriceId) additionalItemId = item.id;
+  }
+  return { baseItemId, additionalItemId };
+}
+
+// Resolve the clinic ONLY from trusted Stripe metadata / stored Stripe ids.
+async function resolveClinicForStripe(args: {
+  metadataClinicId?: string | null;
+  customerId?: string | null;
+  subscriptionId?: string | null;
+}): Promise<string | null> {
+  if (args.metadataClinicId) {
+    const c = await findClinicById(args.metadataClinicId).catch(() => null);
+    if (c) return c.id;
+  }
+  if (args.subscriptionId) {
+    const id = await findClinicIdByStripeSubscriptionId(args.subscriptionId);
+    if (id) return id;
+  }
+  if (args.customerId) {
+    const id = await findClinicIdByStripeCustomerId(args.customerId);
+    if (id) return id;
+  }
+  return null;
+}
+
+function readSubscriptionRef(o: { subscription?: unknown }): string | null {
+  // Invoice.subscription typing drifts across Stripe API versions; read safely.
+  const v = o.subscription as string | { id: string } | null | undefined;
+  return idOf(v ?? null);
+}
+
+// Handle subscription-lifecycle events. Throws on DB failure so the caller can
+// fail closed. Idempotent (saveClinicSubscriptionState coalesces + upserts).
+async function handleStripeBillingEvent(event: Stripe.Event): Promise<void> {
+  if (!isDatabaseConfigured()) {
+    // Cannot persist entitlement — fail closed so Stripe retries.
+    throw new Error("database not configured for billing webhook");
+  }
+
+  let priceIds: { basePlanPriceId: string; additionalNumberPriceId: string } | null = null;
+  if (hasStripeBillingPriceIds()) {
+    try {
+      priceIds = getStripeBillingEnv();
+    } catch {
+      priceIds = null;
+    }
+  }
+  const itemIdsFrom = (sub: Stripe.Subscription) =>
+    priceIds
+      ? extractSubscriptionItemIds(sub, priceIds.basePlanPriceId, priceIds.additionalNumberPriceId)
+      : { baseItemId: null, additionalItemId: null };
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    if (session.mode !== "subscription" || session.metadata?.purpose !== "paid_plan_start") return;
+    const subscriptionId = idOf(session.subscription);
+    const customerId = idOf(session.customer);
+    const clinicId = await resolveClinicForStripe({
+      metadataClinicId: session.metadata?.clinic_id ?? session.client_reference_id ?? null,
+      customerId,
+      subscriptionId,
+    });
+    if (!clinicId) {
+      logger.warn("stripe.webhook.billing_missing_clinic", { type: event.type });
+      return;
+    }
+    if (!subscriptionId) {
+      logger.warn("stripe.webhook.billing_no_subscription", { type: event.type, clinicId });
+      return;
+    }
+    const stripe = getStripeServerClient();
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    const status = mapSubscriptionStatus(sub.status);
+    const items = itemIdsFrom(sub);
+    await saveClinicSubscriptionState(clinicId, {
+      stripeSubscriptionId: subscriptionId,
+      baseSubscriptionItemId: items.baseItemId,
+      additionalSubscriptionItemId: items.additionalItemId,
+      billingStatus: status,
+      markPaidPlanStarted: status === "active",
+    });
+    logger.info("stripe.webhook.paid_plan_started", { clinicId, status });
+    return;
+  }
+
+  if (
+    event.type === "customer.subscription.created" ||
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.deleted"
+  ) {
+    const sub = event.data.object as Stripe.Subscription;
+    const clinicId = await resolveClinicForStripe({
+      metadataClinicId: sub.metadata?.clinic_id ?? null,
+      customerId: idOf(sub.customer),
+      subscriptionId: sub.id,
+    });
+    if (!clinicId) {
+      logger.warn("stripe.webhook.billing_missing_clinic", { type: event.type });
+      return;
+    }
+    const status: BillingStatus =
+      event.type === "customer.subscription.deleted" ? "canceled" : mapSubscriptionStatus(sub.status);
+    const items = itemIdsFrom(sub);
+    await saveClinicSubscriptionState(clinicId, {
+      stripeSubscriptionId: sub.id,
+      baseSubscriptionItemId: items.baseItemId,
+      additionalSubscriptionItemId: items.additionalItemId,
+      billingStatus: status,
+      markPaidPlanStarted: status === "active",
+    });
+    logger.info("stripe.webhook.subscription_state", { clinicId, type: event.type, status });
+    return;
+  }
+
+  if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
+    const invoice = event.data.object as Stripe.Invoice;
+    const subscriptionId = readSubscriptionRef(invoice as unknown as { subscription?: unknown });
+    if (!subscriptionId) return; // non-subscription invoice — not relevant
+    const clinicId = await resolveClinicForStripe({
+      customerId: idOf(invoice.customer),
+      subscriptionId,
+    });
+    if (!clinicId) {
+      logger.warn("stripe.webhook.billing_missing_clinic", { type: event.type });
+      return;
+    }
+    const status: BillingStatus = event.type === "invoice.paid" ? "active" : "past_due";
+    await saveClinicSubscriptionState(clinicId, {
+      stripeSubscriptionId: subscriptionId,
+      baseSubscriptionItemId: null,
+      additionalSubscriptionItemId: null,
+      billingStatus: status,
+      markPaidPlanStarted: status === "active",
+    });
+    logger.info("stripe.webhook.invoice", { clinicId, type: event.type, status });
+    return;
+  }
 }
