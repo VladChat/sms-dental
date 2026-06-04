@@ -472,6 +472,20 @@ export async function findClinicIdByStripeSubscriptionId(
   return rows[0]?.id ?? null;
 }
 
+// Persist the additional-number Stripe subscription item id after the quantity
+// sync creates it. Idempotent single-column update; touches nothing else.
+export async function saveClinicAdditionalSubscriptionItemId(
+  clinicId: string,
+  itemId: string,
+): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.clinics
+    set stripe_additional_number_subscription_item_id = ${itemId}
+    where id = ${clinicId}
+  `;
+}
+
 // Subscription billing state persisted from verified Stripe webhook events.
 // Subscription/item ids and timestamp are coalesced (null leaves existing); the
 // billing_status is mapped conservatively by the caller. Idempotent.
