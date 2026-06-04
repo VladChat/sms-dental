@@ -49,7 +49,8 @@ export const runtimeConfig = {
   },
 
   billing: {
-    monthlyPriceUsd: 99,
+    // Plan pricing + included usage live in config/billing.config.ts (the single
+    // source of truth). Do not duplicate plan/price amounts here.
     trialDaysAfterActivation: 21,
   },
 

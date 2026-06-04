@@ -2,8 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { StatusBadge, StatusRow } from "./AccountUI";
+import { StatusBadge, StatusRow, InfoTooltip } from "./AccountUI";
 import type { PaymentMethodSummary, PaymentMethodSetupResult } from "./account-types";
+import {
+  billingConfig,
+  formatInteger,
+  formatUsdFromCents,
+} from "../../../../config/billing.config";
+
+const SMS_SEGMENT_TOOLTIP =
+  "An SMS segment is a billing unit. Long messages and some characters can use more than one segment. Your monthly limit is based on segments, not messages.";
 
 export function BillingCard({
   hasPaymentMethod,
@@ -67,11 +75,6 @@ export function BillingCard({
             <StatusBadge kind="needs_setup" />
           )}
         </StatusRow>
-        <StatusRow label="Plan">
-          <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-            Missed-call text follow-up · $99/mo
-          </span>
-        </StatusRow>
         <StatusRow label="Free trial">
           {trialEnded ? (
             <StatusBadge kind="needs_action" label="Trial ended" />
@@ -81,6 +84,56 @@ export function BillingCard({
             </span>
           )}
         </StatusRow>
+      </div>
+
+      {/* Plan details — sourced entirely from config/billing.config.ts. */}
+      <div className="acct-plan">
+        <div className="acct-plan-head">
+          <span className="t-small" style={{ fontWeight: 700, color: "var(--text)" }}>
+            {billingConfig.basePlan.displayName}
+          </span>
+          <span className="t-h4">
+            {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month
+          </span>
+        </div>
+
+        <div>
+          <p className="t-eyebrow">Included each month</p>
+          <ul className="acct-plan-list">
+            <li>
+              {formatInteger(billingConfig.basePlan.includedBusinessNumbers)} business{" "}
+              {billingConfig.basePlan.includedBusinessNumbers === 1 ? "number" : "numbers"}
+            </li>
+            <li>{formatInteger(billingConfig.basePlan.includedCallMinutes)} call minutes</li>
+            <li>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
+                {formatInteger(billingConfig.basePlan.includedSmsSegments)} SMS segments
+                <InfoTooltip label="What is an SMS segment?" text={SMS_SEGMENT_TOOLTIP} />
+              </span>
+            </li>
+          </ul>
+          <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-2) 0 0" }}>
+            Included usage is shared across all business numbers on your account.
+          </p>
+        </div>
+
+        <div>
+          <p className="t-eyebrow">Additional business numbers</p>
+          <p className="t-small" style={{ color: "var(--text)", fontWeight: 600, margin: "var(--space-1) 0 0" }}>
+            {formatUsdFromCents(billingConfig.additionalBusinessNumber.monthlyUnitAmountCents)}/month each
+          </p>
+          <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-1) 0 0" }}>
+            Billing starts after a number is approved and activated.
+          </p>
+        </div>
+
+        <div>
+          <p className="t-eyebrow">Usage above the included monthly limits</p>
+          <ul className="acct-plan-list">
+            <li>{formatUsdFromCents(billingConfig.overage.callMinuteUnitAmountCents)} per additional call minute</li>
+            <li>{formatUsdFromCents(billingConfig.overage.smsSegmentUnitAmountCents)} per additional SMS segment</li>
+          </ul>
+        </div>
       </div>
 
       {/* Returning from Stripe-hosted setup. Success is shown only when a real

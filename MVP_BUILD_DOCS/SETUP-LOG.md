@@ -4059,3 +4059,72 @@ What changed:
 
 Safety: no Twilio purchase, reserve, assign, release, or provision; no
 `clinic_phone_numbers` write; no SMS recovery change; no Stripe billing change.
+
+---
+
+## 2026-06-03 — feat: multi-number pricing + additional-number consent foundation
+
+What changed:
+- **Pricing source of truth:** new `config/billing.config.ts` (client+server safe;
+  no secrets/env/Stripe IDs) holds the $99 base plan, 1 included number / 1,000
+  call minutes / 1,000 SMS segments, $20/mo additional numbers, $0.07 call-minute
+  and $0.06 SMS-segment overage, plus `formatUsdFromCents` / `formatInteger` /
+  `additionalNumberConsentText`. Removed the duplicate `monthlyPriceUsd` from
+  `runtime.config.ts`. No plan price/limit is hard-coded elsewhere.
+- **Billing panel** (`BillingCard`) now shows a concise, config-sourced plan
+  breakdown (included usage, shared-usage statement, additional-number price,
+  overage) + an accessible SMS-segment question-mark tooltip (`InfoTooltip` in
+  `AccountUI`: hover/focus/click, Escape + outside-click close, no mobile
+  overflow, semantic tokens). Payment-method status/card/trial/setup unchanged.
+- **Owner Phone numbers** is now multi-number: data model went from single
+  `assignedPhone`/`requestedNumber` to `assignedNumbers[]`/`requestedNumbers[]`.
+  All assigned numbers + all open requests render with plan labels ("Included
+  with plan" / "Additional business number · $20/month [after activation]").
+  "Not assigned yet" only when there are no assigned numbers and no open requests.
+  Adding a request never hides/replaces an existing number.
+- **Additional-number consent:** the request flow classifies the next number on
+  the server. For an additional number the selected-number card shows a $20/month
+  block + an unchecked-by-default authorization checkbox; the button ("Request
+  additional number") is disabled until checked. The checkbox resets on selection
+  change / new search / hide. Included numbers use "Request this number" with no
+  consent.
+- **API** `POST /api/account/phone-numbers/request` accepts optional
+  `additional_billing_authorized` only; it never trusts a client price/class/clinic
+  id. `createClinicNumberRequest` now runs in a clinic-locked transaction:
+  verifies the phone isn't already assigned, de-dupes identical open requests,
+  counts active assigned + open requests, classifies included vs additional from
+  `billingConfig`, requires consent for additional (`400
+  additional_billing_authorization_required`), and stores the pricing/consent
+  snapshot. It no longer supersedes other different open requests.
+- **Admin console** Phone panel lists all assigned numbers + all open requests
+  with billing class, monthly price snapshot, requester, timestamp, and (for
+  additional) the consent status/timestamp, the note "Owner authorized $20/month
+  when this number is activated.", and "Additional-number purchase remains blocked
+  until Stripe subscription billing is implemented."
+- **Purchase gate** unchanged behaviour, clearer message: a second-number purchase
+  now returns `additional_number_billing_not_ready` explaining the clinic already
+  has a number, additional-number Stripe billing isn't implemented, and no Twilio
+  purchase was made. First-number path untouched.
+
+Migration: `supabase/migrations/20260603000100_clinic_number_request_billing.sql`
+adds billing-snapshot + consent columns to `clinic_number_requests` (defaults
+`billing_class='included'`, `monthly_unit_amount_cents=0`, `currency='usd'`), CHECK
+constraints (class/amount/currency + included-vs-additional consistency), and a
+partial unique index on `(clinic_id, requested_phone_number)` for open statuses.
+Additive + idempotent; existing/legacy rows stay `included` and non-billable and
+need no retroactive consent. Does NOT touch `clinic_phone_numbers`,
+`local_number_status`, `sms_recovery_enabled`, Stripe IDs, or Twilio config. Apply
+after a clean duplicate-open-request preflight.
+
+Safety: no Stripe subscription/invoice/charge/PaymentIntent/meter; payment-method
+setup stays sandbox-mode; no Twilio purchase/reserve/assign/provision; no
+`clinic_phone_numbers` write from the owner path (read-only counts only); no SMS
+recovery change. New policy doc: `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md`.
+
+Validation: `npm run typecheck` pass; `npm run build` pass; `git diff --check`
+clean; price-duplication grep clean. Commit `__PENDING__`; migration apply +
+production verify recorded below after push.
+
+Remaining milestone: live Stripe subscription + usage billing (base item,
+additional-number quantity item, usage-based overage items) and activation-time
+revalidation — a separate milestone.

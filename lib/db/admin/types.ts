@@ -117,9 +117,11 @@ export type AdminClinicDetail = {
   assignedPhoneMasked: string | null;
   hasAssignedNumber: boolean;
   phoneNumbers: AdminClinicPhoneNumber[];
-  // Latest owner-requested number (owner preference for admin review). NOT an
-  // assigned/active number — purchase + assignment stay admin-controlled.
-  requestedNumber: {
+  // All open owner-requested numbers (owner preference + pricing/consent snapshot
+  // for admin review). NOT assigned/active numbers — purchase + assignment stay
+  // admin-controlled, and a pending request is never charged.
+  requestedNumbers: {
+    id: string;
     phoneNumber: string;
     friendlyName: string | null;
     locality: string | null;
@@ -127,7 +129,14 @@ export type AdminClinicDetail = {
     status: string;
     createdAt: string;
     requestedByEmail: string | null;
-  } | null;
+    billingClass: string;
+    monthlyUnitAmountCents: number;
+    currency: string;
+    billingConsentTextVersion: string | null;
+    billingConsentText: string | null;
+    billingConsentAuthorizedAt: string | null;
+    billingConsentAuthorizedByEmail: string | null;
+  }[];
   // sms approval / a2p. Representative details (which the owner sees in /account)
   // are the A2P submission packet, shown in full to the operator.
   smsStatus: string;

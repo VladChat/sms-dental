@@ -10,6 +10,10 @@ import {
 import { resolveAuthClinicAccess } from "@/lib/auth/access";
 import { createClinicNumberRequest } from "@/lib/db/clinic-number-requests";
 import { logger } from "@/lib/logging/logger";
+import {
+  billingConfig,
+  formatUsdFromCents,
+} from "@/config/billing.config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +42,10 @@ const BodySchema = z.object({
     })
     .passthrough(),
   type: z.enum(["local", "toll_free"]).optional(),
+  // Owner authorization for the additional $20/month. Only meaningful for an
+  // additional number; the SERVER decides whether it is required. Never trust the
+  // client for price/classification/clinic id.
+  additional_billing_authorized: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -76,7 +84,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const row = await createClinicNumberRequest({
+    const result = await createClinicNumberRequest({
       clinicId: clinic.id,
       requestedPhoneNumber: b.phone_number,
       friendlyName: b.friendly_name ?? null,
@@ -91,21 +99,51 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
       requestedByProfileId: access.userId,
       requestedByEmail: access.userEmail ?? clinic.owner_contact_email ?? null,
+      additionalBillingAuthorized: b.additional_billing_authorized === true,
     });
 
+    if (!result.ok) {
+      if (result.reason === "additional_billing_authorization_required") {
+        const amount = formatUsdFromCents(
+          billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
+        );
+        return jsonError(
+          400,
+          "additional_billing_authorization_required",
+          `Authorize the additional ${amount}/month charge before requesting this number.`,
+        );
+      }
+      // already_assigned_to_clinic
+      return jsonError(
+        409,
+        "number_already_assigned",
+        "That number is already assigned to your clinic.",
+      );
+    }
+
+    const row = result.row;
     logger.info("account.number_request.saved", {
       clinicId: clinic.id,
       status: row.status,
+      billingClass: row.billing_class,
+      deduped: result.deduped,
     });
 
     return jsonOk({
       ok: true,
       requestedNumber: {
+        id: row.id,
         phoneNumber: row.requested_phone_number,
         friendlyName: row.friendly_name,
         locality: row.locality,
         region: row.region,
         status: row.status,
+        billingClass: row.billing_class,
+        monthlyUnitAmountCents: row.monthly_unit_amount_cents,
+        currency: row.currency,
+        billingConsentAuthorizedAt: row.billing_consent_authorized_at
+          ? row.billing_consent_authorized_at.toISOString()
+          : null,
       },
     });
   } catch (err) {

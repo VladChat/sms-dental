@@ -3,6 +3,15 @@
 import { useMemo, useRef, useState } from "react";
 
 import type { RequestedNumberSummary } from "./account-types";
+import {
+  additionalNumberConsentText,
+  billingConfig,
+  formatUsdFromCents,
+} from "../../../../config/billing.config";
+
+const ADDITIONAL_MONTHLY = formatUsdFromCents(
+  billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
+);
 
 type Candidate = {
   phone_number: string;
@@ -31,30 +40,38 @@ type SearchResponse = {
 type RequestNumberResponse = {
   ok?: boolean;
   requestedNumber?: {
+    id: string;
     phoneNumber: string;
     friendlyName: string | null;
     locality: string | null;
     region: string | null;
     status: string;
+    billingClass: "included" | "additional";
+    monthlyUnitAmountCents: number;
+    currency: string;
+    billingConsentAuthorizedAt: string | null;
   };
-  error?: { message?: string };
+  error?: { message?: string; code?: string };
 };
 
 export function OwnerLocalNumberSearch({
   hasPaymentMethod,
   onGoToBilling,
-  requestedNumberE164,
   initialAreaCode,
   initialPostalCode,
+  nextNumberIsAdditional,
+  existingRequestedNumbers,
   onRequestedNumberSaved,
 }: {
   hasPaymentMethod: boolean;
   onGoToBilling: () => void;
-  // The owner's already-requested number (E.164), if any. Used to reflect an
-  // existing pending request and to avoid duplicate submits for the same number.
-  requestedNumberE164?: string | null;
   initialAreaCode?: string | null;
   initialPostalCode?: string | null;
+  // Presentation hint: is the next requested number likely an additional ($20/mo)
+  // number? The server remains the final authority on classification + price.
+  nextNumberIsAdditional: boolean;
+  // E.164 numbers already open as requests (to avoid duplicate submits).
+  existingRequestedNumbers: string[];
   onRequestedNumberSaved: (requestedNumber: RequestedNumberSummary) => void;
 }) {
   const searchRunId = useRef(0);
@@ -69,8 +86,14 @@ export function OwnerLocalNumberSearch({
   const [fallbackMessage, setFallbackMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
-  // The number we have already saved as a request (this session or on load).
-  const [savedNumber, setSavedNumber] = useState<string | null>(requestedNumberE164 ?? null);
+  // Additional-number authorization. Unchecked by default; reset on any change of
+  // selection / new search / hide.
+  const [consentChecked, setConsentChecked] = useState(false);
+
+  const alreadyRequested = useMemo(
+    () => new Set(existingRequestedNumbers),
+    [existingRequestedNumbers],
+  );
 
   const displayedCandidates = useMemo(() => {
     const sorted = [...candidates].sort((a, b) => locationRank(b) - locationRank(a));
@@ -90,6 +113,7 @@ export function OwnerLocalNumberSearch({
     setSelected(null);
     setFallbackMessage(null);
     setActionError(null);
+    setConsentChecked(false);
   }
 
   function hideSearch() {
@@ -105,6 +129,7 @@ export function OwnerLocalNumberSearch({
     setActionError(null);
     setFallbackMessage(null);
     setSelected(null);
+    setConsentChecked(false);
     try {
       const params = new URLSearchParams();
       const cleanAreaCode = areaCode.trim();
@@ -136,8 +161,9 @@ export function OwnerLocalNumberSearch({
     }
   }
 
-  // Save the selected candidate as a pending owner request for admin review.
-  // This never purchases, reserves, or assigns a number.
+  // Save the selected candidate as a pending owner request for admin review. This
+  // never purchases, reserves, or assigns a number. The server classifies billing
+  // and enforces additional-number consent.
   async function requestSelectedNumber() {
     const selectedCandidate =
       displayedCandidates.find((c) => c.phone_number === selected) ??
@@ -159,6 +185,7 @@ export function OwnerLocalNumberSearch({
           postal_code: selectedCandidate.postal_code,
           capabilities: selectedCandidate.capabilities,
           type: selectedCandidate.type,
+          additional_billing_authorized: consentChecked,
         }),
       });
       const json = (await res.json().catch(() => null)) as RequestNumberResponse | null;
@@ -168,12 +195,7 @@ export function OwnerLocalNumberSearch({
         );
         return;
       }
-      const savedRequestedNumber = normalizeRequestedNumberResponse(
-        json.requestedNumber,
-        selectedCandidate,
-      );
-      setSavedNumber(savedRequestedNumber.phoneNumber);
-      onRequestedNumberSaved(savedRequestedNumber);
+      onRequestedNumberSaved(normalizeRequestedNumberResponse(json.requestedNumber, selectedCandidate));
       clearSearchUi(true);
     } catch {
       setActionError("Could not save your requested number. Please try again.");
@@ -259,6 +281,7 @@ export function OwnerLocalNumberSearch({
               {displayedCandidates.map((c) => {
                 const checked = selected === c.phone_number;
                 const showRecommended = shouldShowRecommended(c, displayedCandidates);
+                const isAlreadyRequested = alreadyRequested.has(c.phone_number);
                 return (
                   <div
                     key={c.phone_number}
@@ -274,6 +297,7 @@ export function OwnerLocalNumberSearch({
                         onChange={() => {
                           setSelected(c.phone_number);
                           setActionError(null);
+                          setConsentChecked(false);
                         }}
                       />
                       <span className="acct-cand-body">
@@ -300,7 +324,7 @@ export function OwnerLocalNumberSearch({
                               Add a payment method to use this number
                             </p>
                             <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
-                              You can choose a number now, but a payment method is required before it can be assigned to your clinic. You won’t be charged today. Billing starts only after SMS recovery is active and your trial period ends.
+                              You can choose a number now, but a payment method is required before it can be assigned to your clinic. You won’t be charged today.
                             </p>
                             <div style={{ marginTop: "var(--space-2)" }}>
                               <button type="button" className="btn btn-primary acct-primary-action" onClick={onGoToBilling}>
@@ -308,20 +332,47 @@ export function OwnerLocalNumberSearch({
                               </button>
                             </div>
                           </div>
-                        ) : savedNumber && c.phone_number === savedNumber ? (
-                          <div className="alert alert-success" role="status" aria-live="polite">
-                            <span>Requested number saved. Our team will review it before assignment.</span>
+                        ) : isAlreadyRequested ? (
+                          <div className="alert alert-info" role="status" aria-live="polite">
+                            <span>This number is already requested and pending review.</span>
                           </div>
                         ) : (
                           <>
+                            {nextNumberIsAdditional && (
+                              <div className="acct-consent">
+                                <div>
+                                  <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>
+                                    Additional business number
+                                  </p>
+                                  <p className="t-h4" style={{ margin: "var(--space-1) 0 0" }}>
+                                    {ADDITIONAL_MONTHLY}/month
+                                  </p>
+                                  <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
+                                    Billing starts after this number is approved and activated.
+                                  </p>
+                                </div>
+                                <label className="check">
+                                  <input
+                                    type="checkbox"
+                                    checked={consentChecked}
+                                    onChange={(e) => setConsentChecked(e.target.checked)}
+                                  />
+                                  <span>{additionalNumberConsentText()}</span>
+                                </label>
+                              </div>
+                            )}
                             <button
                               type="button"
                               className="btn btn-primary acct-primary-action"
                               onClick={() => void requestSelectedNumber()}
-                              disabled={requesting}
+                              disabled={requesting || (nextNumberIsAdditional && !consentChecked)}
                               aria-busy={requesting}
                             >
-                              {requesting ? "Saving…" : "Use this number"}
+                              {requesting
+                                ? "Saving…"
+                                : nextNumberIsAdditional
+                                  ? "Request additional number"
+                                  : "Request this number"}
                             </button>
                             {actionError && (
                               <div className="alert alert-error" role="alert" aria-live="polite">
@@ -348,12 +399,17 @@ function normalizeRequestedNumberResponse(
   selectedCandidate: Candidate,
 ): RequestedNumberSummary {
   return {
+    id: requestedNumber?.id ?? selectedCandidate.phone_number,
     phoneNumber: requestedNumber?.phoneNumber ?? selectedCandidate.phone_number,
     friendlyName: requestedNumber?.friendlyName ?? selectedCandidate.friendly_name ?? null,
     locality: requestedNumber?.locality ?? selectedCandidate.locality,
     region: requestedNumber?.region ?? selectedCandidate.region,
     status: requestedNumber?.status ?? "pending",
     createdAt: null,
+    billingClass: requestedNumber?.billingClass ?? "included",
+    monthlyUnitAmountCents: requestedNumber?.monthlyUnitAmountCents ?? 0,
+    currency: requestedNumber?.currency ?? billingConfig.currency,
+    billingConsentAuthorizedAt: requestedNumber?.billingConsentAuthorizedAt ?? null,
   };
 }
 

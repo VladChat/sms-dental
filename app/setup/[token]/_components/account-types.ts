@@ -41,9 +41,21 @@ export type PaymentMethodSummary = {
 // query param. Null when the page was not reached via a Stripe return.
 export type PaymentMethodSetupResult = "success" | "cancelled" | null;
 
-// Latest owner-requested number (preference awaiting admin review). This is NOT
-// an assigned/active number — assignment stays admin-controlled.
+// An assigned business number. Multiple may exist; none is ever hidden/replaced
+// because another number is requested.
+export type AssignedBusinessNumberSummary = {
+  id: string;
+  phoneNumber: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string | null;
+};
+
+// An owner-requested number (preference + pricing/consent snapshot awaiting admin
+// review). This is NOT an assigned/active number — assignment stays
+// admin-controlled, and a pending request is never charged.
 export type RequestedNumberSummary = {
+  id: string;
   phoneNumber: string;
   friendlyName: string | null;
   locality: string | null;
@@ -51,6 +63,11 @@ export type RequestedNumberSummary = {
   // 'pending' | 'reviewed' | 'fulfilled' | 'rejected' | 'cancelled'
   status: string;
   createdAt: string | null;
+  // Billing snapshot recorded at request time (revalidated at activation later).
+  billingClass: "included" | "additional";
+  monthlyUnitAmountCents: number;
+  currency: string;
+  billingConsentAuthorizedAt: string | null;
 };
 
 export type BusinessProfileData = {
@@ -72,14 +89,14 @@ export type BusinessProfileData = {
   number: {
     localNumberStatus: LocalNumberStatus;
     smsStatus: SmsStatus;
-    // The assigned office number in E.164 when one exists, else null.
-    assignedPhone: string | null;
+    // All assigned business numbers (may be empty). Never collapsed to one.
+    assignedNumbers: AssignedBusinessNumberSummary[];
     // Initial local-number search values come from the saved office profile.
     // Editing them in the Phone number search does not update the profile.
     areaCode: string | null;
     postalCode: string | null;
-    // Latest owner-requested number awaiting admin review, or null.
-    requestedNumber: RequestedNumberSummary | null;
+    // All open owner-requested numbers awaiting admin review (may be empty).
+    requestedNumbers: RequestedNumberSummary[];
   };
   billing: {
     // True only when a real payment method is saved (stripe_payment_method_id

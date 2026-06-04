@@ -74,14 +74,17 @@ export async function POST(
   const clinic = await findClinicById(clinicId).catch(() => null);
   if (!clinic) return jsonError(404, "not_found", "Clinic not found.");
 
-  // Idempotency / one-number rule: never purchase a second number for a clinic
-  // that already has an active assigned number.
+  // One-number safety gate: never purchase a second number for a clinic that
+  // already has an active assigned number. Additional-number billing (the $20/mo
+  // Stripe subscription item) is not implemented yet, so a second purchase stays
+  // blocked here. The owner's additional-number request is only a saved
+  // preference + consent snapshot — no Twilio purchase happens from it.
   const existing = await findActiveOfficeTextingNumber(clinicId).catch(() => null);
   if (existing) {
     return jsonError(
       409,
-      "already_assigned",
-      "This clinic already has an active assigned number.",
+      "additional_number_billing_not_ready",
+      "Additional number purchase is not available until subscription billing is configured. This clinic already has an assigned number, additional-number Stripe billing is not implemented yet, and no additional Twilio purchase was made.",
     );
   }
 

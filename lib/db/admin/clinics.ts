@@ -206,10 +206,11 @@ export async function getAdminClinicDetail(
     updatedAt: p.updated_at.toISOString(),
   }));
 
-  // Latest owner-requested number (owner preference for admin review). Resilient
-  // to the table not yet existing in this environment.
+  // All open owner-requested numbers (pending/reviewed) + their pricing/consent
+  // snapshot. Resilient to the table/columns not yet existing in an environment.
   const requestRows = await sql<
     {
+      id: string;
       requested_phone_number: string;
       friendly_name: string | null;
       locality: string | null;
@@ -217,27 +218,42 @@ export async function getAdminClinicDetail(
       status: string;
       created_at: Date;
       requested_by_email: string | null;
+      billing_class: string;
+      monthly_unit_amount_cents: number;
+      currency: string;
+      billing_consent_text_version: string | null;
+      billing_consent_text: string | null;
+      billing_consent_authorized_at: Date | null;
+      billing_consent_authorized_by_email: string | null;
     }[]
   >`
-    select requested_phone_number, friendly_name, locality, region, status,
-           created_at, requested_by_email
+    select id, requested_phone_number, friendly_name, locality, region, status,
+           created_at, requested_by_email, billing_class, monthly_unit_amount_cents,
+           currency, billing_consent_text_version, billing_consent_text,
+           billing_consent_authorized_at, billing_consent_authorized_by_email
     from public.clinic_number_requests
-    where clinic_id = ${clinicId}
-    order by created_at desc
-    limit 1
+    where clinic_id = ${clinicId} and status in ('pending', 'reviewed')
+    order by created_at asc
   `.catch(() => []);
-  const rq = requestRows[0];
-  const requestedNumber = rq
-    ? {
-        phoneNumber: rq.requested_phone_number,
-        friendlyName: rq.friendly_name,
-        locality: rq.locality,
-        region: rq.region,
-        status: rq.status,
-        createdAt: rq.created_at.toISOString(),
-        requestedByEmail: rq.requested_by_email,
-      }
-    : null;
+  const requestedNumbers = requestRows.map((rq) => ({
+    id: rq.id,
+    phoneNumber: rq.requested_phone_number,
+    friendlyName: rq.friendly_name,
+    locality: rq.locality,
+    region: rq.region,
+    status: rq.status,
+    createdAt: rq.created_at.toISOString(),
+    requestedByEmail: rq.requested_by_email,
+    billingClass: rq.billing_class,
+    monthlyUnitAmountCents: rq.monthly_unit_amount_cents,
+    currency: rq.currency,
+    billingConsentTextVersion: rq.billing_consent_text_version,
+    billingConsentText: rq.billing_consent_text,
+    billingConsentAuthorizedAt: rq.billing_consent_authorized_at
+      ? rq.billing_consent_authorized_at.toISOString()
+      : null,
+    billingConsentAuthorizedByEmail: rq.billing_consent_authorized_by_email,
+  }));
 
   return {
     id: r.id,
@@ -286,7 +302,7 @@ export async function getAdminClinicDetail(
     assignedPhoneMasked: maskPhone(r.assigned_phone),
     hasAssignedNumber: Boolean(r.assigned_phone),
     phoneNumbers,
-    requestedNumber,
+    requestedNumbers,
     smsStatus: r.sms_status,
     a2pInfoCompleted: r.a2p_info_completed,
     a2pAuthorized: r.a2p_authorized,

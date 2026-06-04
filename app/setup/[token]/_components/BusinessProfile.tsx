@@ -29,9 +29,20 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [sms, setSms] = useState<SmsApprovalFields>(() => withRepDefaults(data));
   const [smsDone, setSmsDone] = useState(data.smsApproval.completed);
   const [smsStatus, setSmsStatus] = useState<SmsStatus>(data.number.smsStatus);
-  const [requestedNumber, setRequestedNumber] = useState<RequestedNumberSummary | null>(
-    data.number.requestedNumber,
+  const [requestedNumbers, setRequestedNumbers] = useState<RequestedNumberSummary[]>(
+    data.number.requestedNumbers,
   );
+
+  // Append a newly-saved request without ever replacing/hiding existing numbers.
+  // Idempotent: a repeat save of the same number updates that entry in place.
+  function handleRequestedNumberSaved(saved: RequestedNumberSummary) {
+    setRequestedNumbers((prev) => {
+      const exists = prev.some((r) => r.phoneNumber === saved.phoneNumber);
+      return exists
+        ? prev.map((r) => (r.phoneNumber === saved.phoneNumber ? saved : r))
+        : [...prev, saved];
+    });
+  }
 
   const hasPaymentMethod = data.billing.hasPaymentMethod;
   const clinicName = biz.name || "Your clinic";
@@ -119,13 +130,13 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
               description="Your business numbers for calls and texting."
             >
               <AssignedNumberCard
-                assignedPhone={data.number.assignedPhone}
+                assignedNumbers={data.number.assignedNumbers}
                 areaCode={data.number.areaCode}
                 postalCode={data.number.postalCode}
                 hasPaymentMethod={hasPaymentMethod}
                 onGoToBilling={() => setActive("billing")}
-                requestedNumber={requestedNumber}
-                onRequestedNumberSaved={setRequestedNumber}
+                requestedNumbers={requestedNumbers}
+                onRequestedNumberSaved={handleRequestedNumberSaved}
               />
             </Section>
           )}

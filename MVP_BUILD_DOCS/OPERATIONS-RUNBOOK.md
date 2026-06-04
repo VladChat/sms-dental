@@ -2065,3 +2065,37 @@ Verify (after a request): `clinic_number_requests` has a `pending` row for the c
 Migration: apply `supabase/migrations/20260602000200_clinic_number_requests.sql` (owner
 approval). Reads are defensive, so `/account` and the admin console still load before it
 is applied, but saving a request fails until the table exists.
+
+---
+
+## Multi-number pricing + additional-number consent — 2026-06-03
+
+Pricing/usage policy lives in `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` and is
+sourced in code from `config/billing.config.ts`. Base plan **$99/mo** includes **1**
+business number, **1,000** call minutes, **1,000** SMS segments (shared across all
+numbers on the account). Additional numbers **$20/mo each** (billed only after
+activation). Overage **$0.07/min**, **$0.06/SMS segment**.
+
+Owner flow: an owner can hold multiple assigned numbers and multiple open requests
+at once. The server classifies each new request as `included` or `additional` from
+live DB state (active assigned + open requests vs the 1 included number). An
+**additional** request requires the owner to tick the $20/mo authorization checkbox;
+consent is stored as an audit snapshot on `clinic_number_requests`. A pending request
+is never charged, and requesting a number never replaces/cancels an existing one.
+
+Admin: the clinic Phone panel shows every assigned number and every open request with
+billing class, monthly price snapshot, requester, timestamp, and (for additional) the
+consent status/timestamp. Operator action is unchanged — review, then add the number
+through the existing gated **Add number** flow.
+
+Purchase safety: a second-number purchase is still blocked, now with code
+`additional_number_billing_not_ready` ("Additional number purchase is not available
+until subscription billing is configured."). No Stripe subscription/invoice/charge is
+created anywhere in this milestone; payment-method collection stays in sandbox setup
+mode.
+
+Migration: apply `supabase/migrations/20260603000100_clinic_number_request_billing.sql`
+(owner approval) AFTER a clean duplicate-open-request preflight (see SETUP-LOG). It is
+additive/idempotent and leaves legacy requests `included` + non-billable. Reads are
+defensive, so the app loads before it is applied, but billing-class/consent fields are
+absent until then.
