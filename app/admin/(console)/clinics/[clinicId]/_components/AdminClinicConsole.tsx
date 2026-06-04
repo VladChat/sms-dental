@@ -24,6 +24,7 @@ import { AdminClinicActions } from "./AdminClinicActions";
 import { AdminBusinessProfileForm } from "./AdminBusinessProfileForm";
 import { AdminA2pForm } from "./AdminA2pForm";
 import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
+import { AdminNumberControls } from "./AdminNumberControls";
 import { formatUsdFromCents } from "../../../../../../config/billing.config";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
@@ -232,7 +233,9 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
               </p>
             )}
 
-            {d.requestedNumbers.length > 0 && (
+            <AdminNumberControls d={d} />
+
+            {false && d.requestedNumbers.length > 0 && (
               <div style={{ marginTop: "var(--space-4)", display: "grid", gap: "var(--space-3)" }}>
                 {d.requestedNumbers.map((r) => {
                   const additional = r.billingClass === "additional";

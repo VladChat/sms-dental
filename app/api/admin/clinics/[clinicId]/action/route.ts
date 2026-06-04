@@ -11,12 +11,18 @@ import {
 import { resolvePlatformAdmin } from "../../../../../../lib/auth/platform-admin";
 import { getAdminClinicDetail } from "../../../../../../lib/db/admin/clinics";
 import {
+  countHeldNumbers,
+  dismissLegacyNumberRequest,
   setAdminInternalNote,
   setClinicActive,
+  setNumberPurchasesEnabled,
+  setPhoneNumberLimit,
   setSmsRecoveryEnabled,
   type ActionResult,
 } from "../../../../../../lib/db/admin/actions";
 import { recordAdminAuditEvent } from "../../../../../../lib/db/admin/audit";
+
+type AdminCtx = { userId: string | null; email: string; source: string };
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,8 +44,15 @@ const BodySchema = z.object({
     "disable_sms",
     "enable_sms",
     "update_note",
+    "revoke_number_purchases",
+    "allow_number_purchases",
+    "set_phone_number_limit",
+    "dismiss_legacy_request",
   ]),
   note: z.union([z.string(), z.null()]).optional(),
+  reason: z.union([z.string(), z.null()]).optional(),
+  limit: z.number().int().optional(),
+  request_id: z.string().uuid().optional(),
 });
 
 // POST /api/admin/clinics/[clinicId]/action
@@ -70,6 +83,20 @@ export async function POST(
     return jsonBadRequest("Unknown or invalid admin action.");
   }
   const { action } = parsed.data;
+
+  // Number-purchase control actions handle their own audit + early return.
+  if (
+    action === "revoke_number_purchases" ||
+    action === "allow_number_purchases" ||
+    action === "set_phone_number_limit" ||
+    action === "dismiss_legacy_request"
+  ) {
+    return handleNumberControlAction(action, clinicId, parsed.data, {
+      userId: admin.userId,
+      email: admin.email,
+      source: admin.source,
+    });
+  }
 
   let result: ActionResult = null;
   let auditAction = "";
@@ -148,4 +175,81 @@ function redactSnapshot(
   if (action === "disable_sms" || action === "enable_sms") return { sms_recovery_enabled: s.sms_recovery_enabled };
   if (action === "update_note") return { admin_internal_note_present: Boolean(s.admin_internal_note) };
   return {};
+}
+
+type ActionBody = z.infer<typeof BodySchema>;
+
+async function adminAudit(
+  admin: AdminCtx,
+  clinicId: string,
+  action: string,
+  after: Record<string, string | number | boolean | null>,
+): Promise<void> {
+  try {
+    await recordAdminAuditEvent({
+      adminUserId: admin.userId,
+      adminEmail: admin.email,
+      action,
+      targetType: "clinic",
+      targetId: clinicId,
+      clinicId,
+      afterState: after,
+      metadata: { authSource: admin.source },
+    });
+  } catch {
+    // Mutation already succeeded; never fail the request on an audit hiccup.
+  }
+}
+
+async function handleNumberControlAction(
+  action: ActionBody["action"],
+  clinicId: string,
+  data: ActionBody,
+  admin: AdminCtx,
+): Promise<NextResponse> {
+  try {
+    if (action === "revoke_number_purchases" || action === "allow_number_purchases") {
+      const enabled = action === "allow_number_purchases";
+      const reason = (data.reason ?? "").trim() || null;
+      const res = await setNumberPurchasesEnabled(clinicId, enabled, reason);
+      if (!res) return jsonError(404, "not_found", "Clinic not found.");
+      await adminAudit(
+        admin,
+        clinicId,
+        enabled ? "clinic.number_purchases.allow" : "clinic.number_purchases.revoke",
+        { phone_number_purchases_enabled: res.enabled },
+      );
+      return jsonOk({ ok: true, message: "Done." });
+    }
+
+    if (action === "set_phone_number_limit") {
+      const limit = data.limit;
+      if (typeof limit !== "number" || limit < 1 || limit > 100) {
+        return jsonBadRequest("Limit must be an integer between 1 and 100.");
+      }
+      // Never lower the limit below what the clinic already holds.
+      const held = await countHeldNumbers(clinicId);
+      if (limit < held) {
+        return jsonError(
+          409,
+          "limit_below_held",
+          `Limit cannot be lower than the ${held} number(s) this clinic already holds.`,
+        );
+      }
+      const res = await setPhoneNumberLimit(clinicId, limit, admin.userId);
+      if (!res) return jsonError(404, "not_found", "Clinic not found.");
+      await adminAudit(admin, clinicId, "clinic.number_limit.set", { phone_number_limit: res.limit });
+      return jsonOk({ ok: true, message: "Done." });
+    }
+
+    // dismiss_legacy_request
+    const requestId = data.request_id;
+    if (!requestId) return jsonBadRequest("request_id is required.");
+    const ok = await dismissLegacyNumberRequest(clinicId, requestId);
+    if (!ok) return jsonError(404, "not_found", "Request not found or already closed.");
+    await adminAudit(admin, clinicId, "clinic.legacy_request.dismiss", { request_dismissed: true });
+    return jsonOk({ ok: true, message: "Done." });
+  } catch {
+    return jsonError(500, "action_failed", "Could not complete this action. Please try again.");
+  }
 }
