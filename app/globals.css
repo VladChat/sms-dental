@@ -285,7 +285,10 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 
 /* Accessible question-mark info tooltip. */
 .acct-tooltip { position:relative; display:inline-flex; vertical-align:middle; }
-.acct-tooltip-btn { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; margin:-5px 0; padding:0; border:none; border-radius:var(--r-pill); background:transparent; color:var(--text-muted); cursor:pointer; }
+.acct-tooltip-btn { position:relative; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; margin:-5px 0; padding:0; border:none; border-radius:var(--r-pill); background:transparent; color:var(--text-muted); cursor:pointer; }
+/* Expand the tap/click hit target to >=44x44px without changing the compact
+   visible size or affecting layout: a transparent, absolutely-centered overlay. */
+.acct-tooltip-btn::before { content:""; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:44px; height:44px; }
 .acct-tooltip-btn:hover { color:var(--text-secondary); }
 .acct-tooltip-btn:focus-visible { outline:none; box-shadow:var(--focus-ring); color:var(--text-secondary); }
 .acct-tooltip-pop { position:absolute; z-index:20; top:calc(100% + 6px); left:0; max-width:min(17rem, 78vw); width:max-content; padding:var(--space-3) var(--space-4); border:1px solid var(--border-strong); border-radius:var(--r-md); background:var(--surface); color:var(--text-secondary); font:var(--body-sm); box-shadow:var(--shadow-md); text-align:left; }

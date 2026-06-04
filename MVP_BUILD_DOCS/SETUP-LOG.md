@@ -4137,3 +4137,54 @@ Migration APPLIED to production (`qfjpvbvfvhbtebwivcdc`, Management API
 Remaining milestone: live Stripe subscription + usage billing (base item,
 additional-number quantity item, usage-based overage items) and activation-time
 revalidation — a separate milestone.
+
+---
+
+## 2026-06-03 — harden second-number purchase gate + tooltip hit target + doc fixes
+
+Follow-up safety/accessibility/doc cleanup. No migration, no Stripe, no Twilio call.
+
+- **Purchase gate hardening:** the admin number-purchase route's one-number safety
+  gate used `findActiveOfficeTextingNumber()`, which only matches
+  `role='office_texting'`. A clinic with a legacy/manually-provisioned active row
+  of another role (e.g. `recovery`) could slip past the gate. Added a focused
+  read-only helper `findAnyActiveClinicPhoneNumber(clinicId)` (any active row,
+  role-agnostic, oldest first, null when none) in `lib/db/clinic-phone-numbers.ts`
+  and switched the gate in
+  `app/api/admin/clinics/[clinicId]/phone-numbers/purchase/route.ts` to use it.
+  Now a clinic with **any** active assigned number is blocked from a second
+  purchase (`409 additional_number_billing_not_ready`, same message).
+  `findActiveOfficeTextingNumber()` is preserved unchanged for its existing
+  callers (onboarding first-number purchase, setup status page); the first-number
+  purchase path is unchanged.
+- **Tooltip touch target:** the SMS-segment `InfoTooltip` button was ~24×24px.
+  Added a transparent, absolutely-centered `::before` overlay (44×44px) on
+  `.acct-tooltip-btn` in `app/globals.css` so the tap/click hit target is ≥44×44px
+  while the visible icon (14px) and button (24px) stay compact — no layout shift,
+  no horizontal overflow, semantic tokens only. No `AccountUI.tsx` change needed
+  (hover/focus/click/Escape/outside-click/ARIA already correct).
+- **Doc corrections (now match additive multi-number behavior):**
+  OPERATIONS-RUNBOOK — replaced "a new request supersedes prior pending ones" with
+  the correct rule (multiple different open requests coexist; only an exact
+  duplicate is de-duped; requesting another number never cancels/replaces/hides an
+  assigned number or a different open request). REPEATABLE-SETUP-CHECKLIST —
+  replaced the "supersede prior pending rows" lesson with the additive-resource
+  rule (allow multiple different open requests; de-dupe same tenant+resource;
+  never silently cancel a different older request). FIRST-CLINIC-ONBOARDING —
+  replaced the owner button wording "Use this number" with "Request this number" /
+  "Request additional number" and clarified it saves a request for admin review.
+
+Safety preserved: second-number block kept (now stricter); first-number path
+unchanged; no Twilio purchase/reserve/assign/release/config; no
+`clinic_phone_numbers` write; no `sms_recovery_enabled` change; no Stripe
+billing/subscription/invoice/charge/meter; no migration.
+
+Validation: `npm run typecheck` pass; `npm run build` pass
+(`/api/admin/clinics/[clinicId]/phone-numbers/purchase` compiled); `git diff --check`
+clean. Static checks: gate is role-agnostic; `findActiveOfficeTextingNumber` intact
+with 2 existing callers; tooltip hit target ≥44px with small visible icon; docs no
+longer say different open requests are superseded and no longer use "Use this number".
+
+Commit `__PENDING__`; pushed to `origin/main`. (Production auto-deploys; no
+authenticated owner browser session in the repo CLI, so tooltip tap QA on a live
+375px viewport is the operator's manual check — not fabricated.)

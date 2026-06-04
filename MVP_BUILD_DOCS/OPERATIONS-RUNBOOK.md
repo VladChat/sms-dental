@@ -2048,8 +2048,13 @@ How it works:
 - Owner UI → `POST /api/account/phone-numbers/request` (auth owner/admin only;
   `front_desk` rejected; clinic from session, no client clinic id). A saved payment
   method is required (else `400 payment_method_required`).
-- Stored in `public.clinic_number_requests` (status `pending`). A new request supersedes
-  prior pending ones for the clinic; an identical repeat click is de-duped.
+- Stored in `public.clinic_number_requests` (status `pending`). **Multiple different open
+  requested numbers may coexist** — a new request never cancels, replaces, or hides an
+  existing assigned number or a different open request. Only an **exact duplicate** open
+  request (same clinic + same phone number) is idempotently de-duplicated (the existing row
+  is returned; a partial unique index on open statuses enforces it). The owner button reads
+  **Request this number** (first/included) or **Request additional number** (paid, after the
+  $20/month authorization).
 - Owner sees a persistent **Requested number / Pending review** status; admin clinic
   console **Phone number** panel shows **Owner requested number** (E.164, status,
   location, timestamp, requester email) with a hint by the Add number button.
