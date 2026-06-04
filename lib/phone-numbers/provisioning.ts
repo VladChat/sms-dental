@@ -11,6 +11,7 @@ import {
   phoneAreaCode,
   purchaseNumberAndConfigure,
 } from "../twilio/numbers";
+import { syncAdditionalNumberQuantity } from "../billing/stripe-number-quantity";
 import { logger } from "../logging/logger";
 
 // Shared, race-safe phone-number provisioning service used by BOTH the owner
@@ -147,18 +148,6 @@ export async function provisionClinicPhoneNumber(
         };
       }
 
-      // Additional (paid) provisioning is enabled in a later phase. It is
-      // unreachable here while no clinic has an active paid subscription; guard
-      // BEFORE any attempt row or external call so no number is ever stranded.
-      if (slotClass === "additional") {
-        logger.warn("provisioning.additional_not_enabled", { clinicId });
-        return {
-          kind: "blocked" as const,
-          error: "purchase_failed" as const,
-          message: "Additional-number purchasing is not available yet.",
-        };
-      }
-
       try {
         const ins = await tx<{ id: string }[]>`
           insert into public.clinic_phone_number_purchase_attempts
@@ -200,6 +189,7 @@ export async function provisionClinicPhoneNumber(
     return { ok: false, error: gate.error, message: gate.message };
   }
   const attemptId = gate.attemptId;
+  const slotClass = gate.slotClass;
 
   // ── 2. Twilio purchase gate (no transaction held open) ─────────────────────
   if (!isTwilioNumberPurchaseEnabled()) {
@@ -280,7 +270,20 @@ export async function provisionClinicPhoneNumber(
     };
   }
 
-  // ── 4. Included (first) number: assign + start trial (no charge) ────────────
+  // ── 4. Additional (paid) number: sync Stripe quantity BEFORE activating ─────
+  if (slotClass === "additional") {
+    return assignAdditionalNumber({
+      clinicId,
+      attemptId,
+      sid,
+      purchasedNumber,
+      actorProfileId,
+      actorEmail,
+      source,
+    });
+  }
+
+  // ── 4b. Included (first) number: assign + start trial (no charge) ───────────
   const trialDays = runtimeConfig.billing.trialDaysAfterActivation;
   try {
     const assigned = await sql.begin(async (tx) => {
@@ -389,6 +392,172 @@ export async function provisionClinicPhoneNumber(
       error: "reconciliation_required",
       message:
         "The number was purchased but could not be assigned automatically. Our team will finish setup.",
+      attemptId,
+    };
+  }
+}
+
+// Additional (paid) number activation. The Twilio number is already purchased
+// (SID persisted on the attempt). We sync the Stripe additional-number quantity
+// FIRST and only insert the active mapping if the sync succeeds. On any failure
+// the attempt is marked reconciliation_required and the number is NEVER released.
+async function assignAdditionalNumber(args: {
+  clinicId: string;
+  attemptId: string;
+  sid: string;
+  purchasedNumber: string;
+  actorProfileId: string | null;
+  actorEmail: string | null;
+  source: ProvisionSource;
+}): Promise<ProvisionResult> {
+  const sql = getDb();
+  const { clinicId, attemptId, sid, purchasedNumber, actorProfileId, actorEmail, source } = args;
+
+  await markAttempt(attemptId, { status: "billing_pending" });
+
+  // Re-read billing context. The in-flight attempt blocks concurrent additional
+  // purchases, so this count is stable. Suspended additional numbers are counted
+  // (billing_class='additional' regardless of is_active) — quantity never drops
+  // on suspension.
+  const ctxRows = await sql<
+    { subscription_id: string | null; additional_item_id: string | null; additional_count: number }[]
+  >`
+    select
+      stripe_subscription_id as subscription_id,
+      stripe_additional_number_subscription_item_id as additional_item_id,
+      (select count(*)::int from public.clinic_phone_numbers
+         where clinic_id = ${clinicId} and billing_class = 'additional') as additional_count
+    from public.clinics where id = ${clinicId} limit 1
+  `;
+  const subscriptionId = ctxRows[0]?.subscription_id ?? null;
+  const additionalCountBefore = ctxRows[0]?.additional_count ?? 0;
+  if (!subscriptionId) {
+    logger.error("provisioning.additional_no_subscription", { clinicId, attemptId });
+    await markAttempt(attemptId, {
+      status: "reconciliation_required",
+      error_code: "no_active_subscription",
+    });
+    return {
+      ok: false,
+      error: "reconciliation_required",
+      message: "The number was purchased but billing could not be synchronized. Our team will verify it.",
+      attemptId,
+    };
+  }
+
+  const desiredQuantity = additionalCountBefore + 1;
+  const sync = await syncAdditionalNumberQuantity({
+    clinicId,
+    stripeSubscriptionId: subscriptionId,
+    existingAdditionalItemId: ctxRows[0]?.additional_item_id ?? null,
+    desiredQuantity,
+    attemptId,
+  });
+  if (!sync.ok) {
+    // Twilio number purchased + SID persisted, but billing not synced. Do NOT
+    // activate and do NOT release the number.
+    await markAttempt(attemptId, { status: "reconciliation_required", error_code: sync.error });
+    return { ok: false, error: sync.error, message: sync.message, attemptId };
+  }
+
+  const amount = billingConfig.additionalBusinessNumber.monthlyUnitAmountCents;
+  try {
+    const assigned = await sql.begin(async (tx) => {
+      await tx`select 1 from public.clinics where id = ${clinicId} for update`;
+      const rows = await tx<
+        {
+          id: string;
+          phone_number: string;
+          role: string;
+          is_active: boolean;
+          billing_class: string;
+          monthly_unit_amount_cents: number;
+          currency: string;
+          activated_at: Date | null;
+          created_at: Date;
+        }[]
+      >`
+        insert into public.clinic_phone_numbers
+          (clinic_id, phone_number, twilio_phone_number_sid, role, is_active,
+           source, billing_class, monthly_unit_amount_cents, currency,
+           purchased_by_profile_id, purchased_by_email, activated_at)
+        values
+          (${clinicId}, ${purchasedNumber}, ${sid}, 'office_texting', true,
+           ${source}, 'additional', ${amount}, ${billingConfig.currency},
+           ${actorProfileId}, ${actorEmail}, now())
+        on conflict (phone_number) do update set
+          clinic_id = excluded.clinic_id,
+          twilio_phone_number_sid = excluded.twilio_phone_number_sid,
+          role = 'office_texting',
+          is_active = true,
+          source = excluded.source,
+          billing_class = excluded.billing_class,
+          monthly_unit_amount_cents = excluded.monthly_unit_amount_cents,
+          currency = excluded.currency,
+          purchased_by_profile_id = excluded.purchased_by_profile_id,
+          purchased_by_email = excluded.purchased_by_email,
+          activated_at = now(),
+          suspended_at = null,
+          suspended_by_profile_id = null,
+          suspension_reason = null
+        returning id, phone_number, role, is_active, billing_class,
+                  monthly_unit_amount_cents, currency, activated_at, created_at
+      `;
+      const row = rows[0];
+      if (!row) throw new Error("clinic_phone_numbers insert returned no row");
+
+      await tx`
+        update public.clinic_phone_number_purchase_attempts set
+          status = 'assigned',
+          stripe_subscription_id = ${subscriptionId},
+          stripe_additional_quantity_before = ${additionalCountBefore},
+          stripe_additional_quantity_after = ${desiredQuantity}
+        where id = ${attemptId}
+      `;
+      return row;
+    });
+
+    logger.info("provisioning.assigned", {
+      clinicId,
+      attemptId,
+      source,
+      slotClass: "additional",
+      areaCode: phoneAreaCode(purchasedNumber),
+    });
+
+    return {
+      ok: true,
+      attemptId,
+      twilioSid: sid,
+      assigned: {
+        id: assigned.id,
+        phoneNumber: assigned.phone_number,
+        role: assigned.role,
+        isActive: assigned.is_active,
+        billingClass: assigned.billing_class,
+        monthlyUnitAmountCents: assigned.monthly_unit_amount_cents,
+        currency: assigned.currency,
+        activatedAt: assigned.activated_at ? assigned.activated_at.toISOString() : null,
+        createdAt: assigned.created_at.toISOString(),
+      },
+    };
+  } catch (err) {
+    // Twilio purchased + Stripe quantity already incremented, but the mapping
+    // insert failed. Never release; never auto-reduce quantity. Reconcile.
+    logger.error("provisioning.additional_assignment_save_failed", {
+      clinicId,
+      attemptId,
+      message: err instanceof Error ? err.message : "unknown",
+    });
+    await markAttempt(attemptId, {
+      status: "reconciliation_required",
+      error_code: "assignment_save_failed",
+    });
+    return {
+      ok: false,
+      error: "reconciliation_required",
+      message:
+        "The number was purchased and billing updated, but it could not be activated automatically. Our team will finish setup.",
       attemptId,
     };
   }
