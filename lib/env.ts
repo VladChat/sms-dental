@@ -22,6 +22,14 @@ const StripeServerSchema = z.object({
   STRIPE_SECRET_KEY: requiredString,
 });
 
+// Non-secret Stripe TEST-mode recurring Price IDs for the subscription billing
+// model. Server-only: returned to server code, never sent to the client. Test
+// and live IDs differ, so these live in env (not committed billing.config.ts).
+const StripeBillingSchema = z.object({
+  STRIPE_BASE_PLAN_PRICE_ID: requiredString,
+  STRIPE_ADDITIONAL_NUMBER_PRICE_ID: requiredString,
+});
+
 const SupabaseDbSchema = z.object({
   SUPABASE_DB_URL: requiredString,
 });
@@ -65,6 +73,28 @@ export function getStripeWebhookEnv() {
 
 export function getStripeServerEnv() {
   return StripeServerSchema.parse(process.env);
+}
+
+// Validated lazily, only when the subscription billing flow needs the Price IDs.
+// Throws (ZodError) when either is unset; callers map that to a safe
+// `billing_configuration_missing` outcome and never expose the values.
+export function getStripeBillingEnv(): {
+  basePlanPriceId: string;
+  additionalNumberPriceId: string;
+} {
+  const parsed = StripeBillingSchema.parse(process.env);
+  return {
+    basePlanPriceId: parsed.STRIPE_BASE_PLAN_PRICE_ID,
+    additionalNumberPriceId: parsed.STRIPE_ADDITIONAL_NUMBER_PRICE_ID,
+  };
+}
+
+// Safe presence check (boolean only) without throwing — for entitlement/health.
+export function hasStripeBillingPriceIds(): boolean {
+  return (
+    present("STRIPE_BASE_PLAN_PRICE_ID") &&
+    present("STRIPE_ADDITIONAL_NUMBER_PRICE_ID")
+  );
 }
 
 export function getSupabaseDbEnv() {
@@ -177,6 +207,8 @@ export type EnvPresenceReport = {
   stripeSecretKey: boolean;
   stripeWebhookSecret: boolean;
   stripeAccountId: boolean;
+  stripeBasePlanPriceId: boolean;
+  stripeAdditionalNumberPriceId: boolean;
   publicWebhookBaseUrl: boolean;
   smsRecoveryMode: boolean;
   smsTestAllowedTo: boolean;
@@ -205,6 +237,8 @@ export function getEnvPresenceReport(): EnvPresenceReport {
     stripeSecretKey: present("STRIPE_SECRET_KEY"),
     stripeWebhookSecret: present("STRIPE_WEBHOOK_SECRET"),
     stripeAccountId: runtimeConfig.stripe.accountId.trim().length > 0,
+    stripeBasePlanPriceId: present("STRIPE_BASE_PLAN_PRICE_ID"),
+    stripeAdditionalNumberPriceId: present("STRIPE_ADDITIONAL_NUMBER_PRICE_ID"),
     publicWebhookBaseUrl: present("PUBLIC_WEBHOOK_BASE_URL"),
     smsRecoveryMode: present("SMS_RECOVERY_MODE"),
     smsTestAllowedTo: present("SMS_TEST_ALLOWED_TO"),

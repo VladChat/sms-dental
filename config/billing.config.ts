@@ -30,6 +30,13 @@ export const billingConfig = {
     callMinuteUnitAmountCents: 7,
     smsSegmentUnitAmountCents: 6,
   },
+
+  // Non-secret product policy. The default cap on how many business numbers a
+  // clinic may self-service hold (assigned + suspended + in-flight). A platform
+  // admin can raise a specific clinic's limit; this is only the default.
+  productPolicy: {
+    defaultSelfServiceBusinessNumberLimit: 5,
+  },
 } as const;
 
 // "$99", "$20", "$0.07" — whole-dollar amounts drop the cents; sub-dollar
