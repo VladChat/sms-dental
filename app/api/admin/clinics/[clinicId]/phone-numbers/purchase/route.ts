@@ -21,6 +21,7 @@ import {
   purchaseNumberAndConfigure,
 } from "../../../../../../../lib/twilio/numbers";
 import { recordAdminAuditEvent } from "../../../../../../../lib/db/admin/audit";
+import { logger } from "../../../../../../../lib/logging/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,7 +82,24 @@ export async function POST(
   // so a second purchase stays blocked here. The owner's additional-number
   // request is only a saved preference + consent snapshot — no Twilio purchase
   // happens from it.
-  const existing = await findAnyActiveClinicPhoneNumber(clinicId).catch(() => null);
+  // Fail CLOSED: if the active-number lookup throws (e.g. a transient DB error),
+  // never proceed to purchase. A swallowed error must not let the safety gate
+  // pass and allow a second number. This returns before the purchase flag check,
+  // the Twilio purchase, and the DB write.
+  let existing;
+  try {
+    existing = await findAnyActiveClinicPhoneNumber(clinicId);
+  } catch (err) {
+    logger.error("admin.phone_number.active_check_failed", {
+      clinicId,
+      message: err instanceof Error ? err.message : "unknown",
+    });
+    return jsonError(
+      503,
+      "active_number_check_failed",
+      "Could not safely verify whether this clinic already has an assigned number. No number was purchased.",
+    );
+  }
   if (existing) {
     return jsonError(
       409,

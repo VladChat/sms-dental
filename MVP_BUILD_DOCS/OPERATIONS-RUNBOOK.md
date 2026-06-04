@@ -2095,9 +2095,15 @@ through the existing gated **Add number** flow.
 
 Purchase safety: a second-number purchase is still blocked, now with code
 `additional_number_billing_not_ready` ("Additional number purchase is not available
-until subscription billing is configured."). No Stripe subscription/invoice/charge is
-created anywhere in this milestone; payment-method collection stays in sandbox setup
-mode.
+until subscription billing is configured."). The one-number gate is **role-agnostic**
+(any active `clinic_phone_numbers` row blocks a second purchase, not just
+`office_texting`) and **fails closed**: if the active-number lookup throws (e.g. a
+transient DB error) the route logs `admin.phone_number.active_check_failed` and returns
+`503 active_number_check_failed` ("Could not safely verify whether this clinic already
+has an assigned number. No number was purchased.") — **before** the purchase flag check,
+the Twilio purchase, and the DB write, so a swallowed error can never let a second
+number through. No Stripe subscription/invoice/charge is created anywhere in this
+milestone; payment-method collection stays in sandbox setup mode.
 
 Migration: apply `supabase/migrations/20260603000100_clinic_number_request_billing.sql`
 (owner approval) AFTER a clean duplicate-open-request preflight (see SETUP-LOG). It is
