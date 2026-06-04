@@ -4188,3 +4188,29 @@ longer say different open requests are superseded and no longer use "Use this nu
 Commit `1c591a3`; pushed to `origin/main`. (Production auto-deploys; no
 authenticated owner browser session in the repo CLI, so tooltip tap QA on a live
 375px viewport is the operator's manual check — not fabricated.)
+
+---
+
+## 2026-06-03 — fail closed on the active-number purchase check
+
+Follow-up to the gate hardening above. The active-number safety check in
+`app/api/admin/clinics/[clinicId]/phone-numbers/purchase/route.ts` still used
+`findAnyActiveClinicPhoneNumber(clinicId).catch(() => null)` — a **fail-open**
+bug: a transient DB error would swallow to `null`, the gate would treat the clinic
+as having no number, and a second purchase could proceed.
+
+Fix: removed `.catch(() => null)` and wrapped the lookup in an explicit
+`try/catch`. On any lookup error the route now **fails closed** — logs
+`admin.phone_number.active_check_failed` (clinicId + message only, no secrets) via
+the structured logger and returns a safe non-200 **before** the purchase flag
+check, the Twilio purchase, and the DB write:
+- code: `active_number_check_failed`
+- message: "Could not safely verify whether this clinic already has an assigned
+  number. No number was purchased."
+
+The existing `additional_number_billing_not_ready` (409) behavior when an active
+number IS found is preserved. No Twilio call, no Stripe change, no
+`clinic_phone_numbers` write, no `sms_recovery_enabled` change, no migration.
+
+Validation: `npm run typecheck` pass; `npm run build` pass (purchase route
+compiled); `git diff --check` clean. Commit `__PENDING__`; pushed to `origin/main`.
