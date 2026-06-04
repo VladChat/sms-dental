@@ -718,3 +718,26 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 - [ ] Accessible info tooltip: a real `<button>` with `aria-label` + `aria-expanded` +
       `aria-describedby`, popup `role="tooltip"`, works on hover/focus/tap, closes on Escape +
       outside click, constrained width so it never causes mobile horizontal overflow.
+
+---
+
+## Self-service provider purchasing + paid-plan conversion (reusable lessons)
+
+- [ ] Put real provider-purchase logic in ONE shared service used by every caller (owner + admin);
+      no route duplicates it. Recompute entitlement from live DB inside a per-tenant row lock.
+- [ ] Serialize concurrent purchases with a durable attempt row + a partial unique index
+      (one in-flight per tenant and per resource). Insert `started` BEFORE the external call;
+      do NOT hold the DB transaction open across the provider/Stripe call.
+- [ ] Persist the provider SID immediately after purchase; on an uncertain provider outcome mark
+      `reconciliation_required` (never claim "nothing was purchased", never hide the SID, never
+      auto-release).
+- [ ] For a metered add-on: purchase the resource, then sync the Stripe subscription-item
+      **quantity** (idempotency key from the attempt id; `proration_behavior:create_prorations`
+      so there's no immediate charge), and activate the resource ONLY after the sync succeeds.
+      Suspension keeps quantity (don't auto-decrement); never auto-release.
+- [ ] Grant paid entitlement ONLY from a webhook-confirmed active subscription — never from a
+      `?success` query param. Billing-critical webhook handlers must be idempotent, run on every
+      delivery (even "duplicate"), and FAIL CLOSED (return 5xx so Stripe retries) on a DB write
+      failure.
+- [ ] Trial source of truth = the tenant's own trial columns set at first activation, not a
+      registration/setup date.

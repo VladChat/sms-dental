@@ -540,18 +540,20 @@ Current onboarding defaults to automatic local number preparation/reservation.
 The customer should not manually choose from a broad number catalog as part of default onboarding.
 Toll-free can remain an alternate/reference path for special cases, but it is not the main MVP onboarding path.
 
-Owner number **request** (2026-06-02, multi-number 2026-06-03): once a payment method is
-saved, the owner can search local numbers on `/account → Phone numbers` and click
-**Request this number** (first/included number) or **Request additional number** (a paid
-$20/month number, which also requires checking the explicit authorization). This **saves a
-request for admin review** (`public.clinic_number_requests`, status `pending`) — it is not a
-purchase or assignment. It does **not** purchase, reserve, assign, provision, or activate a
-number, and does not touch `clinic_phone_numbers` or `sms_recovery_enabled`. Multiple
-different open requests (and existing assigned numbers) coexist; an exact duplicate request
-is de-duped. The platform admin reviews each requested number (shown in the admin clinic
-console) and finishes assignment through the existing gated admin **Add number** flow. Apply
-`supabase/migrations/20260602000200_clinic_number_requests.sql` and
-`supabase/migrations/20260603000100_clinic_number_request_billing.sql` before using it.
+Owner number purchasing (2026-06-03, branch `feat/self-service-numbers`, not yet deployed —
+**supersedes the request workflow above**): once a payment method is saved, the owner
+searches local numbers on `/account → Phone numbers` and **purchases directly** —
+**Purchase and assign number** (first/included; starts the 21-day trial on assignment, no
+charge today) or, after starting the paid plan, **Purchase additional number** ($20/mo,
+requires the explicit authorization checkbox). The first number is purchased + assigned
+automatically (no admin approval); additional numbers require a webhook-confirmed active
+paid subscription and only activate after the Stripe quantity sync succeeds. Default limit:
+5 held numbers per clinic. `POST /api/account/phone-numbers/request` is **retired (410)** —
+`clinic_number_requests` rows remain as legacy data (admin "Legacy number requests"), never
+auto-purchased/billed. Real purchase still requires `TWILIO_NUMBER_PURCHASE_ENABLED=true`.
+See `BILLING-AND-USAGE-POLICY.md` v2 + SETUP-LOG 2026-06-03. Apply migration
+`supabase/migrations/20260603000200_self_service_number_purchasing.sql` (and set the two
+`STRIPE_*_PRICE_ID` env vars) before deploying.
 
 ### Production safety still applies
 

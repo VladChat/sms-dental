@@ -2110,3 +2110,34 @@ Migration: apply `supabase/migrations/20260603000100_clinic_number_request_billi
 additive/idempotent and leaves legacy requests `included` + non-billable. Reads are
 defensive, so the app loads before it is applied, but billing-class/consent fields are
 absent until then.
+
+---
+
+## Self-service number purchasing + paid plan — 2026-06-03 (branch, not yet deployed)
+
+The owner "request a number for admin review" flow is **retired**
+(`POST /api/account/phone-numbers/request` → 410). New model (branch
+`feat/self-service-numbers`; Stripe sandbox/test only; `TWILIO_NUMBER_PURCHASE_
+ENABLED` false; see SETUP-LOG 2026-06-03 and BILLING-AND-USAGE-POLICY v2):
+
+- Owner self-service: first number is purchased+assigned automatically (included,
+  no admin approval), starting the 21-day trial from `clinics.trial_ends_at`.
+  Additional numbers ($20/mo) require a webhook-confirmed active paid subscription
+  and explicit consent; they activate only after the Stripe quantity sync succeeds.
+- Default **5 held numbers** per clinic; suspended numbers still count + stay billed.
+- Operator surface = clinic console **Phone number → Number operations**:
+  allow/revoke new purchases, set the limit (1–100, never below held), suspend /
+  reactivate a number (no Twilio release, no Stripe quantity change), view purchase
+  attempts (`reconciliation_required` shows the Twilio SID), and "Legacy number
+  requests" (dismiss-only). Routes: `POST …/clinics/[id]/action`
+  (`revoke_number_purchases`/`allow_number_purchases`/`set_phone_number_limit`/
+  `dismiss_legacy_request`) and `POST …/clinics/[id]/phone-numbers/[pid]/action`
+  (`suspend`/`reactivate`). All audited.
+- Reconciliation: a `reconciliation_required` purchase attempt means a Twilio
+  number was bought but billing/assignment didn't complete — the SID is preserved
+  for manual reconciliation; nothing is auto-released.
+
+**Apply/deploy order (expand-before-deploy):** apply migration
+`20260603000200_self_service_number_purchasing.sql` → set `STRIPE_BASE_PLAN_PRICE_ID`
++ `STRIPE_ADDITIONAL_NUMBER_PRICE_ID` (Vercel Production) → deploy. Keep
+`TWILIO_NUMBER_PURCHASE_ENABLED` false until deliberate go-live.
