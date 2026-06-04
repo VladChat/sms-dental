@@ -7,11 +7,7 @@ import {
   listClinicPhoneNumbersForClinic,
   type ClinicPhoneNumberRow,
 } from "../../lib/db/clinic-phone-numbers";
-import {
-  listOpenClinicNumberRequestsForClinic,
-  type ClinicNumberRequestRow,
-} from "../../lib/db/clinic-number-requests";
-import { findMostRecentSetupRequestByClinicId } from "../../lib/db/setup-requests";
+import { getNumberEntitlement } from "../../lib/billing/number-entitlements";
 import { getAppDomainsSafe } from "../../lib/env";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
 import { listActiveMembershipsForClinic } from "../../lib/db/clinic-memberships";
@@ -21,9 +17,9 @@ import { ClinicForm } from "../setup/[token]/_components/ClinicForm";
 import { BusinessProfile, type BusinessProfileData } from "../setup/[token]/_components/BusinessProfile";
 import type {
   AssignedBusinessNumberSummary,
+  OwnerNumberEntitlement,
   PaymentMethodSetupResult,
   PaymentMethodSummary,
-  RequestedNumberSummary,
 } from "../setup/[token]/_components/account-types";
 import { PageShell } from "../setup/[token]/_components/PageShell";
 import { phoneAreaCode } from "../../lib/twilio/numbers";
@@ -38,13 +34,20 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const TRIAL_DAYS = 21;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Real saved-payment-method signal: keyed strictly off stripe_payment_method_id,
-// never the customer id or billing_status. Returns the safe summary too.
+// Trial countdown comes from clinics.trial_ends_at (the product source of truth),
+// NOT the setup-request date. 0 when no trial or already ended.
+function trialDaysRemainingFrom(clinic: ClinicOnboardingRow): number {
+  if (!clinic.trial_ends_at) return 0;
+  const ms = clinic.trial_ends_at.getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / DAY_MS));
+}
+
+// Real saved-payment-method signal: keyed strictly off stripe_payment_method_id.
 function buildBilling(
   clinic: ClinicOnboardingRow,
+  ent: OwnerNumberEntitlement,
   trialDaysRemaining: number,
 ): BusinessProfileData["billing"] {
   const hasPaymentMethod = Boolean(clinic.stripe_payment_method_id);
@@ -63,63 +66,94 @@ function buildBilling(
     hasPaymentMethod,
     paymentMethod,
     trialDaysRemaining,
-    trialEnded: trialDaysRemaining <= 0,
+    trialEnded: ent.trialEnded,
+    isTrialing: ent.isTrialing,
+    paidPlanActive: ent.hasActivePaidSubscription,
+    billingStatus: ent.billingStatus,
   };
 }
 
-// Map an assigned phone-number row to the safe owner-facing summary.
 function toAssignedSummary(row: ClinicPhoneNumberRow): AssignedBusinessNumberSummary {
   return {
     id: row.id,
     phoneNumber: row.phone_number,
     role: row.role,
     isActive: row.is_active,
-    createdAt: row.created_at ? row.created_at.toISOString() : null,
-  };
-}
-
-// Map an owner number-request row to the safe owner-facing summary (incl. the
-// pricing/consent snapshot). No secrets.
-function toRequestedSummary(row: ClinicNumberRequestRow): RequestedNumberSummary {
-  return {
-    id: row.id,
-    phoneNumber: row.requested_phone_number,
-    friendlyName: row.friendly_name,
-    locality: row.locality,
-    region: row.region,
-    status: row.status,
-    createdAt: row.created_at ? row.created_at.toISOString() : null,
     billingClass: row.billing_class,
-    monthlyUnitAmountCents: row.monthly_unit_amount_cents,
-    currency: row.currency,
-    billingConsentAuthorizedAt: row.billing_consent_authorized_at
-      ? row.billing_consent_authorized_at.toISOString()
-      : null,
+    createdAt: row.created_at ? row.created_at.toISOString() : null,
   };
 }
 
-// Parse the section / payment_method_setup query params from a Stripe return.
+// Load the server-computed entitlement, mapped to the owner-safe shape. Resilient
+// to the new columns not existing yet (pre-migration): falls back to a SAFE,
+// purchase-blocked entitlement so /account never errors and never over-grants.
+async function loadOwnerEntitlement(
+  clinicId: string,
+  assigned: AssignedBusinessNumberSummary[],
+): Promise<OwnerNumberEntitlement> {
+  try {
+    const e = await getNumberEntitlement(clinicId);
+    return {
+      heldNumberCount: e.heldNumberCount,
+      activeNumberCount: e.activeNumberCount,
+      numberLimit: e.numberLimit,
+      additionalBilledQuantity: e.additionalBilledQuantity,
+      purchasesEnabled: e.purchasesEnabled,
+      nextSlotClass: e.nextSlotClass,
+      isTrialing: e.isTrialing,
+      trialEnded: e.trialEnded,
+      hasActivePaidSubscription: e.hasActivePaidSubscription,
+      canPurchaseNext: e.canPurchaseNext,
+      blockReason: e.blockReason,
+      trialStartedAt: e.trialStartedAt,
+      trialEndsAt: e.trialEndsAt,
+      paidPlanStartedAt: e.paidPlanStartedAt,
+      billingStatus: e.billingStatus,
+    };
+  } catch {
+    return {
+      heldNumberCount: assigned.length,
+      activeNumberCount: assigned.filter((n) => n.isActive).length,
+      numberLimit: 5,
+      additionalBilledQuantity: 0,
+      purchasesEnabled: false,
+      nextSlotClass: "included",
+      isTrialing: false,
+      trialEnded: false,
+      hasActivePaidSubscription: false,
+      canPurchaseNext: false,
+      blockReason: "billing_configuration_missing",
+      trialStartedAt: null,
+      trialEndsAt: null,
+      paidPlanStartedAt: null,
+      billingStatus: "not_started",
+    };
+  }
+}
+
 function parseAccountSearch(sp: Record<string, string | string[] | undefined>): {
   initialSection: string | null;
   paymentMethodSetup: PaymentMethodSetupResult;
+  paidPlanResult: "success" | "cancelled" | null;
 } {
-  const sectionRaw = sp.section;
-  const section = (Array.isArray(sectionRaw) ? sectionRaw[0] : sectionRaw) ?? null;
-  const setupRaw = sp.payment_method_setup;
-  const setup = Array.isArray(setupRaw) ? setupRaw[0] : setupRaw;
-  const paymentMethodSetup: PaymentMethodSetupResult =
-    setup === "success" ? "success" : setup === "cancelled" ? "cancelled" : null;
-  return { initialSection: section, paymentMethodSetup };
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? null;
+  const section = one(sp.section);
+  const setup = one(sp.payment_method_setup);
+  const paid = one(sp.paid_plan);
+  return {
+    initialSection: section,
+    paymentMethodSetup: setup === "success" ? "success" : setup === "cancelled" ? "cancelled" : null,
+    paidPlanResult: paid === "success" ? "success" : paid === "cancelled" ? "cancelled" : null,
+  };
 }
 
-// `/account` now prefers real authenticated session + clinic membership.
-// The setup-token cookie path is kept as temporary fallback during rollout.
 export default async function AccountPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { initialSection, paymentMethodSetup } = parseAccountSearch(await searchParams);
+  const { initialSection, paymentMethodSetup, paidPlanResult } = parseAccountSearch(await searchParams);
+
   // Primary access path: real authenticated session + clinic membership.
   const access = await resolveAuthClinicAccess();
   if (access.ok) {
@@ -129,17 +163,13 @@ export default async function AccountPage({
 
     const clinic = access.clinic;
     const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
-    // All assigned business numbers + all open requested numbers (resilient to a
-    // table not yet existing in this environment).
     const assignedNumbers = await listClinicPhoneNumbersForClinic(clinic.id)
       .then((rows) => rows.map(toAssignedSummary))
       .catch(() => []);
-    const requestedNumbers = await listOpenClinicNumberRequestsForClinic(clinic.id)
-      .then((rows) => rows.map(toRequestedSummary))
-      .catch(() => []);
+    const entitlement = await loadOwnerEntitlement(clinic.id, assignedNumbers);
+
     const memberships = await listActiveMembershipsForClinic(clinic.id).catch(() => []);
-    const profileIds = memberships.map((m) => m.profile_id);
-    const profiles = await listProfilesByIds(profileIds).catch(() => []);
+    const profiles = await listProfilesByIds(memberships.map((m) => m.profile_id)).catch(() => []);
     const profileById = new Map(profiles.map((p) => [p.id, p]));
     const teamMembers = memberships
       .map((m) => {
@@ -161,69 +191,26 @@ export default async function AccountPage({
       });
     }
 
-    // Keep trial countdown aligned to the original setup creation when
-    // available, otherwise fall back to now.
-    const setupRequest = await findMostRecentSetupRequestByClinicId(clinic.id).catch(() => null);
-    const created = new Date(setupRequest?.created_at ?? new Date()).getTime();
-    const elapsedDays = Math.max(0, Math.floor((Date.now() - created) / DAY_MS));
-    const trialDaysRemaining = Math.max(0, TRIAL_DAYS - elapsedDays);
-
-    const data: BusinessProfileData = {
+    const data = buildData({
+      clinic,
       token: null,
       loginEmail: access.userEmail ?? clinic.owner_contact_email ?? "",
       publicBaseUrl,
-      slug: clinic.slug,
+      assignedNumbers,
+      entitlement,
+      teamMembers,
       initialSection,
       paymentMethodSetup,
-      businessProfile: {
-        name: clinic.name,
-        mainPhone: clinic.main_phone ?? "",
-        streetAddress: clinic.street_address ?? "",
-        addressLine2: clinic.address_line2 ?? "",
-        city: clinic.city ?? "",
-        stateRegion: clinic.state_region ?? "",
-        postalCode: clinic.postal_code ?? "",
-        website: clinic.website ?? "",
-        completed: clinic.business_info_completed,
-      },
-      smsApproval: {
-        legalBusinessName: clinic.legal_business_name ?? "",
-        einTaxId: clinic.ein_tax_id ?? "",
-        businessType: clinic.business_type ?? "",
-        repFirstName: clinic.a2p_rep_first_name ?? "",
-        repLastName: clinic.a2p_rep_last_name ?? "",
-        repEmail: clinic.a2p_rep_email ?? "",
-        repPhone: clinic.a2p_rep_phone ?? "",
-        authorized: clinic.a2p_authorized,
-        completed: clinic.a2p_info_completed,
-      },
-      number: {
-        localNumberStatus: clinic.local_number_status,
-        smsStatus: clinic.sms_status,
-        assignedNumbers,
-        areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
-        postalCode: clinic.postal_code,
-        requestedNumbers,
-      },
-      billing: buildBilling(clinic, trialDaysRemaining),
-      security: {
-        passwordEnabled: true,
-      },
-      teamAccess: {
-        members: teamMembers,
-      },
-    };
-
+      paidPlanResult,
+    });
     return <BusinessProfile data={data} />;
   }
 
-  // Temporary fallback path: legacy setup-token cookie. Keep while auth rollout
-  // is verified so existing setup-link users are not locked out.
+  // Temporary fallback path: legacy setup-token cookie.
   const token = await readAccountSessionToken();
   if (!token) {
     return <AccountGate />;
   }
-
   const lookup = await lookupSetupRequestByRawToken(token);
   if (!lookup.ok) {
     return (
@@ -233,21 +220,13 @@ export default async function AccountPage({
     );
   }
   const setupRequest = lookup.setupRequest;
-
-  // Cookie is only set after a clinic exists, but handle the edge gracefully by
-  // letting the customer finish the office profile (posts then returns here).
   if (!setupRequest.clinic_id) {
     return (
       <PageShell>
-        <ClinicForm
-          token={token}
-          loginEmail={setupRequest.owner_email}
-          initialValues={{ name: "", mainPhone: "", postalCode: "" }}
-        />
+        <ClinicForm token={token} loginEmail={setupRequest.owner_email} initialValues={{ name: "", mainPhone: "", postalCode: "" }} />
       </PageShell>
     );
   }
-
   const clinic = await findClinicById(setupRequest.clinic_id);
   if (!clinic) {
     return (
@@ -256,28 +235,51 @@ export default async function AccountPage({
       </PageShell>
     );
   }
-
   const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
   const assignedNumbers = await listClinicPhoneNumbersForClinic(clinic.id)
     .then((rows) => rows.map(toAssignedSummary))
     .catch(() => []);
-  const requestedNumbers = await listOpenClinicNumberRequestsForClinic(clinic.id)
-    .then((rows) => rows.map(toRequestedSummary))
-    .catch(() => []);
+  const entitlement = await loadOwnerEntitlement(clinic.id, assignedNumbers);
 
-  // Trial countdown from the safest available creation timestamp: the setup
-  // request's created_at (the registration moment).
-  const created = new Date(setupRequest.created_at).getTime();
-  const elapsedDays = Math.max(0, Math.floor((Date.now() - created) / DAY_MS));
-  const trialDaysRemaining = Math.max(0, TRIAL_DAYS - elapsedDays);
-
-  const data: BusinessProfileData = {
+  const data = buildData({
+    clinic,
     token,
     loginEmail: setupRequest.owner_email,
     publicBaseUrl,
-    slug: clinic.slug,
+    assignedNumbers,
+    entitlement,
+    teamMembers: [
+      { email: setupRequest.owner_email.trim().toLowerCase(), role: "owner", status: "active" as const },
+    ],
     initialSection,
     paymentMethodSetup,
+    paidPlanResult,
+  });
+  return <BusinessProfile data={data} />;
+}
+
+function buildData(args: {
+  clinic: ClinicOnboardingRow;
+  token: string | null;
+  loginEmail: string;
+  publicBaseUrl: string;
+  assignedNumbers: AssignedBusinessNumberSummary[];
+  entitlement: OwnerNumberEntitlement;
+  teamMembers: BusinessProfileData["teamAccess"]["members"];
+  initialSection: string | null;
+  paymentMethodSetup: PaymentMethodSetupResult;
+  paidPlanResult: "success" | "cancelled" | null;
+}): BusinessProfileData {
+  const { clinic, entitlement, assignedNumbers } = args;
+  const trialDaysRemaining = trialDaysRemainingFrom(clinic);
+  return {
+    token: args.token,
+    loginEmail: args.loginEmail,
+    publicBaseUrl: args.publicBaseUrl,
+    slug: clinic.slug,
+    initialSection: args.initialSection,
+    paymentMethodSetup: args.paymentMethodSetup,
+    paidPlanResult: args.paidPlanResult,
     businessProfile: {
       name: clinic.name,
       mainPhone: clinic.main_phone ?? "",
@@ -306,24 +308,12 @@ export default async function AccountPage({
       assignedNumbers,
       areaCode: clinic.main_phone ? phoneAreaCode(clinic.main_phone) : null,
       postalCode: clinic.postal_code,
-      requestedNumbers,
+      entitlement,
     },
-    billing: buildBilling(clinic, trialDaysRemaining),
-    security: {
-      passwordEnabled: true,
-    },
-    teamAccess: {
-      members: [
-        {
-          email: setupRequest.owner_email.trim().toLowerCase(),
-          role: "owner",
-          status: "active",
-        },
-      ],
-    },
+    billing: buildBilling(clinic, entitlement, trialDaysRemaining),
+    security: { passwordEnabled: true },
+    teamAccess: { members: args.teamMembers },
   };
-
-  return <BusinessProfile data={data} />;
 }
 
 function AccountGate() {

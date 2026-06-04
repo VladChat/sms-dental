@@ -9,6 +9,19 @@ export type ClinicPhoneNumberRow = {
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
+  // Added by the self-service-numbers migration (present after it is applied;
+  // `select *` returns them). Legacy rows default to source/billing_class
+  // 'legacy', amount 0.
+  source: string;
+  billing_class: "legacy" | "included" | "additional";
+  monthly_unit_amount_cents: number;
+  currency: string;
+  purchased_by_profile_id: string | null;
+  purchased_by_email: string | null;
+  activated_at: Date | null;
+  suspended_at: Date | null;
+  suspended_by_profile_id: string | null;
+  suspension_reason: string | null;
 };
 
 /**

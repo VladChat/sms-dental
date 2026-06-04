@@ -42,13 +42,37 @@ export type PaymentMethodSummary = {
 export type PaymentMethodSetupResult = "success" | "cancelled" | null;
 
 // An assigned business number. Multiple may exist; none is ever hidden/replaced
-// because another number is requested.
+// because another number is purchased. Suspended numbers stay listed (isActive
+// false) and still count toward the limit + billing quantity.
 export type AssignedBusinessNumberSummary = {
   id: string;
   phoneNumber: string;
   role: string;
   isActive: boolean;
+  billingClass: "legacy" | "included" | "additional";
   createdAt: string | null;
+};
+
+// Owner-safe number-purchase entitlement (computed server-side from live state).
+// Drives the Phone numbers panel CTAs and gating. The client never decides any
+// of this — it only renders it.
+export type OwnerNumberEntitlement = {
+  heldNumberCount: number;
+  activeNumberCount: number;
+  numberLimit: number;
+  additionalBilledQuantity: number;
+  purchasesEnabled: boolean;
+  nextSlotClass: "included" | "additional";
+  isTrialing: boolean;
+  trialEnded: boolean;
+  hasActivePaidSubscription: boolean;
+  canPurchaseNext: boolean;
+  // null when purchasable; otherwise a stable machine-readable block reason.
+  blockReason: string | null;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  paidPlanStartedAt: string | null;
+  billingStatus: string;
 };
 
 // An owner-requested number (preference + pricing/consent snapshot awaiting admin
@@ -84,6 +108,8 @@ export type BusinessProfileData = {
   initialSection?: string | null;
   // Outcome of a returning Stripe payment-method setup redirect, if any.
   paymentMethodSetup?: PaymentMethodSetupResult;
+  // Outcome of a returning Stripe paid-plan (subscription) Checkout redirect.
+  paidPlanResult?: "success" | "cancelled" | null;
   businessProfile: BusinessProfileFields & { completed: boolean };
   smsApproval: SmsApprovalFields & { completed: boolean };
   number: {
@@ -95,8 +121,8 @@ export type BusinessProfileData = {
     // Editing them in the Phone number search does not update the profile.
     areaCode: string | null;
     postalCode: string | null;
-    // All open owner-requested numbers awaiting admin review (may be empty).
-    requestedNumbers: RequestedNumberSummary[];
+    // Server-computed purchase entitlement (gating + CTA selection).
+    entitlement: OwnerNumberEntitlement;
   };
   billing: {
     // True only when a real payment method is saved (stripe_payment_method_id
@@ -104,9 +130,13 @@ export type BusinessProfileData = {
     hasPaymentMethod: boolean;
     // Safe saved-method summary, or null when none is on file.
     paymentMethod: PaymentMethodSummary | null;
-    // Days left in the 21-day trial, counted from setup creation. 0 when ended.
+    // Days left in the 21-day trial, counted from clinics.trial_ends_at. 0 ended.
     trialDaysRemaining: number;
     trialEnded: boolean;
+    isTrialing: boolean;
+    // True only when a webhook-confirmed active paid subscription exists.
+    paidPlanActive: boolean;
+    billingStatus: string;
   };
   security: {
     passwordEnabled: boolean;

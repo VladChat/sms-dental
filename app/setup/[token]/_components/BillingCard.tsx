@@ -19,12 +19,26 @@ export function BillingCard({
   trialDaysRemaining,
   trialEnded,
   paymentMethodSetup,
+  paidPlanActive,
+  canStartPaidPlan,
+  isTrialing,
+  paidPlanResult,
+  startingPaidPlan,
+  paidPlanError,
+  onStartPaidPlan,
 }: {
   hasPaymentMethod: boolean;
   paymentMethod: PaymentMethodSummary | null;
   trialDaysRemaining: number;
   trialEnded: boolean;
   paymentMethodSetup: PaymentMethodSetupResult;
+  paidPlanActive: boolean;
+  canStartPaidPlan: boolean;
+  isTrialing: boolean;
+  paidPlanResult: "success" | "cancelled" | null;
+  startingPaidPlan: boolean;
+  paidPlanError: string | null;
+  onStartPaidPlan: () => void;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -75,16 +89,62 @@ export function BillingCard({
             <StatusBadge kind="needs_setup" />
           )}
         </StatusRow>
-        <StatusRow label="Free trial">
-          {trialEnded ? (
+        <StatusRow label="Plan">
+          {paidPlanActive ? (
+            <StatusBadge kind="active" label="Paid plan active" />
+          ) : isTrialing ? (
+            <StatusBadge kind="waiting" label="Free trial" />
+          ) : trialEnded ? (
             <StatusBadge kind="needs_action" label="Trial ended" />
           ) : (
-            <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-              Free trial ends in {dayLabel}
-            </span>
+            <StatusBadge kind="not_started" label="Not started" />
           )}
         </StatusRow>
+        {!paidPlanActive && (
+          <StatusRow label="Free trial">
+            {trialEnded ? (
+              <StatusBadge kind="needs_action" label="Trial ended" />
+            ) : isTrialing ? (
+              <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
+                Free trial ends in {dayLabel}
+              </span>
+            ) : (
+              <span className="t-small" style={{ color: "var(--text-muted)" }}>Starts after your first number</span>
+            )}
+          </StatusRow>
+        )}
       </div>
+
+      {/* Returning from Stripe-hosted subscription Checkout. Paid status is shown
+          only from confirmed subscription data (paidPlanActive), never the param. */}
+      {paidPlanResult === "success" && !paidPlanActive && (
+        <div className="alert alert-info" role="status" aria-live="polite" style={{ alignItems: "center" }}>
+          <span style={{ flex: 1 }}>Your paid plan is being confirmed. This can take a few seconds.</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => router.refresh()}>Refresh</button>
+        </div>
+      )}
+      {paidPlanResult === "cancelled" && (
+        <div className="alert alert-info" role="status" aria-live="polite">
+          <span>Paid plan setup was cancelled. You are still on your trial.</span>
+        </div>
+      )}
+
+      {/* Explicit trial -> paid conversion. The subscription is created in
+          Stripe-hosted Checkout; this never charges directly. */}
+      {hasPaymentMethod && !paidPlanActive && canStartPaidPlan && (
+        <div style={{ display: "grid", gap: "var(--space-2)" }}>
+          <button type="button" className="btn btn-primary" onClick={onStartPaidPlan}
+            disabled={startingPaidPlan} aria-busy={startingPaidPlan}>
+            {startingPaidPlan ? "Starting…" : isTrialing ? "End trial and start paid plan" : "Start paid plan"}
+          </button>
+          <p className="t-small" style={{ color: "var(--text-muted)" }}>
+            Starts the {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month plan via Stripe. Required before adding more numbers.
+          </p>
+          {paidPlanError && (
+            <div className="alert alert-error" role="alert" aria-live="polite"><span>{paidPlanError}</span></div>
+          )}
+        </div>
+      )}
 
       {/* Plan details — sourced entirely from config/billing.config.ts. */}
       <div className="acct-plan">
