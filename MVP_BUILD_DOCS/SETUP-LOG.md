@@ -4214,3 +4214,57 @@ number IS found is preserved. No Twilio call, no Stripe change, no
 
 Validation: `npm run typecheck` pass; `npm run build` pass (purchase route
 compiled); `git diff --check` clean. Commit `7f17bc1`; pushed to `origin/main`.
+
+---
+
+## 2026-06-03 — Self-service number purchasing milestone (branch `feat/self-service-numbers`, NOT yet applied/deployed)
+
+Major billing + provisioning milestone built in validated phases on a feature
+branch, off `main` @ `5940aec`. **HELD for explicit approval:** prod migration
+apply, Vercel env vars, and push/deploy. Stripe **sandbox/test only**;
+`TWILIO_NUMBER_PURCHASE_ENABLED` unchanged (false); no real Twilio purchase or live
+charge performed.
+
+What changed (by phase / commit):
+- **P1 `cddd389`** — `config/billing.config.ts` `productPolicy.defaultSelfServiceBusinessNumberLimit=5`;
+  `lib/env.ts` lazy `getStripeBillingEnv()` + presence; migration
+  `20260603000200_self_service_number_purchasing.sql` (clinic purchase controls,
+  per-number billing/audit snapshot cols, `clinic_phone_number_purchase_attempts`
+  with in-flight unique partial indexes); `lib/billing/number-entitlements.ts`
+  (single server-side eligibility authority).
+- **P2 `e2987f4`** — `lib/phone-numbers/provisioning.ts` shared race-safe service
+  (both owner + admin); owner `POST /api/account/phone-numbers/purchase` (first
+  included number → assign + start trial, no charge); `…/request` retired → **410**;
+  admin purchase route refactored onto the shared service.
+- **P3 `649310a`** — `POST /api/account/billing/start-paid-plan` (subscription
+  Checkout, server-side base Price ID); Stripe webhook expanded for subscription
+  lifecycle, **fail-closed** (5xx on billing DB failure), idempotent.
+- **P4 `727c85c`** — additional-number path + `lib/billing/stripe-number-quantity.ts`
+  (quantity sync, proration, idempotency from attempt id, fail-closed; activate
+  only after sync; never release).
+- **P5 `b01531d`** — owner UI: entitlement-driven Phone numbers panel (purchase,
+  trial/paid CTAs, $20/mo consent, suspended display, counts) + Billing panel
+  (real trial/paid state, Start paid plan); trial countdown from `trial_ends_at`.
+- **P6 `e48f3ec`** — admin controls: revoke/allow purchasing, set limit (1–100, not
+  below held), suspend/reactivate (no Twilio release, no quantity change), purchase
+  attempts + reconciliation visibility, legacy requests labeled + dismiss.
+- **P7** — docs (this entry, `BILLING-AND-USAGE-POLICY.md` v2, RUNBOOK, CHECKLIST,
+  FIRST-CLINIC).
+
+Production preflight (read-only, clean): 0 clinics >5 numbers, 0 >1 active, 0 dup
+mappings, **0 existing subscriptions**, 2 legacy open requests (kept), new
+table/cols absent.
+
+Stripe TEST catalog created (`livemode:false`, idempotent; non-secret IDs to set
+in Vercel at deploy): `STRIPE_BASE_PLAN_PRICE_ID=price_1TegbY4ZSHLicmejTDngrrYT`
+($99/mo), `STRIPE_ADDITIONAL_NUMBER_PRICE_ID=price_1TegbZ4ZSHLicmejnCGGpOEQ` ($20/mo).
+
+Validation (branch): `npm run typecheck` pass; `npm run build` pass; `git diff
+--check` clean; no Twilio release code (grep clean).
+
+**Apply/deploy order when approved (expand-before-deploy):** (1) apply migration to
+prod Supabase via Management API; (2) set the two `STRIPE_*_PRICE_ID` env vars in
+Vercel Production; (3) merge branch → push `main` (auto-deploys); (4) verify health
++ `/account`. The migration MUST be applied before the deploy (the code SELECTs the
+new columns). Keep `TWILIO_NUMBER_PURCHASE_ENABLED` false until a deliberate
+go-live; a real owner purchase requires it true.
