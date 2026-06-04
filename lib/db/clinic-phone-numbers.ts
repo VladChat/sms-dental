@@ -49,6 +49,29 @@ export async function findActiveOfficeTextingNumber(
 }
 
 /**
+ * Returns the first ACTIVE clinic_phone_numbers row for a clinic regardless of
+ * role (oldest first), or null when none exists. The additional-number purchase
+ * safety gate uses this so a clinic that already has ANY active assigned number
+ * — including a legacy/manually-provisioned row with a non-`office_texting` role
+ * (e.g. `recovery`) — is detected and a second purchase is blocked. Read-only;
+ * never writes, releases, or reconfigures a number.
+ */
+export async function findAnyActiveClinicPhoneNumber(
+  clinicId: string,
+): Promise<ClinicPhoneNumberRow | null> {
+  const sql = getDb();
+  const rows = await sql<ClinicPhoneNumberRow[]>`
+    select *
+    from public.clinic_phone_numbers
+    where clinic_id = ${clinicId}
+      and is_active = true
+    order by created_at asc
+    limit 1
+  `;
+  return rows[0] ?? null;
+}
+
+/**
  * Persist the assigned office texting number for a clinic. Uses upsert by
  * phone_number (unique). Sets role='office_texting' and is_active=true.
  */

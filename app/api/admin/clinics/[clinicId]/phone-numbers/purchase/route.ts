@@ -11,7 +11,7 @@ import {
 import { resolvePlatformAdmin } from "../../../../../../../lib/auth/platform-admin";
 import { findClinicById } from "../../../../../../../lib/db/clinics";
 import {
-  findActiveOfficeTextingNumber,
+  findAnyActiveClinicPhoneNumber,
   upsertOfficeTextingNumber,
 } from "../../../../../../../lib/db/clinic-phone-numbers";
 import { getAppDomains, isTwilioNumberPurchaseEnabled } from "../../../../../../../lib/env";
@@ -75,11 +75,13 @@ export async function POST(
   if (!clinic) return jsonError(404, "not_found", "Clinic not found.");
 
   // One-number safety gate: never purchase a second number for a clinic that
-  // already has an active assigned number. Additional-number billing (the $20/mo
-  // Stripe subscription item) is not implemented yet, so a second purchase stays
-  // blocked here. The owner's additional-number request is only a saved
-  // preference + consent snapshot — no Twilio purchase happens from it.
-  const existing = await findActiveOfficeTextingNumber(clinicId).catch(() => null);
+  // already has ANY active assigned number (role-agnostic — includes legacy or
+  // manually-provisioned rows whose role is not `office_texting`). Additional-
+  // number billing (the $20/mo Stripe subscription item) is not implemented yet,
+  // so a second purchase stays blocked here. The owner's additional-number
+  // request is only a saved preference + consent snapshot — no Twilio purchase
+  // happens from it.
+  const existing = await findAnyActiveClinicPhoneNumber(clinicId).catch(() => null);
   if (existing) {
     return jsonError(
       409,

@@ -686,8 +686,11 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 - [ ] The customer write route must: require auth, reject lower roles, derive tenant id from
       the session (never from the client), validate the payload (E.164, required capabilities)
       with zod, and make **zero** provider API calls.
-- [ ] De-dupe repeat submits: if the latest pending request already matches, return it; else
-      supersede prior pending rows (→ `cancelled`) and insert one new `pending`.
+- [ ] When the product supports additive resources (e.g. multiple business numbers), allow
+      multiple *different* open requests to coexist. De-duplicate only the **same tenant +
+      same resource** open request (return the existing row; a partial unique index on open
+      statuses enforces it). **Never** silently cancel an older *different* open request unless
+      the product explicitly defines replacement behavior — additive ≠ replace.
 - [ ] Make new-table reads **defensive** (`.catch(() => null/[])`) in page/console loaders so
       the app still renders before the hand-applied migration lands (avoids a repeat of the
       "missing column/table → 500" outage).
