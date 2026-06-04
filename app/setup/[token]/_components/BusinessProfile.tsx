@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Section, NavStatusIcon, type StatusKind } from "./AccountUI";
 import { BusinessProfileForm } from "./BusinessProfileForm";
 import { SmsApprovalForm } from "./SmsApprovalForm";
@@ -11,7 +12,6 @@ import { TeamAccessCard } from "./TeamAccessCard";
 import type {
   BusinessProfileData,
   BusinessProfileFields,
-  RequestedNumberSummary,
   SmsApprovalFields,
   SmsStatus,
 } from "./account-types";
@@ -29,22 +29,46 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [sms, setSms] = useState<SmsApprovalFields>(() => withRepDefaults(data));
   const [smsDone, setSmsDone] = useState(data.smsApproval.completed);
   const [smsStatus, setSmsStatus] = useState<SmsStatus>(data.number.smsStatus);
-  const [requestedNumbers, setRequestedNumbers] = useState<RequestedNumberSummary[]>(
-    data.number.requestedNumbers,
-  );
+  const router = useRouter();
+  const [startingPaidPlan, setStartingPaidPlan] = useState(false);
+  const [paidPlanError, setPaidPlanError] = useState<string | null>(null);
 
-  // Append a newly-saved request without ever replacing/hiding existing numbers.
-  // Idempotent: a repeat save of the same number updates that entry in place.
-  function handleRequestedNumberSaved(saved: RequestedNumberSummary) {
-    setRequestedNumbers((prev) => {
-      const exists = prev.some((r) => r.phoneNumber === saved.phoneNumber);
-      return exists
-        ? prev.map((r) => (r.phoneNumber === saved.phoneNumber ? saved : r))
-        : [...prev, saved];
-    });
+  // Explicit trial -> paid conversion. Redirects to Stripe-hosted subscription
+  // Checkout; paid status is only granted later by the webhook.
+  async function startPaidPlan() {
+    setStartingPaidPlan(true);
+    setPaidPlanError(null);
+    try {
+      const res = await fetch("/api/account/billing/start-paid-plan", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; url?: string; error?: { message?: string } }
+        | null;
+      if (!res.ok || !json?.ok || !json.url) {
+        setPaidPlanError(json?.error?.message ?? "Could not start the paid plan. Please try again.");
+        setStartingPaidPlan(false);
+        return;
+      }
+      window.location.href = json.url;
+    } catch {
+      setPaidPlanError("Could not start the paid plan. Please try again.");
+      setStartingPaidPlan(false);
+    }
+  }
+
+  // After a successful purchase, reload server data so entitlement (counts,
+  // trial start, next slot) and the assigned-number list refresh in place.
+  function handlePurchased() {
+    router.refresh();
   }
 
   const hasPaymentMethod = data.billing.hasPaymentMethod;
+  const entitlement = data.number.entitlement;
+  const hasActiveNumber = data.number.assignedNumbers.some((n) => n.isActive);
+  const canStartPaidPlan = hasActiveNumber && !data.billing.paidPlanActive;
   const clinicName = biz.name || "Your clinic";
 
   // Phone number is the customer's primary resource, so it is first and opens by
@@ -134,9 +158,10 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 areaCode={data.number.areaCode}
                 postalCode={data.number.postalCode}
                 hasPaymentMethod={hasPaymentMethod}
+                entitlement={entitlement}
                 onGoToBilling={() => setActive("billing")}
-                requestedNumbers={requestedNumbers}
-                onRequestedNumberSaved={handleRequestedNumberSaved}
+                onStartPaidPlan={startPaidPlan}
+                onPurchased={handlePurchased}
               />
             </Section>
           )}
@@ -196,6 +221,13 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 trialDaysRemaining={data.billing.trialDaysRemaining}
                 trialEnded={data.billing.trialEnded}
                 paymentMethodSetup={data.paymentMethodSetup ?? null}
+                paidPlanActive={data.billing.paidPlanActive}
+                canStartPaidPlan={canStartPaidPlan}
+                isTrialing={data.billing.isTrialing}
+                paidPlanResult={data.paidPlanResult ?? null}
+                startingPaidPlan={startingPaidPlan}
+                paidPlanError={paidPlanError}
+                onStartPaidPlan={startPaidPlan}
               />
             </Section>
           )}
