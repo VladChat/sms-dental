@@ -4185,6 +4185,6 @@ clean. Static checks: gate is role-agnostic; `findActiveOfficeTextingNumber` int
 with 2 existing callers; tooltip hit target ≥44px with small visible icon; docs no
 longer say different open requests are superseded and no longer use "Use this number".
 
-Commit `__PENDING__`; pushed to `origin/main`. (Production auto-deploys; no
+Commit `1c591a3`; pushed to `origin/main`. (Production auto-deploys; no
 authenticated owner browser session in the repo CLI, so tooltip tap QA on a live
 375px viewport is the operator's manual check — not fabricated.)
