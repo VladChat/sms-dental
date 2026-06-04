@@ -243,7 +243,6 @@ export function OwnerLocalNumberSearch({
                       {c.recommended && c.selectable && <span className="badge badge-info">Recommended</span>}
                     </span>
                     <span className="acct-cand-meta">
-                      <span className="t-mono">{c.phone_number}</span>
                       <span>{locationLabel(c)}</span>
                     </span>
                     <span className="acct-cand-caps">
@@ -284,20 +283,6 @@ export function OwnerLocalNumberSearch({
                         <p className="t-body" style={{ margin: 0, fontWeight: 700 }}>
                           {isAdditional ? "Purchase and assign additional number?" : "Purchase and assign this number?"}
                         </p>
-                        <ul className="acct-plan-list" style={{ margin: "var(--space-1) 0 0" }}>
-                          <li>This purchases a real business number for your clinic.</li>
-                          {isAdditional ? (
-                            <>
-                              <li>It adds {ADDITIONAL_MONTHLY}/month when activated.</li>
-                              <li>It will not activate unless billing synchronization succeeds.</li>
-                            </>
-                          ) : (
-                            <>
-                              <li>It is included with your plan.</li>
-                              <li>Your 21-day trial starts after assignment. You won&apos;t be charged today.</li>
-                            </>
-                          )}
-                        </ul>
                         <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>
                           <button type="button" className="btn btn-primary acct-primary-action"
                             onClick={() => void confirmPurchase()} disabled={purchasing} aria-busy={purchasing}>
@@ -323,18 +308,16 @@ export function OwnerLocalNumberSearch({
 }
 
 function sortByLocation(candidates: Candidate[]): Candidate[] {
-  const sorted = [...candidates].sort((a, b) => rank(b) - rank(a));
-  const localityCount = sorted.filter((c) => Boolean(c.locality)).length;
-  return localityCount >= 3 ? sorted.filter((c) => c.locality || c.region) : sorted;
+  return [...candidates].sort((a, b) => rank(b) - rank(a));
 }
 function rank(c: Candidate): number {
   if (c.locality && c.region) return 3;
-  if (c.region) return 2;
+  if (c.locality || c.region) return 2;
   return 1;
 }
 function locationLabel(c: Candidate): string {
-  if (!c.locality) return "Location not specified";
-  return [c.locality, c.region].filter(Boolean).join(", ");
+  const location = [c.locality, c.region].filter(Boolean).join(", ");
+  return `Location: ${location || "Not specified"}`;
 }
 function digits(v: string): string {
   return v.replace(/\D/g, "");
