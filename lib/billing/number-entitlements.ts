@@ -1,5 +1,8 @@
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import { getDb } from "../db/client";
+
+// Accepts the default client (getDb()) or a transaction handle (sql.begin(tx)).
+type DbExecutor = Sql | TransactionSql;
 import { billingConfig } from "../../config/billing.config";
 import { hasStripeBillingPriceIds } from "../env";
 
@@ -69,7 +72,7 @@ const IN_PROGRESS_ATTEMPT_STATUSES = ["started", "twilio_purchased", "billing_pe
  * service can recompute race-safely while holding the clinic row lock.
  */
 export async function computeNumberEntitlement(
-  q: Sql,
+  q: DbExecutor,
   clinicId: string,
 ): Promise<NumberEntitlement> {
   const clinicRows = await q<ClinicBillingRow[]>`

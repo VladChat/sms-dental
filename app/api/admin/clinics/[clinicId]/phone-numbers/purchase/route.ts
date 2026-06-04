@@ -10,18 +10,12 @@ import {
 } from "../../../../../../../lib/http/responses";
 import { resolvePlatformAdmin } from "../../../../../../../lib/auth/platform-admin";
 import { findClinicById } from "../../../../../../../lib/db/clinics";
-import {
-  findAnyActiveClinicPhoneNumber,
-  upsertOfficeTextingNumber,
-} from "../../../../../../../lib/db/clinic-phone-numbers";
-import { getAppDomains, isTwilioNumberPurchaseEnabled } from "../../../../../../../lib/env";
-import {
-  isNumberNoLongerAvailableError,
-  phoneAreaCode,
-  purchaseNumberAndConfigure,
-} from "../../../../../../../lib/twilio/numbers";
+import { phoneAreaCode } from "../../../../../../../lib/twilio/numbers";
 import { recordAdminAuditEvent } from "../../../../../../../lib/db/admin/audit";
-import { logger } from "../../../../../../../lib/logging/logger";
+import {
+  provisionClinicPhoneNumber,
+  type ProvisionErrorCode,
+} from "../../../../../../../lib/phone-numbers/provisioning";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,21 +24,36 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 const PurchaseSchema = z.object({
-  phone_number: z
-    .string()
-    .trim()
-    .regex(/^\+[1-9]\d{7,14}$/u, "phone_number must be E.164"),
+  phone_number: z.string().trim().regex(/^\+[1-9]\d{7,14}$/u, "phone_number must be E.164"),
+  additional_billing_authorized: z.boolean().optional(),
 });
+
+// Stable error code -> HTTP status (messages come from the provisioning service).
+const ERROR_STATUS: Record<ProvisionErrorCode, number> = {
+  payment_method_required: 400,
+  number_purchases_revoked: 403,
+  number_limit_reached: 409,
+  purchase_in_progress: 409,
+  paid_plan_required: 409,
+  subscription_not_active: 409,
+  billing_configuration_missing: 503,
+  additional_billing_authorization_required: 400,
+  number_already_assigned: 409,
+  number_no_longer_available: 409,
+  purchase_disabled: 503,
+  billing_sync_failed: 502,
+  reconciliation_required: 500,
+  purchase_failed: 502,
+};
 
 // POST /api/admin/clinics/[clinicId]/phone-numbers/purchase
 //
-// Platform-admin-only. Purchases the admin-selected number and assigns it to the
-// clinic, configuring the same production Voice + SMS webhooks and Messaging
-// Service as onboarding (single architecture, not a second one). SMS recovery is
-// NOT enabled here. Gated hard by `TWILIO_NUMBER_PURCHASE_ENABLED`.
-//
-// Precondition order: auth → clinic exists → not already assigned → purchase flag
-// on → app base URL present → purchase. No bypass.
+// Platform-admin manual purchase. Uses the SAME shared, race-safe provisioning
+// service as the owner self-service path (no duplicated Twilio logic). The
+// clinic limit, purchase-permission, and paid-plan requirements for additional
+// numbers are enforced by the shared entitlement gate — the admin must raise the
+// limit / restore permission explicitly before purchase. SMS recovery is never
+// enabled here.
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ clinicId: string }> },
@@ -70,89 +79,21 @@ export async function POST(
   if (!parsed.success) {
     return jsonBadRequest("Please choose an available number to continue.");
   }
-  const phoneNumber = parsed.data.phone_number;
 
   const clinic = await findClinicById(clinicId).catch(() => null);
   if (!clinic) return jsonError(404, "not_found", "Clinic not found.");
 
-  // One-number safety gate: never purchase a second number for a clinic that
-  // already has ANY active assigned number (role-agnostic — includes legacy or
-  // manually-provisioned rows whose role is not `office_texting`). Additional-
-  // number billing (the $20/mo Stripe subscription item) is not implemented yet,
-  // so a second purchase stays blocked here. The owner's additional-number
-  // request is only a saved preference + consent snapshot — no Twilio purchase
-  // happens from it.
-  // Fail CLOSED: if the active-number lookup throws (e.g. a transient DB error),
-  // never proceed to purchase. A swallowed error must not let the safety gate
-  // pass and allow a second number. This returns before the purchase flag check,
-  // the Twilio purchase, and the DB write.
-  let existing;
-  try {
-    existing = await findAnyActiveClinicPhoneNumber(clinicId);
-  } catch (err) {
-    logger.error("admin.phone_number.active_check_failed", {
-      clinicId,
-      message: err instanceof Error ? err.message : "unknown",
-    });
-    return jsonError(
-      503,
-      "active_number_check_failed",
-      "Could not safely verify whether this clinic already has an assigned number. No number was purchased.",
-    );
-  }
-  if (existing) {
-    return jsonError(
-      409,
-      "additional_number_billing_not_ready",
-      "Additional number purchase is not available until subscription billing is configured. This clinic already has an assigned number, additional-number Stripe billing is not implemented yet, and no additional Twilio purchase was made.",
-    );
-  }
+  const result = await provisionClinicPhoneNumber({
+    clinicId,
+    phoneNumber: parsed.data.phone_number,
+    actorProfileId: admin.userId,
+    actorEmail: admin.email,
+    source: "admin",
+    additionalBillingAuthorized: parsed.data.additional_billing_authorized === true,
+  });
 
-  // Hard purchase gate. When disabled, return a safe non-200 — never simulate.
-  if (!isTwilioNumberPurchaseEnabled()) {
-    return jsonError(
-      503,
-      "purchase_disabled",
-      "Twilio number purchase is disabled by environment flag.",
-    );
-  }
-
-  let appBaseUrl: string;
-  try {
-    ({ appBaseUrl } = getAppDomains());
-  } catch {
-    return jsonError(500, "config_missing", "App base URL is not configured for webhook setup.");
-  }
-
-  let purchased: { sid: string; phoneNumber: string };
-  try {
-    purchased = await purchaseNumberAndConfigure({
-      phoneNumber,
-      appBaseUrl,
-      attachMessagingService: true,
-    });
-  } catch (err) {
-    if (isNumberNoLongerAvailableError(err)) {
-      return jsonError(409, "number_no_longer_available", "That number is no longer available. Please search again.");
-    }
-    return jsonError(502, "purchase_failed", "Number purchase failed. Please try another number.");
-  }
-
-  let mapping;
-  try {
-    mapping = await upsertOfficeTextingNumber({
-      clinicId,
-      phoneNumber: purchased.phoneNumber,
-      twilioPhoneNumberSid: purchased.sid,
-    });
-  } catch {
-    // The Twilio number was purchased + configured, but the DB write failed. Do
-    // not lose the SID — surface it so an operator can reconcile manually.
-    return jsonError(
-      500,
-      "assignment_save_failed",
-      `Number ${purchased.phoneNumber} was purchased (SID ${purchased.sid}) but could not be saved. Reconcile manually.`,
-    );
+  if (!result.ok) {
+    return jsonError(ERROR_STATUS[result.error], result.error, result.message);
   }
 
   // Audit: phone number + SID + area code only. Never any Twilio secret.
@@ -164,11 +105,11 @@ export async function POST(
       targetType: "clinic",
       targetId: clinicId,
       clinicId,
-      beforeState: { had_active_number: false },
       afterState: {
-        phone_number: mapping.phone_number,
-        twilio_sid: mapping.twilio_phone_number_sid,
-        area_code: phoneAreaCode(mapping.phone_number),
+        phone_number: result.assigned.phoneNumber,
+        twilio_sid: result.twilioSid,
+        billing_class: result.assigned.billingClass,
+        area_code: phoneAreaCode(result.assigned.phoneNumber),
       },
       metadata: { authSource: admin.source },
     });
@@ -178,7 +119,8 @@ export async function POST(
 
   return jsonOk({
     ok: true,
-    phone_number: mapping.phone_number,
-    twilio_phone_number_sid: mapping.twilio_phone_number_sid,
+    phone_number: result.assigned.phoneNumber,
+    twilio_phone_number_sid: result.twilioSid,
+    billing_class: result.assigned.billingClass,
   });
 }
