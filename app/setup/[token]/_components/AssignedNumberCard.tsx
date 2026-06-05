@@ -72,10 +72,6 @@ export function AssignedNumberCard({
         );
       })}
 
-      <p className="t-small" style={{ color: "var(--text-muted)", margin: 0 }}>
-        {entitlement.heldNumberCount} of {entitlement.numberLimit} business numbers used
-      </p>
-
       <NumberAction
         hasPaymentMethod={hasPaymentMethod}
         entitlement={entitlement}
@@ -166,11 +162,6 @@ function NumberAction({
   // canPurchaseNext — render search for the server-classified next slot.
   return (
     <>
-      {entitlement.nextSlotClass === "included" && (
-        <p className="t-small" style={{ color: "var(--text-muted)", margin: 0 }}>
-          Included with plan. Your 21-day trial starts after this number is assigned. You won&apos;t be charged today.
-        </p>
-      )}
       <OwnerLocalNumberSearch
         mode={entitlement.nextSlotClass}
         initialAreaCode={areaCode}

@@ -261,7 +261,7 @@ export function OwnerLocalNumberSearch({
                           <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>Additional business number</p>
                           <p className="t-h4" style={{ margin: "var(--space-1) 0 0" }}>{ADDITIONAL_MONTHLY}/month</p>
                           <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
-                            Billing starts after this number is approved and activated.
+                            Billing starts after this number is activated.
                           </p>
                         </div>
                         <label className="check">
