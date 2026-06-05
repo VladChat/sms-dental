@@ -4393,3 +4393,26 @@ Validation: `npm run typecheck` pass; `npm run build` pass; `git diff --check` c
 Default mode remains `"disabled"`; allowlist empty. **No real Twilio purchase made by
 these code changes; broad `live` mode not enabled; Stripe stays test-mode.** Branch
 pushed for review; not merged/deployed.
+
+---
+
+## 2026-06-05 — owner_test_live ARMED in production for one test clinic
+
+Approved by Vlad. `feat/owner-test-live-purchase` fast-forward-merged to `main`
+(`0edf8bb`), then runtime config flipped and deployed to production.
+
+- `runtimeConfig.onboarding.twilioNumberPurchaseMode`: `disabled` -> **`owner_test_live`**.
+- `twilioPurchaseTestClinicIds`: **`["f37f24a1-070f-436b-b803-956f55466093"]`** =
+  "Fairstone Dental Smile" (owner `livedealsmart@gmail.com`). ONLY this clinic may make
+  a real Twilio purchase; every other clinic is treated like `disabled`.
+- Broad `"live"` mode stays OFF. Stripe stays test-mode. SMS recovery unchanged
+  (`sms_recovery_enabled` not touched; clinic value remains false).
+- Validation: `npm run typecheck` pass; `npm run build` pass.
+- Commit `cb1dd5d` on `main`; `main == origin/main == cb1dd5d`.
+- Vercel production deploy `dpl_Hn6oes6a21MCWiGLM43P2uer3vna` reached READY;
+  `app.missedcallsdental.com` aliased to it. `/api/health`, `/account`, `/login` all 200.
+- **No real Twilio purchase has occurred** — the config only ARMS the capability; a real
+  purchase happens only when that clinic's owner clicks purchase in the production app.
+
+To stand down: set `twilioNumberPurchaseMode` back to `"disabled"` (optionally clear the
+allowlist), commit, push `main`, redeploy.
