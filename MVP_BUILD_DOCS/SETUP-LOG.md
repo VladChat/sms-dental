@@ -4628,3 +4628,45 @@ Safety:
 
 Commit/deploy status:
 - Pending final commit/push/deploy approval at the time this entry was written.
+
+## 2026-06-05 — Paid-plan confirmation pending-state fix
+
+Diagnosed and fixed the production stuck state after the owner clicked **Add phone number**
+for Fairstone Dental Smile.
+
+Root cause:
+- Production `POST /api/account/billing/start-paid-plan` returned 200.
+- Stripe test mode had created one active paid-plan subscription for the clinic's saved
+  customer/payment method, with a paid latest invoice.
+- Supabase still showed `billing_status='trialing'`, no stored subscription id, no base
+  subscription item id, and `paid_plan_started_at=null`.
+- Only an old setup Checkout webhook was present in `webhook_events`; no subscription or
+  invoice webhook had updated the clinic row. The UI was waiting for DB entitlement that
+  never changed and had no timeout error state.
+
+What changed:
+- Added shared Stripe subscription-state helpers in `lib/billing/stripe-subscription-state.ts`.
+- `start-paid-plan` now looks for an existing active paid-plan subscription for the saved
+  customer before creating another subscription, persists it if found, and avoids duplicate
+  active subscriptions.
+- After `stripe.subscriptions.create(...)` succeeds, `start-paid-plan` immediately persists
+  the returned subscription state with the same conservative status mapping as the webhook.
+- Stripe webhook subscription handlers now reuse the shared status/item mapping helpers and
+  remain idempotent ongoing truth.
+- Added a reusable account `ConfirmationDialog` component and moved the add-phone-number
+  paid-plan confirmation to it.
+- The modal now has explicit states: `Continue`, `Starting...`, `Confirming...`, and a clear
+  timeout error if active billing cannot be confirmed after polling.
+- Owner final number-purchase confirmation also uses the shared confirmation dialog.
+
+Validation:
+- `npm run typecheck` — pass.
+- `npm run build` — pass.
+- `git diff --check` — pass.
+
+Safety:
+- No SMS sent.
+- No Twilio number purchased.
+- `sms_recovery_enabled` unchanged.
+- Broad Twilio live mode unchanged.
+- No secrets printed.

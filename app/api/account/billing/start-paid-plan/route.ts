@@ -12,6 +12,10 @@ import { getStripeBillingEnv } from "@/lib/env";
 import { getStripeServerClient, StripeNotTestModeError } from "@/lib/stripe/server";
 import { getDb } from "@/lib/db/client";
 import { logger } from "@/lib/logging/logger";
+import {
+  findReusablePaidPlanSubscription,
+  persistStripeSubscriptionForClinic,
+} from "@/lib/billing/stripe-subscription-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,6 +92,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
+    const existingSubscription = await findReusablePaidPlanSubscription({
+      stripe,
+      customerId: clinic.stripe_customer_id,
+      clinicId: clinic.id,
+      basePlanPriceId,
+    });
+    if (existingSubscription) {
+      const persisted = await persistStripeSubscriptionForClinic({
+        clinicId: clinic.id,
+        subscription: existingSubscription,
+      });
+      logger.info("billing.paid_plan.existing_subscription_persisted", {
+        clinicId: clinic.id,
+        subscriptionId: existingSubscription.id,
+        status: existingSubscription.status,
+      });
+      return jsonOk({ ok: true, status: persisted.isActive ? "active" : "pending" });
+    }
+
     const subscription = await stripe.subscriptions.create(
       {
         collection_method: "charge_automatically",
@@ -105,6 +128,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         idempotencyKey: `paid-plan-start-${clinic.id}-${clinic.stripe_payment_method_id}`,
       },
     );
+    const persisted = await persistStripeSubscriptionForClinic({
+      clinicId: clinic.id,
+      subscription,
+    });
 
     logger.info("billing.paid_plan.subscription_created", {
       clinicId: clinic.id,
@@ -113,7 +140,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
     return jsonOk({
       ok: true,
-      status: subscription.status === "active" ? "active" : "pending",
+      status: persisted.isActive ? "active" : "pending",
     });
   } catch (err) {
     const paymentMessage =

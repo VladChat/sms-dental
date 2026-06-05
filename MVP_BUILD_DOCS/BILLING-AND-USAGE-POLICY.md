@@ -124,10 +124,13 @@ saved PaymentMethod, and the **server-side** base Price ID
 (`STRIPE_BASE_PLAN_PRICE_ID`; never client-supplied). The API uses
 `collection_method='charge_automatically'`, the saved `default_payment_method`,
 and `payment_behavior='error_if_incomplete'`; payment failure or required card
-action returns an in-app error rather than redirecting to Stripe Checkout. Paid
-entitlement is granted **only** after the webhook confirms an active subscription
-— never from a client response or legacy `?paid_plan=success` query param.
-Natural trial end does not silently charge.
+action returns an in-app error rather than redirecting to Stripe Checkout. After
+successful server-side subscription creation, the API immediately persists the
+returned Stripe subscription state using the same conservative status mapping as
+the webhook so the owner UI does not wait indefinitely on webhook delivery. The
+webhook remains idempotent ongoing truth and can later confirm/update the same
+state. Paid entitlement is never granted from a client-supplied value or legacy
+`?paid_plan=success` query param. Natural trial end does not silently charge.
 
 **Additional numbers** ($20/month each) are available **only** with a
 webhook-confirmed active paid subscription, require the explicit $20/month consent

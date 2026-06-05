@@ -17,9 +17,14 @@ import {
   saveStripePaymentMethodForClinic,
   type BillingStatus,
 } from "@/lib/db/clinics";
-import { getStripeBillingEnv, hasStripeBillingPriceIds } from "@/lib/env";
 import { isDatabaseConfigured } from "@/lib/db/client";
 import { logger } from "@/lib/logging/logger";
+import {
+  getConfiguredSubscriptionItemIds,
+  idOfStripeRef,
+  mapStripeSubscriptionStatus,
+  persistStripeSubscriptionForClinic,
+} from "@/lib/billing/stripe-subscription-state";
 
 // Subscription-lifecycle events that carry paid-plan entitlement. Their DB
 // writes are idempotent and fail CLOSED (a persistence failure returns non-2xx
@@ -141,8 +146,8 @@ async function handleStripeSetupEvent(event: Stripe.Event): Promise<void> {
     if (session.mode !== "setup") return;
     await savePaymentMethodFromSetup({
       clinicId: session.metadata?.clinic_id ?? session.client_reference_id ?? null,
-      setupIntentId: idOf(session.setup_intent),
-      customerId: idOf(session.customer),
+      setupIntentId: idOfStripeRef(session.setup_intent),
+      customerId: idOfStripeRef(session.customer),
       source: "checkout.session.completed",
     });
     return;
@@ -155,8 +160,8 @@ async function handleStripeSetupEvent(event: Stripe.Event): Promise<void> {
     await savePaymentMethodFromSetup({
       clinicId: si.metadata?.clinic_id ?? null,
       setupIntentId: si.id,
-      customerId: idOf(si.customer),
-      paymentMethodId: idOf(si.payment_method),
+      customerId: idOfStripeRef(si.customer),
+      paymentMethodId: idOfStripeRef(si.payment_method),
       source: "setup_intent.succeeded",
     });
     return;
@@ -191,8 +196,8 @@ async function savePaymentMethodFromSetup(args: {
   let customerId = args.customerId ?? null;
   if ((!paymentMethodId || !customerId) && setupIntentId) {
     const si = await stripe.setupIntents.retrieve(setupIntentId);
-    paymentMethodId = paymentMethodId ?? idOf(si.payment_method);
-    customerId = customerId ?? idOf(si.customer);
+    paymentMethodId = paymentMethodId ?? idOfStripeRef(si.payment_method);
+    customerId = customerId ?? idOfStripeRef(si.customer);
   }
 
   if (!paymentMethodId) {
@@ -236,49 +241,7 @@ async function savePaymentMethodFromSetup(args: {
   });
 }
 
-// Stripe fields are often `string | { id } | null`. Return the id string.
-function idOf(
-  ref: string | { id: string } | null | undefined,
-): string | null {
-  if (!ref) return null;
-  return typeof ref === "string" ? ref : ref.id;
-}
-
 // ── Subscription billing lifecycle (fail-closed) ─────────────────────────────
-
-// Conservative status map: ONLY 'active' unlocks additional-number purchasing.
-function mapSubscriptionStatus(status: Stripe.Subscription.Status): BillingStatus {
-  switch (status) {
-    case "active":
-      return "active";
-    case "trialing":
-      return "trialing";
-    case "canceled":
-    case "incomplete_expired":
-      return "canceled";
-    case "past_due":
-    case "unpaid":
-    case "incomplete":
-    case "paused":
-    default:
-      return "past_due";
-  }
-}
-
-function extractSubscriptionItemIds(
-  sub: Stripe.Subscription,
-  basePriceId: string,
-  additionalPriceId: string,
-): { baseItemId: string | null; additionalItemId: string | null } {
-  let baseItemId: string | null = null;
-  let additionalItemId: string | null = null;
-  for (const item of sub.items?.data ?? []) {
-    const priceId = item.price?.id ?? null;
-    if (priceId && priceId === basePriceId) baseItemId = item.id;
-    else if (priceId && priceId === additionalPriceId) additionalItemId = item.id;
-  }
-  return { baseItemId, additionalItemId };
-}
 
 // Resolve the clinic ONLY from trusted Stripe metadata / stored Stripe ids.
 async function resolveClinicForStripe(args: {
@@ -304,7 +267,7 @@ async function resolveClinicForStripe(args: {
 function readSubscriptionRef(o: { subscription?: unknown }): string | null {
   // Invoice.subscription typing drifts across Stripe API versions; read safely.
   const v = o.subscription as string | { id: string } | null | undefined;
-  return idOf(v ?? null);
+  return idOfStripeRef(v ?? null);
 }
 
 // Handle subscription-lifecycle events. Throws on DB failure so the caller can
@@ -315,24 +278,11 @@ async function handleStripeBillingEvent(event: Stripe.Event): Promise<void> {
     throw new Error("database not configured for billing webhook");
   }
 
-  let priceIds: { basePlanPriceId: string; additionalNumberPriceId: string } | null = null;
-  if (hasStripeBillingPriceIds()) {
-    try {
-      priceIds = getStripeBillingEnv();
-    } catch {
-      priceIds = null;
-    }
-  }
-  const itemIdsFrom = (sub: Stripe.Subscription) =>
-    priceIds
-      ? extractSubscriptionItemIds(sub, priceIds.basePlanPriceId, priceIds.additionalNumberPriceId)
-      : { baseItemId: null, additionalItemId: null };
-
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     if (session.mode !== "subscription" || session.metadata?.purpose !== "paid_plan_start") return;
-    const subscriptionId = idOf(session.subscription);
-    const customerId = idOf(session.customer);
+    const subscriptionId = idOfStripeRef(session.subscription);
+    const customerId = idOfStripeRef(session.customer);
     const clinicId = await resolveClinicForStripe({
       metadataClinicId: session.metadata?.clinic_id ?? session.client_reference_id ?? null,
       customerId,
@@ -348,16 +298,8 @@ async function handleStripeBillingEvent(event: Stripe.Event): Promise<void> {
     }
     const stripe = getStripeServerClient();
     const sub = await stripe.subscriptions.retrieve(subscriptionId);
-    const status = mapSubscriptionStatus(sub.status);
-    const items = itemIdsFrom(sub);
-    await saveClinicSubscriptionState(clinicId, {
-      stripeSubscriptionId: subscriptionId,
-      baseSubscriptionItemId: items.baseItemId,
-      additionalSubscriptionItemId: items.additionalItemId,
-      billingStatus: status,
-      markPaidPlanStarted: status === "active",
-    });
-    logger.info("stripe.webhook.paid_plan_started", { clinicId, status });
+    const persisted = await persistStripeSubscriptionForClinic({ clinicId, subscription: sub });
+    logger.info("stripe.webhook.paid_plan_started", { clinicId, status: persisted.billingStatus });
     return;
   }
 
@@ -369,7 +311,7 @@ async function handleStripeBillingEvent(event: Stripe.Event): Promise<void> {
     const sub = event.data.object as Stripe.Subscription;
     const clinicId = await resolveClinicForStripe({
       metadataClinicId: sub.metadata?.clinic_id ?? null,
-      customerId: idOf(sub.customer),
+      customerId: idOfStripeRef(sub.customer),
       subscriptionId: sub.id,
     });
     if (!clinicId) {
@@ -377,15 +319,19 @@ async function handleStripeBillingEvent(event: Stripe.Event): Promise<void> {
       return;
     }
     const status: BillingStatus =
-      event.type === "customer.subscription.deleted" ? "canceled" : mapSubscriptionStatus(sub.status);
-    const items = itemIdsFrom(sub);
-    await saveClinicSubscriptionState(clinicId, {
-      stripeSubscriptionId: sub.id,
-      baseSubscriptionItemId: items.baseItemId,
-      additionalSubscriptionItemId: items.additionalItemId,
-      billingStatus: status,
-      markPaidPlanStarted: status === "active",
-    });
+      event.type === "customer.subscription.deleted" ? "canceled" : mapStripeSubscriptionStatus(sub.status);
+    if (event.type === "customer.subscription.deleted") {
+      const items = getConfiguredSubscriptionItemIds(sub);
+      await saveClinicSubscriptionState(clinicId, {
+        stripeSubscriptionId: sub.id,
+        baseSubscriptionItemId: items.baseItemId,
+        additionalSubscriptionItemId: items.additionalItemId,
+        billingStatus: status,
+        markPaidPlanStarted: false,
+      });
+    } else {
+      await persistStripeSubscriptionForClinic({ clinicId, subscription: sub });
+    }
     logger.info("stripe.webhook.subscription_state", { clinicId, type: event.type, status });
     return;
   }
@@ -395,7 +341,7 @@ async function handleStripeBillingEvent(event: Stripe.Event): Promise<void> {
     const subscriptionId = readSubscriptionRef(invoice as unknown as { subscription?: unknown });
     if (!subscriptionId) return; // non-subscription invoice — not relevant
     const clinicId = await resolveClinicForStripe({
-      customerId: idOf(invoice.customer),
+      customerId: idOfStripeRef(invoice.customer),
       subscriptionId,
     });
     if (!clinicId) {

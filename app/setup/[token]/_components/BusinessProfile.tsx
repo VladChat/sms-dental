@@ -53,6 +53,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
       if (!res.ok || !json?.ok) {
         setPaidPlanError(json?.error?.message ?? "Could not start the paid plan. Please try again.");
         setStartingPaidPlan(false);
+        setPaidPlanPending(false);
         return;
       }
       setPaidPlanPending(true);
@@ -68,6 +69,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
     if (data.billing.paidPlanActive) {
       setPaidPlanPending(false);
       setStartingPaidPlan(false);
+      setPaidPlanError(null);
       return;
     }
     if (!paidPlanPending) return;
@@ -77,6 +79,8 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
       router.refresh();
       if (ticks >= 10) {
         window.clearInterval(id);
+        setPaidPlanPending(false);
+        setPaidPlanError("We couldn\u2019t confirm your paid plan yet. Please check Billing or try again.");
       }
     }, 3000);
     return () => window.clearInterval(id);

@@ -2165,7 +2165,10 @@ SETUP-LOG 2026-06-03/2026-06-04 and BILLING-AND-USAGE-POLICY):
   creates a Stripe test-mode subscription server-side using the saved Customer,
   saved PaymentMethod, and `STRIPE_BASE_PLAN_PRICE_ID` with
   `payment_behavior='error_if_incomplete'`. The API returns JSON, not a Checkout
-  URL; webhook-confirmed `billing_status='active'` remains the entitlement gate.
+  URL. After a successful Stripe response, the API persists the returned
+  subscription state immediately using the same conservative mapping as the
+  webhook; webhook events remain idempotent ongoing truth. `billing_status='active'`
+  plus a stored subscription id remains the entitlement gate.
 - Default **5 held numbers** per clinic; suspended numbers still count + stay billed.
 - Operator surface = clinic console **Phone number → Number operations**:
   allow/revoke new purchases, set the limit (1–100, never below held), suspend /

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { ConfirmationDialog } from "./ConfirmationDialog";
 import type { AssignedBusinessNumberSummary } from "./account-types";
 import {
   additionalNumberConsentText,
@@ -285,26 +286,21 @@ export function OwnerLocalNumberSearch({
                         {isAdditional ? "Purchase additional number" : "Assign this number"}
                       </button>
                     ) : (
-                      <div className="acct-callout">
-                        <p className="t-body" style={{ margin: 0, fontWeight: 700 }}>
-                          {isAdditional ? "Purchase additional number?" : "Assign this number?"}
-                        </p>
-                        <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
-                          {isAdditional
-                            ? `This will add ${ADDITIONAL_MONTHLY}/month to your monthly plan.`
-                            : INCLUDED_PLAN_SUMMARY}
-                        </p>
-                        <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>
-                          <button type="button" className="btn btn-primary acct-primary-action"
-                            onClick={() => void confirmPurchase()} disabled={purchasing} aria-busy={purchasing}>
-                            Confirm
-                          </button>
-                          <button type="button" className="btn btn-ghost btn-sm"
-                            onClick={() => setConfirming(false)} disabled={purchasing}>Cancel</button>
-                        </div>
-                      </div>
+                      <ConfirmationDialog
+                        title={isAdditional ? "Purchase additional number?" : "Assign this number?"}
+                        description={isAdditional
+                          ? `This will add ${ADDITIONAL_MONTHLY}/month to your monthly plan.`
+                          : INCLUDED_PLAN_SUMMARY}
+                        primaryLabel="Confirm"
+                        secondaryLabel="Cancel"
+                        loading={purchasing}
+                        loadingLabel="Purchasing..."
+                        error={actionError}
+                        onConfirm={() => void confirmPurchase()}
+                        onCancel={() => setConfirming(false)}
+                      />
                     )}
-                    {actionError && (
+                    {actionError && !confirming && (
                       <div className="alert alert-error" role="alert" aria-live="polite"><span>{actionError}</span></div>
                     )}
                   </div>
