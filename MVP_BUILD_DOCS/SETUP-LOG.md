@@ -4670,3 +4670,14 @@ Safety:
 - `sms_recovery_enabled` unchanged.
 - Broad Twilio live mode unchanged.
 - No secrets printed.
+
+Follow-up after deploy:
+- Commit `f5926c726b394bf31bca483df6c226e7a6da71c4` pushed to `main`.
+- Vercel production deployment `dpl_9eX11JV7nR6EvhMzTz4SnSgWYxvR` reached READY.
+- Production smoke checks passed: `/api/health`, `/account`, and `/login` returned 200.
+- Existing Fairstone Dental Smile Stripe test subscription was reconciled into Supabase without
+  creating a new subscription: `billing_status='active'`, subscription id present, base subscription
+  item id present, additional-number item absent, and `paid_plan_started_at` populated.
+- Existing phone-number state after remediation: one active included number (`+12244009986`).
+- `sms_recovery_enabled=false` and `sms_status='waiting_for_approval'` remained unchanged.
+- No SMS sent, no Twilio number purchased, broad Twilio live mode unchanged.
