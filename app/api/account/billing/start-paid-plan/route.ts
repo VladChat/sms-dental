@@ -8,7 +8,7 @@ import {
   jsonUnauthorized,
 } from "@/lib/http/responses";
 import { resolveAuthClinicAccess } from "@/lib/auth/access";
-import { getAppDomains, getStripeBillingEnv } from "@/lib/env";
+import { getStripeBillingEnv } from "@/lib/env";
 import { getStripeServerClient, StripeNotTestModeError } from "@/lib/stripe/server";
 import { getDb } from "@/lib/db/client";
 import { logger } from "@/lib/logging/logger";
@@ -18,11 +18,11 @@ export const dynamic = "force-dynamic";
 
 // POST /api/account/billing/start-paid-plan
 //
-// Explicit owner action to convert the trial into the paid $99/month plan via
-// Stripe-hosted Checkout in mode:"subscription". The base-plan Price ID is
+// Explicit owner action to convert the trial into the paid $99/month plan using
+// the saved Stripe Customer + saved PaymentMethod. The base-plan Price ID is
 // resolved server-side only (never from the client). Paid status is NOT granted
 // here — it is granted only by the webhook after Stripe confirms the
-// subscription is active. No charge is made by this route; Checkout collects it.
+// subscription is active.
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const access = await resolveAuthClinicAccess(req);
   if (!access.ok) {
@@ -88,40 +88,79 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const { appBaseUrl } = getAppDomains();
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: clinic.stripe_customer_id,
-      line_items: [{ price: basePlanPriceId, quantity: 1 }],
-      client_reference_id: clinic.id,
-      success_url: `${appBaseUrl}/account?section=billing&paid_plan=success`,
-      cancel_url: `${appBaseUrl}/account?section=billing&paid_plan=cancelled`,
-      metadata: {
-        clinic_id: clinic.id,
-        purpose: "paid_plan_start",
-        environment: "stripe_sandbox",
-      },
-      subscription_data: {
+    const subscription = await stripe.subscriptions.create(
+      {
+        collection_method: "charge_automatically",
+        customer: clinic.stripe_customer_id,
+        default_payment_method: clinic.stripe_payment_method_id,
+        items: [{ price: basePlanPriceId, quantity: 1 }],
         metadata: {
           clinic_id: clinic.id,
           purpose: "paid_plan_start",
           environment: "stripe_sandbox",
         },
+        payment_behavior: "error_if_incomplete",
       },
+      {
+        idempotencyKey: `paid-plan-start-${clinic.id}-${clinic.stripe_payment_method_id}`,
+      },
+    );
+
+    logger.info("billing.paid_plan.subscription_created", {
+      clinicId: clinic.id,
+      subscriptionId: subscription.id,
+      status: subscription.status,
     });
-
-    if (!session.url) {
-      logger.error("billing.paid_plan.no_session_url", { clinicId: clinic.id, sessionId: session.id });
-      return jsonInternalError("Could not start the paid plan. Please try again.");
-    }
-
-    logger.info("billing.paid_plan.session_created", { clinicId: clinic.id, sessionId: session.id });
-    return jsonOk({ ok: true, url: session.url });
+    return jsonOk({
+      ok: true,
+      status: subscription.status === "active" ? "active" : "pending",
+    });
   } catch (err) {
+    const paymentMessage =
+      "We couldn\u2019t start your paid plan with the saved payment method. Please update your payment method in Billing.";
     logger.error("billing.paid_plan.failed", {
       clinicId: clinic.id,
       message: err instanceof Error ? err.message : "unknown",
+      stripeType: stripeErrorType(err),
+      stripeCode: stripeErrorCode(err),
     });
+    if (isStripePaymentFailure(err)) {
+      return jsonError(402, "payment_failed", paymentMessage);
+    }
     return jsonInternalError("Could not start the paid plan. Please try again.");
   }
+}
+
+function stripeErrorType(err: unknown): string | null {
+  return typeof err === "object" && err !== null && "type" in err
+    ? String((err as { type?: unknown }).type ?? "")
+    : null;
+}
+
+function stripeErrorCode(err: unknown): string | null {
+  return typeof err === "object" && err !== null && "code" in err
+    ? String((err as { code?: unknown }).code ?? "")
+    : null;
+}
+
+function isStripePaymentFailure(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as {
+    type?: string;
+    code?: string;
+    decline_code?: string;
+    payment_intent?: { status?: string };
+    raw?: { payment_intent?: { status?: string } };
+  };
+  const status = e.payment_intent?.status ?? e.raw?.payment_intent?.status ?? null;
+  return (
+    e.type === "StripeCardError" ||
+    Boolean(e.decline_code) ||
+    e.code === "card_declined" ||
+    e.code === "payment_intent_authentication_failure" ||
+    e.code === "authentication_required" ||
+    status === "requires_action" ||
+    status === "requires_payment_method" ||
+    Boolean(e.type?.startsWith("Stripe"))
+  );
 }

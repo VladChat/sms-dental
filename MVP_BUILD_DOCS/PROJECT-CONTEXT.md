@@ -117,7 +117,7 @@ The MVP should include:
 - simple front desk recovery inbox later
 - manual booked/lost outcome tracking later
 - Supabase/Postgres database
-- Stripe test-mode subscription Checkout and webhooks for paid-plan conversion
+- Stripe test-mode saved-payment-method subscription creation and webhooks for paid-plan conversion
 - usage metering/billing later
 - Vercel-hosted Next.js app/backend
 
@@ -191,7 +191,7 @@ The project uses or plans to use:
 
 - **Twilio** — Phone number, call webhooks, SMS sending, inbound SMS, and delivery status callbacks.
 - **Supabase / Postgres** — Database, future auth, clinic records, messages, webhook events, and app data.
-- **Stripe** — Test-mode payment-method setup, subscription Checkout, webhooks, and future live billing/usage metering.
+- **Stripe** — Test-mode payment-method setup, saved-payment-method subscription creation, webhooks, and future live billing/usage metering.
 - **Vercel** — Next.js app/backend hosting.
 - **GitHub** — Source control.
 - **Namecheap** — DNS for `missedcallsdental.com`.
@@ -355,7 +355,7 @@ Current operational status:
 - Self-service owner number purchasing is deployed in code, with production migration `20260603000200_self_service_number_purchasing.sql` applied and verified.
 - Owners search and select business numbers from `/account`; the first assigned number is included with the $99/month base plan and requires a saved payment method.
 - The old owner request workflow is retired: `POST /api/account/phone-numbers/request` returns 410, and `clinic_number_requests` remains legacy data for admin view/dismiss only.
-- Stripe test-mode subscription Checkout and webhooks exist. Paid entitlement is granted only by webhook-confirmed active subscription.
+- Stripe test-mode paid-plan subscription creation and webhooks exist. Paid entitlement is granted only by webhook-confirmed active subscription.
 - Stripe Price IDs configured in production are test-mode only. `STRIPE_SECRET_KEY` remains test-mode, so no live Stripe charge can occur.
 - `runtimeConfig.onboarding.twilioNumberPurchaseMode` defaults to `"disabled"`.
   No real Twilio number purchase can occur unless that mode is deliberately set

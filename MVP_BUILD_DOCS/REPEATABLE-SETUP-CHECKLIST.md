@@ -744,5 +744,10 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       `?success` query param. Billing-critical webhook handlers must be idempotent, run on every
       delivery (even "duplicate"), and FAIL CLOSED (return 5xx so Stripe retries) on a DB write
       failure.
+- [ ] When starting a paid plan from a saved payment method instead of Checkout, create the
+      subscription server-side with `collection_method:'charge_automatically'`,
+      `default_payment_method`, and `payment_behavior:'error_if_incomplete'`; return an in-app
+      payment error if the saved card fails or needs action, and still wait for webhook-confirmed
+      active status before unlocking paid entitlement.
 - [ ] Trial source of truth = the tenant's own trial columns set at first activation, not a
       registration/setup date.

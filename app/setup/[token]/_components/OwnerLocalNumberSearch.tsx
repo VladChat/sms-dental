@@ -267,7 +267,7 @@ export function OwnerLocalNumberSearch({
                           <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>Additional number</p>
                           <p className="t-h4" style={{ margin: "var(--space-1) 0 0" }}>{ADDITIONAL_MONTHLY}/month</p>
                           <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
-                            Billing starts after this number is activated.
+                            This adds to your monthly paid plan.
                           </p>
                         </div>
                         <label className="check">
@@ -291,7 +291,7 @@ export function OwnerLocalNumberSearch({
                         </p>
                         <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
                           {isAdditional
-                            ? `This will add ${ADDITIONAL_MONTHLY}/month to your plan after activation.`
+                            ? `This will add ${ADDITIONAL_MONTHLY}/month to your monthly plan.`
                             : INCLUDED_PLAN_SUMMARY}
                         </p>
                         <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>

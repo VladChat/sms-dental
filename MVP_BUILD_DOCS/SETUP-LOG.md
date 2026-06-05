@@ -4585,3 +4585,46 @@ Safety:
 - `sms_recovery_enabled` unchanged.
 - Broad live mode unchanged.
 - No secrets printed.
+
+## 2026-06-05 — In-app paid-plan start for add-phone-number flow
+
+Implemented a focused billing UX/backend change for the owner add-phone-number path.
+
+What changed:
+- Phone numbers paid-plan blocker now shows **Add phone number** instead of
+  "End trial and start paid plan".
+- The add-phone-number action opens an in-app confirmation showing prices sourced
+  from `config/billing.config.ts`:
+  - Standard Plan: `$99/month`
+  - Additional phone number: `$20/month`
+  - Total: `$119/month`
+  - Checkbox: "I understand my saved payment method will be charged $119/month."
+- `POST /api/account/billing/start-paid-plan` no longer creates a subscription
+  Checkout Session. It creates a Stripe test-mode subscription server-side using
+  the saved Stripe Customer, saved PaymentMethod, and server-side base plan Price
+  ID with `collection_method='charge_automatically'` and
+  `payment_behavior='error_if_incomplete'`.
+- The API returns structured JSON (`ok`, `status`) instead of a Stripe URL.
+- Payment/card failure or required card action returns `payment_failed` with
+  owner-safe copy directing the owner to update the payment method in Billing.
+- Paid entitlement still remains webhook-confirmed only; the client refreshes
+  while waiting for `billing_status='active'`.
+- Billing policy/runbook/source docs were updated to remove current paid-plan
+  Checkout wording and record the server-side subscription behavior.
+
+Validation:
+- `npm run typecheck` — pass.
+- `npm run build` — pass.
+- `git diff --check` — pass.
+
+Safety:
+- No SMS sent.
+- No Twilio number purchased.
+- `sms_recovery_enabled` unchanged.
+- Broad Twilio live mode unchanged.
+- No Stripe Checkout redirect for paid-plan start.
+- Payment-method setup Checkout remains unchanged.
+- No secrets printed.
+
+Commit/deploy status:
+- Pending final commit/push/deploy approval at the time this entry was written.

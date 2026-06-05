@@ -108,7 +108,8 @@ export type BusinessProfileData = {
   initialSection?: string | null;
   // Outcome of a returning Stripe payment-method setup redirect, if any.
   paymentMethodSetup?: PaymentMethodSetupResult;
-  // Outcome of a returning Stripe paid-plan (subscription) Checkout redirect.
+  // Legacy outcome of a returning Stripe paid-plan redirect. Current paid-plan
+  // start stays in-app and uses the saved payment method instead.
   paidPlanResult?: "success" | "cancelled" | null;
   businessProfile: BusinessProfileFields & { completed: boolean };
   smsApproval: SmsApprovalFields & { completed: boolean };

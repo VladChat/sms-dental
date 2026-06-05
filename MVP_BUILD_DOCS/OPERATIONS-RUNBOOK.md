@@ -2161,6 +2161,11 @@ SETUP-LOG 2026-06-03/2026-06-04 and BILLING-AND-USAGE-POLICY):
   no admin approval), starting the 21-day trial from `clinics.trial_ends_at`.
   Additional numbers ($20/mo) require a webhook-confirmed active paid subscription
   and explicit consent; they activate only after the Stripe quantity sync succeeds.
+- Paid-plan start stays in-app: `POST /api/account/billing/start-paid-plan`
+  creates a Stripe test-mode subscription server-side using the saved Customer,
+  saved PaymentMethod, and `STRIPE_BASE_PLAN_PRICE_ID` with
+  `payment_behavior='error_if_incomplete'`. The API returns JSON, not a Checkout
+  URL; webhook-confirmed `billing_status='active'` remains the entitlement gate.
 - Default **5 held numbers** per clinic; suspended numbers still count + stay billed.
 - Operator surface = clinic console **Phone number → Number operations**:
   allow/revoke new purchases, set the limit (1–100, never below held), suspend /
@@ -2231,7 +2236,8 @@ To run the first real Twilio purchase for Vlad's test clinic:
 6. After testing, set the mode back to `"disabled"` (leave the allowlist or clear it).
 
 Additional (paid) number test: with the test clinic still allowlisted, start the paid plan
-(Stripe **test** Checkout) so the webhook marks the subscription active, then purchase a
-second number — it makes a real Twilio purchase only after the Stripe additional-number
-quantity sync succeeds (test mode → no real charge). SMS recovery stays off the entire time
+from the in-app confirmation so the server creates the Stripe **test-mode** subscription
+with the saved payment method and the webhook marks the subscription active. Then purchase
+a second number — it makes a real Twilio purchase only after the Stripe additional-number
+quantity sync succeeds (test mode → no live charge). SMS recovery stays off the entire time
 (`sms_recovery_enabled` is never changed by number assignment or billing).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Section, NavStatusIcon, type StatusKind } from "./AccountUI";
 import { BusinessProfileForm } from "./BusinessProfileForm";
@@ -31,12 +31,15 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [smsStatus, setSmsStatus] = useState<SmsStatus>(data.number.smsStatus);
   const router = useRouter();
   const [startingPaidPlan, setStartingPaidPlan] = useState(false);
+  const [paidPlanPending, setPaidPlanPending] = useState(false);
   const [paidPlanError, setPaidPlanError] = useState<string | null>(null);
 
-  // Explicit trial -> paid conversion. Redirects to Stripe-hosted subscription
-  // Checkout; paid status is only granted later by the webhook.
+  // Explicit trial -> paid conversion. The API creates the subscription using
+  // the saved Stripe payment method; paid status is granted only by webhook-
+  // confirmed subscription state, so the UI refreshes until that state lands.
   async function startPaidPlan() {
     setStartingPaidPlan(true);
+    setPaidPlanPending(false);
     setPaidPlanError(null);
     try {
       const res = await fetch("/api/account/billing/start-paid-plan", {
@@ -45,19 +48,39 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
         headers: { "content-type": "application/json" },
       });
       const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; url?: string; error?: { message?: string } }
+        | { ok?: boolean; status?: "active" | "pending"; error?: { message?: string } }
         | null;
-      if (!res.ok || !json?.ok || !json.url) {
+      if (!res.ok || !json?.ok) {
         setPaidPlanError(json?.error?.message ?? "Could not start the paid plan. Please try again.");
         setStartingPaidPlan(false);
         return;
       }
-      window.location.href = json.url;
+      setPaidPlanPending(true);
+      setStartingPaidPlan(false);
+      router.refresh();
     } catch {
       setPaidPlanError("Could not start the paid plan. Please try again.");
       setStartingPaidPlan(false);
     }
   }
+
+  useEffect(() => {
+    if (data.billing.paidPlanActive) {
+      setPaidPlanPending(false);
+      setStartingPaidPlan(false);
+      return;
+    }
+    if (!paidPlanPending) return;
+    let ticks = 0;
+    const id = window.setInterval(() => {
+      ticks += 1;
+      router.refresh();
+      if (ticks >= 10) {
+        window.clearInterval(id);
+      }
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [data.billing.paidPlanActive, paidPlanPending, router]);
 
   // After a successful purchase, reload server data so entitlement (counts,
   // trial start, next slot) and the assigned-number list refresh in place.
@@ -161,6 +184,9 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 entitlement={entitlement}
                 onGoToBilling={() => setActive("billing")}
                 onStartPaidPlan={startPaidPlan}
+                startingPaidPlan={startingPaidPlan}
+                paidPlanPending={paidPlanPending}
+                paidPlanError={paidPlanError}
                 onPurchased={handlePurchased}
               />
             </Section>
@@ -226,6 +252,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 isTrialing={data.billing.isTrialing}
                 paidPlanResult={data.paidPlanResult ?? null}
                 startingPaidPlan={startingPaidPlan}
+                paidPlanPending={paidPlanPending}
                 paidPlanError={paidPlanError}
                 onStartPaidPlan={startPaidPlan}
               />

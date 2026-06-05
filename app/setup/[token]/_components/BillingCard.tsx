@@ -24,6 +24,7 @@ export function BillingCard({
   isTrialing,
   paidPlanResult,
   startingPaidPlan,
+  paidPlanPending,
   paidPlanError,
   onStartPaidPlan,
 }: {
@@ -37,8 +38,9 @@ export function BillingCard({
   isTrialing: boolean;
   paidPlanResult: "success" | "cancelled" | null;
   startingPaidPlan: boolean;
+  paidPlanPending: boolean;
   paidPlanError: string | null;
-  onStartPaidPlan: () => void;
+  onStartPaidPlan: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -117,8 +119,8 @@ export function BillingCard({
         )}
       </div>
 
-      {/* Returning from Stripe-hosted subscription Checkout. Paid status is shown
-          only from confirmed subscription data (paidPlanActive), never the param. */}
+      {/* Legacy return-state support. Paid status is shown only from confirmed
+          subscription data (paidPlanActive), never from a query param. */}
       {paidPlanResult === "success" && !paidPlanActive && (
         <div className="alert alert-info" role="status" aria-live="polite" style={{ alignItems: "center" }}>
           <span style={{ flex: 1 }}>Your paid plan is being confirmed. This can take a few seconds.</span>
@@ -131,17 +133,24 @@ export function BillingCard({
         </div>
       )}
 
-      {/* Explicit trial -> paid conversion. The subscription is created in
-          Stripe-hosted Checkout; this never charges directly. */}
+      {/* Explicit trial -> paid conversion. The subscription is created using
+          the saved Stripe payment method; webhook-confirmed state unlocks paid
+          entitlement. */}
       {hasPaymentMethod && !paidPlanActive && canStartPaidPlan && (
         <div style={{ display: "grid", gap: "var(--space-2)" }}>
           <button type="button" className="btn btn-primary" onClick={onStartPaidPlan}
-            disabled={startingPaidPlan} aria-busy={startingPaidPlan}>
-            {startingPaidPlan ? "Starting…" : isTrialing ? "End trial and start paid plan" : "Start paid plan"}
+            disabled={startingPaidPlan || paidPlanPending} aria-busy={startingPaidPlan || paidPlanPending}>
+            {startingPaidPlan || paidPlanPending ? "Starting..." : "Start paid plan"}
           </button>
           <p className="t-small" style={{ color: "var(--text-muted)" }}>
-            Starts the {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month plan via Stripe. Required before adding more numbers.
+            Starts the {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month plan using your saved payment method. Required before adding more numbers.
           </p>
+          {paidPlanPending && (
+            <div className="alert alert-info" role="status" aria-live="polite" style={{ alignItems: "center" }}>
+              <span style={{ flex: 1 }}>Your paid plan is being confirmed. This can take a few seconds.</span>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => router.refresh()}>Refresh</button>
+            </div>
+          )}
           {paidPlanError && (
             <div className="alert alert-error" role="alert" aria-live="polite"><span>{paidPlanError}</span></div>
           )}
@@ -193,7 +202,7 @@ export function BillingCard({
             {formatUsdFromCents(billingConfig.additionalBusinessNumber.monthlyUnitAmountCents)}/month each
           </p>
           <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-1) 0 0" }}>
-            Billing starts after an additional phone number is activated.
+            Each additional phone number adds {formatUsdFromCents(billingConfig.additionalBusinessNumber.monthlyUnitAmountCents)}/month to your paid plan.
           </p>
         </div>
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState, type CSSProperties } from "react";
 import { StatusBadge } from "./AccountUI";
 import { OwnerLocalNumberSearch } from "./OwnerLocalNumberSearch";
 import type {
@@ -8,11 +9,16 @@ import type {
 } from "./account-types";
 import { billingConfig, formatUsdFromCents } from "../../../../config/billing.config";
 
+const BASE_MONTHLY = formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents);
 const ADDITIONAL_MONTHLY = formatUsdFromCents(
   billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
 );
+const ADD_NUMBER_TOTAL_MONTHLY = formatUsdFromCents(
+  billingConfig.basePlan.monthlyUnitAmountCents +
+    billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
+);
 
-const TAG_ROW: React.CSSProperties = {
+const TAG_ROW: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
@@ -28,6 +34,9 @@ export function AssignedNumberCard({
   entitlement,
   onGoToBilling,
   onStartPaidPlan,
+  startingPaidPlan,
+  paidPlanPending,
+  paidPlanError,
   onPurchased,
 }: {
   assignedNumbers: AssignedBusinessNumberSummary[];
@@ -36,7 +45,10 @@ export function AssignedNumberCard({
   hasPaymentMethod: boolean;
   entitlement: OwnerNumberEntitlement;
   onGoToBilling: () => void;
-  onStartPaidPlan: () => void;
+  onStartPaidPlan: () => void | Promise<void>;
+  startingPaidPlan: boolean;
+  paidPlanPending: boolean;
+  paidPlanError: string | null;
   onPurchased: (n: AssignedBusinessNumberSummary) => void;
 }) {
   const showEmpty = assignedNumbers.length === 0;
@@ -79,6 +91,9 @@ export function AssignedNumberCard({
         postalCode={postalCode}
         onGoToBilling={onGoToBilling}
         onStartPaidPlan={onStartPaidPlan}
+        startingPaidPlan={startingPaidPlan}
+        paidPlanPending={paidPlanPending}
+        paidPlanError={paidPlanError}
         onPurchased={onPurchased}
       />
     </div>
@@ -92,6 +107,9 @@ function NumberAction({
   postalCode,
   onGoToBilling,
   onStartPaidPlan,
+  startingPaidPlan,
+  paidPlanPending,
+  paidPlanError,
   onPurchased,
 }: {
   hasPaymentMethod: boolean;
@@ -99,10 +117,20 @@ function NumberAction({
   areaCode: string | null;
   postalCode: string | null;
   onGoToBilling: () => void;
-  onStartPaidPlan: () => void;
+  onStartPaidPlan: () => void | Promise<void>;
+  startingPaidPlan: boolean;
+  paidPlanPending: boolean;
+  paidPlanError: string | null;
   onPurchased: (n: AssignedBusinessNumberSummary) => void;
 }) {
   const reason = entitlement.blockReason;
+  const [showPaidPlanConfirm, setShowPaidPlanConfirm] = useState(false);
+
+  useEffect(() => {
+    if (reason !== "paid_plan_required") {
+      setShowPaidPlanConfirm(false);
+    }
+  }, [reason]);
 
   if (reason === "payment_method_required" || !hasPaymentMethod) {
     return (
@@ -135,14 +163,39 @@ function NumberAction({
       <div className="acct-callout">
         <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
           {entitlement.isTrialing
-            ? "Additional business numbers are available after you start the paid plan."
-            : "Start the paid plan to add another business number."}
+            ? "Additional phone numbers are available after you start the paid plan."
+            : "Start the paid plan to add another phone number."}
         </p>
+        {paidPlanPending && (
+          <div className="alert alert-info" role="status" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
+            <span>Your paid plan is being confirmed. This can take a few seconds.</span>
+          </div>
+        )}
+        {paidPlanError && (
+          <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
+            <span>{paidPlanError}</span>
+          </div>
+        )}
         <div style={{ marginTop: "var(--space-2)" }}>
-          <button type="button" className="btn btn-primary acct-primary-action" onClick={onStartPaidPlan}>
-            {entitlement.isTrialing ? "End trial and start paid plan" : "Start paid plan"}
+          <button
+            type="button"
+            className="btn btn-primary acct-primary-action"
+            onClick={() => setShowPaidPlanConfirm(true)}
+            disabled={startingPaidPlan || paidPlanPending}
+            aria-busy={startingPaidPlan || paidPlanPending}
+          >
+            Add phone number
           </button>
         </div>
+        {showPaidPlanConfirm && (
+          <AddPhoneNumberConfirmation
+            onClose={() => setShowPaidPlanConfirm(false)}
+            onContinue={() => void onStartPaidPlan()}
+            starting={startingPaidPlan}
+            pending={paidPlanPending}
+            error={paidPlanError}
+          />
+        )}
       </div>
     );
   }
@@ -169,6 +222,125 @@ function NumberAction({
         onPurchased={onPurchased}
       />
     </>
+  );
+}
+
+function AddPhoneNumberConfirmation({
+  onClose,
+  onContinue,
+  starting,
+  pending,
+  error,
+}: {
+  onClose: () => void;
+  onContinue: () => void;
+  starting: boolean;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [checked, setChecked] = useState(false);
+  const continueDisabled = !checked || starting || pending;
+
+  return (
+    <div className="acct-modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        className="acct-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-phone-number-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "grid", gap: "var(--space-2)" }}>
+          <h3 id="add-phone-number-title" className="t-h4">Add phone number</h3>
+          <p className="t-small" style={{ margin: 0 }}>
+            Adding another phone number will end your free trial and start your paid plan.
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "var(--space-2)",
+            padding: "var(--space-4)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--r-md)",
+            background: "var(--surface-2)",
+          }}
+        >
+          <p className="t-eyebrow" style={{ margin: 0 }}>Billing summary</p>
+          <BillingSummaryRow label="Standard Plan" value={`${BASE_MONTHLY}/month`} />
+          <BillingSummaryRow label="Additional phone number" value={`${ADDITIONAL_MONTHLY}/month`} />
+          <div className="divider" />
+          <BillingSummaryRow
+            label="Total"
+            value={`${ADD_NUMBER_TOTAL_MONTHLY}/month`}
+            emphasis
+          />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "var(--space-3)",
+            paddingTop: "var(--space-2)",
+          }}
+        >
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => setChecked(e.target.checked)}
+            />
+            <span>I understand my saved payment method will be charged {ADD_NUMBER_TOTAL_MONTHLY}/month.</span>
+          </label>
+          {pending && (
+            <div className="alert alert-info" role="status" aria-live="polite">
+              <span>Your paid plan is being confirmed. This can take a few seconds.</span>
+            </div>
+          )}
+          {error && (
+            <div className="alert alert-error" role="alert" aria-live="polite">
+              <span>{error}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={starting}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={onContinue}
+              disabled={continueDisabled}
+              aria-busy={starting || pending}
+            >
+              {starting || pending ? "Starting..." : "Continue"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BillingSummaryRow({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-4)" }}>
+      <span className={emphasis ? "t-body" : "t-small"} style={{ margin: 0, fontWeight: emphasis ? 800 : 600, color: "var(--text)" }}>
+        {label}:
+      </span>
+      <span className={emphasis ? "t-h4" : "t-small"} style={{ margin: 0, fontWeight: emphasis ? 800 : 700, color: "var(--text)" }}>
+        {value}
+      </span>
+    </div>
   );
 }
 

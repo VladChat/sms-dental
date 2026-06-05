@@ -23,7 +23,7 @@ Current implementation state:
 - Inbound voice has been verified end-to-end after the Twilio account upgrade.
 - Self-service owner number purchasing is merged and deployed, but Twilio purchase mode defaults to `"disabled"` and real purchases require `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"`.
 - Supabase migration `20260603000200_self_service_number_purchasing.sql` is applied and verified.
-- Stripe test-mode subscription Checkout and webhooks exist; Stripe remains test-mode and no live charge can occur.
+- Stripe test-mode saved-payment-method subscription creation and webhooks exist; Stripe remains test-mode and no live charge can occur.
 - SMS recovery is not automatically enabled.
 
 ---
@@ -61,7 +61,7 @@ automatic SMS recovery flow after approval/configuration
 inbound SMS handling
 recovery inbox later
 manual booked/lost outcome tracking later
-Stripe test-mode subscription Checkout and webhooks
+Stripe test-mode saved-payment-method subscription creation and webhooks
 usage metering/billing later
 Supabase database/auth
 Vercel deployment

@@ -5,8 +5,8 @@ code at **`config/billing.config.ts`** and rendered everywhere from there (owner
 UI, API validation, consent text, DB snapshots). Do not duplicate these amounts.
 
 > Status: **current canonical policy.** Self-service number purchasing and
-> Stripe-hosted subscription Checkout are deployed in production code, with Stripe
-> **test-mode only** Price IDs and secret key. Twilio number assignment is gated
+> server-side paid-plan subscription creation are deployed in production code,
+> with Stripe **test-mode only** Price IDs and secret key. Twilio number assignment is gated
 > by `runtimeConfig.onboarding.twilioNumberPurchaseMode`, which defaults to
 > `"disabled"`. Real Twilio purchases happen only when the mode is `"live"`;
 > `"mock"` is for local/staging UX testing and never calls Twilio purchase APIs.
@@ -89,7 +89,8 @@ wiring, **never** hard-coded next to the amounts in `billing.config.ts`.
 
 - Supabase migration `20260603000200_self_service_number_purchasing.sql` has been applied and verified.
 - `STRIPE_BASE_PLAN_PRICE_ID` and `STRIPE_ADDITIONAL_NUMBER_PRICE_ID` are set in Vercel Production with test-mode Price IDs.
-- Stripe subscription Checkout exists in test mode.
+- Paid-plan start creates a Stripe test-mode subscription server-side using the
+  saved Stripe Customer and saved PaymentMethod.
 - Twilio purchase mode defaults to `"disabled"` in committed runtime config.
 - Real Twilio purchases are still blocked unless the mode is deliberately changed to `"live"`.
 - Mock mode can exercise assignment UX and DB/entitlement behavior in local/staging without buying a Twilio number.
@@ -117,11 +118,16 @@ first number is assigned** (`clinics.trial_started_at` / `trial_ends_at`;
 **Trial source of truth** = `clinics.trial_started_at` / `trial_ends_at` (no longer
 derived from the setup-request date).
 
-**Starting the paid plan** is an explicit owner action: Stripe-hosted Checkout in
-`mode:"subscription"` charging the $99/month base plan via the **server-side**
-Price ID (`STRIPE_BASE_PLAN_PRICE_ID`; never client-supplied). Paid entitlement is
-granted **only** after the webhook confirms an active subscription — never from the
-`?paid_plan=success` query param. Natural trial end does not silently charge.
+**Starting the paid plan** is an explicit owner action that stays in-app. The
+server creates a Stripe test-mode subscription using the saved Stripe Customer,
+saved PaymentMethod, and the **server-side** base Price ID
+(`STRIPE_BASE_PLAN_PRICE_ID`; never client-supplied). The API uses
+`collection_method='charge_automatically'`, the saved `default_payment_method`,
+and `payment_behavior='error_if_incomplete'`; payment failure or required card
+action returns an in-app error rather than redirecting to Stripe Checkout. Paid
+entitlement is granted **only** after the webhook confirms an active subscription
+— never from a client response or legacy `?paid_plan=success` query param.
+Natural trial end does not silently charge.
 
 **Additional numbers** ($20/month each) are available **only** with a
 webhook-confirmed active paid subscription, require the explicit $20/month consent
