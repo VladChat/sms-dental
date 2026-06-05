@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
 // Purchases the user-selected Twilio number after validating:
 //   1. Setup token validity.
 //   2. Clinic exists and has no active office texting number (idempotent).
-//   3. runtime config purchase gate is enabled.
+//   3. runtime config purchase mode is live.
 //
 // On success, configures Voice + SMS webhooks pointing at the configured app
 // base URL and
@@ -92,7 +92,7 @@ export async function POST(
     return jsonError(
       503,
       "purchase_disabled",
-      "Number purchase is currently disabled by the operator. Please try again later.",
+      "Number assignment is temporarily unavailable. Please contact support.",
     );
   }
 

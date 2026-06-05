@@ -6,9 +6,9 @@ import type { LocalListInstanceOptions } from "twilio/lib/rest/api/v2010/account
 //
 // Rules from the build guide:
 //   - Search is read-only. It must never purchase anything.
-//   - Purchase requires TWILIO_NUMBER_PURCHASE_ENABLED=true; that check is
-//     enforced by the API route, not here, so this module stays a pure
-//     wrapper around Twilio.
+//   - Live purchase requires runtimeConfig.onboarding.twilioNumberPurchaseMode
+//     to be "live"; that check is enforced by callers, not here, so this
+//     module stays a pure wrapper around Twilio.
 //   - Return only Voice + SMS capable numbers.
 //   - Prefer numbers with address_requirements=none.
 //

@@ -181,11 +181,20 @@ export function getSetupEmailEnv(): {
   };
 }
 
-// Twilio number purchase safety gate. Search is always allowed when the
-// Twilio client is configured. Purchase proceeds only when the committed
-// runtime config explicitly enables it.
+// Twilio number purchase safety mode. Search is always allowed when the
+// Twilio client is configured. Live Twilio purchase proceeds only when the
+// committed runtime config explicitly sets mode to "live".
+export type TwilioNumberPurchaseMode = "disabled" | "mock" | "live";
+
+export function getTwilioNumberPurchaseMode(): TwilioNumberPurchaseMode {
+  const mode = runtimeConfig.onboarding.twilioNumberPurchaseMode;
+  return mode === "mock" || mode === "live" ? mode : "disabled";
+}
+
+// Legacy safety helper: true only for the real Twilio purchase path. Keep this
+// live-only so older direct-purchase routes cannot call Twilio in mock mode.
 export function isTwilioNumberPurchaseEnabled(): boolean {
-  return runtimeConfig.onboarding.twilioNumberPurchaseEnabled;
+  return getTwilioNumberPurchaseMode() === "live";
 }
 
 // Owner-test setup link fallback gate from committed runtime config.
@@ -216,6 +225,7 @@ export type EnvPresenceReport = {
   publicSiteUrl: boolean;
   resendApiKey: boolean;
   setupEmailFrom: boolean;
+  twilioNumberPurchaseMode: TwilioNumberPurchaseMode;
   twilioNumberPurchaseEnabled: boolean;
 };
 
@@ -246,6 +256,7 @@ export function getEnvPresenceReport(): EnvPresenceReport {
     publicSiteUrl: runtimeConfig.app.publicSiteUrl.trim().length > 0,
     resendApiKey: present("RESEND_API_KEY"),
     setupEmailFrom: runtimeConfig.email.defaultSetupFrom.trim().length > 0,
-    twilioNumberPurchaseEnabled: runtimeConfig.onboarding.twilioNumberPurchaseEnabled,
+    twilioNumberPurchaseMode: getTwilioNumberPurchaseMode(),
+    twilioNumberPurchaseEnabled: isTwilioNumberPurchaseEnabled(),
   };
 }

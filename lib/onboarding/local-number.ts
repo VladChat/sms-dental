@@ -16,10 +16,10 @@ import {
 // the clinic's ZIP code (falling back to the area code of the main phone).
 //
 // SAFETY: this is read-only. It NEVER purchases or reserves a live Twilio
-// number. Reservation/purchase stays behind the existing purchase gate
-// (TWILIO_NUMBER_PURCHASE_ENABLED) + explicit owner approval in the purchase
-// route. While the gate is disabled, we only confirm a candidate exists and
-// keep the customer-facing status at "preparing".
+// number. Reservation/purchase stays behind the committed purchase mode +
+// explicit owner approval in the purchase route. While the mode is disabled,
+// we only confirm a candidate exists and keep the customer-facing status at
+// "preparing".
 
 export type LocalNumberPrepResult = {
   candidate: AvailableNumber | null;
@@ -51,7 +51,7 @@ export async function prepareLocalNumber(
   }
 
   // We do not reserve or purchase here. Status stays "preparing" until the
-  // purchase gate is enabled and the owner explicitly approves a purchase.
+  // purchase mode allows assignment and the owner explicitly approves it.
   await setLocalNumberStatus(clinic.id, "preparing");
 
   return result;

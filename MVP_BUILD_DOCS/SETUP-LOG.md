@@ -4298,3 +4298,57 @@ Final production rollout completed after approval.
 Result: self-service number purchasing is merged and deployed for safe production
 testing, with real Twilio purchasing and live Stripe charging still gated for a
 separate explicit go-live decision.
+
+---
+
+## 2026-06-05 — Safe mock Twilio number-assignment mode
+
+Implemented a committed runtime-config mode for owner/admin phone-number assignment
+testing without buying real Twilio numbers.
+
+What changed:
+- Replaced the boolean-only runtime config gate with
+  `runtimeConfig.onboarding.twilioNumberPurchaseMode`, defaulting to `"disabled"`.
+- Added `getTwilioNumberPurchaseMode()` in `lib/env.ts`; kept
+  `isTwilioNumberPurchaseEnabled()` live-only for older direct-purchase routes.
+- Updated the shared provisioning service:
+  - `"disabled"` marks the attempt `cancelled`, returns safe unavailable copy, and
+    never calls Twilio.
+  - `"mock"` generates `PN_mock_<attemptId_without_dashes>`, marks the attempt
+    `twilio_purchased`, and continues through existing assignment, entitlement,
+    trial-start, and additional-number billing logic without calling Twilio purchase
+    APIs.
+  - `"live"` preserves the existing `purchaseNumberAndConfigure()` behavior.
+- Cleaned customer/operator-facing disabled copy so it no longer mentions
+  environment flags.
+- Updated current source-of-truth docs and runbook sections for disabled/mock/live
+  behavior.
+
+Validation:
+- `npm run typecheck` — pass.
+- `npm run build` — pass.
+
+Manual testing:
+- Browser/manual first-number and additional-number assignment tests were not
+  completed in this turn because no local/staging mock config change and no
+  authenticated test clinic/payment-method/subscription state were used.
+- Committed default remained `"disabled"` after validation.
+
+Commit hash:
+- Not created. Working tree changes only; no commit was requested.
+
+Push status:
+- Not pushed. No production deploy or Vercel env/config change was performed.
+
+Remaining risks:
+- Mock-mode first-number and additional-number UX still need local/staging browser QA.
+- Additional-number mock testing still exercises Stripe quantity sync when the test
+  clinic has webhook-confirmed active paid-plan state; use Stripe test-mode only.
+- Twilio available-number search remains a read-only Twilio API path and still needs
+  configured Twilio credentials for search QA.
+
+Next steps:
+- For local/staging UX testing, temporarily set
+  `runtimeConfig.onboarding.twilioNumberPurchaseMode = "mock"`, run owner first-number
+  and additional-number tests, verify `PN_mock_*` SIDs in DB rows/attempts, then switch
+  the mode back to `"disabled"`.

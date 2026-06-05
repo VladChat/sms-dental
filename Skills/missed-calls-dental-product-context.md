@@ -42,7 +42,7 @@ Primary MVP connection modes:
    - The owner searches local numbers from `/account` and chooses a business number.
    - The first number is included with the $99/month plan and requires a saved payment method.
    - The current backend starts the 21-day trial after the first successful number assignment.
-   - Real Twilio purchasing remains gated by `TWILIO_NUMBER_PURCHASE_ENABLED`.
+   - Real Twilio purchasing remains gated by `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"`.
    - Additional numbers require a webhook-confirmed active paid plan and explicit $20/month consent.
    - The assigned number can be used for conditional forwarding, direct routing, or campaign needs where appropriate.
 

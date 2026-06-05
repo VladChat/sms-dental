@@ -206,8 +206,8 @@ export function AdminPhoneNumberManager({
       {!purchaseEnabled && (
         <div className="adm-banner tone-warning" role="note" style={{ marginTop: "var(--space-2)" }}>
           <div className="adm-banner-main">
-            <span className="adm-banner-title">Number purchase is disabled by environment flag.</span>
-            <span className="adm-banner-body">Search works; purchase is blocked until the operator enables it.</span>
+            <span className="adm-banner-title">Number assignment is temporarily unavailable.</span>
+            <span className="adm-banner-body">Search works; assignment is blocked until an operator enables it.</span>
           </div>
         </div>
       )}
@@ -307,7 +307,7 @@ export function AdminPhoneNumberManager({
           </button>
           {!purchaseEnabled && (
             <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-2) 0 0" }}>
-              Purchase is disabled by environment flag — the request will be safely blocked.
+              Assignment is temporarily unavailable; the request will be safely blocked.
             </p>
           )}
         </div>
