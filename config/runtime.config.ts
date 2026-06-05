@@ -39,9 +39,21 @@ export const runtimeConfig = {
   },
 
   onboarding: {
-    // Non-secret runtime flags. Keep default disabled; use "mock" only in
-    // local/staging UX tests, and "live" only for deliberate Twilio purchases.
-    twilioNumberPurchaseMode: "disabled" as "disabled" | "mock" | "live",
+    // Non-secret runtime flags. Keep default disabled.
+    //  - "mock": local/staging assignment UX only — no real Twilio call.
+    //  - "owner_test_live": REAL Twilio purchase, but ONLY for clinic ids listed
+    //     in twilioPurchaseTestClinicIds (controlled owner/test live testing).
+    //  - "live": REAL Twilio purchase for all eligible clinics (deliberate go-live).
+    twilioNumberPurchaseMode: "disabled" as
+      | "disabled"
+      | "mock"
+      | "owner_test_live"
+      | "live",
+    // Allowlist of clinic UUIDs permitted to make a REAL Twilio purchase while
+    // twilioNumberPurchaseMode === "owner_test_live". Non-secret operational
+    // config (clinic ids are not secrets). Empty = no clinic may purchase in
+    // owner_test_live. Ignored in "live" (all eligible), "mock", and "disabled".
+    twilioPurchaseTestClinicIds: [] as readonly string[],
     // Production must keep this false so /api/setup-requests actually sends the
     // Resend email instead of short-circuiting to a fallback link. Only flip
     // to true for short, controlled owner-only API tests when Resend is

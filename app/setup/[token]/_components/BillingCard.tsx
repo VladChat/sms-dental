@@ -91,13 +91,13 @@ export function BillingCard({
         </StatusRow>
         <StatusRow label="Plan">
           {paidPlanActive ? (
-            <StatusBadge kind="active" label="Paid plan active" />
-          ) : isTrialing ? (
-            <StatusBadge kind="waiting" label="Free trial" />
-          ) : trialEnded ? (
-            <StatusBadge kind="needs_action" label="Trial ended" />
+            <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
+              {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month
+            </span>
           ) : (
-            <StatusBadge kind="not_started" label="Not started" />
+            <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
+              21-day free trial, then {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month
+            </span>
           )}
         </StatusRow>
         {!paidPlanActive && (
@@ -106,10 +106,12 @@ export function BillingCard({
               <StatusBadge kind="needs_action" label="Trial ended" />
             ) : isTrialing ? (
               <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-                Free trial ends in {dayLabel}
+                Ends in {dayLabel}
               </span>
             ) : (
-              <span className="t-small" style={{ color: "var(--text-muted)" }}>Starts after your first number</span>
+              <span className="t-small" style={{ color: "var(--text-muted)" }}>
+                Starts after your first phone number is assigned
+              </span>
             )}
           </StatusRow>
         )}
@@ -178,21 +180,21 @@ export function BillingCard({
         </div>
 
         <div>
-          <p className="t-eyebrow">Additional business numbers</p>
-          <p className="t-small" style={{ color: "var(--text)", fontWeight: 600, margin: "var(--space-1) 0 0" }}>
-            {formatUsdFromCents(billingConfig.additionalBusinessNumber.monthlyUnitAmountCents)}/month each
-          </p>
-          <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-1) 0 0" }}>
-            Billing starts after a number is approved and activated.
-          </p>
-        </div>
-
-        <div>
           <p className="t-eyebrow">Usage above the included monthly limits</p>
           <ul className="acct-plan-list">
             <li>{formatUsdFromCents(billingConfig.overage.callMinuteUnitAmountCents)} per additional call minute</li>
             <li>{formatUsdFromCents(billingConfig.overage.smsSegmentUnitAmountCents)} per additional SMS segment</li>
           </ul>
+        </div>
+
+        <div>
+          <p className="t-eyebrow">Additional phone numbers</p>
+          <p className="t-small" style={{ color: "var(--text)", fontWeight: 600, margin: "var(--space-1) 0 0" }}>
+            {formatUsdFromCents(billingConfig.additionalBusinessNumber.monthlyUnitAmountCents)}/month each
+          </p>
+          <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-1) 0 0" }}>
+            Billing starts after an additional phone number is activated.
+          </p>
         </div>
       </div>
 

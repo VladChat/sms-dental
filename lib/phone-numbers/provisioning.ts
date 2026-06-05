@@ -5,7 +5,11 @@ import {
   computeNumberEntitlement,
   type NumberPurchaseBlockReason,
 } from "../billing/number-entitlements";
-import { getAppDomains, getTwilioNumberPurchaseMode } from "../env";
+import {
+  getAppDomains,
+  getTwilioNumberPurchaseMode,
+  isClinicAllowedForLivePurchase,
+} from "../env";
 import {
   isNumberNoLongerAvailableError,
   phoneAreaCode,
@@ -218,6 +222,20 @@ export async function provisionClinicPhoneNumber(
       areaCode: phoneAreaCode(purchasedNumber),
     });
   } else {
+    // Real purchase path: mode is "live" or "owner_test_live". In
+    // "owner_test_live", only clinics on the committed allowlist may make a real
+    // Twilio purchase; any other clinic is treated exactly like "disabled" (no
+    // Twilio call, clean user-safe copy). "live" allows all eligible clinics.
+    if (!isClinicAllowedForLivePurchase(clinicId)) {
+      await markAttempt(attemptId, { status: "cancelled", error_code: "purchase_disabled" });
+      return {
+        ok: false,
+        error: "purchase_disabled",
+        message: "Number assignment is temporarily unavailable. Please contact support.",
+        attemptId,
+      };
+    }
+
     let appBaseUrl: string;
     try {
       ({ appBaseUrl } = getAppDomains());
