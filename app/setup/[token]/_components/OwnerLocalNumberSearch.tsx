@@ -2,23 +2,16 @@
 
 import { useRef, useState } from "react";
 
-import { ConfirmationDialog } from "./ConfirmationDialog";
 import type { AssignedBusinessNumberSummary } from "./account-types";
 import {
   additionalNumberConsentText,
   billingConfig,
-  formatInteger,
   formatUsdFromCents,
 } from "../../../../config/billing.config";
 
 const ADDITIONAL_MONTHLY = formatUsdFromCents(
   billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
 );
-const INCLUDED_PLAN_SUMMARY = `Included in your plan: ${formatInteger(
-  billingConfig.basePlan.includedCallMinutes,
-)} call minutes, and ${formatInteger(
-  billingConfig.basePlan.includedSmsSegments,
-)} SMS segments each month.`;
 
 type Candidate = {
   phone_number: string;
@@ -78,7 +71,6 @@ export function OwnerLocalNumberSearch({
   const [selected, setSelected] = useState<string | null>(null);
   const [fallbackMessage, setFallbackMessage] = useState<string | null>(null);
   const [consentChecked, setConsentChecked] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -87,7 +79,6 @@ export function OwnerLocalNumberSearch({
   function resetSelection() {
     setSelected(null);
     setConsentChecked(false);
-    setConfirming(false);
     setActionError(null);
   }
 
@@ -163,7 +154,6 @@ export function OwnerLocalNumberSearch({
       const json = (await res.json().catch(() => null)) as PurchaseResponse | null;
       if (!res.ok || !json?.ok || !json.assignedNumber) {
         setActionError(json?.error?.message ?? "Could not purchase this number. Please try again.");
-        setConfirming(false);
         return;
       }
       const a = json.assignedNumber;
@@ -178,7 +168,6 @@ export function OwnerLocalNumberSearch({
       clearAll(true);
     } catch {
       setActionError("Could not purchase this number. Please try again.");
-      setConfirming(false);
     } finally {
       setPurchasing(false);
     }
@@ -243,7 +232,7 @@ export function OwnerLocalNumberSearch({
                 <label className="acct-cand-choice">
                   <input type="radio" name="owner-number" value={c.phone_number} checked={checked}
                     disabled={!c.selectable}
-                    onChange={() => { setSelected(c.phone_number); setConsentChecked(false); setConfirming(false); setActionError(null); }} />
+                    onChange={() => { setSelected(c.phone_number); setConsentChecked(false); setActionError(null); }} />
                   <span className="acct-cand-body">
                     <span className="acct-cand-top">
                       <span className="acct-cand-num">{c.friendly_name || c.phone_number}</span>
@@ -273,34 +262,19 @@ export function OwnerLocalNumberSearch({
                         </div>
                         <label className="check">
                           <input type="checkbox" checked={consentChecked}
-                            onChange={(e) => { setConsentChecked(e.target.checked); setConfirming(false); }} />
+                            onChange={(e) => setConsentChecked(e.target.checked)} />
                           <span>{additionalNumberConsentText()}</span>
                         </label>
                       </div>
                     )}
 
-                    {!confirming ? (
-                      <button type="button" className="btn btn-primary acct-primary-action"
-                        onClick={() => setConfirming(true)}
-                        disabled={isAdditional && !consentChecked}>
-                        {isAdditional ? "Purchase additional number" : "Assign this number"}
-                      </button>
-                    ) : (
-                      <ConfirmationDialog
-                        title={isAdditional ? "Purchase additional number?" : "Assign this number?"}
-                        description={isAdditional
-                          ? `This will add ${ADDITIONAL_MONTHLY}/month to your monthly plan.`
-                          : INCLUDED_PLAN_SUMMARY}
-                        primaryLabel="Confirm"
-                        secondaryLabel="Cancel"
-                        loading={purchasing}
-                        loadingLabel="Purchasing..."
-                        error={actionError}
-                        onConfirm={() => void confirmPurchase()}
-                        onCancel={() => setConfirming(false)}
-                      />
-                    )}
-                    {actionError && !confirming && (
+                    <button type="button" className="btn btn-primary acct-primary-action"
+                      onClick={() => void confirmPurchase()}
+                      disabled={(isAdditional && !consentChecked) || purchasing}
+                      aria-busy={purchasing}>
+                      {purchasing ? "Purchasing..." : isAdditional ? "Purchase this number" : "Assign this number"}
+                    </button>
+                    {actionError && (
                       <div className="alert alert-error" role="alert" aria-live="polite"><span>{actionError}</span></div>
                     )}
                   </div>
