@@ -4468,3 +4468,64 @@ Deploy notes:
   that writes the new columns.
 - The already purchased Fairstone number still needs manual/approved remediation
   for emergency address and A2P/10DLC; this task only fixes future purchases.
+
+---
+
+## 2026-06-05 — Phone hardening deployed; existing-number remediation stopped
+
+Production hardening sequence continued after commit `db334b0`.
+
+Validation before deploy:
+- `npm run typecheck` — pass.
+- `npm run build` — pass.
+- `git diff --check` — pass.
+
+Migration:
+- Applied `supabase/migrations/20260605000100_twilio_number_address_status.sql`
+  to Supabase.
+- Verified `clinic_phone_numbers` columns exist:
+  `twilio_address_sid`, `twilio_emergency_address_sid`,
+  `twilio_emergency_address_status`, `twilio_address_configured_at`.
+
+Deploy:
+- Commit `db334b0` pushed to `origin/main`.
+- Vercel production deployment `dpl_AheUtkcWDkXgGdMWPbSVfqyD9bK2` reached READY.
+- Alias includes `app.missedcallsdental.com`.
+- Smoke checks passed:
+  - `GET https://app.missedcallsdental.com/api/health` — 200.
+  - `GET https://app.missedcallsdental.com/account` — 200.
+  - `GET https://app.missedcallsdental.com/login` — 200.
+
+Existing number remediation attempt:
+- Target: Fairstone Dental Smile, `+12244009986`,
+  PN `PNcfa04ebbb3c99d346473979781eb8785`.
+- Created/reused Twilio Address `ADe303a7e8801efdff77e94b6bec887a59`
+  with `emergencyEnabled=true` for the clinic business address.
+- Twilio rejected the IncomingPhoneNumber update with:
+  `Cannot modify both emergency address SID and emergency status in the same request.`
+- Per safety rule, no second write attempt was made.
+
+Post-rejection verification:
+- IncomingPhoneNumber remains `in-use`.
+- Voice webhook and voice status callback unchanged.
+- SMS webhook unchanged.
+- Messaging Service attachment remains present.
+- IncomingPhoneNumber `addressSid` and `emergencyAddressSid` remain null.
+- IncomingPhoneNumber emergency address status remains `unregistered`.
+- Supabase `clinic_phone_numbers` row remains active, `billing_class='included'`,
+  PN SID unchanged.
+- New Twilio address/emergency metadata columns remain null because the PN update
+  did not succeed.
+- `clinics.sms_recovery_enabled=false`; `clinics.sms_status='waiting_for_approval'`.
+- A2P/10DLC API check still returns no Brand registrations and no campaigns for
+  the Messaging Service.
+
+Result:
+- Deployed safety fix is active for missing-field blocking.
+- Existing-number emergency/address remediation is **not complete**.
+- Do not run a second-number real purchase test until the Twilio update sequence
+  is corrected and redeployed/approved; the observed API behavior requires
+  address SID and emergency status changes to be handled without sending both in
+  one request.
+- No SMS sent, no new number purchased, broad live mode unchanged, no secrets
+  printed.
