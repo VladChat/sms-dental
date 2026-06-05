@@ -243,11 +243,12 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
             <Section
               id="billing"
               title="Billing & payment method"
-              description="Add a payment method to finish setup."
+              description="Manage your plan and payment method."
             >
               <BillingCard
                 hasPaymentMethod={hasPaymentMethod}
                 paymentMethod={data.billing.paymentMethod}
+                additionalBilledQuantity={data.number.entitlement.additionalBilledQuantity}
                 trialDaysRemaining={data.billing.trialDaysRemaining}
                 trialEnded={data.billing.trialEnded}
                 paymentMethodSetup={data.paymentMethodSetup ?? null}

@@ -16,6 +16,7 @@ const SMS_SEGMENT_TOOLTIP =
 export function BillingCard({
   hasPaymentMethod,
   paymentMethod,
+  additionalBilledQuantity,
   trialDaysRemaining,
   trialEnded,
   paymentMethodSetup,
@@ -30,6 +31,7 @@ export function BillingCard({
 }: {
   hasPaymentMethod: boolean;
   paymentMethod: PaymentMethodSummary | null;
+  additionalBilledQuantity: number;
   trialDaysRemaining: number;
   trialEnded: boolean;
   paymentMethodSetup: PaymentMethodSetupResult;
@@ -80,25 +82,38 @@ export function BillingCard({
       ? `${String(paymentMethod.expMonth).padStart(2, "0")}/${paymentMethod.expYear}`
       : null;
   const brandLabel = paymentMethod?.brand ? titleCase(paymentMethod.brand) : "Card";
+  const paymentMethodLabel =
+    hasPaymentMethod && paymentMethod
+      ? `${brandLabel} •••• ${paymentMethod.last4 ?? "••••"}`
+      : "Not added";
+  const baseMonthly = billingConfig.basePlan.monthlyUnitAmountCents;
+  const additionalMonthly = billingConfig.additionalBusinessNumber.monthlyUnitAmountCents;
+  const additionalTotal = additionalBilledQuantity * additionalMonthly;
+  const currentMonthlyTotal = baseMonthly + additionalTotal;
+  const baseMonthlyLabel = `${formatUsdFromCents(baseMonthly)}/month`;
+  const additionalMonthlyLabel = `${formatUsdFromCents(additionalMonthly)}/month`;
+  const currentMonthlyTotalLabel = `${formatUsdFromCents(currentMonthlyTotal)}/month`;
 
   return (
     <div style={{ display: "grid", gap: "var(--space-5)" }}>
       <div>
         <StatusRow label="Payment method">
           {hasPaymentMethod ? (
-            <StatusBadge kind="complete" label="Added" />
+            <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
+              {paymentMethodLabel}
+            </span>
           ) : (
-            <StatusBadge kind="needs_setup" />
+            <StatusBadge kind="needs_setup" label="Not added" />
           )}
         </StatusRow>
         <StatusRow label="Plan">
           {paidPlanActive ? (
             <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-              {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month
+              {currentMonthlyTotalLabel}
             </span>
           ) : (
             <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-              21-day free trial, then {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month
+              21-day free trial, then {baseMonthlyLabel}
             </span>
           )}
         </StatusRow>
@@ -143,7 +158,7 @@ export function BillingCard({
             {startingPaidPlan || paidPlanPending ? "Starting..." : "Start paid plan"}
           </button>
           <p className="t-small" style={{ color: "var(--text-muted)" }}>
-            Starts the {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month plan using your saved payment method. Required before adding more numbers.
+            Starts the {baseMonthlyLabel} plan using your saved payment method. Required before adding more numbers.
           </p>
           {paidPlanPending && (
             <div className="alert alert-info" role="status" aria-live="polite" style={{ alignItems: "center" }}>
@@ -159,14 +174,29 @@ export function BillingCard({
 
       {/* Plan details — sourced entirely from config/billing.config.ts. */}
       <div className="acct-plan">
-        <div className="acct-plan-head">
-          <span className="t-small" style={{ fontWeight: 700, color: "var(--text)" }}>
-            {billingConfig.basePlan.displayName}
-          </span>
-          <span className="t-h4">
-            {formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents)}/month
-          </span>
-        </div>
+        {paidPlanActive ? (
+          <div>
+            <p className="t-eyebrow">Monthly billing</p>
+            <ul className="acct-plan-list">
+              <li>{billingConfig.basePlan.displayName}: {baseMonthlyLabel}</li>
+              <li>
+                Additional phone numbers: {formatInteger(additionalBilledQuantity)} × {additionalMonthlyLabel}
+              </li>
+              <li style={{ fontWeight: 700, color: "var(--text)" }}>
+                Current monthly total: {currentMonthlyTotalLabel}
+              </li>
+            </ul>
+          </div>
+        ) : (
+          <div className="acct-plan-head">
+            <span className="t-small" style={{ fontWeight: 700, color: "var(--text)" }}>
+              {billingConfig.basePlan.displayName}
+            </span>
+            <span className="t-h4">
+              {baseMonthlyLabel}
+            </span>
+          </div>
+        )}
 
         <div>
           <p className="t-eyebrow">Included each month</p>
@@ -196,22 +226,26 @@ export function BillingCard({
           </ul>
         </div>
 
-        <div>
-          <p className="t-eyebrow">Additional phone numbers</p>
-          <p className="t-small" style={{ color: "var(--text)", fontWeight: 600, margin: "var(--space-1) 0 0" }}>
-            {formatUsdFromCents(billingConfig.additionalBusinessNumber.monthlyUnitAmountCents)}/month each
-          </p>
-          <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-1) 0 0" }}>
-            Each additional phone number adds {formatUsdFromCents(billingConfig.additionalBusinessNumber.monthlyUnitAmountCents)}/month to your paid plan.
-          </p>
-        </div>
+        {!paidPlanActive && (
+          <div>
+            <p className="t-eyebrow">Additional phone numbers</p>
+            <p className="t-small" style={{ color: "var(--text)", fontWeight: 600, margin: "var(--space-1) 0 0" }}>
+              {additionalMonthlyLabel} each
+            </p>
+            <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-1) 0 0" }}>
+              Each additional phone number adds {additionalMonthlyLabel} to your paid plan.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Returning from Stripe-hosted setup. Success is shown only when a real
           payment method is present — never inferred from the query param alone. */}
       {paymentMethodSetup === "success" && hasPaymentMethod && (
         <div className="alert alert-success" role="status" aria-live="polite">
-          <span>Payment method added. You won&apos;t be charged today.</span>
+          <span>
+            {paidPlanActive ? "Payment method updated." : "Payment method added. You won't be charged today."}
+          </span>
         </div>
       )}
       {paymentMethodSetup === "success" && !hasPaymentMethod && (
@@ -238,15 +272,19 @@ export function BillingCard({
         </span>
         {hasPaymentMethod && paymentMethod ? (
           <span style={{ display: "grid", gap: "2px" }}>
+            <span className="t-helper" style={{ color: "var(--text-muted)" }}>Payment method</span>
             <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-              {brandLabel} •••• {paymentMethod.last4 ?? "••••"}
+              {paymentMethodLabel}
             </span>
             {expLabel && (
               <span className="t-helper" style={{ color: "var(--text-muted)" }}>Expires {expLabel}</span>
             )}
           </span>
         ) : (
-          <span className="t-small" style={{ color: "var(--text-muted)" }}>No payment method on file</span>
+          <span style={{ display: "grid", gap: "2px" }}>
+            <span className="t-helper" style={{ color: "var(--text-muted)" }}>Payment method</span>
+            <span className="t-small" style={{ color: "var(--text-muted)" }}>No payment method on file</span>
+          </span>
         )}
       </div>
 
@@ -265,7 +303,9 @@ export function BillingCard({
               : "Add payment method"}
         </button>
         <p className="t-small" style={{ color: "var(--text-muted)" }}>
-          Secure payment setup is handled by Stripe. You will not be charged today.
+          {paidPlanActive
+            ? "Payment method updates are securely handled by Stripe."
+            : "Secure payment setup is handled by Stripe. You will not be charged today."}
         </p>
         {error && (
           <div className="alert alert-error" role="alert" aria-live="polite">
