@@ -129,6 +129,9 @@ export async function POST(
       if (!detail.a2pInfoCompleted) {
         return jsonError(409, "precondition_failed", "SMS approval information is not complete yet.");
       }
+      if (detail.smsStatus !== "active") {
+        return jsonError(409, "precondition_failed", "SMS approval is not active yet.");
+      }
       result = await setSmsRecoveryEnabled(clinicId, true);
     } else if (action === "update_note") {
       auditAction = "clinic.note.update";

@@ -2177,8 +2177,20 @@ SETUP-LOG 2026-06-03/2026-06-04 and BILLING-AND-USAGE-POLICY):
 Safe operating notes:
 
 - Migration `20260603000200_self_service_number_purchasing.sql` is applied and verified.
+- Migration `20260605000100_twilio_number_address_status.sql` must be applied
+  before deploying the post-audit purchase fix. It adds Twilio address/emergency
+  metadata columns to `clinic_phone_numbers` and does not modify existing data.
 - Vercel Production has `STRIPE_BASE_PLAN_PRICE_ID` and `STRIPE_ADDITIONAL_NUMBER_PRICE_ID`
   set to Stripe test-mode Price IDs.
+- Future real purchases are blocked before `getAppDomains()` or any Twilio API
+  call unless the clinic has `name`, `legal_business_name`, `main_phone`,
+  `street_address`, `city`, `state_region`, `postal_code`, `country='US'`, and
+  `business_info_completed=true`.
+- Real purchase configuration creates/reuses an emergency-enabled Twilio Address
+  from the clinic business address, attaches it to the IncomingPhoneNumber, then
+  attaches the number to the Messaging Service. If address or Messaging Service
+  setup fails after purchase, the attempt is marked `reconciliation_required`
+  with the purchased PN SID preserved.
 - With `runtimeConfig.onboarding.twilioNumberPurchaseMode = "disabled"`, purchase
   attempts cancel safely and no Twilio number is bought.
 - With mode `"mock"` in local/staging only, the shared provisioning flow writes a
@@ -2189,6 +2201,8 @@ Safe operating notes:
 - Setting `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"` is the
   deliberate go-live switch for real Twilio purchase.
 - Stripe remains test-mode unless a future live billing rollout is explicitly approved.
+- Admin `enable_sms` / launch requires `sms_status='active'`; saved A2P fields
+  alone (`a2p_info_completed=true`) are not enough to turn on SMS recovery.
 - If a purchase attempt is `reconciliation_required`, do not retry blindly. Inspect the
   Twilio SID/attempt details first; the system intentionally preserves the SID and does not
   auto-release the number.

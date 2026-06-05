@@ -4416,3 +4416,55 @@ Approved by Vlad. `feat/owner-test-live-purchase` fast-forward-merged to `main`
 
 To stand down: set `twilioNumberPurchaseMode` back to `"disabled"` (optionally clear the
 allowlist), commit, push `main`, redeploy.
+
+---
+
+## 2026-06-05 — Post-audit production purchase safety fix
+
+Implemented the minimal follow-up fix after the first real Twilio purchase audit
+for Fairstone Dental Smile (`clinic_id=f37f24a1-070f-436b-b803-956f55466093`,
+number `+12244009986`, PN `PNcfa04ebbb3c99d346473979781eb8785`).
+
+What changed:
+- Added migration `20260605000100_twilio_number_address_status.sql` with additive
+  `clinic_phone_numbers` metadata columns:
+  `twilio_address_sid`, `twilio_emergency_address_sid`,
+  `twilio_emergency_address_status`, `twilio_address_configured_at`.
+- Added a shared real-purchase readiness check in
+  `lib/phone-numbers/provisioning.ts` after durable attempt creation and before
+  `getAppDomains()` or any Twilio API call. Required fields:
+  `name`, `legal_business_name`, `main_phone`, `street_address`, `city`,
+  `state_region`, `postal_code`, `country='US'`, and
+  `business_info_completed=true`.
+- Missing readiness fields now mark the purchase attempt `cancelled` with
+  `error_code='missing_fields'` and return HTTP 400 from owner/admin purchase
+  routes with `error.missing_fields`.
+- `purchaseNumberAndConfigure()` now creates/reuses an emergency-enabled Twilio
+  Address from the clinic business address, attaches it to the purchased
+  IncomingPhoneNumber, and then attaches the number to the configured Messaging
+  Service.
+- Address setup or Messaging Service attach failure after purchase now throws a
+  typed configuration error carrying the purchased PN SID; provisioning marks the
+  attempt `reconciliation_required` and preserves the SID.
+- Legacy token-scoped number purchase route now delegates to the shared
+  provisioning service instead of calling Twilio directly.
+- Admin SMS launch now requires `sms_status='active'`; saved local A2P fields
+  alone are not enough to enable `sms_recovery_enabled`.
+
+Validation:
+- `npm run typecheck` — pass.
+- `npm run build` — pass.
+- `git diff --check` — pass.
+
+Safety:
+- No Twilio number was purchased during validation.
+- No SMS was sent.
+- `sms_recovery_enabled` was not changed.
+- Existing `+12244009986` Twilio configuration was not modified.
+- No secrets were printed.
+
+Deploy notes:
+- Apply `20260605000100_twilio_number_address_status.sql` before deploying code
+  that writes the new columns.
+- The already purchased Fairstone number still needs manual/approved remediation
+  for emergency address and A2P/10DLC; this task only fixes future purchases.

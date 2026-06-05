@@ -41,6 +41,7 @@ const ERROR_STATUS: Record<ProvisionErrorCode, number> = {
   number_already_assigned: 409,
   number_no_longer_available: 409,
   purchase_disabled: 503,
+  missing_fields: 400,
   billing_sync_failed: 502,
   reconciliation_required: 500,
   purchase_failed: 502,
@@ -93,7 +94,12 @@ export async function POST(
   });
 
   if (!result.ok) {
-    return jsonError(ERROR_STATUS[result.error], result.error, result.message);
+    return jsonError(
+      ERROR_STATUS[result.error],
+      result.error,
+      result.message,
+      result.missingFields ? { missing_fields: result.missingFields } : undefined,
+    );
   }
 
   // Audit: phone number + SID + area code only. Never any Twilio secret.

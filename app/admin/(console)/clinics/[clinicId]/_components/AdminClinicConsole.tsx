@@ -105,8 +105,10 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
     ? "Clinic is paused. Reactivate it before launching service."
     : !d.hasAssignedNumber
       ? "No phone number assigned. Assign a number before launching."
-      : !d.a2pInfoCompleted
-        ? "SMS approval information is not complete yet."
+    : !d.a2pInfoCompleted
+      ? "SMS approval information is not complete yet."
+      : d.smsStatus !== "active"
+        ? "SMS approval is not active yet."
         : null;
 
   const ownerEmail = d.ownerContactEmail ?? d.members.find((m) => m.role === "owner")?.email ?? null;
@@ -600,6 +602,9 @@ function bannerFor(
   }
   if (!d.a2pInfoCompleted) {
     return { tone: "warning", title: "Launch blocked: SMS approval incomplete", body: "Complete SMS approval before launching SMS recovery.", target: "sms", actionLabel: "Go to SMS approval" };
+  }
+  if (d.smsStatus !== "active") {
+    return { tone: "warning", title: "Launch blocked: SMS approval not active", body: "Wait for active SMS approval before launching SMS recovery.", target: "sms", actionLabel: "Go to SMS approval" };
   }
   void launchBlockedReason;
   return { tone: "info", title: "Ready to launch", body: "All prerequisites met. Launch from Admin tools.", target: "admin", actionLabel: "Go to Admin tools" };

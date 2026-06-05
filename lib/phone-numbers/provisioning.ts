@@ -13,7 +13,9 @@ import {
 import {
   isNumberNoLongerAvailableError,
   phoneAreaCode,
+  PurchaseConfigurationError,
   purchaseNumberAndConfigure,
+  type TwilioBusinessAddress,
 } from "../twilio/numbers";
 import { syncAdditionalNumberQuantity } from "../billing/stripe-number-quantity";
 import { logger } from "../logging/logger";
@@ -53,6 +55,7 @@ export type ProvisionErrorCode =
   | "number_already_assigned"
   | "number_no_longer_available"
   | "purchase_disabled"
+  | "missing_fields"
   | "billing_sync_failed"
   | "reconciliation_required"
   | "purchase_failed";
@@ -71,7 +74,13 @@ export type AssignedNumber = {
 
 export type ProvisionResult =
   | { ok: true; assigned: AssignedNumber; attemptId: string; twilioSid: string }
-  | { ok: false; error: ProvisionErrorCode; message: string; attemptId?: string };
+  | {
+      ok: false;
+      error: ProvisionErrorCode;
+      message: string;
+      attemptId?: string;
+      missingFields?: string[];
+    };
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
@@ -210,6 +219,9 @@ export async function provisionClinicPhoneNumber(
   // ── 3. Purchase the Twilio number ──────────────────────────────────────────
   let sid: string;
   let purchasedNumber: string;
+  let twilioAddressSid: string | null = null;
+  let twilioEmergencyAddressSid: string | null = null;
+  let twilioEmergencyAddressStatus: string | null = null;
   if (purchaseMode === "mock") {
     sid = `PN_mock_${attemptId.replace(/-/g, "")}`;
     purchasedNumber = phoneNumber;
@@ -236,6 +248,39 @@ export async function provisionClinicPhoneNumber(
       };
     }
 
+    let businessAddress: TwilioBusinessAddress;
+    try {
+      const readiness = await getPurchaseReadiness(clinicId);
+      if (!readiness.ok) {
+        await markAttempt(attemptId, {
+          status: "cancelled",
+          error_code: "missing_fields",
+          error_message: `missing_fields:${readiness.missingFields.join(",")}`,
+        });
+        return {
+          ok: false,
+          error: "missing_fields",
+          message: "Complete required business information before assigning a number.",
+          attemptId,
+          missingFields: readiness.missingFields,
+        };
+      }
+      businessAddress = readiness.businessAddress;
+    } catch (err) {
+      logger.error("provisioning.readiness_check_failed", {
+        clinicId,
+        attemptId,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+      await markAttempt(attemptId, { status: "failed", error_code: "readiness_check_failed" });
+      return {
+        ok: false,
+        error: "purchase_failed",
+        message: "Could not verify business information before purchase. Please try again.",
+        attemptId,
+      };
+    }
+
     let appBaseUrl: string;
     try {
       ({ appBaseUrl } = getAppDomains());
@@ -253,13 +298,35 @@ export async function provisionClinicPhoneNumber(
       const purchased = await purchaseNumberAndConfigure({
         phoneNumber,
         appBaseUrl,
+        businessAddress,
         attachMessagingService: true,
       });
       sid = purchased.sid;
       purchasedNumber = purchased.phoneNumber;
+      twilioAddressSid = purchased.addressSid;
+      twilioEmergencyAddressSid = purchased.emergencyAddressSid;
+      twilioEmergencyAddressStatus = purchased.emergencyAddressStatus;
       // Persist the SID immediately so a later failure can never hide it.
       await markAttempt(attemptId, { status: "twilio_purchased", twilio_phone_number_sid: sid });
     } catch (err) {
+      if (err instanceof PurchaseConfigurationError) {
+        await markAttempt(attemptId, {
+          status: "reconciliation_required",
+          twilio_phone_number_sid: err.sid,
+          error_code:
+            err.step === "address_configuration"
+              ? "twilio_address_configuration_failed"
+              : "messaging_service_attach_failed",
+          error_message: err.message,
+        });
+        return {
+          ok: false,
+          error: "reconciliation_required",
+          message:
+            "The number was purchased but provider configuration did not complete. Our team will finish setup.",
+          attemptId,
+        };
+      }
       if (isNumberNoLongerAvailableError(err)) {
         await markAttempt(attemptId, {
           status: "failed",
@@ -309,6 +376,9 @@ export async function provisionClinicPhoneNumber(
       attemptId,
       sid,
       purchasedNumber,
+      twilioAddressSid,
+      twilioEmergencyAddressSid,
+      twilioEmergencyAddressStatus,
       actorProfileId,
       actorEmail,
       source,
@@ -317,6 +387,7 @@ export async function provisionClinicPhoneNumber(
 
   // ── 4b. Included (first) number: assign + start trial (no charge) ───────────
   const trialDays = runtimeConfig.billing.trialDaysAfterActivation;
+  const twilioAddressConfiguredAt = twilioAddressSid ? new Date() : null;
   try {
     const assigned = await sql.begin(async (tx) => {
       await tx`select 1 from public.clinics where id = ${clinicId} for update`;
@@ -337,11 +408,16 @@ export async function provisionClinicPhoneNumber(
         insert into public.clinic_phone_numbers
           (clinic_id, phone_number, twilio_phone_number_sid, role, is_active,
            source, billing_class, monthly_unit_amount_cents, currency,
-           purchased_by_profile_id, purchased_by_email, activated_at)
+           purchased_by_profile_id, purchased_by_email, activated_at,
+           twilio_address_sid, twilio_emergency_address_sid,
+           twilio_emergency_address_status, twilio_address_configured_at)
         values
           (${clinicId}, ${purchasedNumber}, ${sid}, 'office_texting', true,
            ${source}, 'included', 0, ${billingConfig.currency},
-           ${actorProfileId}, ${actorEmail}, now())
+           ${actorProfileId}, ${actorEmail}, now(),
+           ${twilioAddressSid}, ${twilioEmergencyAddressSid},
+           ${twilioEmergencyAddressStatus},
+           ${twilioAddressConfiguredAt})
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
           twilio_phone_number_sid = excluded.twilio_phone_number_sid,
@@ -353,6 +429,10 @@ export async function provisionClinicPhoneNumber(
           currency = excluded.currency,
           purchased_by_profile_id = excluded.purchased_by_profile_id,
           purchased_by_email = excluded.purchased_by_email,
+          twilio_address_sid = excluded.twilio_address_sid,
+          twilio_emergency_address_sid = excluded.twilio_emergency_address_sid,
+          twilio_emergency_address_status = excluded.twilio_emergency_address_status,
+          twilio_address_configured_at = excluded.twilio_address_configured_at,
           activated_at = now(),
           suspended_at = null,
           suspended_by_profile_id = null,
@@ -438,12 +518,26 @@ async function assignAdditionalNumber(args: {
   attemptId: string;
   sid: string;
   purchasedNumber: string;
+  twilioAddressSid: string | null;
+  twilioEmergencyAddressSid: string | null;
+  twilioEmergencyAddressStatus: string | null;
   actorProfileId: string | null;
   actorEmail: string | null;
   source: ProvisionSource;
 }): Promise<ProvisionResult> {
   const sql = getDb();
-  const { clinicId, attemptId, sid, purchasedNumber, actorProfileId, actorEmail, source } = args;
+  const {
+    clinicId,
+    attemptId,
+    sid,
+    purchasedNumber,
+    twilioAddressSid,
+    twilioEmergencyAddressSid,
+    twilioEmergencyAddressStatus,
+    actorProfileId,
+    actorEmail,
+    source,
+  } = args;
 
   await markAttempt(attemptId, { status: "billing_pending" });
 
@@ -493,6 +587,7 @@ async function assignAdditionalNumber(args: {
   }
 
   const amount = billingConfig.additionalBusinessNumber.monthlyUnitAmountCents;
+  const twilioAddressConfiguredAt = twilioAddressSid ? new Date() : null;
   try {
     const assigned = await sql.begin(async (tx) => {
       await tx`select 1 from public.clinics where id = ${clinicId} for update`;
@@ -512,11 +607,16 @@ async function assignAdditionalNumber(args: {
         insert into public.clinic_phone_numbers
           (clinic_id, phone_number, twilio_phone_number_sid, role, is_active,
            source, billing_class, monthly_unit_amount_cents, currency,
-           purchased_by_profile_id, purchased_by_email, activated_at)
+           purchased_by_profile_id, purchased_by_email, activated_at,
+           twilio_address_sid, twilio_emergency_address_sid,
+           twilio_emergency_address_status, twilio_address_configured_at)
         values
           (${clinicId}, ${purchasedNumber}, ${sid}, 'office_texting', true,
            ${source}, 'additional', ${amount}, ${billingConfig.currency},
-           ${actorProfileId}, ${actorEmail}, now())
+           ${actorProfileId}, ${actorEmail}, now(),
+           ${twilioAddressSid}, ${twilioEmergencyAddressSid},
+           ${twilioEmergencyAddressStatus},
+           ${twilioAddressConfiguredAt})
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
           twilio_phone_number_sid = excluded.twilio_phone_number_sid,
@@ -528,6 +628,10 @@ async function assignAdditionalNumber(args: {
           currency = excluded.currency,
           purchased_by_profile_id = excluded.purchased_by_profile_id,
           purchased_by_email = excluded.purchased_by_email,
+          twilio_address_sid = excluded.twilio_address_sid,
+          twilio_emergency_address_sid = excluded.twilio_emergency_address_sid,
+          twilio_emergency_address_status = excluded.twilio_emergency_address_status,
+          twilio_address_configured_at = excluded.twilio_address_configured_at,
           activated_at = now(),
           suspended_at = null,
           suspended_by_profile_id = null,
@@ -593,6 +697,80 @@ async function assignAdditionalNumber(args: {
       attemptId,
     };
   }
+}
+
+type PurchaseReadinessRow = {
+  name: string | null;
+  legal_business_name: string | null;
+  main_phone: string | null;
+  street_address: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state_region: string | null;
+  postal_code: string | null;
+  country: string | null;
+  business_info_completed: boolean;
+};
+
+type PurchaseReadinessResult =
+  | { ok: true; businessAddress: TwilioBusinessAddress }
+  | { ok: false; missingFields: string[] };
+
+async function getPurchaseReadiness(
+  clinicId: string,
+): Promise<PurchaseReadinessResult> {
+  const sql = getDb();
+  const rows = await sql<PurchaseReadinessRow[]>`
+    select
+      name,
+      legal_business_name,
+      main_phone,
+      street_address,
+      address_line2,
+      city,
+      state_region,
+      postal_code,
+      country,
+      business_info_completed
+    from public.clinics
+    where id = ${clinicId}
+    limit 1
+  `;
+  const clinic = rows[0];
+  if (!clinic) throw new Error("clinic not found for purchase readiness");
+
+  const missingFields: string[] = [];
+  if (!present(clinic.name)) missingFields.push("name");
+  if (!present(clinic.legal_business_name)) missingFields.push("legal_business_name");
+  if (!present(clinic.main_phone)) missingFields.push("main_phone");
+  if (!present(clinic.street_address)) missingFields.push("street_address");
+  if (!present(clinic.city)) missingFields.push("city");
+  if (!present(clinic.state_region)) missingFields.push("state_region");
+  if (!present(clinic.postal_code)) missingFields.push("postal_code");
+  if (clinic.country !== "US") missingFields.push("country");
+  if (clinic.business_info_completed !== true) missingFields.push("business_info_completed");
+
+  if (missingFields.length > 0) {
+    return { ok: false, missingFields };
+  }
+
+  return {
+    ok: true,
+    businessAddress: {
+      clinicId,
+      customerName: clinic.legal_business_name!.trim(),
+      street: clinic.street_address!.trim(),
+      streetSecondary: present(clinic.address_line2) ? clinic.address_line2!.trim() : null,
+      city: clinic.city!.trim(),
+      region: clinic.state_region!.trim(),
+      postalCode: clinic.postal_code!.trim(),
+      isoCountry: "US",
+    },
+  };
+}
+
+function present(value: string | null): boolean {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 type AttemptUpdate = {

@@ -18,9 +18,10 @@ export function jsonError(
   status: number,
   code: string,
   message: string,
+  details?: Record<string, unknown>,
 ): NextResponse {
   return NextResponse.json(
-    { ok: false, error: { code, message } },
+    { ok: false, error: { code, message, ...(details ?? {}) } },
     { status, headers: NO_CACHE_HEADERS },
   );
 }

@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { getTwilioClient } from "./client";
 import { getTwilioMessagingEnv } from "../env";
 import type { LocalListInstanceOptions } from "twilio/lib/rest/api/v2010/account/availablePhoneNumberCountry/local";
@@ -242,13 +243,60 @@ type TwilioAvailableNumberLike = {
 export type PurchaseInput = {
   phoneNumber: string;
   appBaseUrl: string;
+  businessAddress: TwilioBusinessAddress;
   attachMessagingService?: boolean;
 };
 
 export type PurchaseResult = {
   sid: string;
   phoneNumber: string;
+  addressSid: string | null;
+  emergencyAddressSid: string | null;
+  emergencyAddressStatus: string | null;
+  messagingServiceSid: string | null;
 };
+
+export type TwilioBusinessAddress = {
+  clinicId: string;
+  customerName: string;
+  street: string;
+  streetSecondary: string | null;
+  city: string;
+  region: string;
+  postalCode: string;
+  isoCountry: "US";
+};
+
+export class PurchaseConfigurationError extends Error {
+  readonly step: "address_configuration" | "messaging_service_attach";
+  readonly sid: string;
+  readonly phoneNumber: string;
+  readonly addressSid: string | null;
+  readonly emergencyAddressSid: string | null;
+  readonly emergencyAddressStatus: string | null;
+  readonly messagingServiceSid: string | null;
+
+  constructor(args: {
+    step: "address_configuration" | "messaging_service_attach";
+    message: string;
+    sid: string;
+    phoneNumber: string;
+    addressSid?: string | null;
+    emergencyAddressSid?: string | null;
+    emergencyAddressStatus?: string | null;
+    messagingServiceSid?: string | null;
+  }) {
+    super(args.message);
+    this.name = "PurchaseConfigurationError";
+    this.step = args.step;
+    this.sid = args.sid;
+    this.phoneNumber = args.phoneNumber;
+    this.addressSid = args.addressSid ?? null;
+    this.emergencyAddressSid = args.emergencyAddressSid ?? null;
+    this.emergencyAddressStatus = args.emergencyAddressStatus ?? null;
+    this.messagingServiceSid = args.messagingServiceSid ?? null;
+  }
+}
 
 export async function purchaseNumberAndConfigure(
   input: PurchaseInput,
@@ -266,24 +314,116 @@ export async function purchaseNumberAndConfigure(
     smsMethod: "POST",
   });
 
+  let configured = created;
+  let addressSid: string | null = null;
+  let emergencyAddressSid: string | null = null;
+  let emergencyAddressStatus: string | null = null;
+  try {
+    const address = await createOrReuseEmergencyAddress(input.businessAddress);
+    addressSid = address.sid;
+    configured = await client.incomingPhoneNumbers(created.sid).update({
+      addressSid,
+      emergencyAddressSid: addressSid,
+      emergencyStatus: "Active",
+    });
+    emergencyAddressSid = configured.emergencyAddressSid ?? addressSid;
+    emergencyAddressStatus = configured.emergencyAddressStatus ?? null;
+  } catch (err) {
+    throw new PurchaseConfigurationError({
+      step: "address_configuration",
+      message: err instanceof Error ? err.message : "Twilio address configuration failed",
+      sid: created.sid,
+      phoneNumber: created.phoneNumber,
+      addressSid,
+      emergencyAddressSid,
+      emergencyAddressStatus,
+    });
+  }
+
+  let messagingServiceSid: string | null = null;
   if (input.attachMessagingService) {
-    // Best-effort: add to Messaging Service so outbound SMS can reuse it.
-    // Errors here should not fail the purchase since the number is already
-    // provisioned. The caller logs failure separately.
+    // Required for production readiness. If this fails after purchase, callers
+    // must reconcile with the purchased PN SID rather than silently proceeding.
     try {
       const { TWILIO_MESSAGING_SERVICE_SID } = getTwilioMessagingEnv();
       await client.messaging.v1
         .services(TWILIO_MESSAGING_SERVICE_SID)
         .phoneNumbers.create({ phoneNumberSid: created.sid });
+      messagingServiceSid = TWILIO_MESSAGING_SERVICE_SID;
     } catch {
-      // intentionally swallow; status callback updates remain unaffected
+      throw new PurchaseConfigurationError({
+        step: "messaging_service_attach",
+        message: "Twilio Messaging Service attach failed",
+        sid: created.sid,
+        phoneNumber: created.phoneNumber,
+        addressSid,
+        emergencyAddressSid,
+        emergencyAddressStatus,
+        messagingServiceSid,
+      });
     }
   }
 
   return {
-    sid: created.sid,
-    phoneNumber: created.phoneNumber,
+    sid: configured.sid,
+    phoneNumber: configured.phoneNumber,
+    addressSid,
+    emergencyAddressSid,
+    emergencyAddressStatus,
+    messagingServiceSid,
   };
+}
+
+async function createOrReuseEmergencyAddress(
+  input: TwilioBusinessAddress,
+): Promise<{ sid: string }> {
+  const client = getTwilioClient();
+  const friendlyName = addressFriendlyName(input);
+  const existing = await client.addresses.list({
+    friendlyName,
+    emergencyEnabled: true,
+    isoCountry: input.isoCountry,
+    limit: 1,
+  });
+  if (existing[0]?.sid) {
+    return { sid: existing[0].sid };
+  }
+
+  const created = await client.addresses.create({
+    customerName: truncate(input.customerName, 64),
+    friendlyName,
+    street: input.street,
+    streetSecondary: input.streetSecondary ?? undefined,
+    city: input.city,
+    region: input.region,
+    postalCode: input.postalCode,
+    isoCountry: input.isoCountry,
+    emergencyEnabled: true,
+    autoCorrectAddress: true,
+  });
+
+  return { sid: created.sid };
+}
+
+function addressFriendlyName(input: TwilioBusinessAddress): string {
+  const body = [
+    input.customerName,
+    input.street,
+    input.streetSecondary ?? "",
+    input.city,
+    input.region,
+    input.postalCode,
+    input.isoCountry,
+  ]
+    .map((part) => part.trim().toLowerCase())
+    .join("|");
+  const hash = createHash("sha256").update(body).digest("hex").slice(0, 12);
+  const clinic = input.clinicId.replace(/-/g, "").slice(0, 8);
+  return `MCD ${clinic} ${hash}`;
+}
+
+function truncate(value: string, max: number): string {
+  return value.length <= max ? value : value.slice(0, max);
 }
 
 /** Identifies a number as out-of-inventory (HTTP 400 21422 / 21452). */

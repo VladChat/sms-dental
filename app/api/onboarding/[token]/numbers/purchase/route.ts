@@ -7,37 +7,23 @@ import {
   jsonOk,
 } from "../../../../../../lib/http/responses";
 import { lookupSetupRequestByRawToken } from "../../../../../../lib/onboarding/verify";
-import {
-  getAppDomains,
-  isTwilioNumberPurchaseEnabled,
-} from "../../../../../../lib/env";
-import {
-  findActiveOfficeTextingNumber,
-  upsertOfficeTextingNumber,
-} from "../../../../../../lib/db/clinic-phone-numbers";
-import {
-  setClinicSetupStatus,
-} from "../../../../../../lib/db/clinics";
+import { findActiveOfficeTextingNumber } from "../../../../../../lib/db/clinic-phone-numbers";
 import { setSetupRequestStatus } from "../../../../../../lib/db/setup-requests";
 import {
-  isNumberNoLongerAvailableError,
-  purchaseNumberAndConfigure,
-} from "../../../../../../lib/twilio/numbers";
+  provisionClinicPhoneNumber,
+  type ProvisionErrorCode,
+} from "../../../../../../lib/phone-numbers/provisioning";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/onboarding/[token]/numbers/purchase
 //
-// Purchases the user-selected Twilio number after validating:
-//   1. Setup token validity.
-//   2. Clinic exists and has no active office texting number (idempotent).
-//   3. runtime config purchase mode is live.
-//
-// On success, configures Voice + SMS webhooks pointing at the configured app
-// base URL and
-// stores the mapping. SMS recovery remains DISABLED — onboarding never
-// enables live SMS.
+// Legacy token-scoped number assignment endpoint. New owner UI uses
+// /api/account/phone-numbers/purchase, but this route remains as a safe wrapper:
+// it never calls Twilio directly and instead delegates to the shared provisioning
+// service so entitlement, readiness, purchase mode, and reconciliation behavior
+// stay identical across all purchase surfaces.
 
 const PurchaseInputSchema = z.object({
   phone_number: z
@@ -45,6 +31,24 @@ const PurchaseInputSchema = z.object({
     .trim()
     .regex(/^\+[1-9]\d{7,14}$/u, "phone_number must be E.164"),
 });
+
+const ERROR_STATUS: Record<ProvisionErrorCode, number> = {
+  payment_method_required: 400,
+  number_purchases_revoked: 403,
+  number_limit_reached: 409,
+  purchase_in_progress: 409,
+  paid_plan_required: 409,
+  subscription_not_active: 409,
+  billing_configuration_missing: 503,
+  additional_billing_authorization_required: 400,
+  number_already_assigned: 409,
+  number_no_longer_available: 409,
+  purchase_disabled: 503,
+  missing_fields: 400,
+  billing_sync_failed: 502,
+  reconciliation_required: 500,
+  purchase_failed: 502,
+};
 
 export async function POST(
   req: NextRequest,
@@ -88,57 +92,33 @@ export async function POST(
     });
   }
 
-  if (!isTwilioNumberPurchaseEnabled()) {
+  const result = await provisionClinicPhoneNumber({
+    clinicId: setupRequest.clinic_id,
+    phoneNumber: parsed.data.phone_number,
+    actorProfileId: null,
+    actorEmail: setupRequest.owner_email,
+    source: "owner_self_service",
+    additionalBillingAuthorized: false,
+  });
+
+  if (!result.ok) {
     return jsonError(
-      503,
-      "purchase_disabled",
-      "Number assignment is temporarily unavailable. Please contact support.",
+      ERROR_STATUS[result.error],
+      result.error,
+      result.message,
+      result.missingFields ? { missing_fields: result.missingFields } : undefined,
     );
   }
 
-  let appBaseUrl: string;
   try {
-    ({ appBaseUrl } = getAppDomains());
-  } catch {
-    return jsonError(
-      500,
-      "config_missing",
-      "App is not fully configured for number purchase.",
-    );
-  }
-
-  try {
-    const purchased = await purchaseNumberAndConfigure({
-      phoneNumber: parsed.data.phone_number,
-      appBaseUrl,
-      attachMessagingService: true,
-    });
-
-    const mapping = await upsertOfficeTextingNumber({
-      clinicId: setupRequest.clinic_id,
-      phoneNumber: purchased.phoneNumber,
-      twilioPhoneNumberSid: purchased.sid,
-    });
-    await setClinicSetupStatus(setupRequest.clinic_id, "number_assigned");
     await setSetupRequestStatus(setupRequest.id, "number_assigned");
-
-    return jsonOk({
-      ok: true,
-      phone_number: mapping.phone_number,
-      twilio_phone_number_sid: mapping.twilio_phone_number_sid,
-    });
-  } catch (err) {
-    if (isNumberNoLongerAvailableError(err)) {
-      return jsonError(
-        409,
-        "number_no_longer_available",
-        "That number is no longer available. Please choose another number.",
-      );
-    }
-    return jsonError(
-      502,
-      "purchase_failed",
-      "Number purchase failed. Please choose another number or try again.",
-    );
+  } catch {
+    // Assignment already succeeded; setup-request status can be reconciled later.
   }
+
+  return jsonOk({
+    ok: true,
+    phone_number: result.assigned.phoneNumber,
+    twilio_phone_number_sid: result.twilioSid,
+  });
 }
