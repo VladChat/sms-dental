@@ -4529,3 +4529,59 @@ Result:
   one request.
 - No SMS sent, no new number purchased, broad live mode unchanged, no secrets
   printed.
+
+---
+
+## 2026-06-05 — Split Twilio emergency update deployed; Fairstone number remediated
+
+Implemented and deployed the corrected Twilio emergency-address update sequence.
+
+What changed:
+- `lib/twilio/numbers.ts` now updates the IncomingPhoneNumber with
+  `addressSid` / `emergencyAddressSid` first, then updates `emergencyStatus`
+  separately only if Twilio still reports it is not `Active`, then fetches the
+  number and persists returned status.
+
+Validation:
+- `npm run typecheck` — pass.
+- `npm run build` — pass.
+- `git diff --check` — pass.
+
+Deploy:
+- Commit `cc2321c8acedcde33095adfd428dfbf5a1391413` pushed to `main`.
+- Vercel production deployment `dpl_DhEv4awAtLDGdiaL71PZtrgj5eWH` reached READY.
+- Smoke checks passed:
+  - `GET https://app.missedcallsdental.com/api/health` — 200.
+  - `GET https://app.missedcallsdental.com/account` — 200.
+  - `GET https://app.missedcallsdental.com/login` — 200.
+
+Existing number remediation:
+- Target: Fairstone Dental Smile, `+12244009986`,
+  PN `PNcfa04ebbb3c99d346473979781eb8785`.
+- Reused Twilio Address `ADe303a7e8801efdff77e94b6bec887a59`.
+- Applied split sequence successfully.
+- Twilio result:
+  - number status: `in-use`
+  - emergencyAddressSid: `ADe303a7e8801efdff77e94b6bec887a59`
+  - emergencyAddressStatus: `registered`
+  - emergencyStatus: `Active`
+  - voice/SMS webhooks unchanged
+  - Messaging Service attachment still present
+- Supabase result:
+  - `clinic_phone_numbers.is_active=true`
+  - PN SID unchanged
+  - `billing_class='included'`
+  - `twilio_address_sid='ADe303a7e8801efdff77e94b6bec887a59'`
+  - `twilio_emergency_address_sid='ADe303a7e8801efdff77e94b6bec887a59'`
+  - `twilio_emergency_address_status='registered'`
+  - `clinics.sms_recovery_enabled=false`
+  - `clinics.sms_status='waiting_for_approval'`
+- A2P check: no Brand registrations and no campaigns returned for the configured
+  Messaging Service. Outbound SMS remains not production-safe.
+
+Safety:
+- No SMS sent.
+- No new Twilio number purchased.
+- `sms_recovery_enabled` unchanged.
+- Broad live mode unchanged.
+- No secrets printed.
