@@ -6,12 +6,20 @@ import type { AssignedBusinessNumberSummary } from "./account-types";
 import {
   additionalNumberConsentText,
   billingConfig,
+  formatInteger,
   formatUsdFromCents,
 } from "../../../../config/billing.config";
 
 const ADDITIONAL_MONTHLY = formatUsdFromCents(
   billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
 );
+const INCLUDED_PLAN_SUMMARY = `Included in your plan: ${formatInteger(
+  billingConfig.basePlan.includedBusinessNumbers,
+)} phone number, ${formatInteger(
+  billingConfig.basePlan.includedCallMinutes,
+)} call minutes, and ${formatInteger(
+  billingConfig.basePlan.includedSmsSegments,
+)} SMS segments each month.`;
 
 type Candidate = {
   phone_number: string;
@@ -258,7 +266,7 @@ export function OwnerLocalNumberSearch({
                     {isAdditional && (
                       <div className="acct-consent">
                         <div>
-                          <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>Additional business number</p>
+                          <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>Additional number</p>
                           <p className="t-h4" style={{ margin: "var(--space-1) 0 0" }}>{ADDITIONAL_MONTHLY}/month</p>
                           <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
                             Billing starts after this number is activated.
@@ -276,17 +284,22 @@ export function OwnerLocalNumberSearch({
                       <button type="button" className="btn btn-primary acct-primary-action"
                         onClick={() => setConfirming(true)}
                         disabled={isAdditional && !consentChecked}>
-                        {isAdditional ? "Purchase additional number" : "Purchase and assign number"}
+                        {isAdditional ? "Purchase additional number" : "Assign this number"}
                       </button>
                     ) : (
                       <div className="acct-callout">
                         <p className="t-body" style={{ margin: 0, fontWeight: 700 }}>
-                          {isAdditional ? "Purchase and assign additional number?" : "Purchase and assign this number?"}
+                          {isAdditional ? "Purchase additional number?" : "Assign this number?"}
+                        </p>
+                        <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+                          {isAdditional
+                            ? `This will add ${ADDITIONAL_MONTHLY}/month to your plan after activation.`
+                            : INCLUDED_PLAN_SUMMARY}
                         </p>
                         <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>
                           <button type="button" className="btn btn-primary acct-primary-action"
                             onClick={() => void confirmPurchase()} disabled={purchasing} aria-busy={purchasing}>
-                            {purchasing ? "Purchasing…" : "Confirm purchase"}
+                            Confirm
                           </button>
                           <button type="button" className="btn btn-ghost btn-sm"
                             onClick={() => setConfirming(false)} disabled={purchasing}>Cancel</button>
