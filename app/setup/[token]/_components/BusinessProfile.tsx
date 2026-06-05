@@ -151,7 +151,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
             <Section
               id="phone-number"
               title="Phone numbers"
-              description="Your business numbers for calls and texting."
+              description="Your numbers for calls and texting."
             >
               <AssignedNumberCard
                 assignedNumbers={data.number.assignedNumbers}
