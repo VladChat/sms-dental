@@ -21,6 +21,7 @@ export type LocalNumberSearchPlanInput = {
   contains?: string | null;
   required?: Partial<RequiredCapabilities>;
   limit?: number;
+  includeBroadFallback?: boolean;
 };
 
 export type LocalNumberSearchPlanResult = {
@@ -89,6 +90,11 @@ export function buildLocalNumberSearchPlan(
     attempts.push({
       label: contains ? "contains_only" : "local_default",
       input: baseLocalSearchInput(input, { contains }),
+    });
+  } else if (input.includeBroadFallback && !contains) {
+    attempts.push({
+      label: "local_default",
+      input: baseLocalSearchInput(input, {}),
     });
   }
 

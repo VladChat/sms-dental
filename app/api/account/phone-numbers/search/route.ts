@@ -8,10 +8,9 @@ import {
   jsonUnauthorized,
 } from "../../../../../lib/http/responses";
 import { resolveAuthClinicAccess } from "../../../../../lib/auth/access";
-import { findClinicById, type ClinicOnboardingRow } from "../../../../../lib/db/clinics";
+import { findClinicById } from "../../../../../lib/db/clinics";
 import { readAccountSessionToken } from "../../../../../lib/onboarding/account-session";
 import { lookupSetupRequestByRawToken } from "../../../../../lib/onboarding/verify";
-import { phoneAreaCode } from "../../../../../lib/twilio/numbers";
 import {
   buildLocalNumberSearchPlan,
   runLocalNumberSearchPlan,
@@ -27,20 +26,17 @@ export const dynamic = "force-dynamic";
 // never purchases, reserves, assigns, releases, or stores a phone number.
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const access = await resolveAuthClinicAccess(req);
-  let clinic: ClinicOnboardingRow | null = null;
 
   if (access.ok) {
     if (access.membership.role === "front_desk") {
       return jsonForbidden("Front desk users cannot search account phone number options.");
     }
-    clinic = access.clinic;
   } else {
     const fallback = await resolveLegacyClinic();
     if (!fallback.ok) {
       if (access.reason === "no_session") return jsonUnauthorized("Please sign in to continue.");
       return jsonForbidden("You do not have access to this account.");
     }
-    clinic = fallback.clinic;
   }
 
   const country = "US";
@@ -57,31 +53,35 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   );
   if (!requestedPostalCode.ok) return jsonBadRequest(requestedPostalCode.message);
 
-  const mainPhone = clinic.main_phone;
-  const areaCode = requestedAreaCode.value ?? (mainPhone ? phoneAreaCode(mainPhone) : null);
-  const postalCode = requestedPostalCode.value ?? clinic.postal_code;
+  const areaCode = requestedAreaCode.value;
+  const postalCode = requestedPostalCode.value;
   const required = { voice: true, sms: true, mms: false };
   const limit = 5;
 
   try {
     const attempts = buildLocalNumberSearchPlan({
       country,
-      mainPhone,
+      mainPhone: null,
       areaCode,
       postalCode,
-      stateRegion: clinic.state_region,
+      stateRegion: null,
       required,
       limit,
+      includeBroadFallback: true,
     });
     const result = await runLocalNumberSearchPlan(attempts);
-    const exactAttempt = attempts[0]?.label ?? null;
 
     return jsonOk({
       ok: true,
       search_mode: "smart_fallback",
       attempt_label: result.attemptLabel,
       attempted_labels: attempts.map((a) => a.label),
-      fallback_message: fallbackMessage(result.attemptLabel, exactAttempt),
+      fallback_message: searchStatusMessage({
+        areaCode,
+        postalCode,
+        attemptLabel: result.attemptLabel,
+        count: result.numbers.length,
+      }),
       params: {
         area_code: areaCode,
         postal_code: postalCode,
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 }
 
 async function resolveLegacyClinic(): Promise<
-  | { ok: true; clinic: ClinicOnboardingRow }
+  | { ok: true }
   | { ok: false }
 > {
   const token = await readAccountSessionToken();
@@ -112,29 +112,59 @@ async function resolveLegacyClinic(): Promise<
   const clinic = await findClinicById(lookup.setupRequest.clinic_id).catch(() => null);
   if (!clinic) return { ok: false };
 
-  return { ok: true, clinic };
+  return { ok: true };
 }
 
-function fallbackMessage(attemptLabel: string | null, exactAttempt: string | null): string | null {
-  if (!attemptLabel || !exactAttempt || attemptLabel === exactAttempt) return null;
-  if (exactAttempt === "area_code_and_zip") {
+function searchStatusMessage({
+  areaCode,
+  postalCode,
+  attemptLabel,
+  count,
+}: {
+  areaCode: string | null;
+  postalCode: string | null;
+  attemptLabel: string | null;
+  count: number;
+}): string {
+  if (count === 0) {
+    return "No available local numbers found. Try a different area code or ZIP.";
+  }
+
+  const hasAreaCode = Boolean(areaCode);
+  const hasPostalCode = Boolean(postalCode);
+
+  if (hasAreaCode && hasPostalCode) {
+    if (attemptLabel === "area_code_and_zip") return "Exact match for ZIP and area code.";
     if (attemptLabel === "zip_only") {
       return "No exact ZIP + area-code match found. Showing ZIP matches.";
     }
     if (attemptLabel === "area_code_only") {
       return "No exact ZIP + area-code match found. Showing area-code matches.";
     }
-    if (attemptLabel.startsWith("zip_radius_")) {
-      return "No exact ZIP + area-code match found. Showing nearby matches.";
-    }
-    if (attemptLabel === "state_region") {
-      return "No exact ZIP + area-code match found. Showing state matches.";
+    if (attemptLabel === "local_default") {
+      return "No ZIP or area-code matches found. Showing available U.S. local numbers. Enter a different area code or ZIP to narrow results.";
     }
   }
-  if (exactAttempt === "zip_only" && attemptLabel === "state_region") {
-    return "No ZIP match found. Showing state matches.";
+
+  if (hasPostalCode && !hasAreaCode) {
+    if (attemptLabel === "zip_only") return "Showing ZIP matches.";
+    if (attemptLabel === "local_default") {
+      return "No ZIP match found. Showing available U.S. local numbers. Enter a different ZIP or area code to narrow results.";
+    }
   }
-  return "No exact match found. Showing the best available local numbers.";
+
+  if (hasAreaCode && !hasPostalCode) {
+    if (attemptLabel === "area_code_only") return "Showing area-code matches.";
+    if (attemptLabel === "local_default") {
+      return "No area-code match found. Showing available U.S. local numbers. Enter a different area code or ZIP to narrow results.";
+    }
+  }
+
+  if (!hasAreaCode && !hasPostalCode && attemptLabel === "local_default") {
+    return "Showing available U.S. local numbers. Enter an area code or ZIP to narrow results.";
+  }
+
+  return "Showing available local numbers.";
 }
 
 function parseOptionalDigitsParam(
