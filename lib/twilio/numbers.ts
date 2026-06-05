@@ -324,8 +324,15 @@ export async function purchaseNumberAndConfigure(
     configured = await client.incomingPhoneNumbers(created.sid).update({
       addressSid,
       emergencyAddressSid: addressSid,
-      emergencyStatus: "Active",
     });
+
+    if (configured.emergencyStatus !== "Active") {
+      configured = await client.incomingPhoneNumbers(created.sid).update({
+        emergencyStatus: "Active",
+      });
+    }
+
+    configured = await client.incomingPhoneNumbers(created.sid).fetch();
     emergencyAddressSid = configured.emergencyAddressSid ?? addressSid;
     emergencyAddressStatus = configured.emergencyAddressStatus ?? null;
   } catch (err) {
