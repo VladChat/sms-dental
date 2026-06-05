@@ -21,7 +21,7 @@ Current implementation state:
 - Twilio webhooks are configured by API.
 - Inbound SMS webhook has been verified.
 - Inbound voice has been verified end-to-end after the Twilio account upgrade.
-- Self-service owner number purchasing is merged and deployed, but real Twilio purchases remain gated by `TWILIO_NUMBER_PURCHASE_ENABLED=false`.
+- Self-service owner number purchasing is merged and deployed, but Twilio purchase mode defaults to `"disabled"` and real purchases require `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"`.
 - Supabase migration `20260603000200_self_service_number_purchasing.sql` is applied and verified.
 - Stripe test-mode subscription Checkout and webhooks exist; Stripe remains test-mode and no live charge can occur.
 - SMS recovery is not automatically enabled.

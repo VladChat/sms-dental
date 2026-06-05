@@ -19,7 +19,7 @@ Current live state:
 - Twilio webhooks are configured by API.
 - Inbound SMS webhook has been verified.
 - Inbound voice webhook is verified end-to-end.
-- Self-service owner number purchasing is deployed in code; real Twilio purchasing remains disabled by `TWILIO_NUMBER_PURCHASE_ENABLED=false`.
+- Self-service owner number purchasing is deployed in code; Twilio purchase mode defaults to `"disabled"` and real Twilio purchasing requires `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"`.
 - Stripe test-mode subscription Checkout, webhook handling, and production test Price ID env vars exist. Stripe remains test-mode.
 - SMS recovery remains separately gated and is not automatically enabled by number assignment or billing.
 - `docs/` remains the GitHub Pages marketing website and must stay untouched unless explicitly requested.
@@ -28,7 +28,7 @@ Current operational status / next safe work:
 
 - Owner/admin production browser QA for the deployed self-service number purchase flow.
 - UI cleanup and documentation/source-of-truth cleanup.
-- Deliberate go-live decision before flipping `TWILIO_NUMBER_PURCHASE_ENABLED=true` for real Twilio number purchases.
+- Deliberate go-live decision before setting `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"` for real Twilio number purchases.
 - Future live Stripe rollout requires explicit approval; current Stripe resources and keys are test-mode only.
 - Do not build a full CRM, recovery inbox, or broad dashboard unless explicitly scoped.
 

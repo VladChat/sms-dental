@@ -357,7 +357,10 @@ Current operational status:
 - The old owner request workflow is retired: `POST /api/account/phone-numbers/request` returns 410, and `clinic_number_requests` remains legacy data for admin view/dismiss only.
 - Stripe test-mode subscription Checkout and webhooks exist. Paid entitlement is granted only by webhook-confirmed active subscription.
 - Stripe Price IDs configured in production are test-mode only. `STRIPE_SECRET_KEY` remains test-mode, so no live Stripe charge can occur.
-- `TWILIO_NUMBER_PURCHASE_ENABLED=false` remains the real-purchase gate. No real Twilio number purchase can occur while that flag is false.
+- `runtimeConfig.onboarding.twilioNumberPurchaseMode` defaults to `"disabled"`.
+  No real Twilio number purchase can occur unless that mode is deliberately set
+  to `"live"`; `"mock"` is local/staging assignment UX only and does not call
+  Twilio purchase APIs.
 - SMS recovery remains separately gated by compliance, QA, owner approval, runtime mode, and `clinics.sms_recovery_enabled`; it is not enabled automatically by number assignment or billing.
 
 Current backend trial behavior:

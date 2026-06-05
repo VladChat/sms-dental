@@ -5,7 +5,7 @@ import {
   computeNumberEntitlement,
   type NumberPurchaseBlockReason,
 } from "../billing/number-entitlements";
-import { getAppDomains, isTwilioNumberPurchaseEnabled } from "../env";
+import { getAppDomains, getTwilioNumberPurchaseMode } from "../env";
 import {
   isNumberNoLongerAvailableError,
   phoneAreaCode,
@@ -192,25 +192,13 @@ export async function provisionClinicPhoneNumber(
   const slotClass = gate.slotClass;
 
   // ── 2. Twilio purchase gate (no transaction held open) ─────────────────────
-  if (!isTwilioNumberPurchaseEnabled()) {
+  const purchaseMode = getTwilioNumberPurchaseMode();
+  if (purchaseMode === "disabled") {
     await markAttempt(attemptId, { status: "cancelled", error_code: "purchase_disabled" });
     return {
       ok: false,
       error: "purchase_disabled",
-      message: "Number purchase is disabled by environment flag.",
-      attemptId,
-    };
-  }
-
-  let appBaseUrl: string;
-  try {
-    ({ appBaseUrl } = getAppDomains());
-  } catch {
-    await markAttempt(attemptId, { status: "failed", error_code: "config_missing" });
-    return {
-      ok: false,
-      error: "purchase_failed",
-      message: "App base URL is not configured for webhook setup.",
+      message: "Number assignment is temporarily unavailable. Please contact support.",
       attemptId,
     };
   }
@@ -218,56 +206,82 @@ export async function provisionClinicPhoneNumber(
   // ── 3. Purchase the Twilio number ──────────────────────────────────────────
   let sid: string;
   let purchasedNumber: string;
-  try {
-    const purchased = await purchaseNumberAndConfigure({
-      phoneNumber,
-      appBaseUrl,
-      attachMessagingService: true,
-    });
-    sid = purchased.sid;
-    purchasedNumber = purchased.phoneNumber;
-    // Persist the SID immediately so a later failure can never hide it.
+  if (purchaseMode === "mock") {
+    sid = `PN_mock_${attemptId.replace(/-/g, "")}`;
+    purchasedNumber = phoneNumber;
     await markAttempt(attemptId, { status: "twilio_purchased", twilio_phone_number_sid: sid });
-  } catch (err) {
-    if (isNumberNoLongerAvailableError(err)) {
-      await markAttempt(attemptId, {
-        status: "failed",
-        error_code: "number_no_longer_available",
-      });
-      return {
-        ok: false,
-        error: "number_no_longer_available",
-        message: "That number is no longer available. Please search again.",
-        attemptId,
-      };
-    }
-    if (isDefiniteTwilioApiError(err)) {
-      await markAttempt(attemptId, { status: "failed", error_code: "purchase_failed" });
+    logger.info("provisioning.mock_twilio_purchased", {
+      clinicId,
+      attemptId,
+      source,
+      slotClass,
+      areaCode: phoneAreaCode(purchasedNumber),
+    });
+  } else {
+    let appBaseUrl: string;
+    try {
+      ({ appBaseUrl } = getAppDomains());
+    } catch {
+      await markAttempt(attemptId, { status: "failed", error_code: "config_missing" });
       return {
         ok: false,
         error: "purchase_failed",
-        message: "Number purchase failed. Please try another number.",
+        message: "App base URL is not configured for webhook setup.",
         attemptId,
       };
     }
-    // Uncertain outcome — a number MAY have been purchased. Never claim it was
-    // not. Mark for reconciliation; do not create an active mapping.
-    logger.error("provisioning.twilio_uncertain", {
-      clinicId,
-      attemptId,
-      message: err instanceof Error ? err.message : "unknown",
-    });
-    await markAttempt(attemptId, {
-      status: "reconciliation_required",
-      error_code: "twilio_outcome_uncertain",
-    });
-    return {
-      ok: false,
-      error: "reconciliation_required",
-      message:
-        "We could not confirm the number purchase. Our team will verify it before any charge — please do not retry.",
-      attemptId,
-    };
+
+    try {
+      const purchased = await purchaseNumberAndConfigure({
+        phoneNumber,
+        appBaseUrl,
+        attachMessagingService: true,
+      });
+      sid = purchased.sid;
+      purchasedNumber = purchased.phoneNumber;
+      // Persist the SID immediately so a later failure can never hide it.
+      await markAttempt(attemptId, { status: "twilio_purchased", twilio_phone_number_sid: sid });
+    } catch (err) {
+      if (isNumberNoLongerAvailableError(err)) {
+        await markAttempt(attemptId, {
+          status: "failed",
+          error_code: "number_no_longer_available",
+        });
+        return {
+          ok: false,
+          error: "number_no_longer_available",
+          message: "That number is no longer available. Please search again.",
+          attemptId,
+        };
+      }
+      if (isDefiniteTwilioApiError(err)) {
+        await markAttempt(attemptId, { status: "failed", error_code: "purchase_failed" });
+        return {
+          ok: false,
+          error: "purchase_failed",
+          message: "Number purchase failed. Please try another number.",
+          attemptId,
+        };
+      }
+      // Uncertain outcome — a number MAY have been purchased. Never claim it was
+      // not. Mark for reconciliation; do not create an active mapping.
+      logger.error("provisioning.twilio_uncertain", {
+        clinicId,
+        attemptId,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+      await markAttempt(attemptId, {
+        status: "reconciliation_required",
+        error_code: "twilio_outcome_uncertain",
+      });
+      return {
+        ok: false,
+        error: "reconciliation_required",
+        message:
+          "We could not confirm the number purchase. Our team will verify it before any charge — please do not retry.",
+        attemptId,
+      };
+    }
   }
 
   // ── 4. Additional (paid) number: sync Stripe quantity BEFORE activating ─────

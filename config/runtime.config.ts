@@ -39,8 +39,9 @@ export const runtimeConfig = {
   },
 
   onboarding: {
-    // Non-secret runtime flags.
-    twilioNumberPurchaseEnabled: false,
+    // Non-secret runtime flags. Keep default disabled; use "mock" only in
+    // local/staging UX tests, and "live" only for deliberate Twilio purchases.
+    twilioNumberPurchaseMode: "disabled" as "disabled" | "mock" | "live",
     // Production must keep this false so /api/setup-requests actually sends the
     // Resend email instead of short-circuiting to a fallback link. Only flip
     // to true for short, controlled owner-only API tests when Resend is

@@ -6,9 +6,10 @@ UI, API validation, consent text, DB snapshots). Do not duplicate these amounts.
 
 > Status: **current canonical policy.** Self-service number purchasing and
 > Stripe-hosted subscription Checkout are deployed in production code, with Stripe
-> **test-mode only** Price IDs and secret key. Real Twilio purchases remain gated
-> by `TWILIO_NUMBER_PURCHASE_ENABLED=false`, so production is safe to test but is
-> not live for real number purchases or live Stripe charges.
+> **test-mode only** Price IDs and secret key. Twilio number assignment is gated
+> by `runtimeConfig.onboarding.twilioNumberPurchaseMode`, which defaults to
+> `"disabled"`. Real Twilio purchases happen only when the mode is `"live"`;
+> `"mock"` is for local/staging UX testing and never calls Twilio purchase APIs.
 
 ## Plan
 
@@ -89,7 +90,9 @@ wiring, **never** hard-coded next to the amounts in `billing.config.ts`.
 - Supabase migration `20260603000200_self_service_number_purchasing.sql` has been applied and verified.
 - `STRIPE_BASE_PLAN_PRICE_ID` and `STRIPE_ADDITIONAL_NUMBER_PRICE_ID` are set in Vercel Production with test-mode Price IDs.
 - Stripe subscription Checkout exists in test mode.
-- Real Twilio purchases are still blocked by `TWILIO_NUMBER_PURCHASE_ENABLED=false`.
+- Twilio purchase mode defaults to `"disabled"` in committed runtime config.
+- Real Twilio purchases are still blocked unless the mode is deliberately changed to `"live"`.
+- Mock mode can exercise assignment UX and DB/entitlement behavior in local/staging without buying a Twilio number.
 - No live Stripe charge can occur while Stripe remains test-mode.
 - SMS recovery enablement is separate and is not changed by payment-method setup, first-number assignment, or subscription status.
 - Usage metering/reporting remains a future billing milestone.
@@ -100,14 +103,16 @@ wiring, **never** hard-coded next to the amounts in `billing.config.ts`.
 
 This supersedes the old owner "request a number for admin review" workflow.
 Production code is deployed, Stripe remains **sandbox/test only**, and
-`TWILIO_NUMBER_PURCHASE_ENABLED` stays false.
+`runtimeConfig.onboarding.twilioNumberPurchaseMode` defaults to `"disabled"`.
 
 **First number (included).** When an owner selects their first number, the app
-**purchases and assigns the real Twilio number automatically** — no admin
-approval. A saved payment method is required. The number is included with the
-$99/month base plan, the owner is **not** charged that day, and the **21-day trial
-starts only after the first number is assigned** (`clinics.trial_started_at` /
-`trial_ends_at`; `billing_status='trialing'`). SMS recovery is **not** auto-enabled.
+assigns it through the shared provisioning flow — no admin approval. A saved
+payment method is required. In `"mock"` mode this uses a fake `PN_mock_*` SID and
+does not call Twilio purchase APIs; in `"live"` mode it purchases/configures the
+real Twilio number. The number is included with the $99/month base plan, the
+owner is **not** charged that day, and the **21-day trial starts only after the
+first number is assigned** (`clinics.trial_started_at` / `trial_ends_at`;
+`billing_status='trialing'`). SMS recovery is **not** auto-enabled.
 
 **Trial source of truth** = `clinics.trial_started_at` / `trial_ends_at` (no longer
 derived from the setup-request date).
@@ -120,11 +125,12 @@ granted **only** after the webhook confirms an active subscription — never fro
 
 **Additional numbers** ($20/month each) are available **only** with a
 webhook-confirmed active paid subscription, require the explicit $20/month consent
-text, and are purchased + assigned automatically: purchase Twilio → set the Stripe
-additional-number subscription-item **quantity** (`STRIPE_ADDITIONAL_NUMBER_PRICE_ID`;
-proration to next invoice) → activate **only if the quantity sync succeeds**. If
-sync fails the attempt is `reconciliation_required`, the number is **not activated
-and not released**, and the Twilio SID is preserved.
+text, and are assigned through the same provisioning flow: Twilio mock/live
+purchase step → set the Stripe additional-number subscription-item **quantity**
+(`STRIPE_ADDITIONAL_NUMBER_PRICE_ID`; proration to next invoice) → activate
+**only if the quantity sync succeeds**. If sync fails the attempt is
+`reconciliation_required`, the number is **not activated and not released**, and
+the Twilio SID is preserved.
 
 **Default limit** = **5 total held** business numbers per clinic
 (`billingConfig.productPolicy.defaultSelfServiceBusinessNumberLimit`; stored on
@@ -144,10 +150,10 @@ under "Legacy number requests" (retired; never auto-purchased/billed/cancelled;
 optional admin Dismiss).
 
 **Real-purchase go-live (still gated, separate approval):** only a deliberate
-future change to `TWILIO_NUMBER_PURCHASE_ENABLED=true` permits real Twilio
-purchases. Live Stripe billing requires a separate approved live-mode rollout.
-Until then the flow is fully built and deployed for safe testing, but no real
-Twilio number or live Stripe charge occurs.
+future change to `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"`
+permits real Twilio purchases. Live Stripe billing requires a separate approved
+live-mode rollout. Until then the flow is fully built and deployed for safe
+testing, but no real Twilio number or live Stripe charge occurs.
 
 ## Historical note
 

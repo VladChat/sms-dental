@@ -89,7 +89,8 @@ A call event reaches the system by one of these supported MVP paths:
 2. Owner self-service business-number path
    - The owner searches/selects a local business number from `/account`.
    - The first number is included with the base plan and requires a saved payment method.
-   - The shared provisioning service purchases/assigns the number only when `TWILIO_NUMBER_PURCHASE_ENABLED=true`.
+   - The shared provisioning service assigns the number only when Twilio purchase
+     mode is `"mock"` or `"live"`; real Twilio purchase happens only in `"live"`.
    - Additional numbers require a webhook-confirmed active paid subscription and explicit $20/month consent.
    - The assigned number can be used for direct routing, campaign needs, or as the forwarding destination.
 
@@ -722,9 +723,19 @@ RESEND_API_KEY=<resend api key>            # required secret for email sending
 # SETUP_EMAIL_FROM is OPTIONAL — default sender comes from
 # config/runtime.config.ts (Missed Calls Dental <no-reply@mail.missedcallsdental.com>).
 # Set it only to override the default; it is not a secret.
-TWILIO_NUMBER_PURCHASE_ENABLED=true        # only when ready to spend money
 OWNER_TEST_SETUP_LINK_FALLBACK=false       # never true in public production
 ```
+
+Twilio number purchase mode is not an env var. It lives in committed runtime
+config at `runtimeConfig.onboarding.twilioNumberPurchaseMode`:
+
+- `"disabled"` (default): assignment/purchase requests cancel safely; no Twilio
+  purchase API is called.
+- `"mock"`: local/staging UX testing only; no Twilio purchase API is called; the
+  provisioning attempt records a fake `PN_mock_*` SID and continues through the
+  normal assignment/entitlement/billing logic.
+- `"live"`: real Twilio purchase/configuration path. Use only after explicit
+  approval because it spends money and provisions a real number.
 
 Verify liveness via `GET /api/health`. For environment-variable presence,
 use Vercel Project Settings (do not expose secret presence in a public endpoint).
@@ -773,13 +784,13 @@ the email.)
 
 ### Safety checks
 
-Before flipping `TWILIO_NUMBER_PURCHASE_ENABLED=true`:
+Before setting `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"`:
 
 1. Confirm the Twilio account billing plan covers the expected number
    cost.
 2. Confirm webhook URLs (`/api/webhooks/twilio/...`) are reachable in
    production.
-3. Confirm `RESEND_API_KEY` and `SETUP_EMAIL_FROM` are set and verified
+3. Confirm `RESEND_API_KEY` is set and the configured sender is verified
    in Resend.
 4. Confirm `OWNER_TEST_SETUP_LINK_FALLBACK` is not set or is `false`.
 
@@ -925,17 +936,17 @@ onboarding traffic. Re-run the migration or contact the operator.
 
 ## Required Environment Variables Before Owner-Only Testing
 
-The onboarding code works in three modes depending on env state.
+The onboarding code works in three modes depending on runtime config and env state.
 Production setup-email vars are now configured (2026-05-28); the table
 below is the authoritative reference.
 
-| Env var                          | Required for production? | Owner-only testing default       |
+| Setting                          | Required for production? | Owner-only testing default       |
 |----------------------------------|--------------------------|----------------------------------|
 | APP_BASE_URL                     | yes                      | `http://localhost:3000` (local)  |
 | PUBLIC_SITE_URL                  | yes                      | `https://missedcallsdental.com`  |
 | RESEND_API_KEY                   | yes (secret)             | unset (use fallback below)       |
 | SETUP_EMAIL_FROM                 | no (optional override)   | unset → uses config default      |
-| TWILIO_NUMBER_PURCHASE_ENABLED   | yes (set to `true`)      | `false` (never purchase yet)     |
+| `runtimeConfig.onboarding.twilioNumberPurchaseMode` | committed config; set to `"live"` only by approval | `"disabled"` or short-lived `"mock"` |
 | OWNER_TEST_SETUP_LINK_FALLBACK   | no (must stay `false`)   | `true` only during local testing |
 | TWILIO_ACCOUNT_SID               | yes (already configured) | already configured               |
 | TWILIO_AUTH_TOKEN                | yes (already configured) | already configured               |
@@ -951,20 +962,24 @@ PUBLIC_SITE_URL=https://missedcallsdental.com
 RESEND_API_KEY=<encrypted secret — set>     # the only required Resend secret
 # SETUP_EMAIL_FROM intentionally NOT set — default sender from
 # config/runtime.config.ts (Missed Calls Dental <no-reply@mail.missedcallsdental.com>)
-TWILIO_NUMBER_PURCHASE_ENABLED=false        # flip to true ONLY when ready to spend
 OWNER_TEST_SETUP_LINK_FALLBACK=false        # MUST stay false in production
 ```
+
+Committed production-safe default: `runtimeConfig.onboarding.twilioNumberPurchaseMode`
+is `"disabled"`. Do not change to `"live"` without explicit approval.
 
 For owner-only local testing without configuring Resend:
 
 ```
 OWNER_TEST_SETUP_LINK_FALLBACK=true
-TWILIO_NUMBER_PURCHASE_ENABLED=false
 ```
 
 In that mode, `POST /api/setup-requests` returns the setup link in the
 JSON response instead of sending email, and the number-purchase route
-returns 503 instead of contacting Twilio.
+returns 503 instead of contacting Twilio while purchase mode is `"disabled"`.
+For local/staging number-assignment UX testing, temporarily set
+`runtimeConfig.onboarding.twilioNumberPurchaseMode = "mock"` in the test branch
+or staging config, then switch it back to `"disabled"` afterward.
 
 ### Safe next step for owner-only testing
 
@@ -974,25 +989,29 @@ returns 503 instead of contacting Twilio.
    - `APP_BASE_URL=http://localhost:3000`
    - `PUBLIC_SITE_URL=https://missedcallsdental.com`
    - `OWNER_TEST_SETUP_LINK_FALLBACK=true`
-   - `TWILIO_NUMBER_PURCHASE_ENABLED=false`
-3. Start the dev server: `npm run dev`.
-4. POST a test request:
+3. Keep `runtimeConfig.onboarding.twilioNumberPurchaseMode = "disabled"` for
+   safe disabled-response testing, or temporarily set it to `"mock"` for
+   local/staging assignment UX testing only.
+4. Start the dev server: `npm run dev`.
+5. POST a test request:
    ```
    curl -s -X POST http://localhost:3000/api/setup-requests \
      -H 'content-type: application/json' \
      -d '{"work_email":"owner@example.com"}'
    ```
    Expect a JSON response containing a `setup_url`.
-5. Open the returned setup URL in a browser. Fill out the 3-field
+6. Open the returned setup URL in a browser. Fill out the 3-field
    Step 1 form (clinic name, main office phone, ZIP code), then continue to
    `/account` for owner number search/purchase QA.
-6. In `/account`, choose a number and attempt the purchase action. Expect the
-   safe disabled-purchase response while `TWILIO_NUMBER_PURCHASE_ENABLED=false`.
-   No Twilio number is purchased. No SMS is sent.
+7. In `/account`, choose a number and attempt the purchase action. With mode
+   `"disabled"`, expect the safe unavailable response and no DB assignment. With
+   mode `"mock"`, expect assignment to complete with a `PN_mock_*` SID and no
+   Twilio purchase API call. No SMS is sent.
 
 Only after owner/admin browser QA is clean and the owner makes a deliberate
-go-live decision should anyone consider flipping `TWILIO_NUMBER_PURCHASE_ENABLED=true`
-and rerunning the same flow with a real number purchase.
+go-live decision should anyone consider setting
+`runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"` and rerunning the
+same flow with a real number purchase.
 
 ---
 
@@ -1012,8 +1031,8 @@ The flow above is implemented:
 - `POST /api/onboarding/[token]/clinic` saves the office profile, generates the
   public `slug`, and runs automatic local-number preparation (read-only Twilio
   candidate search; status **Preparing**). No purchase/reservation occurs unless
-  `TWILIO_NUMBER_PURCHASE_ENABLED=true` and the owner approves via the existing
-  purchase route.
+  Twilio purchase mode is `"mock"` or `"live"` and the owner approves via the
+  existing purchase route. Mock mode never calls Twilio purchase APIs.
 - Screen 2 `BusinessProfile` component: a customer **account/settings dashboard**
   (left section nav + right active panel; one section at a time; wrapping tabs on
   mobile). Sections: Business profile → SMS approval → Billing → Phone number →
@@ -1745,44 +1764,55 @@ Routes (platform-admin guarded):
 - `GET /api/admin/clinics/[clinicId]/phone-numbers/search?type=local|toll_free&country=US|CA&area_code=NNN`
   — read-only Twilio available-number lookup; returns Voice+SMS-capable numbers only.
 - `POST /api/admin/clinics/[clinicId]/phone-numbers/purchase` body `{ phone_number }`
-  — purchases + assigns the selected number.
+  — assigns the selected number through the shared provisioning service. In
+  `"live"` mode it purchases/configures the real Twilio number; in `"mock"` mode
+  it records a fake `PN_mock_*` SID and does not call Twilio purchase APIs.
 
 Search hint order (no hardcoded area codes): explicit `area_code` query →
 `clinics.preferred_area_code` → area code derived from `clinics.main_phone` → none;
 region/postal from the clinic. No results → clear no-results state.
 
-Purchase gate (hard, no bypass): `TWILIO_NUMBER_PURCHASE_ENABLED`
-(`runtimeConfig.onboarding.twilioNumberPurchaseEnabled`). When **false/missing** the
-purchase route returns **HTTP 503 `purchase_disabled`** with
-`Twilio number purchase is disabled by environment flag.` and the UI shows that blocker —
-no Twilio call, no DB write. Precondition order: auth → clinic exists → not already
-assigned (409 `already_assigned`, one number per clinic) → flag on → app base URL present
-→ purchase.
+Purchase mode (hard, no bypass): `runtimeConfig.onboarding.twilioNumberPurchaseMode`
+defaults to `"disabled"`. Disabled mode returns **HTTP 503 `purchase_disabled`**
+with a safe unavailable message, marks the attempt `cancelled`, and makes no
+Twilio call. Mock mode records `status='twilio_purchased'` with a fake
+`PN_mock_*` SID and continues through the normal assignment/entitlement path.
+Live mode is the only path that calls `purchaseNumberAndConfigure()`.
 
-Assignment + webhooks: on success, `purchaseNumberAndConfigure` sets the purchased
-number's Voice incoming `/api/webhooks/twilio/voice/incoming`, Voice status
-`/api/webhooks/twilio/voice/status`, SMS incoming
+Live assignment + webhooks: on success, `purchaseNumberAndConfigure` sets the
+purchased number's Voice incoming `/api/webhooks/twilio/voice/incoming`, Voice
+status `/api/webhooks/twilio/voice/status`, SMS incoming
 `/api/webhooks/twilio/messaging/incoming`, SMS status
-`/api/webhooks/twilio/messaging/status` (base from `runtimeConfig.app.appBaseUrl`), and
-best-effort attaches the number to the Twilio Messaging Service
-(`TWILIO_MESSAGING_SERVICE_SID`) for outbound SMS. The mapping is stored in
-`clinic_phone_numbers` (role `office_texting`, `is_active=true`, E.164 + IncomingPhoneNumber
-SID). **SMS recovery is NOT enabled** here; `setup_status` is left unchanged.
+`/api/webhooks/twilio/messaging/status` (base from `runtimeConfig.app.appBaseUrl`),
+and best-effort attaches the number to the Twilio Messaging Service
+(`TWILIO_MESSAGING_SERVICE_SID`) for outbound SMS. Mock mode skips this entire
+Twilio step. The mapping is stored in `clinic_phone_numbers` (role
+`office_texting`, `is_active=true`, E.164 + SID/fake SID). **SMS recovery is NOT
+enabled** here; `setup_status` is left unchanged.
 
 Audit: `admin_audit_events` action `clinic.phone_number.purchase_assign`, after-state
 `{ phone_number, twilio_sid, area_code }`, actor email + auth source. No Twilio secrets.
 
-Safe test with purchase disabled (current committed default `false`):
-1. Confirm `runtimeConfig.onboarding.twilioNumberPurchaseEnabled === false`.
+Safe test with purchase disabled (current committed default):
+1. Confirm `runtimeConfig.onboarding.twilioNumberPurchaseMode === "disabled"`.
 2. Open `/admin/clinics/[clinicId]` (Phone number is the default panel).
 3. "Search available numbers" — read-only lookup; candidates may appear.
 4. Select one → "Purchase and assign selected number" → confirm dialog → Purchase.
-5. Expect the dialog error `Twilio number purchase is disabled by environment flag.`;
-   no number purchased, no `clinic_phone_numbers` row created, no Twilio purchase/reserve.
+5. Expect a safe unavailable error; no number purchased, no `clinic_phone_numbers`
+   row created, no Twilio purchase/reserve.
 
-Enable purchase (production): set the runtime-config flag true and ensure Twilio creds +
-Messaging Service SID + `appBaseUrl` are configured. Do not click final purchase without
-explicit human approval — it spends money and provisions a real number.
+Safe mock assignment test (local/staging only):
+1. Temporarily set `runtimeConfig.onboarding.twilioNumberPurchaseMode = "mock"`.
+2. Use a test clinic/payment-method/subscription state appropriate to the number
+   slot being tested.
+3. Search, select, and confirm a number.
+4. Expect assignment to complete with a `PN_mock_*` SID and no real Twilio purchase.
+5. Switch the mode back to `"disabled"` after testing.
+
+Enable purchase (production): set `runtimeConfig.onboarding.twilioNumberPurchaseMode`
+to `"live"` and ensure Twilio creds + Messaging Service SID + `appBaseUrl` are
+configured. Do not click final purchase without explicit human approval — it
+spends money and provisions a real number.
 
 Rollback / manual cleanup if a wrong number is assigned:
 - DB: set the `clinic_phone_numbers` row `is_active=false` (or delete it) for that clinic;
@@ -1853,7 +1883,7 @@ re-search.
 Safe test (purchase disabled): search by area code + ZIP; verify the request sends only
 `type`, `area_code`, and `postal_code`, fallback labels are tried, and a fallback message
 appears if a broader attempt wins. Select a number; attempt purchase → blocked with
-`Twilio number purchase is disabled by environment flag.`; no number purchased, no DB row.
+a safe unavailable message; no number purchased, no DB row.
 
 ---
 
@@ -1919,13 +1949,14 @@ that page is retained only as a deep-link fallback, see below.)
   search/assignment component. The main **Add number** button does **not** navigate there;
   the route is kept only for direct/bookmarked access. On that page, Cancel and a
   successful purchase route back to the clinic Phone number panel.
-- Purchase safety unchanged: `TWILIO_NUMBER_PURCHASE_ENABLED` still gates purchase
-  (search works when disabled; purchase returns the env-flag block). The confirm dialog,
-  one-number-at-a-time idempotency, webhook config, and audit are unchanged.
+- Purchase safety unchanged: `runtimeConfig.onboarding.twilioNumberPurchaseMode`
+  still gates assignment/purchase (search works when disabled; purchase returns
+  the safe unavailable block). The confirm dialog, one-number-at-a-time
+  idempotency, webhook config, and audit are unchanged.
 
 Provider-neutral copy: external provider brand names were removed from user-visible
 admin/owner UI (e.g. "Provider reference", "Messaging brand/campaign reference",
-"Number purchase is disabled by environment flag.", "Location not specified"). Provider
+"Number assignment is temporarily unavailable.", "Location not specified"). Provider
 names remain only in code comments, env var names, and internal integration code.
 
 ---
@@ -2066,8 +2097,8 @@ How it works:
 
 Historical operator action: review the owner's requested number, then add it through
 the normal admin **Add number** flow (search -> confirm -> purchase/assign), which
-was still gated by `TWILIO_NUMBER_PURCHASE_ENABLED`. There was no auto-approve /
-auto-purchase in this retired flow.
+at the time was still gated by the older Twilio purchase flag. There was no
+auto-approve / auto-purchase in this retired flow.
 
 Verify (after a request): `clinic_number_requests` has a `pending` row for the clinic;
 **no** new `clinic_phone_numbers` row; `clinics.local_number_status` and
@@ -2123,8 +2154,8 @@ absent until then.
 
 The owner "request a number for admin review" flow is **retired**
 (`POST /api/account/phone-numbers/request` -> 410). Current model (deployed;
-Stripe sandbox/test only; `TWILIO_NUMBER_PURCHASE_ENABLED=false`; see SETUP-LOG
-2026-06-03 and BILLING-AND-USAGE-POLICY):
+Stripe sandbox/test only; Twilio purchase mode defaults to `"disabled"`; see
+SETUP-LOG 2026-06-03/2026-06-04 and BILLING-AND-USAGE-POLICY):
 
 - Owner self-service: first number is purchased+assigned automatically (included,
   no admin approval), starting the 21-day trial from `clinics.trial_ends_at`.
@@ -2148,11 +2179,15 @@ Safe operating notes:
 - Migration `20260603000200_self_service_number_purchasing.sql` is applied and verified.
 - Vercel Production has `STRIPE_BASE_PLAN_PRICE_ID` and `STRIPE_ADDITIONAL_NUMBER_PRICE_ID`
   set to Stripe test-mode Price IDs.
-- With `TWILIO_NUMBER_PURCHASE_ENABLED=false`, purchase attempts cancel safely and no
-  Twilio number is bought.
+- With `runtimeConfig.onboarding.twilioNumberPurchaseMode = "disabled"`, purchase
+  attempts cancel safely and no Twilio number is bought.
+- With mode `"mock"` in local/staging only, the shared provisioning flow writes a
+  fake `PN_mock_*` SID and exercises assignment, entitlement, trial-start, and
+  additional-number Stripe test-mode quantity logic without calling Twilio
+  purchase APIs.
 - Before real go-live, owner/admin browser QA is required.
-- Flipping `TWILIO_NUMBER_PURCHASE_ENABLED=true` is the deliberate go-live switch for real
-  Twilio purchase.
+- Setting `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"` is the
+  deliberate go-live switch for real Twilio purchase.
 - Stripe remains test-mode unless a future live billing rollout is explicitly approved.
 - If a purchase attempt is `reconciliation_required`, do not retry blindly. Inspect the
   Twilio SID/attempt details first; the system intentionally preserves the SID and does not

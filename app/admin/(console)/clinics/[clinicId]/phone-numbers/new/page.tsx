@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAdminClinicDetail } from "../../../../../../../lib/db/admin/clinics";
-import { isTwilioNumberPurchaseEnabled } from "../../../../../../../lib/env";
+import { getTwilioNumberPurchaseMode } from "../../../../../../../lib/env";
 import { phoneAreaCode } from "../../../../../../../lib/twilio/numbers";
 import { AdminPhoneNumberManager } from "../../_components/AdminPhoneNumberManager";
 
@@ -53,7 +53,7 @@ export default async function AdminAddNumberPage({
       <section className="card card-pad">
         <AdminPhoneNumberManager
           clinicId={d.id}
-          purchaseEnabled={isTwilioNumberPurchaseEnabled()}
+          purchaseEnabled={getTwilioNumberPurchaseMode() !== "disabled"}
           defaults={defaults}
         />
       </section>
