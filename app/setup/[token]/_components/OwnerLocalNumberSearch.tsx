@@ -14,8 +14,6 @@ const ADDITIONAL_MONTHLY = formatUsdFromCents(
   billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
 );
 const INCLUDED_PLAN_SUMMARY = `Included in your plan: ${formatInteger(
-  billingConfig.basePlan.includedBusinessNumbers,
-)} phone number, ${formatInteger(
   billingConfig.basePlan.includedCallMinutes,
 )} call minutes, and ${formatInteger(
   billingConfig.basePlan.includedSmsSegments,
