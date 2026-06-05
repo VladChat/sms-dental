@@ -155,6 +155,42 @@ permits real Twilio purchases. Live Stripe billing requires a separate approved
 live-mode rollout. Until then the flow is fully built and deployed for safe
 testing, but no real Twilio number or live Stripe charge occurs.
 
+## Controlled real-purchase test mode (`owner_test_live`)
+
+`runtimeConfig.onboarding.twilioNumberPurchaseMode` now has four values:
+`disabled` (no purchase), `mock` (staging UX only — a fabricated `PN_mock_…` SID,
+no Twilio call), **`owner_test_live`** (a **real** Twilio purchase, but ONLY for
+clinic ids in the non-secret `runtimeConfig.onboarding.twilioPurchaseTestClinicIds`
+allowlist), and `live` (real purchase for all eligible clinics — deliberate
+go-live). In `owner_test_live`, any clinic not on the allowlist is treated exactly
+like `disabled`. The allowlist holds clinic UUIDs (not secrets), so it lives in
+committed runtime config. `live` (broad real purchasing) remains off.
+
+## FUTURE MILESTONE — Monthly usage metering + billing breakdown (NOT yet built)
+
+This is **deferred and not implemented**. The UI must **never** show fabricated
+usage numbers until this lands. Tracked here so it is not forgotten.
+
+Acceptance criteria for the future milestone:
+
+- Aggregate usage **per clinic billing period** (the Stripe subscription cycle).
+- **Total call minutes** summed across all of the clinic's phone numbers.
+- **Total SMS segments** summed across all of the clinic's phone numbers.
+- Included limits applied to the account total: **1,000 call minutes** and
+  **1,000 SMS segments** (shared across all numbers; from `billing.config.ts`).
+- Overage: **$0.07 / additional call minute** and **$0.06 / additional SMS
+  segment** (from `billing.config.ts`).
+- Additional phone numbers: **quantity × $20/month** (from the Stripe additional-
+  number subscription item quantity).
+- An **estimated monthly total** = base $99 + (additional numbers × $20) + overage.
+- **Stripe billing synchronization rules:** call-minute and SMS-segment overage
+  are reported as usage-based subscription items; reporting must be idempotent and
+  reconciled against the billing period, and never double-count across webhook
+  retries.
+- **No live overage billing** (no real charge for usage) until this milestone is
+  implemented AND explicitly approved — i.e. no usage meter/meter-event is created
+  before then.
+
 ## Historical note
 
 The earlier 2026-06-02 request/consent foundation stored owner number preferences

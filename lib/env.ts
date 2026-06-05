@@ -184,17 +184,44 @@ export function getSetupEmailEnv(): {
 // Twilio number purchase safety mode. Search is always allowed when the
 // Twilio client is configured. Live Twilio purchase proceeds only when the
 // committed runtime config explicitly sets mode to "live".
-export type TwilioNumberPurchaseMode = "disabled" | "mock" | "live";
+export type TwilioNumberPurchaseMode =
+  | "disabled"
+  | "mock"
+  | "owner_test_live"
+  | "live";
 
 export function getTwilioNumberPurchaseMode(): TwilioNumberPurchaseMode {
   const mode = runtimeConfig.onboarding.twilioNumberPurchaseMode;
-  return mode === "mock" || mode === "live" ? mode : "disabled";
+  return mode === "mock" || mode === "owner_test_live" || mode === "live"
+    ? mode
+    : "disabled";
 }
 
-// Legacy safety helper: true only for the real Twilio purchase path. Keep this
-// live-only so older direct-purchase routes cannot call Twilio in mock mode.
+// Legacy safety helper: true only for the BROAD real-purchase path. Kept
+// "live"-only so older direct-purchase routes never call Twilio in "mock" or
+// "owner_test_live" mode. owner_test_live is enforced per-clinic via
+// isClinicAllowedForLivePurchase() in the shared provisioning service.
 export function isTwilioNumberPurchaseEnabled(): boolean {
   return getTwilioNumberPurchaseMode() === "live";
+}
+
+// Non-secret allowlist of clinic UUIDs permitted to make a REAL Twilio purchase
+// while the mode is "owner_test_live".
+export function getTwilioPurchaseTestClinicIds(): readonly string[] {
+  return runtimeConfig.onboarding.twilioPurchaseTestClinicIds;
+}
+
+// Whether THIS clinic may make a real Twilio purchase under the current mode:
+//   - "live": yes (all eligible clinics).
+//   - "owner_test_live": only if its id is in the allowlist.
+//   - "mock" / "disabled": no (callers handle those modes separately).
+export function isClinicAllowedForLivePurchase(clinicId: string): boolean {
+  const mode = getTwilioNumberPurchaseMode();
+  if (mode === "live") return true;
+  if (mode === "owner_test_live") {
+    return getTwilioPurchaseTestClinicIds().includes(clinicId);
+  }
+  return false;
 }
 
 // Owner-test setup link fallback gate from committed runtime config.

@@ -2192,3 +2192,32 @@ Safe operating notes:
 - If a purchase attempt is `reconciliation_required`, do not retry blindly. Inspect the
   Twilio SID/attempt details first; the system intentionally preserves the SID and does not
   auto-release the number.
+
+### Controlled real-purchase testing — `owner_test_live` (2026-06-05)
+
+`twilioNumberPurchaseMode` now also supports `owner_test_live`: a REAL Twilio purchase
+restricted to an explicit clinic-id allowlist, so a single owner/test clinic can buy a
+real number without opening broad live purchasing.
+
+To run the first real Twilio purchase for Vlad's test clinic:
+1. Get the test clinic's UUID (`clinics.id` in Supabase).
+2. In `config/runtime.config.ts` set
+   `onboarding.twilioPurchaseTestClinicIds: ["<that-uuid>"]` and
+   `onboarding.twilioNumberPurchaseMode: "owner_test_live"`. Commit + deploy (these are
+   non-secret committed config). **`live` stays off; no other clinic can purchase.**
+3. Sign in as that clinic's owner, add a payment method, search a local number, and
+   confirm "Purchase and assign number". This makes a REAL Twilio purchase + assignment
+   and starts the trial. A non-allowlisted clinic gets "Number assignment is temporarily
+   unavailable. Please contact support." and no Twilio call.
+4. Verify in **Twilio Console → Phone Numbers → Active numbers** that the number exists
+   with the app's Voice + SMS webhook URLs.
+5. Verify in **Supabase**: `clinic_phone_numbers` has a row (real `PN…` SID, `source`
+   owner_self_service, `billing_class` included, `is_active=true`, `activated_at` set) and
+   the matching `clinic_phone_number_purchase_attempts` row is `assigned` with the SID.
+6. After testing, set the mode back to `"disabled"` (leave the allowlist or clear it).
+
+Additional (paid) number test: with the test clinic still allowlisted, start the paid plan
+(Stripe **test** Checkout) so the webhook marks the subscription active, then purchase a
+second number — it makes a real Twilio purchase only after the Stripe additional-number
+quantity sync succeeds (test mode → no real charge). SMS recovery stays off the entire time
+(`sms_recovery_enabled` is never changed by number assignment or billing).

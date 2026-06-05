@@ -4352,3 +4352,44 @@ Next steps:
   `runtimeConfig.onboarding.twilioNumberPurchaseMode = "mock"`, run owner first-number
   and additional-number tests, verify `PN_mock_*` SIDs in DB rows/attempts, then switch
   the mode back to `"disabled"`.
+
+---
+
+## 2026-06-05 — owner_test_live controlled real-purchase mode + Billing UI cleanup
+
+Baseline: the disabled|mock|live refactor above was committed to local `main` as
+**`6f52cea`** (validated: typecheck + build + diff-check clean), then this work was
+done on branch **`feat/owner-test-live-purchase`** (NOT merged, NOT deployed).
+
+Scope A — controlled Twilio purchase mode:
+- Added a 4th mode **`owner_test_live`** to `twilioNumberPurchaseMode`
+  (`disabled|mock|owner_test_live|live`) + non-secret allowlist
+  `onboarding.twilioPurchaseTestClinicIds: readonly string[]` (clinic UUIDs — not
+  secrets — so committed runtime config, matching project rules).
+- `lib/env.ts`: `getTwilioPurchaseTestClinicIds()` + `isClinicAllowedForLivePurchase(clinicId)`
+  (true for `live` always; for `owner_test_live` only if the clinic id is allowlisted).
+  `isTwilioNumberPurchaseEnabled()` kept live-only.
+- `lib/phone-numbers/provisioning.ts`: in the real-purchase branch, a clinic that is
+  not allowed (`owner_test_live` + not allowlisted) is treated exactly like `disabled`
+  (attempt `cancelled`, safe copy, no Twilio call). `live` unchanged.
+- No fake DB columns added; uses existing `clinic_phone_numbers` + purchase-attempt
+  fields. SMS recovery untouched.
+
+Scope B — Billing UI cleanup (all prices/usage still from `billing.config.ts`):
+- `billing.config.ts` plan displayName → **Standard Plan**.
+- BillingCard Plan row: `21-day free trial, then $99/month` (trial/pre-trial) →
+  `$99/month` once paid plan active (Free trial row hidden when active; "Ends in X
+  days" while trialing; "Starts after your first phone number is assigned" pre-trial).
+- Plan details reordered: Standard Plan → Included each month → Usage above the
+  included monthly limits → Additional phone numbers. Renamed "Additional business
+  numbers" → "Additional phone numbers"; copy → "Billing starts after an additional
+  phone number is activated."
+
+Scope C — documented FUTURE milestone "Monthly usage metering + billing breakdown"
+in `BILLING-AND-USAGE-POLICY.md` (deferred; UI must not fake usage numbers; full
+acceptance criteria recorded). No usage metering implemented.
+
+Validation: `npm run typecheck` pass; `npm run build` pass; `git diff --check` clean.
+Default mode remains `"disabled"`; allowlist empty. **No real Twilio purchase made by
+these code changes; broad `live` mode not enabled; Stripe stays test-mode.** Branch
+pushed for review; not merged/deployed.

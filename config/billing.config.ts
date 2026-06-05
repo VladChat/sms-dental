@@ -14,7 +14,7 @@ export const billingConfig = {
   currency: "usd",
 
   basePlan: {
-    displayName: "Missed-call text follow-up",
+    displayName: "Standard Plan",
     monthlyUnitAmountCents: 9900,
     includedBusinessNumbers: 1,
     includedCallMinutes: 1000,
