@@ -4798,8 +4798,12 @@ Operational notes:
 
 Commit/push:
 
-- Pending at time of log entry; see final report for exact commit hash and
-  deployment status.
+- Code commit: `56abda3f963af9b69f0d0b8e5cc3f44f7e13a68e`
+  (`feat: add fail-closed SMS readiness guards`), pushed to `origin/main`.
+- Vercel production deployment:
+  `dpl_7pZDMZxiEmF32CFaaZ7LPbY9D1Y1`, READY.
+- Safe smoke checks after deployment: `/api/health` 200, `/login` 200,
+  `/account` 200.
 
 Safety:
 
