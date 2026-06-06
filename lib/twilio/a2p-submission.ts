@@ -13,6 +13,13 @@ import {
   upsertA2pSubmissionProgress,
 } from "../db/a2p-submissions";
 import { buildCampaignContent } from "../a2p/campaign-content";
+import {
+  a2pProfileAttributes,
+  addressParams,
+  businessInfoAttributes,
+  mapBusinessType,
+  representativeAttributes,
+} from "../a2p/provider-payload";
 import type { A2pSubmissionStatus, JsonObject } from "../a2p/types";
 import { logger } from "../logging/logger";
 
@@ -156,20 +163,6 @@ function getClient(): TwilioLike {
   return getTwilioClient() as unknown as TwilioLike;
 }
 
-// Map the stored A2P business_type enum to a Trust Hub legal-structure string.
-// NOTE: acceptable values are account/policy-specific; verify against your Twilio
-// account before the first live submit. Overridable via config fallback.
-function mapBusinessType(value: string | null, fallback: string): string {
-  switch ((value ?? "").trim()) {
-    case "PRIVATE_PROFIT": return "Private Company";
-    case "PUBLIC_PROFIT": return "Public Company";
-    case "NON_PROFIT": return "Non-profit Corporation";
-    case "SOLE_PROPRIETOR": return "Sole Proprietorship";
-    case "GOVERNMENT": return "Government";
-    default: return fallback;
-  }
-}
-
 function str(state: JsonObject, key: string): string | null {
   const v = state[key];
   return typeof v === "string" && v.length > 0 ? v : null;
@@ -276,16 +269,16 @@ export async function runRealA2pSubmission(
       const eu = await th.endUsers.create({
         friendlyName: `${clinic.name} business info`,
         type: "customer_profile_business_information",
-        attributes: {
-          business_name: clinic.legal_business_name ?? clinic.name,
-          business_type: mapBusinessType(clinic.business_type, brandCfg.businessTypeFallback),
-          business_industry: brandCfg.businessIndustry,
-          business_registration_identifier: brandCfg.businessRegistrationIdentifier,
-          business_registration_number: ein, // EIN — never logged/persisted.
-          business_regions_of_operation: brandCfg.regionsOfOperation,
-          business_identity: brandCfg.businessIdentity,
-          website_url: clinic.website ?? "",
-        },
+        attributes: businessInfoAttributes({
+          businessName: clinic.legal_business_name ?? clinic.name,
+          businessType: mapBusinessType(clinic.business_type, brandCfg.businessTypeFallback),
+          industry: brandCfg.businessIndustry,
+          registrationIdentifier: brandCfg.businessRegistrationIdentifier,
+          businessRegistrationNumber: ein, // raw EIN — sent to Twilio, never logged/persisted.
+          regionsOfOperation: brandCfg.regionsOfOperation,
+          identity: brandCfg.businessIdentity,
+          websiteUrl: clinic.website ?? "",
+        }),
       });
       businessEndUserSid = eu.sid;
       state.businessEndUserSid = businessEndUserSid;
@@ -299,14 +292,14 @@ export async function runRealA2pSubmission(
       const eu = await th.endUsers.create({
         friendlyName: `${clinic.name} authorized rep`,
         type: "authorized_representative_1",
-        attributes: {
-          first_name: clinic.a2p_rep_first_name ?? "",
-          last_name: clinic.a2p_rep_last_name ?? "",
+        attributes: representativeAttributes({
+          firstName: clinic.a2p_rep_first_name ?? "",
+          lastName: clinic.a2p_rep_last_name ?? "",
           email: clinic.a2p_rep_email ?? "",
-          phone_number: clinic.a2p_rep_phone ?? "",
-          business_title: clinic.a2p_rep_business_title ?? "Owner",
-          job_position: clinic.a2p_rep_business_title ?? "Owner",
-        },
+          phone: clinic.a2p_rep_phone ?? "",
+          jobPosition: clinic.a2p_rep_business_title ?? "Owner",
+          businessTitle: clinic.a2p_rep_business_title ?? "Owner",
+        }),
       });
       repEndUserSid = eu.sid;
       state.repEndUserSid = repEndUserSid;
@@ -317,15 +310,15 @@ export async function runRealA2pSubmission(
     // ---- 3. Address + SupportingDocument (customer_profile_address) ----
     let addressSid = str(state, "addressSid");
     if (!addressSid) {
-      const addr = await client.addresses.create({
+      const addr = await client.addresses.create(addressParams({
         customerName: clinic.legal_business_name ?? clinic.name,
         street: clinic.street_address ?? "",
-        streetSecondary: clinic.address_line2 ?? undefined,
+        addressLine2: clinic.address_line2,
         city: clinic.city ?? "",
         region: clinic.state_region ?? "",
         postalCode: clinic.postal_code ?? "",
         isoCountry: clinic.country ?? "US",
-      });
+      }));
       addressSid = addr.sid;
       state.addressSid = addressSid;
       created.push({ key: "address", sid: addressSid, reused: false });
@@ -399,7 +392,7 @@ export async function runRealA2pSubmission(
       const eu = await th.endUsers.create({
         friendlyName: `${clinic.name} a2p messaging profile`,
         type: "us_a2p_messaging_profile_information",
-        attributes: { company_type: brandCfg.companyType },
+        attributes: a2pProfileAttributes({ companyType: brandCfg.companyType }),
       });
       a2pProfileEndUserSid = eu.sid;
       state.a2pProfileEndUserSid = a2pProfileEndUserSid;

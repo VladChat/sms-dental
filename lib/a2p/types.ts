@@ -103,6 +103,12 @@ export type A2pPlannedResource = {
   reuseSid: string | null;
 };
 
+// "What will be submitted to Twilio" — minimal provider payload, grouped by
+// Twilio resource/step. Contains ONLY fields that are actually submitted.
+export type A2pPayloadField = { label: string; value: string };
+export type A2pPayloadResource = { step: string; fields: A2pPayloadField[] };
+export type A2pProviderPayloadView = { resources: A2pPayloadResource[] };
+
 export type A2pReviewBusiness = {
   legalBusinessName: string | null;
   businessType: string | null;
@@ -169,6 +175,8 @@ export type A2pReviewPackage = {
   // Fixed campaign content (use case, samples, opt-in, STOP/HELP) shown before
   // submit and submitted to Twilio.
   campaign: A2pCampaignContent;
+  // Minimal provider payload — exactly what will be submitted to Twilio.
+  providerPayload: A2pProviderPayloadView;
   // Exact Twilio resources the real submit will create or reuse.
   plannedResources: A2pPlannedResource[];
   // Fee / risk notices to display before a real submit.

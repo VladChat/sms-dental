@@ -51,6 +51,17 @@ Example:
 
 If the next step only needs clinic identity, office phone, and ZIP code, ask only for those fields. Do not ask for legal business name, owner phone, timezone, compliance details, billing details, or test data until those fields are actually required for the next step.
 
+## Minimum Necessary Information Rule (Project-Wide)
+
+Use only the minimum necessary information for every provider payload, UI, form, prompt, log, document, and workflow. Extra information increases confusion and provider rejection risk.
+
+- Do not send, display, collect, duplicate, or store optional information unless it is required for the immediate task.
+- For any external provider payload (Twilio, Stripe, etc.), include only required or conditionally-required fields. If a provider field is optional, omit it by default.
+- If a field is required, use the correct stored value. Never invent, guess, or substitute unrelated data (e.g. do not send one entity's website/EIN/address for another). If a required value is missing, BLOCK the action and show the exact missing field.
+- Separate "submitted to provider" from "internal diagnostics". Internal/admin-only data (readiness, SIDs, statuses, sync timestamps, blocking reasons, support/compliance URLs) must not be sent to external providers unless that provider requires the field.
+- Do not duplicate statuses or repeat the same field across a UI/payload.
+- Protect secrets and sensitive identifiers (e.g. full EIN/tax ID): a full value may be sent to a provider only when required, but must never be shown in full in UI, written to logs, or stored in snapshots/diagnostics.
+
 ## Sample Domain Rule
 
 When fake/demo/sample domains or emails are needed in UI copy, docs, tests, or

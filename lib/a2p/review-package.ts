@@ -10,6 +10,8 @@ import {
 } from "../db/sms-readiness";
 import { getA2pSubmissionState } from "../db/a2p-submissions";
 import {
+  getA2pBrandConfig,
+  getA2pDisallowedClinicWebsiteHosts,
   getA2pSubmissionMode,
   getA2pTrustHubConfig,
   getAppDomainsSafe,
@@ -19,6 +21,7 @@ import {
 import { runtimeConfig } from "../../config/runtime.config";
 import { BUSINESS_TYPE_LABELS, type BusinessType } from "../validation/url";
 import { buildCampaignContent } from "./campaign-content";
+import { addressParams, buildProviderPayloadView, isDisallowedClinicWebsite, mapBusinessType } from "./provider-payload";
 import type {
   A2pPlannedResource,
   A2pReviewMissingField,
@@ -119,14 +122,24 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     "business_address",
     "Complete business address",
   );
+  // Website is a required attribute of the Twilio business-information EndUser, so
+  // it is a hard requirement here. We never substitute an unrelated URL: if the
+  // clinic has no website, OR the stored website is a disallowed platform/owner/
+  // placeholder domain (e.g. allyexp.com), submission is BLOCKED with a clear
+  // reason instead of sending wrong data to Twilio.
+  const websiteIsDisallowed = isDisallowedClinicWebsite(business.website, getA2pDisallowedClinicWebsiteHosts());
+  req(
+    Boolean(business.website) && !websiteIsDisallowed,
+    "website",
+    websiteIsDisallowed
+      ? "Business website — the stored value is a platform/placeholder domain, not this clinic’s own website. Set the clinic’s real website before submitting."
+      : "Business website (required by Twilio for A2P)",
+  );
   req(activeNumbers.length > 0, "active_number", "At least one active SMS number");
   req(Boolean(MESSAGING_SERVICE_SID), "messaging_service_sid", "Messaging Service SID");
 
   // ---- warnings (non-blocking, informational) ----
   const warnings: string[] = [];
-  if (!business.website) {
-    warnings.push("No business website on file. Carriers usually expect an online presence for A2P review.");
-  }
   if (!clinic.a2p_info_completed) {
     warnings.push("The clinic has not yet marked its SMS approval information complete.");
   }
@@ -214,6 +227,44 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
 
   const campaign = buildCampaignContent(clinic.name);
 
+  // ---- minimal provider payload view (exactly what is submitted to Twilio) ----
+  // Built from the SAME shared builders the submission helper uses, with the EIN
+  // masked. Optional/internal fields (privacy/SMS-terms/business-page URLs,
+  // readiness, SIDs, statuses) are intentionally NOT in this payload.
+  const brandCfg = getA2pBrandConfig();
+  const providerPayload = buildProviderPayloadView({
+    clinicName: clinic.name,
+    legalBusinessName: business.legalBusinessName ?? clinic.name,
+    businessTypeMapped: mapBusinessType(clinic.business_type, brandCfg.businessTypeFallback),
+    industry: brandCfg.businessIndustry,
+    registrationIdentifier: brandCfg.businessRegistrationIdentifier,
+    einMaskedValue: business.einProvided ? `Provided ···· ${business.einLast4 ?? "••••"}` : "(missing)",
+    regionsOfOperation: brandCfg.regionsOfOperation,
+    identity: brandCfg.businessIdentity,
+    websiteUrl: business.website ?? "(missing)",
+    repFirstName: representative.firstName ?? "(missing)",
+    repLastName: representative.lastName ?? "(missing)",
+    repEmail: representative.email ?? "(missing)",
+    repPhone: representative.phone ?? "(missing)",
+    repJobPosition: representative.title ?? "Owner",
+    repBusinessTitle: representative.title ?? "Owner",
+    companyType: brandCfg.companyType,
+    address: addressParams({
+      customerName: business.legalBusinessName ?? clinic.name,
+      street: clinic.street_address ?? "(missing)",
+      addressLine2: clinic.address_line2,
+      city: clinic.city ?? "(missing)",
+      region: clinic.state_region ?? "(missing)",
+      postalCode: clinic.postal_code ?? "(missing)",
+      isoCountry: clinic.country ?? "US",
+    }),
+    customerProfilePolicySid: trustHub.customerProfilePolicySid,
+    a2pTrustProductPolicySid: trustHub.a2pTrustProductPolicySid,
+    brandType: brandCfg.brandType,
+    campaign,
+    numbers: activeNumbers.map((n) => ({ phoneNumber: n.phone_number, twilioPhoneNumberSid: n.twilio_phone_number_sid })),
+  });
+
   const plannedResources: A2pPlannedResource[] = [
     planned("Secondary Customer Profile", record?.twilioSecondaryCustomerProfileSid ?? record?.twilioCustomerProfileSid ?? null),
     planned("A2P Trust Product", record?.twilioTrustProductSid ?? null),
@@ -248,6 +299,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     liveSubmitArmed,
     liveSubmitBlockedReason,
     campaign,
+    providerPayload,
     plannedResources,
     feesRiskNotice,
     reviewStatus,
@@ -474,6 +526,7 @@ function notFoundPackage(
     liveSubmitArmed: false,
     liveSubmitBlockedReason: "Clinic not found.",
     campaign: buildCampaignContent(null),
+    providerPayload: { resources: [] },
     plannedResources: [],
     feesRiskNotice: [],
     reviewStatus: "not_found",

@@ -84,10 +84,11 @@ export const runtimeConfig = {
     //     when an authenticated platform admin clicks Submit AFTER reviewing the
     //     package. This creates BILLABLE, externally-vetted, hard-to-reverse Twilio
     //     resources (Brand has a one-time fee; Campaign has recurring carrier fees).
-    //     It is OFF by committed default on purpose. Arming it requires BOTH
-    //     setting this to "live" AND the per-clinic allowlist below AND a configured
-    //     trustHub.primaryCustomerProfileSid. See OPERATIONS-RUNBOOK.md.
-    submissionMode: "dry_run" as "disabled" | "dry_run" | "live",
+    //     Real execution still requires the per-clinic allowlist below AND a
+    //     configured trustHub.primaryCustomerProfileSid AND an admin Submit click.
+    //  ARMED 2026-06-08 for the controlled Fairstone rollout (only Fairstone is in
+    //  liveSubmitClinicIds). See OPERATIONS-RUNBOOK.md before changing.
+    submissionMode: "live" as "disabled" | "dry_run" | "live",
 
     // Per-clinic allowlist for REAL ("live") A2P submission. Mirrors the
     // twilioPurchaseTestClinicIds safety pattern: even when submissionMode="live",
@@ -133,6 +134,13 @@ export const runtimeConfig = {
       // business_type when present; this is the fallback.
       businessTypeFallback: "Private Company",
     },
+
+    // Website hosts that must NEVER be submitted as a clinic's OWN A2P business
+    // website (platform / account-owner / placeholder domains). If a clinic's
+    // stored website matches one of these, A2P submission is BLOCKED with a clear
+    // reason instead of sending unrelated data to Twilio (minimum-information rule).
+    //  - allyexp.com: the account owner / ISV domain, not a clinic website.
+    disallowedClinicWebsiteHosts: ["allyexp.com"] as readonly string[],
   },
 
   testClinic: {

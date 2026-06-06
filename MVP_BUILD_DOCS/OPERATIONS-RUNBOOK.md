@@ -2550,3 +2550,53 @@ Safety invariants: real provider mutation happens ONLY on an authenticated admin
 Submit click in live mode for an allowlisted clinic. Dry-run and disabled modes
 never mutate Twilio. The workflow never sends SMS, never enables
 `sms_recovery_enabled`, and never changes `SMS_RECOVERY_MODE`.
+
+---
+
+## Minimum-information A2P payload + Fairstone live arming — 2026-06-08
+
+Minimum-information rule (now in AGENTS.md, applied to A2P): submit only fields
+required by the Twilio resource being created; omit optional provider fields;
+never substitute unrelated data; keep internal diagnostics out of provider
+payloads; protect the full EIN.
+
+What IS submitted to Twilio (minimal), per resource:
+
+- Business EndUser (`customer_profile_business_information`): business_name,
+  business_type, business_industry, business_registration_identifier,
+  business_registration_number (EIN), business_regions_of_operation,
+  business_identity, website_url.
+- Representative EndUser (`authorized_representative_1`): first_name, last_name,
+  email, phone_number, job_position, business_title.
+- A2P profile EndUser (`us_a2p_messaging_profile_information`): company_type.
+- Address + SupportingDocument (`customer_profile_address`).
+- Secondary Customer Profile + A2P Trust Product (policy SIDs only).
+- Brand Registration (brandType + the two bundle SIDs).
+- A2P Campaign: use case, description, message flow (opt-in), sample messages,
+  embedded-links/phone flags.
+- Messaging Service senders: each active PN SID.
+
+What is NOT submitted (internal only): readiness status, Messaging Service sender
+status, A2P coverage, Twilio SIDs, sync timestamps, blocking reasons, planned
+resources, fees/risk notes, and the Privacy / SMS-terms / business-page URLs
+(support/context only). The full EIN is sent to Twilio but never shown in full,
+logged, or stored. The admin UI and the submission helper share one payload
+builder (`lib/a2p/provider-payload.ts`) so "shown == submitted".
+
+Website guard: a clinic's own website is required by the business EndUser. The
+review package BLOCKS submission if the stored website is empty OR a disallowed
+platform/owner/placeholder host (`config a2p.disallowedClinicWebsiteHosts`,
+currently `["allyexp.com"]`) — it never substitutes an unrelated URL.
+
+Current Fairstone status: live mode is ARMED (`submissionMode="live"`, Fairstone
+is the only `liveSubmitClinicIds` entry, `primaryCustomerProfileSid` configured),
+but Submit is BLOCKED because Fairstone's stored website is `allyexp.com` (the
+owner/ISV domain, not the clinic's). To enable the real Submit button, set
+Fairstone's real clinic website (Business profile / SMS approval), then the
+"Submit to Twilio for A2P Review" button activates after the admin ticks the
+authorization checkbox.
+
+Vlad's production path: admin console → Fairstone → A2P review → fix the website →
+review "What will be submitted to Twilio" → tick authorization → click "Submit to
+Twilio for A2P Review". Do NOT enable SMS until brand+campaign approval and a
+fresh readiness sync show both numbers covered.

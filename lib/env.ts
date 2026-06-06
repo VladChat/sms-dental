@@ -286,6 +286,13 @@ export type A2pBrandConfig = {
   businessTypeFallback: string;
 };
 
+// Hosts that must never be submitted as a clinic's own A2P business website
+// (platform/owner/placeholder domains). Lowercased.
+export function getA2pDisallowedClinicWebsiteHosts(): string[] {
+  const list = runtimeConfig.a2p?.disallowedClinicWebsiteHosts ?? [];
+  return list.map((h) => h.trim().toLowerCase()).filter((h) => h.length > 0);
+}
+
 export function getA2pBrandConfig(): A2pBrandConfig {
   const b = runtimeConfig.a2p?.brand;
   return {

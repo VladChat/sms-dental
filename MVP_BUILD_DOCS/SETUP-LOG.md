@@ -5106,3 +5106,61 @@ Safety: no real A2P submission run; no SMS sent; Twilio calls read-only only (no
 mutation); no Messaging Service attach/detach; no Brand/Campaign created; no
 Stripe change; no Vercel env change; `sms_recovery_enabled` unchanged; no secrets
 or full EIN printed.
+
+---
+
+## 2026-06-08 — Minimum-information A2P payload + live armed for Fairstone (submit blocked by website)
+
+Applied a project-wide minimum-information rule, audited the A2P provider
+payload, cleaned up the admin review UI, and armed live mode for Fairstone. No
+real submit was run.
+
+Minimum-information rule: added to `AGENTS.md` — send/show/store only the minimum
+required information; omit optional provider fields; never substitute unrelated
+data; separate "submitted to provider" from "internal diagnostics"; protect full
+EIN. Applied throughout the A2P workflow.
+
+Payload audit result: the Twilio A2P calls already sent only required fields. The
+optional campaign fields (opt-in/opt-out/help messages + keywords, subscriberOptIn,
+ageGated, directLending, privacyPolicyUrl, termsAndConditionsUrl), brand
+mock/skipAutomaticSecVet, profile statusCallback, and address emergency/auto-correct
+flags are NOT sent. Privacy/SMS-terms/business-page URLs are internal context and
+are NOT submitted. Both the submission helper and the review UI now derive the
+EndUser/address payload from one shared module (`lib/a2p/provider-payload.ts`), so
+"what is shown" exactly equals "what is submitted" (EIN masked in the view; raw EIN
+sent to Twilio only, never logged/stored).
+
+Website guard (important): Fairstone's stored `website` is `https://allyexp.com` —
+the account-owner/ISV domain, NOT the clinic's own website. Per the rule, the
+review package now BLOCKS submission when the website is a disallowed
+platform/placeholder host (config `a2p.disallowedClinicWebsiteHosts = ["allyexp.com"]`)
+instead of sending unrelated data. Verified read-only: `missingFields=[website]`,
+`submitEligible=false`. Vlad must set Fairstone's real clinic website before the
+Submit button activates.
+
+Config armed: `a2p.submissionMode = "live"`; `liveSubmitClinicIds` = Fairstone only;
+`trustHub.primaryCustomerProfileSid = BUaeab21ee3b774f0293e17522e6a1337c`. Verified
+read-only: `liveSubmitArmed=true`, `realSubmissionEnabled=true`, both numbers present
+(`+12244009986`/`PNcfa…85`, `+12243442685`/`PN04b…12`), both "Not covered yet".
+
+UI: A2P review tab refactored — top summary (Can submit now / Mode / Main blocker /
+Next action / Submit button), then "What will be submitted to Twilio" (minimal
+payload grouped by resource), "Required information", "Numbers included", and a
+collapsed "Internal diagnostics" section (readiness, SIDs, statuses, sync times,
+planned resources, fees/risk, warnings, compliance URLs marked not-submitted).
+
+Account-state caveat (unchanged from prior task): the Twilio account already has an
+approved A2P Trust Product on a different policy SID and a draft
+"missedcallsdental.com" profile. Confirm the per-clinic-vs-shared-brand model and
+`a2pTrustProductPolicySid` before the first real submit.
+
+Files: `AGENTS.md`, `config/runtime.config.ts`, `lib/env.ts`,
+`lib/a2p/provider-payload.ts` (new), `lib/a2p/types.ts`, `lib/a2p/review-package.ts`,
+`lib/twilio/a2p-submission.ts`, the admin A2P review panel, and the three MVP docs.
+
+Validation: `npm run typecheck` pass; `npm run build` pass; `git diff --check` pass.
+
+Safety: NO real A2P submission run; no SMS sent; no Twilio mutation during
+development; no Messaging Service attach/detach; no Brand/Campaign created; no
+Stripe change; no Vercel env change; `sms_recovery_enabled` and `SMS_RECOVERY_MODE`
+unchanged; no full EIN/secrets printed.
