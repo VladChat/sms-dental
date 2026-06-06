@@ -4918,3 +4918,67 @@ Safety:
 - `sms_recovery_enabled` unchanged.
 - No production DB migration applied.
 - No secrets printed or documented.
+
+---
+
+## 2026-06-06 — Production readiness migrations applied + read-only readiness sync (Fairstone)
+
+Records two operational steps performed after the A2P review workflow code
+shipped (commit `24e318d`). No product behavior code was changed.
+
+### Production migrations applied
+
+Applied, in order, to the production Supabase project `qfjpvbvfvhbtebwivcdc`
+(`sms_dental`) via the Supabase migration tooling. Both are additive/idempotent;
+no existing data was rewritten.
+
+1. `supabase/migrations/20260606000100_sms_readiness_tracking.sql`
+   → `public.clinic_sms_readiness`, `public.clinic_sms_number_readiness`.
+2. `supabase/migrations/20260607000100_a2p_submission_tracking.sql`
+   → `public.clinic_a2p_submissions`.
+
+Verified: all three tables exist, column structures match the migrations, and
+RLS is enabled on all three.
+
+### Read-only SMS readiness sync (Fairstone)
+
+Ran the existing read-only `syncClinicSmsReadinessFromTwilio()` for Fairstone
+Dental Smile (`f37f24a1-070f-436b-b803-956f55466093`) — the same read-only
+Twilio reads (Messaging Service fetch, sender list, A2P brand/campaign list) plus
+local readiness-row writes that the platform-admin route
+`POST /api/admin/clinics/:clinicId/sms-readiness/sync` performs. No Twilio
+mutation, no SMS, no `sms_recovery_enabled` change.
+
+Result written to `clinic_sms_readiness` / `clinic_sms_number_readiness`
+(`last_synced_at` 2026-06-06 ~04:10 UTC, `last_sync_error_code` null on every
+row — the Twilio reads succeeded):
+
+- Messaging Service `MG83239dc7dfdf8aa6c9b397e8258f7d93`: `messaging_service_status=verified`.
+- A2P brand: none found (`unknown`); A2P campaign: none found (`unknown`);
+  clinic `a2p_status=blocked`, `production_safe=false`,
+  `launch_blocking_reason=a2p_brand_not_verified`.
+- `+12244009986` / `PNcfa04ebbb3c99d346473979781eb8785` (included):
+  `messaging_service_sender_status=missing`, `a2p_campaign_coverage_status=missing`,
+  `production_safe=false`, reason `number_not_in_messaging_service`.
+- `+12243442685` / `PN04b5bd6be9a95f26412c58bafea04512` (additional):
+  same — `sender=missing`, `campaign=missing`, `production_safe=false`,
+  reason `number_not_in_messaging_service`.
+
+Admin A2P review package (the data the platform-admin tab renders) verified via
+the server-side builder: `readinessAvailable=true` (the tab no longer shows
+"SMS readiness data unavailable"); both numbers `coverageDisplay=not_in_messaging_service`
+→ "Not covered yet" (neither shown as Approved); `submissionMode=dry_run`,
+`realSubmissionEnabled=false`, `submitEligible=true` (dry-run review only).
+
+Meaning: live patient SMS remains correctly blocked. Before launch, both numbers
+must become Messaging Service senders AND an approved A2P Brand + Campaign must
+cover them, then a fresh sync must report `production_safe=true` per number.
+
+Optional dry-run submit (`clinic_a2p_submissions`) was not exercised: it needs an
+authenticated platform-admin identity to record faithfully, and the package
+already confirms the dry-run path is eligible and mutation-free.
+
+Safety: no SMS sent; Twilio calls read-only only (no mutation); no Messaging
+Service attach/detach; no A2P submitted; no Brand/Campaign created; no Stripe
+change; no Vercel env change; `sms_recovery_enabled` unchanged; no secrets
+printed.
