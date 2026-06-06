@@ -47,6 +47,8 @@ export type PaymentMethodSetupResult = "success" | "cancelled" | null;
 export type AssignedBusinessNumberSummary = {
   id: string;
   phoneNumber: string;
+  // 'toll_free' (833/844/… — first is included) or 'local' (paid add-on, A2P 10DLC).
+  numberType: "toll_free" | "local";
   role: string;
   isActive: boolean;
   billingClass: "legacy" | "included" | "additional";

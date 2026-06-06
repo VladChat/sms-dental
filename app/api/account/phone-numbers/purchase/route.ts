@@ -36,7 +36,8 @@ const BodySchema = z.object({
   capabilities: z
     .object({ voice: z.boolean(), sms: z.boolean(), mms: z.boolean().optional() })
     .passthrough(),
-  type: z.enum(["local", "toll_free"]).optional(),
+  // Number type is REQUIRED: the UI always picks toll-free or local before search.
+  type: z.enum(["local", "toll_free"]),
   additional_billing_authorized: z.boolean().optional(),
 });
 
@@ -49,6 +50,7 @@ const ERROR_STATUS: Record<ProvisionErrorCode, number> = {
   paid_plan_required: 409,
   subscription_not_active: 409,
   billing_configuration_missing: 503,
+  local_billing_not_configured: 503,
   additional_billing_authorization_required: 400,
   number_already_assigned: 409,
   number_no_longer_available: 409,
@@ -96,6 +98,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const result = await provisionClinicPhoneNumber({
     clinicId: clinic.id,
     phoneNumber: b.phone_number,
+    numberType: b.type,
     actorProfileId: access.userId,
     actorEmail: access.userEmail ?? clinic.owner_contact_email ?? null,
     source: "owner_self_service",

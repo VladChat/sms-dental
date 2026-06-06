@@ -15,15 +15,17 @@ import {
   buildLocalNumberSearchPlan,
   runLocalNumberSearchPlan,
 } from "../../../../../lib/twilio/local-number-search-plan";
+import { searchAvailableTollFreeNumbers } from "../../../../../lib/twilio/numbers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /api/account/phone-numbers/search
+// GET /api/account/phone-numbers/search?type=local|toll_free
 //
-// Owner/admin account route. Searches available local numbers using the
-// authenticated clinic plus optional area/ZIP search inputs. This is read-only:
-// never purchases, reserves, assigns, releases, or stores a phone number.
+// Owner/admin account route. Read-only: never purchases, reserves, assigns,
+// releases, or stores a phone number. `type` is REQUIRED and selects the search:
+//   - toll_free: simple toll-free search (Voice + SMS). No area code / ZIP.
+//   - local:     smart local search by area code / ZIP with broad fallback.
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const access = await resolveAuthClinicAccess(req);
 
@@ -40,6 +42,40 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const country = "US";
+  const numberType = req.nextUrl.searchParams.get("type");
+  if (numberType !== "local" && numberType !== "toll_free") {
+    return jsonBadRequest("A valid number type (local or toll_free) is required.");
+  }
+
+  // Toll-free: no area code / ZIP. Voice + SMS capable only.
+  if (numberType === "toll_free") {
+    try {
+      const numbers = await searchAvailableTollFreeNumbers({
+        country,
+        required: { voice: true, sms: true, mms: false },
+        limit: 5,
+      });
+      return jsonOk({
+        ok: true,
+        type: "toll_free",
+        search_mode: "toll_free",
+        count: numbers.length,
+        numbers,
+        fallback_message:
+          numbers.length === 0
+            ? "No toll-free numbers are available right now. Please try again shortly."
+            : "Showing available toll-free numbers.",
+        empty_reason: numbers.length === 0 ? "no_toll_free_results" : null,
+      });
+    } catch {
+      return jsonError(
+        502,
+        "search_failed",
+        "Could not search toll-free numbers. Please try again.",
+      );
+    }
+  }
+
   const requestedAreaCode = parseOptionalDigitsParam(
     req.nextUrl.searchParams.get("area_code"),
     3,
@@ -73,6 +109,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     return jsonOk({
       ok: true,
+      type: "local",
       search_mode: "smart_fallback",
       attempt_label: result.attemptLabel,
       attempted_labels: attempts.map((a) => a.label),

@@ -4,7 +4,7 @@ import { getDb } from "../db/client";
 // Accepts the default client (getDb()) or a transaction handle (sql.begin(tx)).
 type DbExecutor = Sql | TransactionSql;
 import { billingConfig } from "../../config/billing.config";
-import { hasStripeBillingPriceIds } from "../env";
+import { hasLocalNumberBillingConfigured, hasStripeBillingPriceIds } from "../env";
 
 // Single server-side source of truth for phone-number purchase eligibility.
 // Computed ONLY from live DB state — the client never decides entitlement, slot
@@ -18,9 +18,29 @@ export type NumberPurchaseBlockReason =
   | "purchase_in_progress"
   | "paid_plan_required"
   | "subscription_not_active"
-  | "billing_configuration_missing";
+  | "billing_configuration_missing"
+  // Local number requested but its regulatory + MCD fee billing is not wired in
+  // Stripe yet. Local purchase is fail-closed until configured (search is still
+  // allowed). See lib/env.ts hasLocalNumberBillingConfigured.
+  | "local_billing_not_configured";
 
 export type NextSlotClass = "included" | "additional";
+
+// The number type an owner/admin asks to purchase. Drives billing class and the
+// downstream approval path (local -> A2P 10DLC; toll_free -> toll-free verification).
+export type RequestedNumberType = "toll_free" | "local";
+
+// Server decision for a TYPED purchase. Local is always a paid add-on and never
+// "included"; the first toll-free is included, additional toll-free is paid.
+export type TypedPurchaseDecision = {
+  type: RequestedNumberType;
+  // For toll_free: 'included' (first) or 'additional' (paid). For local: 'local'
+  // (always paid add-on). 'local' is informational only while local is fail-closed.
+  billingClass: "included" | "additional" | "local";
+  requiresAdditionalConsent: boolean; // additional toll-free $20/month consent
+  requiresLocalBilling: boolean; // local regulatory + MCD fees path
+  blockReason: NumberPurchaseBlockReason | null;
+};
 
 export type NumberEntitlement = {
   // Counts toward the limit: every clinic_phone_numbers row (active OR suspended)
@@ -189,6 +209,54 @@ function computeBlockReason(s: {
     }
   }
   return null;
+}
+
+// Type-independent hard blocks that apply to ANY number purchase regardless of
+// type or slot class. Returns the highest-priority reason, or null.
+function baseHardBlock(ent: NumberEntitlement): NumberPurchaseBlockReason | null {
+  if (!ent.hasPaymentMethod) return "payment_method_required";
+  if (!ent.purchasesEnabled) return "number_purchases_revoked";
+  if (ent.inProgressAttempt) return "purchase_in_progress";
+  if (ent.heldNumberCount >= ent.numberLimit) return "number_limit_reached";
+  return null;
+}
+
+/**
+ * Type-aware purchase decision computed from the live entitlement. This is the
+ * single server source of truth for the number model:
+ *   - Toll-free: the first number is included; an additional toll-free number is
+ *     a paid add-on (reuses the existing count-based included/additional gating
+ *     and the $20/month additional Stripe item).
+ *   - Local: ALWAYS a paid add-on (never included), even as the first number and
+ *     during trial. Local billing (regulatory + MCD fees) is not wired in Stripe
+ *     yet, so local purchase is fail-closed (`local_billing_not_configured`) —
+ *     the owner may search local numbers but the server refuses to assign one.
+ */
+export function decideTypedPurchase(
+  ent: NumberEntitlement,
+  type: RequestedNumberType,
+): TypedPurchaseDecision {
+  if (type === "local") {
+    const base = baseHardBlock(ent);
+    const blockReason: NumberPurchaseBlockReason | null =
+      base ?? (hasLocalNumberBillingConfigured() ? null : "local_billing_not_configured");
+    return {
+      type,
+      billingClass: "local",
+      requiresAdditionalConsent: false,
+      requiresLocalBilling: true,
+      blockReason,
+    };
+  }
+
+  // toll_free: reuse the count-based included/additional classification.
+  return {
+    type,
+    billingClass: ent.nextSlotClass,
+    requiresAdditionalConsent: ent.nextSlotClass === "additional",
+    requiresLocalBilling: false,
+    blockReason: ent.blockReason,
+  };
 }
 
 // Convenience wrapper using the default DB client (non-transactional reads).

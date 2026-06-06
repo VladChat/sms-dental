@@ -15,6 +15,9 @@ export type ActiveSmsNumberRow = {
   clinic_id: string;
   phone_number: string;
   twilio_phone_number_sid: string | null;
+  // 'toll_free' | 'local'. A2P 10DLC applies to LOCAL numbers only; toll-free
+  // numbers use toll-free verification and must be excluded from A2P packages.
+  number_type: "toll_free" | "local";
 };
 
 export type ClinicSmsReadiness = {
@@ -129,7 +132,7 @@ export async function listActiveSmsNumbersForClinic(
 ): Promise<ActiveSmsNumberRow[]> {
   const sql = getDb();
   return sql<ActiveSmsNumberRow[]>`
-    select id, clinic_id, phone_number, twilio_phone_number_sid
+    select id, clinic_id, phone_number, twilio_phone_number_sid, number_type
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
       and is_active = true

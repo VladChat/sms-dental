@@ -221,3 +221,39 @@ in `clinic_number_requests` for operator review. That workflow is retired for ne
 owner actions: `POST /api/account/phone-numbers/request` now returns 410. Existing
 rows remain visible as legacy data for admin view/dismiss only and are never
 auto-purchased, billed, cancelled, or treated as current entitlement.
+
+
+---
+
+## Toll-free vs Local number model — pricing (2026-06-09)
+
+Numbers carry a durable `number_type`. Customer-facing prices come ONLY from
+`config/billing.config.ts` (breakdown builders); never hard-coded in components.
+Never use the word "free" for number copy — use "included in plan".
+
+### Toll-free
+- First toll-free number: included in plan
+- Additional toll-free number: $20/month
+- Toll-free verification: included
+- SMS usage: $0.06/additional SMS segment
+- Call usage: $0.07/additional call minute
+- Approval: toll-free verification (NOT A2P 10DLC)
+
+### Local (always a paid add-on)
+Regulatory fees
+- Carrier brand registration: $9 one-time
+- Campaign registration / vetting: $30 one-time
+- Monthly SMS compliance fee: $15/month
+MCD fees
+- Local number: $20/month
+- SMS usage: $0.06/additional SMS segment
+- Call usage: $0.07/additional call minute
+- Setup fee: $20 one-time
+- Approval: A2P 10DLC (Low-Volume Standard Brand, Low-Volume Mixed Campaign;
+  use case: missed-call follow-up and appointment-related customer care for a
+  dental office)
+
+Server rules: first toll-free = included; additional toll-free = paid (existing
+$20/month Stripe item); local = always paid. The client never decides type, slot
+class, price, Stripe quantity, or fees. Local purchase is fail-closed until the
+local Stripe Price IDs are configured (see OPERATIONS-RUNBOOK.md).

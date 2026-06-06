@@ -158,7 +158,12 @@ export type A2pReviewPackage = {
   // reachable, the package degrades to "unavailable" and submit is blocked.
   readinessAvailable: boolean;
   clinicReadiness: A2pReviewClinicReadiness | null;
+  // A2P 10DLC applies to LOCAL numbers only; `numbers` therefore lists only the
+  // clinic's active LOCAL numbers. The counts let the admin UI explain when a
+  // clinic has only toll-free numbers (no local A2P required).
   numbers: A2pReviewNumber[];
+  localNumberCount: number;
+  tollFreeActiveCount: number;
 
   missingFields: A2pReviewMissingField[];
   warnings: string[];

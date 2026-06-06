@@ -216,6 +216,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
             >
               <AssignedNumberCard
                 assignedNumbers={data.number.assignedNumbers}
+                smsStatus={data.number.smsStatus}
                 areaCode={data.number.areaCode}
                 postalCode={data.number.postalCode}
                 hasPaymentMethod={hasPaymentMethod}

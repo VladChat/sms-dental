@@ -40,6 +40,7 @@ const ERROR_STATUS: Record<ProvisionErrorCode, number> = {
   paid_plan_required: 409,
   subscription_not_active: 409,
   billing_configuration_missing: 503,
+  local_billing_not_configured: 503,
   additional_billing_authorization_required: 400,
   number_already_assigned: 409,
   number_no_longer_available: 409,
@@ -95,6 +96,8 @@ export async function POST(
   const result = await provisionClinicPhoneNumber({
     clinicId: setupRequest.clinic_id,
     phoneNumber: parsed.data.phone_number,
+    // Legacy first-number onboarding path assigns the included toll-free number.
+    numberType: "toll_free",
     actorProfileId: null,
     actorEmail: setupRequest.owner_email,
     source: "owner_self_service",

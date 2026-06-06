@@ -77,6 +77,8 @@ function toAssignedSummary(row: ClinicPhoneNumberRow): AssignedBusinessNumberSum
   return {
     id: row.id,
     phoneNumber: row.phone_number,
+    // Default to 'local' if a legacy row predates the column (conservative).
+    numberType: row.number_type === "toll_free" ? "toll_free" : "local",
     role: row.role,
     isActive: row.is_active,
     billingClass: row.billing_class,

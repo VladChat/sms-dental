@@ -25,6 +25,8 @@ const UUID_RE =
 
 const PurchaseSchema = z.object({
   phone_number: z.string().trim().regex(/^\+[1-9]\d{7,14}$/u, "phone_number must be E.164"),
+  // Defaults to toll-free (the included first-number path) when unspecified.
+  type: z.enum(["local", "toll_free"]).optional(),
   additional_billing_authorized: z.boolean().optional(),
 });
 
@@ -37,6 +39,7 @@ const ERROR_STATUS: Record<ProvisionErrorCode, number> = {
   paid_plan_required: 409,
   subscription_not_active: 409,
   billing_configuration_missing: 503,
+  local_billing_not_configured: 503,
   additional_billing_authorization_required: 400,
   number_already_assigned: 409,
   number_no_longer_available: 409,
@@ -87,6 +90,7 @@ export async function POST(
   const result = await provisionClinicPhoneNumber({
     clinicId,
     phoneNumber: parsed.data.phone_number,
+    numberType: parsed.data.type ?? "toll_free",
     actorProfileId: admin.userId,
     actorEmail: admin.email,
     source: "admin",

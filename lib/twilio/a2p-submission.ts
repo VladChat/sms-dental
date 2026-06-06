@@ -197,7 +197,11 @@ export async function runRealA2pSubmission(
   // linked to and the clinic's numbers are added to as senders).
   const targetMsSid = getTwilioMessagingEnv().TWILIO_MESSAGING_SERVICE_SID;
 
-  const activeNumbers = await listActiveSmsNumbersForClinic(clinicId);
+  // A2P 10DLC applies to LOCAL numbers only. Toll-free numbers use toll-free
+  // verification and must never be added as senders on the local A2P campaign.
+  const activeNumbers = (await listActiveSmsNumbersForClinic(clinicId)).filter(
+    (n) => n.number_type === "local",
+  );
   const ein = (clinic.ein_tax_id ?? "").trim();
   const appBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
   const businessPageUrl = appBaseUrl && clinic.slug ? `${appBaseUrl}/business/${clinic.slug}` : "";

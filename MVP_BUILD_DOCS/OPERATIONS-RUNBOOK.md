@@ -2600,3 +2600,40 @@ Vlad's production path: admin console → Fairstone → A2P review → fix the w
 review "What will be submitted to Twilio" → tick authorization → click "Submit to
 Twilio for A2P Review". Do NOT enable SMS until brand+campaign approval and a
 fresh readiness sync show both numbers covered.
+
+
+---
+
+## Toll-free vs Local number model — operate & verify (2026-06-09)
+
+Number model is type-aware (`clinic_phone_numbers.number_type`).
+
+Pricing (source of truth = `config/billing.config.ts`):
+- Toll-free: first included in plan; additional $20/month; verification included;
+  SMS $0.06/additional segment; calls $0.07/additional minute.
+- Local (paid add-on): regulatory — carrier brand registration $9 one-time,
+  campaign registration/vetting $30 one-time, monthly SMS compliance $15/month;
+  MCD — local number $20/month, SMS $0.06/segment, calls $0.07/minute, setup $20
+  one-time.
+
+Approval path: local -> A2P 10DLC Brand/Campaign (admin A2P review tab, local
+numbers only). Toll-free -> toll-free verification (see
+TWILIO-TOLL-FREE-VERIFICATION-SUBMISSION.md); never added to a local A2P campaign.
+
+Verify (read-only):
+- Owner /account?section=phone: assigned numbers show a Toll-free/Local badge,
+  Calls (Active/Not active), Texting (Waiting for approval/Active), Billing line.
+- Add a number -> Toll-free vs Local cards with breakdowns -> toll-free search
+  (no area/ZIP) or local search (area/ZIP).
+- Fairstone (`f37f24a1-...`): both numbers show Local + "Local number · $20/month".
+
+LOCAL PURCHASE IS FAIL-CLOSED. To enable real local purchase, create Stripe Prices
+and set ALL of these env vars (then `hasLocalNumberBillingConfigured()` flips true):
+- STRIPE_LOCAL_NUMBER_PRICE_ID            ($20/month)
+- STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID    ($15/month)
+- STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID  ($9 one-time)
+- STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID ($30 one-time)
+- STRIPE_LOCAL_SETUP_FEE_PRICE_ID         ($20 one-time)
+Then extend `decideTypedPurchase` (lib/billing/number-entitlements.ts) and the
+provisioning additional/local path to charge these items before assignment. Until
+then the server returns `local_billing_not_configured` and assigns nothing.

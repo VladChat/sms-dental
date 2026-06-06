@@ -4,6 +4,9 @@ export type ClinicPhoneNumberRow = {
   id: string;
   clinic_id: string;
   phone_number: string;
+  // Added by 20260609000100_phone_number_type. Existing rows backfilled to 'local'
+  // (conservative). New rows are always written explicitly by provisioning.
+  number_type: "toll_free" | "local";
   twilio_phone_number_sid: string | null;
   role: string;
   is_active: boolean;

@@ -152,9 +152,18 @@ export function AdminA2pReviewPanel({ pkg, clinicId }: { pkg: A2pReviewPackage; 
           {REVIEW_STATUS_LABEL[pkg.reviewStatus] ?? humanizeToken(pkg.reviewStatus)}
         </Badge>
       </div>
-      <p className="t-helper" style={{ margin: "var(--space-1) 0 var(--space-4)" }}>
+      <p className="t-helper" style={{ margin: "var(--space-1) 0 var(--space-2)" }}>
         Platform-admin only. The clinic owner enters this information; you review the minimal package
         below and submit. Submit is never a blind action.
+      </p>
+      <p className="t-small" style={{ margin: "0 0 var(--space-4)", color: "var(--text-secondary)" }}>
+        {pkg.localNumberCount > 0 ? (
+          <>Applies to <strong>Local (A2P 10DLC)</strong> numbers only. Toll-free numbers use toll-free verification and are not part of this package.</>
+        ) : pkg.tollFreeActiveCount > 0 ? (
+          <>This clinic has only toll-free numbers. Local A2P 10DLC registration is not required — toll-free numbers use toll-free verification instead.</>
+        ) : (
+          <>Applies to <strong>Local (A2P 10DLC)</strong> numbers only.</>
+        )}
       </p>
 
       {/* ---- Top summary ---- */}

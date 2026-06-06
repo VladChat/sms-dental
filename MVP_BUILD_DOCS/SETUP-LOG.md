@@ -5164,3 +5164,41 @@ Safety: NO real A2P submission run; no SMS sent; no Twilio mutation during
 development; no Messaging Service attach/detach; no Brand/Campaign created; no
 Stripe change; no Vercel env change; `sms_recovery_enabled` and `SMS_RECOVERY_MODE`
 unchanged; no full EIN/secrets printed.
+
+
+---
+
+## 2026-06-09 — Toll-free vs Local number model
+
+Added a durable `number_type` (`toll_free` | `local`) to the number model and the
+full selection flow.
+
+Migration `supabase/migrations/20260609000100_phone_number_type.sql` (additive,
+idempotent): adds `clinic_phone_numbers.number_type` (NOT NULL, default `local`,
+check in (`toll_free`,`local`)) and `clinic_phone_number_purchase_attempts.requested_number_type`.
+Backfill: Fairstone `+12244009986`/`PNcfa04ebbb3c99d346473979781eb8785` and
+`+12243442685`/`PN04b5bd6be9a95f26412c58bafea04512` set to `local`; all other
+unknown existing rows conservatively set to `local`. No billing_class change, no
+rebilling, no destructive SQL.
+
+Model: first toll-free number = included in plan; additional toll-free = $20/month;
+local = always a paid add-on (even first / during trial). Local uses A2P 10DLC;
+toll-free uses toll-free verification. A2P review package + submission now include
+LOCAL numbers only (toll-free excluded from the local campaign senders).
+
+Pricing source of truth: `config/billing.config.ts` breakdown builders
+(`tollFreeNumberBreakdown`, `localNumberBreakdown`, `assignedNumberBillingLabel`).
+No "free" wording. Search API requires `?type=local|toll_free` (400 otherwise);
+toll-free search has no area/ZIP; local keeps area/ZIP + fallback.
+
+Local purchase is FAIL-CLOSED: `lib/env.ts hasLocalNumberBillingConfigured()`
+requires STRIPE_LOCAL_NUMBER_PRICE_ID, STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID,
+STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID, STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID,
+STRIPE_LOCAL_SETUP_FEE_PRICE_ID. None set yet -> server returns
+`local_billing_not_configured` (503) and never buys/assigns a local number; owners
+can still search local availability.
+
+Validation: `npm run typecheck` pass; `npm run build` pass; `git diff --check` pass.
+
+Safety: no real Twilio purchase; no Stripe charge; no A2P submit; SMS remains
+fail-closed; `sms_recovery_enabled` / `SMS_RECOVERY_MODE` unchanged.

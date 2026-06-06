@@ -97,6 +97,33 @@ export function hasStripeBillingPriceIds(): boolean {
   );
 }
 
+// Stripe Price IDs required to charge a LOCAL number correctly (recurring +
+// one-time). Until ALL are configured, local number purchase/assignment is
+// fail-closed: the owner may search local numbers but the server refuses to buy
+// or assign one (so a local number is never assigned with incomplete billing).
+//   - STRIPE_LOCAL_NUMBER_PRICE_ID            $20/month  (MCD local number)
+//   - STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID    $15/month  (monthly SMS compliance)
+//   - STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID  $9 one-time (carrier brand)
+//   - STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID $30 one-time (campaign/vetting)
+//   - STRIPE_LOCAL_SETUP_FEE_PRICE_ID         $20 one-time (MCD setup fee)
+export const LOCAL_NUMBER_BILLING_ENV_VARS = [
+  "STRIPE_LOCAL_NUMBER_PRICE_ID",
+  "STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID",
+  "STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID",
+  "STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID",
+  "STRIPE_LOCAL_SETUP_FEE_PRICE_ID",
+] as const;
+
+export function hasLocalNumberBillingConfigured(): boolean {
+  return LOCAL_NUMBER_BILLING_ENV_VARS.every((name) => present(name));
+}
+
+// The local-billing env vars that are still missing (for ops reporting only —
+// returns names, never values).
+export function missingLocalNumberBillingEnvVars(): string[] {
+  return LOCAL_NUMBER_BILLING_ENV_VARS.filter((name) => !present(name));
+}
+
 export function getSupabaseDbEnv() {
   return SupabaseDbSchema.parse(process.env);
 }

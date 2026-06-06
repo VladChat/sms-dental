@@ -367,3 +367,25 @@ No SMS was sent, no Twilio configuration was changed, no number was purchased,
 NO real A2P registration was submitted (live mode stays off by committed
 default; no real submit was run during development), and `sms_recovery_enabled`
 remained unchanged.
+
+
+---
+
+## Local number billing — Stripe wiring PENDING (2026-06-09)
+
+The toll-free vs local number model is implemented and production-safe, but the
+LOCAL number fee items are NOT yet wired in Stripe. Local purchase is fail-closed
+server-side: owners can search local numbers, but the server refuses to buy or
+assign one (`local_billing_not_configured`, 503) until ALL of these env vars are
+set (presence-checked by `hasLocalNumberBillingConfigured()` in lib/env.ts):
+
+- STRIPE_LOCAL_NUMBER_PRICE_ID            ($20/month)
+- STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID    ($15/month)
+- STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID  ($9 one-time)
+- STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID ($30 one-time)
+- STRIPE_LOCAL_SETUP_FEE_PRICE_ID         ($20 one-time)
+
+Next step to enable real local purchase: create the Stripe Prices, set the env
+vars, then extend `decideTypedPurchase` + the provisioning local path to attach
+these recurring + one-time items (synchronize billing BEFORE assignment). Toll-free
+(first included / additional $20/month) is fully wired and unaffected.

@@ -62,6 +62,32 @@ Use only the minimum necessary information for every provider payload, UI, form,
 - Do not duplicate statuses or repeat the same field across a UI/payload.
 - Protect secrets and sensitive identifiers (e.g. full EIN/tax ID): a full value may be sent to a provider only when required, but must never be shown in full in UI, written to logs, or stored in snapshots/diagnostics.
 
+## Toll-free vs Local Number Model (Project-Wide)
+
+Business numbers have a durable `number_type`: `toll_free` or `local`. This is a
+fixed product rule:
+
+- The FIRST toll-free number is included in the plan. An additional toll-free
+  number is a paid add-on (`$20/month`).
+- A local number is ALWAYS a paid add-on before assignment — even the first
+  number and even during the free trial — because of A2P 10DLC registration and
+  compliance.
+- Local numbers use A2P 10DLC Brand/Campaign approval. Toll-free numbers use
+  toll-free verification (NOT A2P Brand/Campaign). The A2P review/submission
+  package includes LOCAL numbers only; toll-free numbers are never added to a
+  local A2P campaign.
+- Do not call any number "free". Use "included in plan".
+- Customer-facing prices must come from `config/billing.config.ts` (the breakdown
+  builders), never hard-coded in components. Every breakdown row ends in
+  "included in plan", "included", "$X/month", or "$X one-time".
+- Use minimum necessary information. Do not duplicate statuses or repeat the same
+  field across a card/payload.
+- The number type, slot class (included vs additional), price, Stripe quantity,
+  and fees are decided server-side only. The client never decides them.
+- Local purchase is fail-closed: until the local Stripe Price IDs are configured
+  (`hasLocalNumberBillingConfigured` in `lib/env.ts`), the server refuses to buy
+  or assign a local number. Owners may still SEARCH local numbers.
+
 ## Sample Domain Rule
 
 When fake/demo/sample domains or emails are needed in UI copy, docs, tests, or

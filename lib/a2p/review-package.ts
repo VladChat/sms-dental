@@ -66,7 +66,12 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     readinessByPhoneId.set(n.clinicPhoneNumberId, n);
   }
 
-  const numbers: A2pReviewNumber[] = activeNumbers.map((active) =>
+  // A2P 10DLC applies to LOCAL numbers only. Toll-free numbers use toll-free
+  // verification and are excluded from the A2P package + submission entirely.
+  const localActiveNumbers = activeNumbers.filter((n) => n.number_type === "local");
+  const tollFreeActiveCount = activeNumbers.length - localActiveNumbers.length;
+
+  const numbers: A2pReviewNumber[] = localActiveNumbers.map((active) =>
     buildNumber(active, readinessByPhoneId.get(active.id) ?? null, readinessAvailable),
   );
 
@@ -122,7 +127,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     "Complete business address",
   );
   req(Boolean(urls.businessPage), "website", "Public business page URL (clinic must have a slug and app base URL configured)");
-  req(activeNumbers.length > 0, "active_number", "At least one active SMS number");
+  req(localActiveNumbers.length > 0, "active_number", "At least one active local SMS number (A2P 10DLC applies to local numbers only)");
   req(Boolean(MESSAGING_SERVICE_SID), "messaging_service_sid", "Messaging Service SID");
 
   // ---- warnings (non-blocking, informational) ----
@@ -192,7 +197,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     submissionMode,
     readinessAvailable,
     missingCount: missingFields.length,
-    activeCount: activeNumbers.length,
+    activeCount: localActiveNumbers.length,
     hasMessagingService: Boolean(MESSAGING_SERVICE_SID),
     recordStatus: record?.status ?? null,
   });
@@ -249,7 +254,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     a2pTrustProductPolicySid: trustHub.a2pTrustProductPolicySid,
     brandType: brandCfg.brandType,
     campaign,
-    numbers: activeNumbers.map((n) => ({ phoneNumber: n.phone_number, twilioPhoneNumberSid: n.twilio_phone_number_sid })),
+    numbers: localActiveNumbers.map((n) => ({ phoneNumber: n.phone_number, twilioPhoneNumberSid: n.twilio_phone_number_sid })),
   });
 
   const plannedResources: A2pPlannedResource[] = [
@@ -278,6 +283,8 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     readinessAvailable,
     clinicReadiness,
     numbers,
+    localNumberCount: localActiveNumbers.length,
+    tollFreeActiveCount,
     missingFields,
     warnings,
     submission,
@@ -485,6 +492,8 @@ function notFoundPackage(
     readinessAvailable: false,
     clinicReadiness: null,
     numbers: [],
+    localNumberCount: 0,
+    tollFreeActiveCount: 0,
     missingFields: [],
     warnings: [],
     submission: {

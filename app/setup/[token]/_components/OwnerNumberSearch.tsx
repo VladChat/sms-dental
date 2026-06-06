@@ -13,6 +13,8 @@ const ADDITIONAL_MONTHLY = formatUsdFromCents(
   billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
 );
 
+type NumberType = "toll_free" | "local";
+
 type Candidate = {
   phone_number: string;
   friendly_name: string;
@@ -23,7 +25,7 @@ type Candidate = {
   address_requirements: string;
   recommended: boolean;
   selectable: boolean;
-  type: "local" | "toll_free";
+  type: NumberType;
 };
 
 type SearchResponse = {
@@ -38,6 +40,7 @@ type PurchaseResponse = {
   assignedNumber?: {
     id: string;
     phoneNumber: string;
+    numberType: NumberType;
     role: string;
     isActive: boolean;
     billingClass: "legacy" | "included" | "additional";
@@ -46,22 +49,36 @@ type PurchaseResponse = {
   error?: { message?: string; code?: string };
 };
 
-// Search + purchase a business number. Rendered by AssignedNumberCard ONLY when a
-// purchase is actually allowed (mode = the server-classified next slot). The
-// owner purchase API remains the final authority on price/classification.
-export function OwnerLocalNumberSearch({
+// Step 2 of the add-number flow: search + assign a number of the chosen type.
+// Rendered by AssignedNumberCard after the type chooser. The server purchase API
+// remains the final authority on price/classification and is the only place that
+// can actually buy/assign a number.
+//
+//  - toll_free: no area code / ZIP. Voice + SMS only. The first toll-free number
+//    is included; an additional toll-free number needs the $20/month consent.
+//  - local: area code / ZIP search with smart fallback. Local assignment is
+//    fail-closed (purchaseEnabled=false) until local billing is configured — the
+//    owner can browse availability but cannot assign yet.
+export function OwnerNumberSearch({
+  numberType,
+  tollFreeSlotClass,
+  purchaseEnabled,
+  localNotice,
   initialAreaCode,
   initialPostalCode,
-  mode,
   onPurchased,
+  onBack,
 }: {
+  numberType: NumberType;
+  tollFreeSlotClass: "included" | "additional";
+  purchaseEnabled: boolean;
+  localNotice: string | null;
   initialAreaCode?: string | null;
   initialPostalCode?: string | null;
-  mode: "included" | "additional";
   onPurchased: (n: AssignedBusinessNumberSummary) => void;
+  onBack: () => void;
 }) {
   const runId = useRef(0);
-  const [expanded, setExpanded] = useState(false);
   const [areaCode, setAreaCode] = useState(initialAreaCode ?? "");
   const [postalCode, setPostalCode] = useState(initialPostalCode ?? "");
   const [searching, setSearching] = useState(false);
@@ -74,23 +91,15 @@ export function OwnerLocalNumberSearch({
   const [purchasing, setPurchasing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const isAdditional = mode === "additional";
+  const isTollFree = numberType === "toll_free";
+  const isAdditionalTollFree = isTollFree && tollFreeSlotClass === "additional";
+  const typeBadgeClass = isTollFree ? "badge-info" : "badge-neutral";
+  const typeBadgeLabel = isTollFree ? "Toll-free" : "Local";
 
   function resetSelection() {
     setSelected(null);
     setConsentChecked(false);
     setActionError(null);
-  }
-
-  function clearAll(collapse: boolean) {
-    runId.current += 1;
-    if (collapse) setExpanded(false);
-    setSearching(false);
-    setSearched(false);
-    setSearchError(null);
-    setCandidates([]);
-    setFallbackMessage(null);
-    resetSelection();
   }
 
   async function search() {
@@ -103,17 +112,19 @@ export function OwnerLocalNumberSearch({
     resetSelection();
     try {
       const params = new URLSearchParams();
-      if (areaCode.trim()) params.set("area_code", areaCode.trim());
-      if (postalCode.trim()) params.set("postal_code", postalCode.trim());
-      const q = params.toString();
-      const res = await fetch(`/api/account/phone-numbers/search${q ? `?${q}` : ""}`, {
+      params.set("type", numberType);
+      if (!isTollFree) {
+        if (areaCode.trim()) params.set("area_code", areaCode.trim());
+        if (postalCode.trim()) params.set("postal_code", postalCode.trim());
+      }
+      const res = await fetch(`/api/account/phone-numbers/search?${params.toString()}`, {
         method: "GET",
         credentials: "include",
       });
       const json = (await res.json().catch(() => null)) as SearchResponse | null;
       if (runId.current !== id) return;
       if (!res.ok || !json?.ok) {
-        setSearchError(json?.error?.message ?? "Could not search local numbers.");
+        setSearchError(json?.error?.message ?? "Could not search numbers.");
         setCandidates([]);
         setSearched(true);
         return;
@@ -122,7 +133,7 @@ export function OwnerLocalNumberSearch({
       setFallbackMessage(json.fallback_message ?? null);
       setSearched(true);
     } catch {
-      setSearchError("Could not search local numbers. Please try again.");
+      setSearchError("Could not search numbers. Please try again.");
       setCandidates([]);
       setSearched(true);
     } finally {
@@ -147,27 +158,28 @@ export function OwnerLocalNumberSearch({
           region: candidate.region,
           postal_code: candidate.postal_code,
           capabilities: candidate.capabilities,
-          type: candidate.type,
-          additional_billing_authorized: isAdditional ? consentChecked : undefined,
+          type: numberType,
+          additional_billing_authorized: isAdditionalTollFree ? consentChecked : undefined,
         }),
       });
       const json = (await res.json().catch(() => null)) as PurchaseResponse | null;
       if (!res.ok || !json?.ok || !json.assignedNumber) {
-        setActionError(json?.error?.message ?? "Could not purchase this number. Please try again.");
+        setActionError(json?.error?.message ?? "Could not assign this number. Please try again.");
         return;
       }
       const a = json.assignedNumber;
       onPurchased({
         id: a.id,
         phoneNumber: a.phoneNumber,
+        numberType: a.numberType,
         role: a.role,
         isActive: a.isActive,
         billingClass: a.billingClass,
         createdAt: a.createdAt,
       });
-      clearAll(true);
+      onBack();
     } catch {
-      setActionError("Could not purchase this number. Please try again.");
+      setActionError("Could not assign this number. Please try again.");
     } finally {
       setPurchasing(false);
     }
@@ -175,40 +187,44 @@ export function OwnerLocalNumberSearch({
 
   const displayed = sortByLocation(candidates);
 
-  if (!expanded) {
-    return (
-      <button type="button" className="btn btn-primary acct-primary-action" onClick={() => setExpanded(true)}>
-        {isAdditional ? "Add another number" : "Add number"}
-      </button>
-    );
-  }
-
   return (
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
       <div className="acct-search-form">
         <div className="acct-search-head">
-          <h3 className="t-h4">Search number</h3>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => clearAll(true)}>Hide</button>
+          <h3 className="t-h4">
+            {isTollFree ? "Search toll-free numbers" : "Search local numbers"}
+          </h3>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onBack}>
+            Back
+          </button>
         </div>
-        <div className="acct-grid-2">
-          <div className="field">
-            <label htmlFor="owner-area-code">Area code</label>
-            <input id="owner-area-code" className="input t-mono" value={areaCode}
-              onChange={(e) => setAreaCode(digits(e.target.value).slice(0, 3))}
-              inputMode="numeric" autoComplete="off" />
+
+        {!isTollFree && (
+          <div className="acct-grid-2">
+            <div className="field">
+              <label htmlFor="owner-area-code">Area code</label>
+              <input id="owner-area-code" className="input t-mono" value={areaCode}
+                onChange={(e) => setAreaCode(digits(e.target.value).slice(0, 3))}
+                inputMode="numeric" autoComplete="off" />
+            </div>
+            <div className="field">
+              <label htmlFor="owner-zip">ZIP code</label>
+              <input id="owner-zip" className="input t-mono" value={postalCode}
+                onChange={(e) => setPostalCode(digits(e.target.value).slice(0, 5))}
+                inputMode="numeric" autoComplete="postal-code" />
+            </div>
           </div>
-          <div className="field">
-            <label htmlFor="owner-zip">ZIP code</label>
-            <input id="owner-zip" className="input t-mono" value={postalCode}
-              onChange={(e) => setPostalCode(digits(e.target.value).slice(0, 5))}
-              inputMode="numeric" autoComplete="postal-code" />
-          </div>
-        </div>
+        )}
+
         <button type="button" className="btn btn-primary acct-primary-action"
           onClick={() => void search()} disabled={searching}>
-          {searching ? "Searching…" : "Search number"}
+          {searching ? "Searching…" : isTollFree ? "Search toll-free numbers" : "Search number"}
         </button>
       </div>
+
+      {!isTollFree && localNotice && (
+        <div className="alert alert-info" role="status" aria-live="polite"><span>{localNotice}</span></div>
+      )}
 
       {searchError && (
         <div className="alert alert-error" role="alert" aria-live="polite"><span>{searchError}</span></div>
@@ -218,7 +234,9 @@ export function OwnerLocalNumberSearch({
       )}
       {searched && !searchError && candidates.length === 0 && (
         <p className="t-small" style={{ color: "var(--text-muted)", margin: 0 }}>
-          No local numbers are available for this area right now. Try a different area code or ZIP.
+          {isTollFree
+            ? "No toll-free numbers are available right now. Please try again shortly."
+            : "No local numbers are available for this area right now. Try a different area code or ZIP."}
         </p>
       )}
 
@@ -236,11 +254,14 @@ export function OwnerLocalNumberSearch({
                   <span className="acct-cand-body">
                     <span className="acct-cand-top">
                       <span className="acct-cand-num">{c.friendly_name || c.phone_number}</span>
+                      <span className={`badge ${typeBadgeClass}`}>{typeBadgeLabel}</span>
                       {c.recommended && c.selectable && <span className="badge badge-info">Recommended</span>}
                     </span>
-                    <span className="acct-cand-meta">
-                      <span>{locationLabel(c)}</span>
-                    </span>
+                    {!isTollFree && (
+                      <span className="acct-cand-meta">
+                        <span>{locationLabel(c)}</span>
+                      </span>
+                    )}
                     <span className="acct-cand-caps">
                       {c.capabilities.voice && <span className="badge badge-success">Voice</span>}
                       {c.capabilities.sms && <span className="badge badge-success">SMS</span>}
@@ -251,29 +272,44 @@ export function OwnerLocalNumberSearch({
 
                 {checked && (
                   <div className="acct-cand-actions">
-                    {isAdditional && (
-                      <div className="acct-consent">
-                        <div>
-                          <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>Additional number</p>
-                          <p className="t-h4" style={{ margin: "var(--space-1) 0 0" }}>{ADDITIONAL_MONTHLY}/month</p>
-                          <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
-                            This adds to your monthly paid plan.
-                          </p>
-                        </div>
-                        <label className="check">
-                          <input type="checkbox" checked={consentChecked}
-                            onChange={(e) => setConsentChecked(e.target.checked)} />
-                          <span>{additionalNumberConsentText()}</span>
-                        </label>
+                    {!purchaseEnabled ? (
+                      <div className="alert alert-info" role="status">
+                        <span>
+                          {localNotice ??
+                            "This number can't be assigned yet. You can browse availability now."}
+                        </span>
                       </div>
-                    )}
+                    ) : (
+                      <>
+                        {isAdditionalTollFree && (
+                          <div className="acct-consent">
+                            <div>
+                              <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>Additional toll-free number</p>
+                              <p className="t-h4" style={{ margin: "var(--space-1) 0 0" }}>{ADDITIONAL_MONTHLY}/month</p>
+                              <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
+                                This adds to your monthly paid plan.
+                              </p>
+                            </div>
+                            <label className="check">
+                              <input type="checkbox" checked={consentChecked}
+                                onChange={(e) => setConsentChecked(e.target.checked)} />
+                              <span>{additionalNumberConsentText()}</span>
+                            </label>
+                          </div>
+                        )}
 
-                    <button type="button" className="btn btn-primary acct-primary-action"
-                      onClick={() => void confirmPurchase()}
-                      disabled={(isAdditional && !consentChecked) || purchasing}
-                      aria-busy={purchasing}>
-                      {purchasing ? "Purchasing..." : isAdditional ? "Purchase this number" : "Assign this number"}
-                    </button>
+                        <button type="button" className="btn btn-primary acct-primary-action"
+                          onClick={() => void confirmPurchase()}
+                          disabled={(isAdditionalTollFree && !consentChecked) || purchasing}
+                          aria-busy={purchasing}>
+                          {purchasing
+                            ? "Assigning…"
+                            : isAdditionalTollFree
+                              ? "Purchase this number"
+                              : "Assign this number"}
+                        </button>
+                      </>
+                    )}
                     {actionError && (
                       <div className="alert alert-error" role="alert" aria-live="polite"><span>{actionError}</span></div>
                     )}

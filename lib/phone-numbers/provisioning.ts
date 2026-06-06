@@ -3,7 +3,9 @@ import { runtimeConfig } from "../../config/runtime.config";
 import { billingConfig } from "../../config/billing.config";
 import {
   computeNumberEntitlement,
+  decideTypedPurchase,
   type NumberPurchaseBlockReason,
+  type RequestedNumberType,
 } from "../billing/number-entitlements";
 import {
   getAppDomains,
@@ -43,6 +45,7 @@ export type ProvisionSource = "owner_self_service" | "admin";
 export type ProvisionInput = {
   clinicId: string;
   phoneNumber: string; // trusted server value; validated E.164 upstream
+  numberType: RequestedNumberType; // 'toll_free' (first included) | 'local' (paid add-on)
   actorProfileId: string | null;
   actorEmail: string | null;
   source: ProvisionSource;
@@ -63,6 +66,7 @@ export type ProvisionErrorCode =
 export type AssignedNumber = {
   id: string;
   phoneNumber: string;
+  numberType: RequestedNumberType;
   role: string;
   isActive: boolean;
   billingClass: string;
@@ -106,6 +110,8 @@ const BLOCK_MESSAGES: Record<NumberPurchaseBlockReason, string> = {
     "Your subscription is not active. Update billing before adding another number.",
   billing_configuration_missing:
     "Number billing is not configured yet. Please try again later.",
+  local_billing_not_configured:
+    "Local numbers can't be assigned yet — local number billing is being finalized. You can still browse available local numbers.",
 };
 
 /**
@@ -117,7 +123,7 @@ export async function provisionClinicPhoneNumber(
   input: ProvisionInput,
 ): Promise<ProvisionResult> {
   const sql = getDb();
-  const { clinicId, phoneNumber, actorProfileId, actorEmail, source } = input;
+  const { clinicId, phoneNumber, numberType, actorProfileId, actorEmail, source } = input;
 
   // ── 1. Gate + open a durable attempt inside a clinic-row lock ───────────────
   let gate:
@@ -129,11 +135,23 @@ export async function provisionClinicPhoneNumber(
       await tx`select 1 from public.clinics where id = ${clinicId} for update`;
 
       const ent = await computeNumberEntitlement(tx, clinicId);
-      if (ent.blockReason) {
+      // Type-aware decision: toll-free first = included; additional toll-free =
+      // paid; local = always a paid add-on and fail-closed until billing wired.
+      const decision = decideTypedPurchase(ent, numberType);
+      if (decision.blockReason) {
         return {
           kind: "blocked" as const,
-          error: ent.blockReason,
-          message: BLOCK_MESSAGES[ent.blockReason],
+          error: decision.blockReason,
+          message: BLOCK_MESSAGES[decision.blockReason],
+        };
+      }
+      // Local must never be assigned as included; while fail-closed it is also
+      // never reachable here (decision.blockReason set above). Backstop:
+      if (numberType === "local" && decision.billingClass !== "additional") {
+        return {
+          kind: "blocked" as const,
+          error: "local_billing_not_configured" as const,
+          message: BLOCK_MESSAGES.local_billing_not_configured,
         };
       }
 
@@ -151,8 +169,9 @@ export async function provisionClinicPhoneNumber(
         };
       }
 
-      const slotClass = ent.nextSlotClass;
-      if (slotClass === "additional" && !input.additionalBillingAuthorized) {
+      const slotClass: "included" | "additional" =
+        decision.billingClass === "included" ? "included" : "additional";
+      if (decision.requiresAdditionalConsent && !input.additionalBillingAuthorized) {
         return {
           kind: "blocked" as const,
           error: "additional_billing_authorization_required" as const,
@@ -164,11 +183,11 @@ export async function provisionClinicPhoneNumber(
       try {
         const ins = await tx<{ id: string }[]>`
           insert into public.clinic_phone_number_purchase_attempts
-            (clinic_id, requested_phone_number, requested_by_profile_id,
-             requested_by_email, source, slot_class, status)
+            (clinic_id, requested_phone_number, requested_number_type,
+             requested_by_profile_id, requested_by_email, source, slot_class, status)
           values
-            (${clinicId}, ${phoneNumber}, ${actorProfileId}, ${actorEmail},
-             ${source}, ${slotClass}, 'started')
+            (${clinicId}, ${phoneNumber}, ${numberType}, ${actorProfileId},
+             ${actorEmail}, ${source}, ${slotClass}, 'started')
           returning id
         `;
         return { kind: "started" as const, attemptId: ins[0]!.id, slotClass };
@@ -376,6 +395,7 @@ export async function provisionClinicPhoneNumber(
       attemptId,
       sid,
       purchasedNumber,
+      numberType,
       twilioAddressSid,
       twilioEmergencyAddressSid,
       twilioEmergencyAddressStatus,
@@ -396,6 +416,7 @@ export async function provisionClinicPhoneNumber(
         {
           id: string;
           phone_number: string;
+          number_type: string;
           role: string;
           is_active: boolean;
           billing_class: string;
@@ -406,13 +427,13 @@ export async function provisionClinicPhoneNumber(
         }[]
       >`
         insert into public.clinic_phone_numbers
-          (clinic_id, phone_number, twilio_phone_number_sid, role, is_active,
+          (clinic_id, phone_number, number_type, twilio_phone_number_sid, role, is_active,
            source, billing_class, monthly_unit_amount_cents, currency,
            purchased_by_profile_id, purchased_by_email, activated_at,
            twilio_address_sid, twilio_emergency_address_sid,
            twilio_emergency_address_status, twilio_address_configured_at)
         values
-          (${clinicId}, ${purchasedNumber}, ${sid}, 'office_texting', true,
+          (${clinicId}, ${purchasedNumber}, ${numberType}, ${sid}, 'office_texting', true,
            ${source}, 'included', 0, ${billingConfig.currency},
            ${actorProfileId}, ${actorEmail}, now(),
            ${twilioAddressSid}, ${twilioEmergencyAddressSid},
@@ -420,6 +441,7 @@ export async function provisionClinicPhoneNumber(
            ${twilioAddressConfiguredAt})
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
+          number_type = excluded.number_type,
           twilio_phone_number_sid = excluded.twilio_phone_number_sid,
           role = 'office_texting',
           is_active = true,
@@ -437,7 +459,7 @@ export async function provisionClinicPhoneNumber(
           suspended_at = null,
           suspended_by_profile_id = null,
           suspension_reason = null
-        returning id, phone_number, role, is_active, billing_class,
+        returning id, phone_number, number_type, role, is_active, billing_class,
                   monthly_unit_amount_cents, currency, activated_at, created_at
       `;
       const row = rows[0];
@@ -478,6 +500,7 @@ export async function provisionClinicPhoneNumber(
       assigned: {
         id: assigned.id,
         phoneNumber: assigned.phone_number,
+        numberType: assigned.number_type as RequestedNumberType,
         role: assigned.role,
         isActive: assigned.is_active,
         billingClass: assigned.billing_class,
@@ -518,6 +541,7 @@ async function assignAdditionalNumber(args: {
   attemptId: string;
   sid: string;
   purchasedNumber: string;
+  numberType: RequestedNumberType;
   twilioAddressSid: string | null;
   twilioEmergencyAddressSid: string | null;
   twilioEmergencyAddressStatus: string | null;
@@ -531,6 +555,7 @@ async function assignAdditionalNumber(args: {
     attemptId,
     sid,
     purchasedNumber,
+    numberType,
     twilioAddressSid,
     twilioEmergencyAddressSid,
     twilioEmergencyAddressStatus,
@@ -595,6 +620,7 @@ async function assignAdditionalNumber(args: {
         {
           id: string;
           phone_number: string;
+          number_type: string;
           role: string;
           is_active: boolean;
           billing_class: string;
@@ -605,13 +631,13 @@ async function assignAdditionalNumber(args: {
         }[]
       >`
         insert into public.clinic_phone_numbers
-          (clinic_id, phone_number, twilio_phone_number_sid, role, is_active,
+          (clinic_id, phone_number, number_type, twilio_phone_number_sid, role, is_active,
            source, billing_class, monthly_unit_amount_cents, currency,
            purchased_by_profile_id, purchased_by_email, activated_at,
            twilio_address_sid, twilio_emergency_address_sid,
            twilio_emergency_address_status, twilio_address_configured_at)
         values
-          (${clinicId}, ${purchasedNumber}, ${sid}, 'office_texting', true,
+          (${clinicId}, ${purchasedNumber}, ${numberType}, ${sid}, 'office_texting', true,
            ${source}, 'additional', ${amount}, ${billingConfig.currency},
            ${actorProfileId}, ${actorEmail}, now(),
            ${twilioAddressSid}, ${twilioEmergencyAddressSid},
@@ -619,6 +645,7 @@ async function assignAdditionalNumber(args: {
            ${twilioAddressConfiguredAt})
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
+          number_type = excluded.number_type,
           twilio_phone_number_sid = excluded.twilio_phone_number_sid,
           role = 'office_texting',
           is_active = true,
@@ -636,7 +663,7 @@ async function assignAdditionalNumber(args: {
           suspended_at = null,
           suspended_by_profile_id = null,
           suspension_reason = null
-        returning id, phone_number, role, is_active, billing_class,
+        returning id, phone_number, number_type, role, is_active, billing_class,
                   monthly_unit_amount_cents, currency, activated_at, created_at
       `;
       const row = rows[0];
@@ -668,6 +695,7 @@ async function assignAdditionalNumber(args: {
       assigned: {
         id: assigned.id,
         phoneNumber: assigned.phone_number,
+        numberType: assigned.number_type as RequestedNumberType,
         role: assigned.role,
         isActive: assigned.is_active,
         billingClass: assigned.billing_class,

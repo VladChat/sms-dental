@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { StatusBadge } from "./AccountUI";
 import { ConfirmationDialog } from "./ConfirmationDialog";
-import { OwnerLocalNumberSearch } from "./OwnerLocalNumberSearch";
+import { NumberTypeChooser } from "./NumberTypeChooser";
+import { OwnerNumberSearch } from "./OwnerNumberSearch";
 import type {
   AssignedBusinessNumberSummary,
   OwnerNumberEntitlement,
+  SmsStatus,
 } from "./account-types";
-import { billingConfig, formatUsdFromCents } from "../../../../config/billing.config";
+import {
+  assignedNumberBillingLabel,
+  billingConfig,
+  formatUsdFromCents,
+} from "../../../../config/billing.config";
 
 const BASE_MONTHLY = formatUsdFromCents(billingConfig.basePlan.monthlyUnitAmountCents);
 const ADDITIONAL_MONTHLY = formatUsdFromCents(
@@ -18,6 +24,11 @@ const ADD_NUMBER_TOTAL_MONTHLY = formatUsdFromCents(
   billingConfig.basePlan.monthlyUnitAmountCents +
     billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
 );
+
+// Local number assignment is fail-closed until local billing is configured. The
+// owner can browse local availability but cannot assign one yet.
+const LOCAL_NOTICE =
+  "Local numbers can't be assigned yet — local number billing is being finalized. You can browse available local numbers now.";
 
 const TAG_ROW: CSSProperties = {
   display: "flex",
@@ -29,6 +40,7 @@ const TAG_ROW: CSSProperties = {
 
 export function AssignedNumberCard({
   assignedNumbers,
+  smsStatus,
   areaCode,
   postalCode,
   hasPaymentMethod,
@@ -41,6 +53,7 @@ export function AssignedNumberCard({
   onPurchased,
 }: {
   assignedNumbers: AssignedBusinessNumberSummary[];
+  smsStatus: SmsStatus;
   areaCode: string | null;
   postalCode: string | null;
   hasPaymentMethod: boolean;
@@ -64,26 +77,9 @@ export function AssignedNumberCard({
         </div>
       )}
 
-      {assignedNumbers.map((n) => {
-        const isAdditional = n.billingClass === "additional";
-        return (
-          <div className="acct-number" key={n.id}>
-            <span className="t-eyebrow">Business number</span>
-            <p className="t-h3 t-mono" style={{ margin: "var(--space-1) 0 0" }}>{formatUsPhone(n.phoneNumber)}</p>
-            <div style={TAG_ROW}>
-              {n.isActive ? <StatusBadge kind="active" /> : <StatusBadge kind="not_active" label="Suspended" />}
-              <span className="t-small" style={{ color: "var(--text-muted)" }}>
-                {isAdditional ? `Additional business number · ${ADDITIONAL_MONTHLY}/month` : "Included with plan"}
-              </span>
-            </div>
-            {!n.isActive && (
-              <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
-                This number is still assigned to your clinic and counts toward your account limit.
-              </p>
-            )}
-          </div>
-        );
-      })}
+      {assignedNumbers.map((n) => (
+        <AssignedRow key={n.id} n={n} smsStatus={smsStatus} />
+      ))}
 
       <NumberAction
         hasPaymentMethod={hasPaymentMethod}
@@ -100,6 +96,61 @@ export function AssignedNumberCard({
     </div>
   );
 }
+
+function AssignedRow({
+  n,
+  smsStatus,
+}: {
+  n: AssignedBusinessNumberSummary;
+  smsStatus: SmsStatus;
+}) {
+  const isLocal = n.numberType === "local";
+  return (
+    <div className="acct-number" key={n.id}>
+      <span className="t-eyebrow">Business number</span>
+      <p className="t-h3 t-mono" style={{ margin: "var(--space-1) 0 0" }}>{formatUsPhone(n.phoneNumber)}</p>
+      <div style={TAG_ROW}>
+        <span className={`badge ${isLocal ? "badge-neutral" : "badge-info"}`}>
+          {isLocal ? "Local" : "Toll-free"}
+        </span>
+      </div>
+
+      <dl className="acct-rows" style={{ marginTop: "var(--space-2)" }}>
+        <Row label="Calls">
+          {n.isActive ? <StatusBadge kind="active" /> : <StatusBadge kind="not_active" />}
+        </Row>
+        <Row label="Texting">
+          {smsStatus === "active" ? <StatusBadge kind="active" /> : <StatusBadge kind="waiting" />}
+        </Row>
+        <Row label="Billing">
+          <span className="t-small" style={{ color: "var(--text-muted)" }}>
+            {assignedNumberBillingLabel(n.numberType, n.billingClass)}
+          </span>
+        </Row>
+      </dl>
+
+      {!n.isActive && (
+        <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+          This number is still assigned to your clinic and counts toward your account limit.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--space-3)" }}>
+      <dt className="t-small" style={{ color: "var(--text-secondary)" }}>{label}</dt>
+      <dd style={{ margin: 0 }}>{children}</dd>
+    </div>
+  );
+}
+
+type FlowStep =
+  | { step: "idle" }
+  | { step: "choose" }
+  | { step: "search"; type: "toll_free" | "local" };
 
 function NumberAction({
   hasPaymentMethod,
@@ -125,14 +176,14 @@ function NumberAction({
   onPurchased: (n: AssignedBusinessNumberSummary) => void;
 }) {
   const reason = entitlement.blockReason;
+  const [flow, setFlow] = useState<FlowStep>({ step: "idle" });
   const [showPaidPlanConfirm, setShowPaidPlanConfirm] = useState(false);
 
   useEffect(() => {
-    if (reason !== "paid_plan_required") {
-      setShowPaidPlanConfirm(false);
-    }
+    setShowPaidPlanConfirm(false);
   }, [reason]);
 
+  // ── Type-independent hard blocks: no purchase of any kind is possible ────────
   if (reason === "payment_method_required" || !hasPaymentMethod) {
     return (
       <div className="acct-callout">
@@ -146,7 +197,6 @@ function NumberAction({
       </div>
     );
   }
-
   if (reason === "number_purchases_revoked") {
     return <Note text="New number purchases are disabled for this account. Contact support." />;
   }
@@ -159,70 +209,115 @@ function NumberAction({
   if (reason === "billing_configuration_missing") {
     return <Note text="Adding numbers is temporarily unavailable. Please try again later." />;
   }
-  if (reason === "paid_plan_required") {
+
+  // ── Otherwise the add-number flow is available ──────────────────────────────
+  // reason may still be paid_plan_required / subscription_not_active, which only
+  // blocks the ADDITIONAL toll-free purchase (handled inside the toll-free branch).
+  const tollFreeNeedsPaidPlan =
+    reason === "paid_plan_required" || reason === "subscription_not_active";
+
+  if (flow.step === "idle") {
     return (
-      <div className="acct-callout">
-        <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
-          {entitlement.isTrialing
-            ? "Additional phone numbers are available after you start the paid plan."
-            : "Start the paid plan to add another phone number."}
-        </p>
-        {paidPlanPending && (
-          <div className="alert alert-info" role="status" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
-            <span>Your paid plan is being confirmed. This can take a few seconds.</span>
-          </div>
-        )}
-        {paidPlanError && (
-          <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
-            <span>{paidPlanError}</span>
-          </div>
-        )}
-        <div style={{ marginTop: "var(--space-2)" }}>
-          <button
-            type="button"
-            className="btn btn-primary acct-primary-action"
-            onClick={() => setShowPaidPlanConfirm(true)}
-            disabled={startingPaidPlan || paidPlanPending}
-            aria-busy={startingPaidPlan || paidPlanPending}
-          >
-            Add phone number
-          </button>
-        </div>
-        {showPaidPlanConfirm && (
-          <AddPhoneNumberConfirmation
-            onClose={() => setShowPaidPlanConfirm(false)}
-            onContinue={() => void onStartPaidPlan()}
-            starting={startingPaidPlan}
-            pending={paidPlanPending}
-            error={paidPlanError}
-          />
-        )}
-      </div>
-    );
-  }
-  if (reason === "subscription_not_active") {
-    return (
-      <div className="acct-callout">
-        <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
-          Your subscription is not active. Update billing to add another number.
-        </p>
-        <div style={{ marginTop: "var(--space-2)" }}>
-          <button type="button" className="btn btn-primary acct-primary-action" onClick={onGoToBilling}>Go to billing</button>
-        </div>
-      </div>
+      <button type="button" className="btn btn-primary acct-primary-action" onClick={() => setFlow({ step: "choose" })}>
+        Add a number
+      </button>
     );
   }
 
-  // canPurchaseNext — render search for the server-classified next slot.
-  return (
-    <>
-      <OwnerLocalNumberSearch
-        mode={entitlement.nextSlotClass}
-        initialAreaCode={areaCode}
-        initialPostalCode={postalCode}
-        onPurchased={onPurchased}
+  if (flow.step === "choose") {
+    return (
+      <NumberTypeChooser
+        onChoose={(type) => setFlow({ step: "search", type })}
+        onCancel={() => setFlow({ step: "idle" })}
       />
-    </>
+    );
+  }
+
+  // flow.step === "search"
+  if (flow.type === "toll_free") {
+    if (tollFreeNeedsPaidPlan) {
+      return (
+        <div className="acct-callout">
+          <div className="acct-search-head">
+            <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>Additional toll-free number</p>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFlow({ step: "choose" })}>Back</button>
+          </div>
+          {reason === "subscription_not_active" ? (
+            <>
+              <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+                Your subscription is not active. Update billing to add another number.
+              </p>
+              <div style={{ marginTop: "var(--space-2)" }}>
+                <button type="button" className="btn btn-primary acct-primary-action" onClick={onGoToBilling}>Go to billing</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+                {entitlement.isTrialing
+                  ? "An additional toll-free number is available after you start the paid plan."
+                  : "Start the paid plan to add another toll-free number."}
+              </p>
+              {paidPlanPending && (
+                <div className="alert alert-info" role="status" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
+                  <span>Your paid plan is being confirmed. This can take a few seconds.</span>
+                </div>
+              )}
+              {paidPlanError && (
+                <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
+                  <span>{paidPlanError}</span>
+                </div>
+              )}
+              <div style={{ marginTop: "var(--space-2)" }}>
+                <button
+                  type="button"
+                  className="btn btn-primary acct-primary-action"
+                  onClick={() => setShowPaidPlanConfirm(true)}
+                  disabled={startingPaidPlan || paidPlanPending}
+                  aria-busy={startingPaidPlan || paidPlanPending}
+                >
+                  Start paid plan
+                </button>
+              </div>
+              {showPaidPlanConfirm && (
+                <AddPhoneNumberConfirmation
+                  onClose={() => setShowPaidPlanConfirm(false)}
+                  onContinue={() => void onStartPaidPlan()}
+                  starting={startingPaidPlan}
+                  pending={paidPlanPending}
+                  error={paidPlanError}
+                />
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <OwnerNumberSearch
+        numberType="toll_free"
+        tollFreeSlotClass={entitlement.nextSlotClass}
+        purchaseEnabled
+        localNotice={null}
+        onPurchased={onPurchased}
+        onBack={() => setFlow({ step: "choose" })}
+      />
+    );
+  }
+
+  // flow.type === "local" — searchable, but assignment is fail-closed for now.
+  return (
+    <OwnerNumberSearch
+      numberType="local"
+      tollFreeSlotClass="additional"
+      purchaseEnabled={false}
+      localNotice={LOCAL_NOTICE}
+      initialAreaCode={areaCode}
+      initialPostalCode={postalCode}
+      onPurchased={onPurchased}
+      onBack={() => setFlow({ step: "choose" })}
+    />
   );
 }
 
@@ -241,12 +336,12 @@ function AddPhoneNumberConfirmation({
 }) {
   return (
     <ConfirmationDialog
-      title="Add phone number"
-      description="Adding another phone number will end your free trial and start your paid plan."
+      title="Add toll-free number"
+      description="Adding another toll-free number will end your free trial and start your paid plan."
       summaryLabel="Billing summary"
       summaryRows={[
         { label: "Standard Plan", value: `${BASE_MONTHLY}/month` },
-        { label: "Additional phone number", value: `${ADDITIONAL_MONTHLY}/month` },
+        { label: "Additional toll-free number", value: `${ADDITIONAL_MONTHLY}/month` },
         { label: "Total", value: `${ADD_NUMBER_TOTAL_MONTHLY}/month`, emphasis: true },
       ]}
       checkboxRequired
