@@ -4,6 +4,7 @@ import { listAdminAuditEvents } from "../../../../../lib/db/admin/audit";
 import { getClinicEvents } from "../../../../../lib/db/admin/events";
 import { getAppDomainsSafe, getSmsRecoveryConfig, getTwilioNumberPurchaseMode } from "../../../../../lib/env";
 import { phoneAreaCode } from "../../../../../lib/twilio/numbers";
+import { buildA2pReviewPackage } from "../../../../../lib/a2p/review-package";
 import { AdminClinicConsole } from "./_components/AdminClinicConsole";
 
 export const dynamic = "force-dynamic";
@@ -31,9 +32,10 @@ export default async function AdminClinicDetailPage({
     );
   }
 
-  const [activityRows, events] = await Promise.all([
+  const [activityRows, events, a2pReview] = await Promise.all([
     listAdminAuditEvents({ clinicId: d.id }, 5).catch(() => []),
     getClinicEvents(d.id, 5).catch(() => ({ calls: [], messages: [] })),
+    buildA2pReviewPackage(d.id),
   ]);
 
   const recentActivity = activityRows.map((e) => ({
@@ -61,6 +63,7 @@ export default async function AdminClinicDetailPage({
         phoneDefaults,
         recentActivity,
         events,
+        a2pReview,
       }}
     />
   );

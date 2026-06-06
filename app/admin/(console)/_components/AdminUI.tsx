@@ -127,6 +127,7 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   "clinic.note.update": "Updated internal note",
   "clinic.business_profile.update": "Edited business profile",
   "clinic.a2p.update": "Edited SMS approval info",
+  "clinic.a2p.submit_dry_run": "Recorded A2P dry-run review",
   "clinic.provisioning.update": "Updated provisioning (legacy)",
 };
 

@@ -72,6 +72,22 @@ export const runtimeConfig = {
     trialDaysAfterActivation: 21,
   },
 
+  a2p: {
+    // Review/submission mode for the platform-admin A2P/10DLC approval workflow.
+    // This is a NON-secret safety switch. Default is "dry_run".
+    //  - "disabled": the submit action is fully off. The admin can still view the
+    //     review package; the submit button is hidden and the endpoint refuses.
+    //  - "dry_run": the platform admin can record a LOCAL "reviewed / ready for
+    //     manual submission" status. NO Twilio mutation occurs and NO real A2P
+    //     registration is submitted. A human still submits in the Twilio console.
+    //  - "live": RESERVED. Real Twilio A2P submission is NOT implemented in this
+    //     build. The submission endpoint refuses "live" so provider state can
+    //     never be mutated from here. Enabling real submission is a deliberate
+    //     future task that also requires the lib/twilio/a2p-submission.ts helper
+    //     to be implemented behind its own explicit gate.
+    submissionMode: "dry_run" as "disabled" | "dry_run" | "live",
+  },
+
   testClinic: {
     name: "Lakeview Family Dental",
     mainPhone: "+12245329236",

@@ -244,6 +244,25 @@ export async function getSmsReadinessSummary(
   return { launchReady: launch.ok, blockingReason: launch.reason, clinic, numbers };
 }
 
+// Tri-state availability probe used by the platform-admin A2P review package.
+// Distinguishes "readiness tables unreachable" (available=false — e.g. the
+// additive migration has not been applied) from "tables present but no rows yet"
+// (available=true, summary present with empty/clinic=null data). Never throws.
+export async function getSmsReadinessState(
+  clinicId: string,
+): Promise<{ available: boolean; summary: SmsReadinessSummary | null }> {
+  try {
+    const summary = await getSmsReadinessSummary(clinicId);
+    return { available: true, summary };
+  } catch {
+    return { available: false, summary: null };
+  }
+}
+
+export function isReadinessFresh(iso: string | null): boolean {
+  return isFresh(iso);
+}
+
 export async function evaluateSmsReadinessForLaunch(
   clinicId: string,
 ): Promise<{ ok: boolean; reason: string; summary: SmsReadinessSummary | null }> {

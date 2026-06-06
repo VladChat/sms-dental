@@ -2351,3 +2351,115 @@ Known current Fairstone blockers:
   senders.
 - `sms_recovery_enabled` must remain false until those provider-side issues are
   resolved and a fresh readiness sync confirms coverage.
+
+---
+
+## Platform-admin A2P/10DLC approval review workflow — 2026-06-07
+
+Purpose: give the system owner / platform admin a single place to review the
+exact A2P/10DLC package for a clinic and its local Twilio numbers, and to record
+whether it is ready to submit — without sending SMS or mutating Twilio.
+
+Product rule: this workflow is for the platform admin ONLY. The clinic owner
+enters the business and SMS/A2P information in their account; the platform admin
+reviews and decides. There is no owner-facing submit path.
+
+Where it lives:
+
+- Admin clinic console → **A2P review** tab
+  (`app/admin/(console)/clinics/:clinicId`).
+- Submit endpoint: `POST /api/admin/clinics/:clinicId/a2p/submit`
+  (`resolvePlatformAdmin`-guarded, audited).
+- Package builder: `lib/a2p/review-package.ts` (server-side, read-only).
+- Local state table: `clinic_a2p_submissions` (one row per clinic).
+
+What the review package shows before submission:
+
+- Business identity: legal name, business type, EIN presence + last 4 ONLY
+  (the full EIN is never shown on this surface), address, main phone, website.
+- Authorized representative: name, title, email, phone, authorization flag.
+- Campaign/service: Messaging Service SID, Messaging Service status, A2P Brand
+  status, A2P Campaign status, overall A2P status, last readiness sync time, and
+  public Business / Privacy / SMS-terms URLs.
+- Per-number coverage for every active number (see meanings below).
+- Required-fields checklist, warnings, and current local submission status.
+
+Per-number status meanings (only "covered" is presented as approved/covered):
+
+| Display | Meaning |
+|---|---|
+| `covered` | Verified service + campaign + per-number coverage, fresh, no error → "Approved / covered". |
+| `not_in_messaging_service` | PN SID is not a sender on the Messaging Service. |
+| `not_campaign_covered` | Sender present but not covered by an approved campaign. |
+| `readiness_missing` | No readiness row for this number — run the sync. |
+| `readiness_unavailable` | Readiness tables not reachable (migration not applied). |
+| `stale` | Readiness data older than the freshness window — re-run the sync. |
+| `error` | The last readiness sync recorded a provider error. |
+| `blocked` | Present but not production-safe for another reason. |
+
+Everything except `covered` is shown as "Not approved yet" / "Not covered yet".
+
+The two Fairstone numbers (`f37f24a1-070f-436b-b803-956f55466093`):
+
+- `+12244009986` / `PNcfa04ebbb3c99d346473979781eb8785` (included)
+- `+12243442685` / `PN04b5bd6be9a95f26412c58bafea04512` (additional)
+
+Until the readiness migration is applied and a sync is run — and until a Brand +
+Campaign exist and both PN SIDs are senders on the Messaging Service — both
+numbers display as "Not covered yet".
+
+Dry-run vs real submission:
+
+- Mode is committed config `runtimeConfig.a2p.submissionMode` (default
+  `"dry_run"`).
+  - `disabled` — submit button hidden; endpoint refuses.
+  - `dry_run` — clicking submit records a local `dry_run_reviewed` status
+    ("reviewed / ready for manual submission"). NO Twilio call, NO A2P
+    registration, NO SMS, NO `sms_recovery_enabled` change.
+  - `live` — reserved and refused by the endpoint. Real submission is not
+    implemented in this build.
+- Submit is hidden/disabled when info is missing, readiness tables are
+  unavailable, the clinic is already submitted/pending/approved, a prior
+  submission was rejected, or the mode is disabled. The endpoint re-validates
+  server-side and refuses duplicates.
+
+Migrations required (both PENDING in production as of 2026-06-07):
+
+1. `supabase/migrations/20260606000100_sms_readiness_tracking.sql`
+2. `supabase/migrations/20260607000100_a2p_submission_tracking.sql`
+
+Apply each, in order, in the approved target database (Supabase SQL editor with
+owner approval — the project applies migrations by hand; there is no automated
+runner). Both are additive and idempotent. Verify:
+
+```sql
+select to_regclass('public.clinic_sms_readiness'),
+       to_regclass('public.clinic_sms_number_readiness'),
+       to_regclass('public.clinic_a2p_submissions');
+-- expect all three non-null after applying
+```
+
+If they are not applied, the admin page still loads: it shows "SMS readiness data
+unavailable", blocks submit, and blocks SMS enablement.
+
+Exact steps BEFORE any real A2P submission (future work, deliberately not done):
+
+1. Apply both migrations above and run the read-only readiness sync.
+2. Implement `lib/twilio/a2p-submission.ts` real provider calls behind an
+   explicit, confirmation-gated, audited, default-off server config flag.
+3. Confirm fees/risks (one-time Brand fee, recurring Campaign fees, external
+   vetting that cannot simply be undone) and obtain owner approval.
+
+Exact steps AFTER carrier approval before live SMS:
+
+1. Re-run the read-only readiness sync.
+2. Confirm Messaging Service verified, Brand + Campaign approved, and every active
+   number reports `messaging_service_sender_status='covered'`,
+   `a2p_campaign_coverage_status='covered'`, `production_safe=true`, fresh.
+3. Only then, with Vlad's approval, use the admin launch action to set
+   `sms_recovery_enabled=true`. Live send still fails closed otherwise.
+
+Safety invariants: the review workflow performs only DB reads + the existing
+read-only Twilio readiness sync. It never submits A2P, never attaches/detaches
+Messaging Service senders, never buys/releases numbers, never sends SMS, and
+never enables `sms_recovery_enabled`.

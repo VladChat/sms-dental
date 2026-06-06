@@ -230,6 +230,24 @@ export function isOwnerTestSetupLinkFallbackEnabled(): boolean {
   return runtimeConfig.onboarding.ownerTestSetupLinkFallback;
 }
 
+// Platform-admin A2P/10DLC review/submission mode from committed runtime config.
+// Never throws — defaults to "disabled" if the value is unknown. The config
+// default is "dry_run" (review-only, no Twilio mutation).
+export type A2pSubmissionMode = "disabled" | "dry_run" | "live";
+
+export function getA2pSubmissionMode(): A2pSubmissionMode {
+  const mode = runtimeConfig.a2p?.submissionMode;
+  return mode === "dry_run" || mode === "live" ? mode : "disabled";
+}
+
+// Whether REAL Twilio A2P submission is enabled. This is hard-wired OFF in this
+// build: even when the config mode is "live", real provider submission is not
+// implemented (see lib/twilio/a2p-submission.ts) and the submission endpoint
+// refuses to mutate Twilio. Flipping this on is a deliberate, separate task.
+export function isRealA2pSubmissionEnabled(): boolean {
+  return false;
+}
+
 // Safe presence check for health and runtime wiring. Returns booleans only,
 // never values. Used to report which feature areas are configured.
 export type EnvPresenceReport = {

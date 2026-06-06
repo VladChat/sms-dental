@@ -4814,3 +4814,107 @@ Safety:
 - No Vercel env changed.
 - `sms_recovery_enabled` unchanged.
 - No secrets printed or documented.
+
+---
+
+## 2026-06-07 — Platform-admin A2P/10DLC approval review workflow
+
+Scope:
+
+- Added a platform-admin-only A2P/10DLC approval review workflow. The system
+  owner reviews the exact clinic/campaign/service-aware A2P package and records
+  whether it is ready to submit. The clinic owner has no submit path.
+- Review-only / dry-run. No real Twilio A2P submission, no provider mutation, no
+  SMS, no `sms_recovery_enabled` change.
+
+Baseline verified before coding (read-only):
+
+- `main` includes `56abda3` (fail-closed SMS readiness guards) and `5e0ab96`
+  (record sms readiness deployment).
+- Readiness migration `20260606000100_sms_readiness_tracking.sql` exists locally
+  but is NOT applied in production: a read-only check on the production Supabase
+  (`qfjpvbvfvhbtebwivcdc`) showed `clinic_sms_readiness` and
+  `clinic_sms_number_readiness` absent. `set_updated_at()` and
+  `admin_audit_events` exist.
+- Fairstone (`f37f24a1-070f-436b-b803-956f55466093`): both numbers active
+  office-texting (`+12244009986`/`PNcfa04ebbb3c99d346473979781eb8785` included,
+  `+12243442685`/`PN04b5bd6be9a95f26412c58bafea04512` additional). Clinic-side
+  A2P packet complete (legal name, EIN, `PRIVATE_PROFIT`, rep email/phone, full
+  address, website, `a2p_info_completed=true`, `a2p_authorized=true`).
+  `sms_status=waiting_for_approval`, `sms_recovery_enabled=false`.
+
+New files:
+
+- `supabase/migrations/20260607000100_a2p_submission_tracking.sql` — additive,
+  idempotent `clinic_a2p_submissions` table (one row per clinic, RLS on,
+  service-role only). Stores review/submission status, submission mode, target
+  Messaging Service SID, selected PN SIDs, future Twilio resource SIDs
+  (Customer/Secondary Profile, Trust Product, Brand, Campaign, Messaging
+  Service), submitted_at/by, status-sync bookkeeping, rejection reason, and a
+  redacted `payload_snapshot` (never the full EIN).
+- `lib/a2p/types.ts` — client-safe shared types (no server imports).
+- `lib/a2p/review-package.ts` — server-side package builder (single source of
+  truth for the page and the submit endpoint).
+- `lib/db/a2p-submissions.ts` — tri-state read (`available`) + idempotent upsert.
+- `lib/twilio/a2p-submission.ts` — future real-submission helper. Every function
+  throws `A2pSubmissionDisabledError` by default; documents the real Customer
+  Profile → Trust Product → Brand → Campaign → Messaging Service →
+  sender-attachment order, fees, and risks. No live mutation.
+- `app/api/admin/clinics/[clinicId]/a2p/submit/route.ts` — platform-admin-only
+  submit endpoint (re-validates server-side, refuses duplicates, dry-run only).
+- `app/admin/(console)/clinics/[clinicId]/_components/AdminA2pReviewPanel.tsx` —
+  the review UI.
+
+Changed files:
+
+- `config/runtime.config.ts` — added `a2p.submissionMode` (default `"dry_run"`).
+- `lib/env.ts` — `getA2pSubmissionMode()` + `isRealA2pSubmissionEnabled()`
+  (hard `false`).
+- `lib/db/sms-readiness.ts` — added `getSmsReadinessState()` (tri-state) +
+  `isReadinessFresh()`.
+- `app/admin/(console)/clinics/[clinicId]/page.tsx` — builds the package.
+- `app/admin/(console)/clinics/[clinicId]/_components/AdminClinicConsole.tsx` —
+  new "A2P review" tab + nav status.
+- `app/admin/(console)/_components/AdminUI.tsx` — audit label for
+  `clinic.a2p.submit_dry_run`.
+- `MVP_BUILD_DOCS/PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md`,
+  `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`, `MVP_BUILD_DOCS/SETUP-LOG.md`.
+
+Behavior:
+
+- Submission mode default is `dry_run`: submit records a local
+  `dry_run_reviewed` status (ready for manual submission in the Twilio console).
+- Real A2P submission is disabled (`isRealA2pSubmissionEnabled()` = false; the
+  endpoint refuses `live`).
+- Graceful degradation: when the readiness/submission tables are absent the page
+  shows "SMS readiness data unavailable", blocks submit, and blocks SMS
+  enablement. Only `covered` numbers display as approved/covered; everything else
+  is "Not approved yet" / "Not covered yet".
+
+Migrations applied: NO. Both `20260606000100_sms_readiness_tracking.sql` and
+`20260607000100_a2p_submission_tracking.sql` remain PENDING in production. Apply
+them in order by hand in the approved Supabase project with owner approval. See
+OPERATIONS-RUNBOOK.md (Platform-admin A2P review workflow) for the verify query.
+
+Validation:
+
+- `npm run typecheck` — pass.
+- `npm run build` — pass.
+- `git diff --check` — pass.
+
+Commit/push/deploy:
+
+- See final report for the exact commit hash, push status, and any Vercel
+  deployment.
+
+Safety:
+
+- No SMS sent.
+- No Twilio number purchased, released, attached, detached, or configured.
+- No A2P submission; no Twilio provider mutation.
+- No Messaging Service attach/detach.
+- No Stripe state changed.
+- No Vercel env changed.
+- `sms_recovery_enabled` unchanged.
+- No production DB migration applied.
+- No secrets printed or documented.

@@ -20,9 +20,11 @@ import type {
   AdminClinicDetail,
   AdminClinicEvents,
 } from "../../../../../../lib/db/admin/types";
+import type { A2pReviewPackage } from "../../../../../../lib/a2p/types";
 import { AdminClinicActions } from "./AdminClinicActions";
 import { AdminBusinessProfileForm } from "./AdminBusinessProfileForm";
 import { AdminA2pForm } from "./AdminA2pForm";
+import { AdminA2pReviewPanel } from "./AdminA2pReviewPanel";
 import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
 import { AdminNumberControls } from "./AdminNumberControls";
 import { formatUsdFromCents } from "../../../../../../config/billing.config";
@@ -42,14 +44,16 @@ export type AdminConsoleData = {
   phoneDefaults: PhoneSearchDefaults;
   recentActivity: { id: string; action: string; adminEmail: string; createdAt: string }[];
   events: AdminClinicEvents;
+  a2pReview: A2pReviewPackage;
 };
 
-type SectionId = "phone" | "business" | "sms" | "billing" | "behavior" | "admin";
+type SectionId = "phone" | "business" | "sms" | "a2p" | "billing" | "behavior" | "admin";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "phone", label: "Phone number" },
   { id: "business", label: "Business profile" },
   { id: "sms", label: "SMS approval" },
+  { id: "a2p", label: "A2P review" },
   { id: "billing", label: "Billing" },
   { id: "behavior", label: "SMS behavior" },
   { id: "admin", label: "Admin tools" },
@@ -168,7 +172,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
     }
   }
 
-  const navStatus = sectionStatuses(d);
+  const navStatus = sectionStatuses(d, data.a2pReview);
 
   return (
     <div style={{ display: "grid", gap: "var(--space-5)" }}>
@@ -481,7 +485,19 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 <a className="link" href={`${publicBase}/sms-terms`} target="_blank" rel="noreferrer noopener">SMS terms</a>
               </p>
             )}
-            <DisabledAction label="Submit SMS approval" reason="A2P submission is not connected. Readiness sync is read-only only." />
+            <div className="adm-blocked" role="note" style={{ marginTop: "var(--space-3)" }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => goTo("a2p")}>
+                Open A2P review
+              </button>
+              <span className="t-small" style={{ color: "var(--text-muted)" }}>
+                Review and submit the A2P/10DLC approval package from the A2P review tab.
+              </span>
+            </div>
+          </Panel>
+
+          {/* A2P / 10DLC approval review (platform-admin only) */}
+          <Panel id="a2p" active={active}>
+            <AdminA2pReviewPanel pkg={data.a2pReview} clinicId={d.id} />
           </Panel>
 
           {/* Billing (compact) */}
@@ -657,8 +673,11 @@ function DisabledAction({ label, reason }: { label: string; reason: React.ReactN
   );
 }
 
-function sectionStatuses(d: AdminClinicDetail): Partial<Record<SectionId, { text: string; tone: Tone }>> {
-  const a2p: { text: string; tone: Tone } =
+function sectionStatuses(
+  d: AdminClinicDetail,
+  review: A2pReviewPackage,
+): Partial<Record<SectionId, { text: string; tone: Tone }>> {
+  const sms: { text: string; tone: Tone } =
     d.smsReadiness?.launchReady
       ? { text: "Verified", tone: "success" }
       : d.a2pInfoCompleted && d.a2pAuthorized
@@ -669,10 +688,25 @@ function sectionStatuses(d: AdminClinicDetail): Partial<Record<SectionId, { text
   return {
     phone: d.hasAssignedNumber ? { text: "Assigned", tone: "success" } : { text: "Missing", tone: "warning" },
     business: d.businessInfoCompleted ? { text: "Complete", tone: "success" } : { text: "Needs setup", tone: "warning" },
-    sms: a2p,
+    sms,
+    a2p: a2pNavStatus(review),
     billing: d.stripeCustomerPresent ? { text: "Connected", tone: "success" } : { text: "Not connected", tone: "neutral" },
     behavior: { text: "Read-only", tone: "neutral" },
   };
+}
+
+function a2pNavStatus(review: A2pReviewPackage): { text: string; tone: Tone } {
+  const status = review.submission.status;
+  if (status === "approved") return { text: "Approved", tone: "success" };
+  if (status === "dry_run_reviewed" || status === "ready_for_manual_submission") {
+    return { text: "Reviewed", tone: "success" };
+  }
+  if (status === "submitted" || status === "pending") return { text: "Submitted", tone: "info" };
+  if (status === "rejected") return { text: "Rejected", tone: "warning" };
+  if (!review.readinessAvailable) return { text: "Readiness off", tone: "warning" };
+  if (review.missingFields.length > 0) return { text: "Missing info", tone: "warning" };
+  if (review.submitEligible) return { text: "Ready", tone: "info" };
+  return { text: "Review", tone: "neutral" };
 }
 
 function readinessTone(ok: boolean): Tone {
