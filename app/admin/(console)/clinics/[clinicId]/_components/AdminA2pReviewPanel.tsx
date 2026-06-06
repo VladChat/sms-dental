@@ -45,7 +45,7 @@ const REVIEW_STATUS_LABEL: Record<string, string> = {
   pending: "Pending carrier review",
   approved: "Approved",
   rejected: "Rejected",
-  failed: "Failed",
+  failed: "Failed — safe to retry",
   blocked: "Blocked",
   not_found: "Clinic not found",
 };
@@ -71,7 +71,7 @@ function reviewStatusTone(status: string): Tone {
 const MODE_LABEL: Record<string, string> = {
   disabled: "Disabled",
   dry_run: "Dry run (review-only)",
-  live: "Live (not implemented)",
+  live: "Live (real Twilio submission)",
 };
 
 export function AdminA2pReviewPanel({
@@ -83,64 +83,78 @@ export function AdminA2pReviewPanel({
 }) {
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmLive, setConfirmLive] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  type PostResult = { ok: boolean; message: string };
+  async function post(path: string, fallbackError: string): Promise<PostResult> {
+    try {
+      const res = await fetch(path, { method: "POST", credentials: "include" });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; message?: string; nextAction?: string; error?: { message?: string } }
+        | null;
+      if (!res.ok || !json?.ok) {
+        return { ok: false, message: json?.error?.message ?? fallbackError };
+      }
+      const next = json.nextAction ? ` ${json.nextAction}` : "";
+      return { ok: true, message: (json.message ?? "Done.") + next };
+    } catch {
+      return { ok: false, message: fallbackError };
+    }
+  }
 
   async function runReadinessSync() {
     setSyncing(true);
     setMessage(null);
     setError(null);
-    try {
-      const res = await fetch(`/api/admin/clinics/${clinicId}/sms-readiness/sync`, {
-        method: "POST",
-        credentials: "include",
-      });
-      const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; error?: { message?: string } }
-        | null;
-      if (!res.ok || !json?.ok) {
-        setError(json?.error?.message ?? "Could not run readiness sync.");
-        return;
-      }
+    const r = await post(`/api/admin/clinics/${clinicId}/sms-readiness/sync`, "Could not run readiness sync.");
+    if (r.ok) {
       setMessage("Read-only readiness sync complete. Coverage status refreshed below.");
       router.refresh();
-    } catch {
-      setError("Could not run readiness sync.");
-    } finally {
-      setSyncing(false);
-    }
+    } else setError(r.message);
+    setSyncing(false);
   }
 
-  async function submitForReview() {
+  async function refreshProviderStatus() {
+    setRefreshing(true);
+    setMessage(null);
+    setError(null);
+    const r = await post(`/api/admin/clinics/${clinicId}/a2p/status`, "Could not refresh A2P provider status.");
+    if (r.ok) {
+      setMessage("Read-only A2P provider status refreshed.");
+      router.refresh();
+    } else setError(r.message);
+    setRefreshing(false);
+  }
+
+  async function submit() {
     setSubmitting(true);
     setMessage(null);
     setError(null);
-    try {
-      const res = await fetch(`/api/admin/clinics/${clinicId}/a2p/submit`, {
-        method: "POST",
-        credentials: "include",
-      });
-      const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; message?: string; error?: { message?: string } }
-        | null;
-      if (!res.ok || !json?.ok) {
-        setError(json?.error?.message ?? "Could not record the A2P review.");
-        return;
-      }
-      setMessage(json.message ?? "Recorded a dry-run review.");
+    const r = await post(`/api/admin/clinics/${clinicId}/a2p/submit`, "Could not record the A2P submission.");
+    if (r.ok) {
+      setMessage(r.message);
+      setConfirmLive(false);
       router.refresh();
-    } catch {
-      setError("Could not record the A2P review.");
-    } finally {
-      setSubmitting(false);
-    }
+    } else setError(r.message);
+    setSubmitting(false);
   }
 
   const b = pkg.business;
   const rep = pkg.representative;
   const cr = pkg.clinicReadiness;
   const sub = pkg.submission;
+  const c = pkg.campaign;
+
+  const isLive = pkg.submissionMode === "live";
+  const isDryRun = pkg.submissionMode === "dry_run";
+  const status = sub.status;
+  const isApproved = status === "approved";
+  const isRejected = status === "rejected";
+  const isResume = status === "pending" || status === "submitted" || status === "failed";
 
   return (
     <div>
@@ -151,21 +165,35 @@ export function AdminA2pReviewPanel({
         </Badge>
       </div>
       <p className="t-helper" style={{ margin: "var(--space-1) 0 var(--space-4)" }}>
-        Platform-admin review of the exact A2P/10DLC package for this clinic and its local
-        Twilio numbers. The clinic owner enters this information; only a platform admin reviews
-        and submits it. Submitting here is review-only — it never sends SMS and never changes
-        Twilio.
+        Platform-admin review of the exact A2P/10DLC package for this clinic and its local Twilio
+        numbers. The clinic owner enters this information; only a platform admin reviews and submits
+        it. Review the full package below before clicking Submit — submit is never a blind action.
       </p>
 
-      {/* Mode / real-submission status */}
       <dl className="adm-rows">
         <Row label="Submission mode">
-          <Badge tone={pkg.submissionMode === "disabled" ? "neutral" : "info"}>
+          <Badge tone={pkg.submissionMode === "disabled" ? "neutral" : isLive ? "brand" : "info"}>
             {MODE_LABEL[pkg.submissionMode] ?? humanizeToken(pkg.submissionMode)}
           </Badge>
         </Row>
         <Row label="Real Twilio A2P submission">
-          <Badge tone="neutral">{pkg.realSubmissionEnabled ? "Enabled" : "Disabled"}</Badge>
+          <Badge tone={pkg.realSubmissionEnabled ? "info" : "neutral"}>
+            {pkg.realSubmissionEnabled ? "Enabled (platform)" : "Disabled"}
+          </Badge>
+        </Row>
+        <Row label="Live submit armed for this clinic">
+          {pkg.liveSubmitArmed ? (
+            <Badge tone="success">Armed</Badge>
+          ) : (
+            <>
+              <Badge tone="neutral">Not armed</Badge>
+              {pkg.liveSubmitBlockedReason && (
+                <span className="t-small" style={{ color: "var(--text-muted)", marginLeft: "var(--space-2)" }}>
+                  {pkg.liveSubmitBlockedReason}
+                </span>
+              )}
+            </>
+          )}
         </Row>
       </dl>
 
@@ -175,20 +203,19 @@ export function AdminA2pReviewPanel({
         </div>
       )}
 
-      {/* Readiness unavailable hard-stop notice */}
       {!pkg.readinessAvailable && (
         <div className="adm-banner tone-warning" role="status" style={{ marginTop: "var(--space-3)" }}>
           <div className="adm-banner-main">
             <span className="adm-banner-title">SMS readiness data unavailable</span>
             <span className="adm-banner-body">
-              The readiness tables are not reachable (the additive migration may not be applied).
-              Per-number coverage cannot be confirmed, so submission and SMS enablement stay blocked.
+              The readiness tables are not reachable. Per-number coverage cannot be confirmed, so
+              submission and SMS enablement stay blocked.
             </span>
           </div>
         </div>
       )}
 
-      {/* Business identity / packet */}
+      {/* Business identity */}
       <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Business identity</h3>
       <dl className="adm-rows">
         <Row label="Legal business name">{b.legalBusinessName ?? <Muted>Missing</Muted>}</Row>
@@ -212,32 +239,44 @@ export function AdminA2pReviewPanel({
         <Row label="Authorized">{rep.authorized ? <Badge tone="success">Yes</Badge> : <Badge tone="warning">No</Badge>}</Row>
       </dl>
 
-      <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Campaign &amp; service</h3>
+      {/* Use case + campaign content */}
+      <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Use case &amp; campaign content</h3>
       <dl className="adm-rows">
+        <Row label="Use case">{c.usecase}</Row>
         <Row label="Messaging Service SID">
           {pkg.messagingServiceSid ? <span className="t-mono">{pkg.messagingServiceSid}</span> : <Muted>Not configured</Muted>}
         </Row>
+        <Row label="Campaign description">{c.description}</Row>
+        <Row label="Opt-in / consent">{c.messageFlow}</Row>
+        <Row label="STOP / HELP">{c.stopHelpStatement}</Row>
+        <Row label="Embedded links / phone">{c.hasEmbeddedLinks ? "Links: yes" : "Links: no"} · {c.hasEmbeddedPhone ? "Phone: yes" : "Phone: no"}</Row>
+      </dl>
+      <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-secondary)" }}>Sample messages submitted to Twilio:</p>
+      <ul className="t-small" style={{ margin: "var(--space-1) 0 0", paddingLeft: "var(--space-5)" }}>
+        {c.sampleMessages.map((m, i) => (
+          <li key={i} style={{ marginBottom: "var(--space-1)" }}>“{m}”</li>
+        ))}
+      </ul>
+      {pkg.urls.businessPage && (
+        <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
+          Compliance pages:{" "}
+          <a className="link" href={pkg.urls.businessPage} target="_blank" rel="noreferrer noopener">Business</a>{" · "}
+          <a className="link" href={pkg.urls.privacyPolicy ?? "#"} target="_blank" rel="noreferrer noopener">Privacy</a>{" · "}
+          <a className="link" href={pkg.urls.smsTerms ?? "#"} target="_blank" rel="noreferrer noopener">SMS terms</a>
+        </p>
+      )}
+
+      {/* Readiness summary */}
+      <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Provider readiness</h3>
+      <dl className="adm-rows">
         <Row label="Messaging Service status">{cr ? humanizeToken(cr.messagingServiceStatus) : <Muted>Not synced</Muted>}</Row>
         <Row label="A2P brand status">{cr ? humanizeToken(cr.brandStatus) : <Muted>Not synced</Muted>}</Row>
         <Row label="A2P campaign status">{cr ? humanizeToken(cr.campaignStatus) : <Muted>Not synced</Muted>}</Row>
-        <Row label="Overall A2P status">{cr ? humanizeToken(cr.a2pStatus) : <Muted>Not synced</Muted>}</Row>
         <Row label="Last readiness sync">{fmtDateTime(cr?.lastSyncedAt ?? null)}</Row>
-        {pkg.urls.businessPage && (
-          <Row label="Compliance pages">
-            <a className="link" href={pkg.urls.businessPage} target="_blank" rel="noreferrer noopener">Business</a>{" · "}
-            <a className="link" href={pkg.urls.privacyPolicy ?? "#"} target="_blank" rel="noreferrer noopener">Privacy</a>{" · "}
-            <a className="link" href={pkg.urls.smsTerms ?? "#"} target="_blank" rel="noreferrer noopener">SMS terms</a>
-          </Row>
-        )}
       </dl>
 
-      {/* Per-number coverage — explicit for every active number */}
+      {/* Per-number coverage */}
       <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Numbers &amp; coverage</h3>
-      <p className="t-helper" style={{ margin: "var(--space-1) 0 var(--space-3)" }}>
-        Each active local number is shown with its current Messaging Service sender coverage and
-        A2P campaign coverage. A number is marked “Approved / covered” only when readiness confirms
-        verified service, campaign, and per-number coverage.
-      </p>
       {pkg.numbers.length === 0 ? (
         <p className="t-body"><Muted>No active SMS numbers on file for this clinic.</Muted></p>
       ) : (
@@ -248,7 +287,29 @@ export function AdminA2pReviewPanel({
         </div>
       )}
 
-      {/* Missing fields checklist */}
+      {/* Planned Twilio resources */}
+      <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Twilio resources this submit will create or reuse</h3>
+      <dl className="adm-rows">
+        {pkg.plannedResources.map((r) => (
+          <Row key={r.key} label={r.label}>
+            {r.reuseSid ? (
+              <span><Badge tone="success">Reuse</Badge> <span className="t-mono">{r.reuseSid}</span></span>
+            ) : (
+              <Badge tone="info">{r.willCreate ? "Will create" : "—"}</Badge>
+            )}
+          </Row>
+        ))}
+      </dl>
+
+      {/* Fees / risk */}
+      <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Fees &amp; risk</h3>
+      <ul className="t-small" style={{ margin: "var(--space-2) 0 0", paddingLeft: "var(--space-5)", color: "var(--text-secondary)" }}>
+        {pkg.feesRiskNotice.map((w, i) => (
+          <li key={i}>{w}</li>
+        ))}
+      </ul>
+
+      {/* Required info checklist */}
       <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Required information</h3>
       {pkg.missingFields.length === 0 ? (
         <p className="t-body"><Badge tone="success">Complete</Badge> All required A2P fields are present.</p>
@@ -260,7 +321,6 @@ export function AdminA2pReviewPanel({
         </ul>
       )}
 
-      {/* Warnings */}
       {pkg.warnings.length > 0 && (
         <>
           <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Warnings</h3>
@@ -272,21 +332,24 @@ export function AdminA2pReviewPanel({
         </>
       )}
 
-      {/* Submission status */}
+      {/* Submission status + resource SIDs */}
       <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Submission status</h3>
       <dl className="adm-rows">
         <Row label="Local status">
-          <Badge tone={reviewStatusTone(sub.status ?? pkg.reviewStatus)}>
-            {REVIEW_STATUS_LABEL[sub.status ?? pkg.reviewStatus] ?? humanizeToken(sub.status ?? pkg.reviewStatus)}
+          <Badge tone={reviewStatusTone(status ?? pkg.reviewStatus)}>
+            {REVIEW_STATUS_LABEL[status ?? pkg.reviewStatus] ?? humanizeToken(status ?? pkg.reviewStatus)}
           </Badge>
         </Row>
+        {sub.submissionStep && <Row label="Current step">{humanizeToken(sub.submissionStep)}</Row>}
         <Row label="Tracking table">
           {sub.trackingAvailable ? <Badge tone="success">Available</Badge> : <Badge tone="warning">Unavailable (migration pending)</Badge>}
         </Row>
-        <Row label="Last reviewed/submitted">{fmtDateTime(sub.submittedAt)}</Row>
+        <Row label="Last submitted/updated">{fmtDateTime(sub.submittedAt)}</Row>
         {sub.submittedByEmail && <Row label="By"><span className="t-mono">{sub.submittedByEmail}</span></Row>}
-        {sub.brandRegistrationSid && <Row label="Brand registration SID"><span className="t-mono">{sub.brandRegistrationSid}</span></Row>}
-        {sub.campaignSid && <Row label="Campaign SID"><span className="t-mono">{sub.campaignSid}</span></Row>}
+        {sub.customerProfileSid && <Row label="Customer Profile">{statusLine(sub.customerProfileSid, sub.customerProfileStatus)}</Row>}
+        {sub.trustProductSid && <Row label="A2P Trust Product">{statusLine(sub.trustProductSid, sub.trustProductStatus)}</Row>}
+        {sub.brandRegistrationSid && <Row label="Brand Registration">{statusLine(sub.brandRegistrationSid, sub.brandStatus)}</Row>}
+        {sub.campaignSid && <Row label="A2P Campaign">{statusLine(sub.campaignSid, sub.campaignStatus)}</Row>}
         {sub.rejectionReason && <Row label="Rejection reason">{sub.rejectionReason}</Row>}
         {sub.lastErrorCode && <Row label="Last error">{humanizeToken(sub.lastErrorCode)}</Row>}
       </dl>
@@ -296,28 +359,74 @@ export function AdminA2pReviewPanel({
         <button type="button" className="btn btn-secondary btn-sm" disabled={syncing} onClick={runReadinessSync}>
           {syncing ? "Checking…" : "Run read-only readiness sync"}
         </button>
-
-        {pkg.submitEligible ? (
-          <button type="button" className="btn btn-primary btn-sm" disabled={submitting} onClick={submitForReview}>
-            {submitting ? "Recording…" : "Submit for A2P review (dry run)"}
+        {(sub.customerProfileSid || sub.brandRegistrationSid) && (
+          <button type="button" className="btn btn-secondary btn-sm" disabled={refreshing} onClick={refreshProviderStatus}>
+            {refreshing ? "Refreshing…" : "Refresh A2P provider status"}
           </button>
-        ) : (
-          <div className="adm-blocked" role="note">
-            <button type="button" className="btn btn-secondary btn-sm" disabled aria-disabled="true">
-              Submit for A2P review
-            </button>
-            <span className="t-small" style={{ color: "var(--text-muted)" }}>
-              {pkg.submitBlockedReason ?? "Not eligible for submission yet."}
-            </span>
-          </div>
         )}
       </div>
-      <p className="t-helper" style={{ margin: "var(--space-3) 0 0", color: "var(--text-muted)" }}>
-        Real Twilio A2P submission is disabled. In dry-run mode, submitting records that the package
-        was reviewed and is ready for manual submission in the Twilio console. It does not submit a
-        registration, does not change Twilio, and does not enable patient SMS.
-      </p>
+
+      {/* Submit area */}
+      <div style={{ marginTop: "var(--space-4)" }}>
+        {isApproved ? (
+          <p className="t-body"><Badge tone="success">Approved / covered</Badge> A2P registration is approved. No further submission is required.</p>
+        ) : isRejected ? (
+          <div className="adm-blocked" role="note">
+            <Badge tone="warning">Rejected</Badge>
+            <span className="t-small" style={{ color: "var(--text-muted)" }}>
+              {sub.rejectionReason ?? "A previous submission was rejected."} Operator review is required before resubmitting.
+            </span>
+          </div>
+        ) : pkg.submissionMode === "disabled" ? (
+          <DisabledSubmit reason="A2P submission is disabled in this environment." />
+        ) : !pkg.submitEligible ? (
+          <DisabledSubmit reason={pkg.submitBlockedReason ?? "Not eligible for submission yet."} />
+        ) : isDryRun ? (
+          <>
+            <button type="button" className="btn btn-primary btn-sm" disabled={submitting} onClick={submit}>
+              {submitting ? "Recording…" : "Submit for A2P review (dry run)"}
+            </button>
+            <p className="t-helper" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+              Dry-run mode: records a reviewed status. No Twilio submission, no SMS, no provider change.
+            </p>
+          </>
+        ) : isLive && pkg.liveSubmitArmed ? (
+          <>
+            <label className="t-small" style={{ display: "flex", gap: "var(--space-2)", alignItems: "flex-start", maxWidth: 640 }}>
+              <input type="checkbox" checked={confirmLive} onChange={(e) => setConfirmLive(e.target.checked)} style={{ marginTop: 3 }} />
+              <span>
+                I have reviewed the complete package above and authorize a <strong>real</strong> Twilio
+                A2P submission for this clinic. This creates billable, externally-vetted Twilio resources.
+              </span>
+            </label>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              style={{ marginTop: "var(--space-3)" }}
+              disabled={submitting || !confirmLive}
+              onClick={submit}
+            >
+              {submitting ? "Submitting…" : isResume ? "Resume A2P submission" : "Submit to Twilio for A2P Review"}
+            </button>
+            <p className="t-helper" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+              Live mode runs every currently-allowed Twilio step and stops at any async approval point
+              (e.g. brand vetting). It never enables patient SMS. Re-click to resume after approval.
+            </p>
+          </>
+        ) : (
+          <DisabledSubmit reason={pkg.liveSubmitBlockedReason ?? "Real submission is not armed for this clinic."} />
+        )}
+      </div>
     </div>
+  );
+}
+
+function statusLine(sid: string, status: string | null) {
+  return (
+    <span>
+      <span className="t-mono">{sid}</span>
+      {status && <Badge tone={status.toLowerCase().includes("approv") || status === "twilio-approved" ? "success" : "info"}>{humanizeToken(status)}</Badge>}
+    </span>
   );
 }
 
@@ -338,6 +447,15 @@ function NumberCard({ n }: { n: A2pReviewNumber }) {
         {n.blockingReason && <Row label="Blocking reason">{humanizeToken(n.blockingReason)}</Row>}
         <Row label="Last sync">{fmtDateTime(n.lastSyncedAt)}</Row>
       </dl>
+    </div>
+  );
+}
+
+function DisabledSubmit({ reason }: { reason: string }) {
+  return (
+    <div className="adm-blocked" role="note">
+      <button type="button" className="btn btn-secondary btn-sm" disabled aria-disabled="true">Submit for A2P review</button>
+      <span className="t-small" style={{ color: "var(--text-muted)" }}>{reason}</span>
     </div>
   );
 }

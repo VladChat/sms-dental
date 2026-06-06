@@ -9,13 +9,22 @@ import {
   type NumberSmsReadiness,
 } from "../db/sms-readiness";
 import { getA2pSubmissionState } from "../db/a2p-submissions";
-import { getA2pSubmissionMode, getAppDomainsSafe, isRealA2pSubmissionEnabled } from "../env";
+import {
+  getA2pSubmissionMode,
+  getA2pTrustHubConfig,
+  getAppDomainsSafe,
+  isClinicAllowedForLiveA2pSubmit,
+  isRealA2pSubmissionEnabled,
+} from "../env";
 import { runtimeConfig } from "../../config/runtime.config";
 import { BUSINESS_TYPE_LABELS, type BusinessType } from "../validation/url";
+import { buildCampaignContent } from "./campaign-content";
 import type {
+  A2pPlannedResource,
   A2pReviewMissingField,
   A2pReviewNumber,
   A2pReviewPackage,
+  JsonObject,
   NumberCoverageDisplay,
 } from "./types";
 
@@ -136,19 +145,32 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
 
   // ---- submission record (local state) ----
   const record = submissionState.record;
+  const ps = (record?.providerState ?? {}) as JsonObject;
+  const psStr = (key: string): string | null => {
+    const v = ps[key];
+    return typeof v === "string" && v.length > 0 ? v : null;
+  };
   const submission = {
     trackingAvailable: submissionState.available,
     status: record?.status ?? null,
     mode: record?.submissionMode ?? null,
+    submissionStep: record?.submissionStep ?? null,
     submittedAt: record?.submittedAt ?? null,
     submittedByEmail: record?.submittedByAdminEmail ?? null,
     lastStatusSyncedAt: record?.lastStatusSyncedAt ?? null,
     lastErrorCode: record?.lastErrorCode ?? null,
     lastErrorMessage: record?.lastErrorMessage ?? null,
     rejectionReason: record?.rejectionReason ?? null,
+    customerProfileSid:
+      record?.twilioSecondaryCustomerProfileSid ?? record?.twilioCustomerProfileSid ?? null,
+    trustProductSid: record?.twilioTrustProductSid ?? null,
     brandRegistrationSid: record?.twilioBrandRegistrationSid ?? null,
     campaignSid: record?.twilioCampaignSid ?? null,
     messagingServiceSid: record?.twilioMessagingServiceSid ?? null,
+    customerProfileStatus: psStr("customerProfileStatus"),
+    trustProductStatus: psStr("trustProductStatus"),
+    brandStatus: psStr("brandStatus"),
+    campaignStatus: psStr("campaignStatus"),
   };
 
   const clinicReadiness = readinessState.summary?.clinic
@@ -182,6 +204,31 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     submissionMode,
   });
 
+  // ---- live-submit arming (real provider mutation) ----
+  const trustHub = getA2pTrustHubConfig();
+  const { liveSubmitArmed, liveSubmitBlockedReason } = evaluateLiveArming({
+    clinicId,
+    submissionMode,
+    hasPrimaryProfile: Boolean(trustHub.primaryCustomerProfileSid),
+  });
+
+  const campaign = buildCampaignContent(clinic.name);
+
+  const plannedResources: A2pPlannedResource[] = [
+    planned("Secondary Customer Profile", record?.twilioSecondaryCustomerProfileSid ?? record?.twilioCustomerProfileSid ?? null),
+    planned("A2P Trust Product", record?.twilioTrustProductSid ?? null),
+    planned("Brand Registration", record?.twilioBrandRegistrationSid ?? null),
+    planned(`A2P Campaign (${campaign.usecase})`, record?.twilioCampaignSid ?? null),
+    planned("Messaging Service senders (per active number)", null, true),
+  ];
+
+  const feesRiskNotice = [
+    "Brand Registration incurs a one-time Twilio/TCR fee.",
+    "A2P Campaign registration incurs recurring monthly carrier fees.",
+    "Submissions enter external carrier vetting and cannot simply be undone.",
+    "Incorrect business identity (EIN, legal name, address) can cause rejection and re-vetting fees/delays.",
+  ];
+
   return {
     clinicId,
     clinicName: clinic.name,
@@ -198,10 +245,41 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     submission,
     submissionMode,
     realSubmissionEnabled,
+    liveSubmitArmed,
+    liveSubmitBlockedReason,
+    campaign,
+    plannedResources,
+    feesRiskNotice,
     reviewStatus,
     submitEligible,
     submitBlockedReason,
   };
+}
+
+function planned(label: string, reuseSid: string | null, alwaysCreate = false): A2pPlannedResource {
+  return {
+    key: label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
+    label,
+    willCreate: alwaysCreate ? true : reuseSid === null,
+    reuseSid,
+  };
+}
+
+function evaluateLiveArming(input: {
+  clinicId: string;
+  submissionMode: string;
+  hasPrimaryProfile: boolean;
+}): { liveSubmitArmed: boolean; liveSubmitBlockedReason: string | null } {
+  if (input.submissionMode !== "live") {
+    return { liveSubmitArmed: false, liveSubmitBlockedReason: "Real submission mode is not enabled (mode is not “live”)." };
+  }
+  if (!isClinicAllowedForLiveA2pSubmit(input.clinicId)) {
+    return { liveSubmitArmed: false, liveSubmitBlockedReason: "This clinic is not on the live A2P submission allowlist." };
+  }
+  if (!input.hasPrimaryProfile) {
+    return { liveSubmitArmed: false, liveSubmitBlockedReason: "No primary Customer Profile SID is configured for real submission." };
+  }
+  return { liveSubmitArmed: true, liveSubmitBlockedReason: null };
 }
 
 function buildNumber(
@@ -293,13 +371,6 @@ function evaluateSubmitEligibility(input: {
   if (input.submissionMode === "disabled") {
     return { submitEligible: false, submitBlockedReason: "A2P submission is disabled in this environment." };
   }
-  if (input.submissionMode === "live") {
-    // Real submission is never enabled in this build; the endpoint refuses it.
-    return {
-      submitEligible: false,
-      submitBlockedReason: "Real Twilio A2P submission is not enabled in this build.",
-    };
-  }
   if (!input.readinessAvailable) {
     return {
       submitEligible: false,
@@ -315,11 +386,11 @@ function evaluateSubmitEligibility(input: {
   if (!input.hasMessagingService) {
     return { submitEligible: false, submitBlockedReason: "No Messaging Service SID is configured." };
   }
-  if (input.recordStatus && ["submitted", "pending", "approved"].includes(input.recordStatus)) {
-    return {
-      submitEligible: false,
-      submitBlockedReason: "This clinic has already been submitted, is pending, or is approved.",
-    };
+  // Terminal states block submit. "submitted"/"pending"/"failed" stay eligible so
+  // the idempotent live state machine can RESUME (e.g. after async brand approval)
+  // without creating duplicate resources; dry_run simply re-records its review.
+  if (input.recordStatus === "approved") {
+    return { submitEligible: false, submitBlockedReason: "This clinic's A2P registration is already approved." };
   }
   if (input.recordStatus === "rejected") {
     return {
@@ -381,18 +452,30 @@ function notFoundPackage(
       trackingAvailable: false,
       status: null,
       mode: null,
+      submissionStep: null,
       submittedAt: null,
       submittedByEmail: null,
       lastStatusSyncedAt: null,
       lastErrorCode: null,
       lastErrorMessage: null,
       rejectionReason: null,
+      customerProfileSid: null,
+      trustProductSid: null,
       brandRegistrationSid: null,
       campaignSid: null,
       messagingServiceSid: null,
+      customerProfileStatus: null,
+      trustProductStatus: null,
+      brandStatus: null,
+      campaignStatus: null,
     },
     submissionMode,
     realSubmissionEnabled,
+    liveSubmitArmed: false,
+    liveSubmitBlockedReason: "Clinic not found.",
+    campaign: buildCampaignContent(null),
+    plannedResources: [],
+    feesRiskNotice: [],
     reviewStatus: "not_found",
     submitEligible: false,
     submitBlockedReason: "Clinic not found.",

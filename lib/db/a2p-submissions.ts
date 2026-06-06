@@ -2,12 +2,12 @@ import { getDb } from "./client";
 import type { A2pSubmissionMode, A2pSubmissionStatus, JsonObject } from "../a2p/types";
 
 // Local persistence for the platform-admin A2P/10DLC review/submission workflow.
-// One row per clinic (current state). This module performs NO Twilio mutation
-// and NO A2P submission — it only records the local review/submission status.
+// One row per clinic (current state + resumable step progress). This module does
+// NO Twilio mutation — it only records local state.
 //
-// All reads are wrapped so a missing table (additive migration not yet applied)
-// degrades to "unavailable" rather than throwing. Writes throw so the caller can
-// surface a clear, safe error and refuse the action.
+// Reads are wrapped so a missing table OR a missing newer column (additive
+// migration not yet applied) degrades gracefully rather than throwing. Writes
+// throw so the caller can fail closed and tell the operator to apply migrations.
 
 export type A2pSubmissionSelectedNumber = {
   phoneNumber: string;
@@ -18,6 +18,8 @@ export type A2pSubmissionRecord = {
   clinicId: string;
   status: A2pSubmissionStatus;
   submissionMode: A2pSubmissionMode;
+  submissionStep: string | null;
+  providerState: JsonObject;
   targetMessagingServiceSid: string | null;
   selectedPhoneNumbers: A2pSubmissionSelectedNumber[];
   twilioCustomerProfileSid: string | null;
@@ -41,6 +43,8 @@ type SubmissionRow = {
   clinic_id: string;
   status: A2pSubmissionStatus;
   submission_mode: A2pSubmissionMode;
+  submission_step?: string | null;
+  provider_state?: JsonObject | null;
   target_messaging_service_sid: string | null;
   selected_phone_numbers: A2pSubmissionSelectedNumber[] | null;
   twilio_customer_profile_sid: string | null;
@@ -60,9 +64,7 @@ type SubmissionRow = {
   updated_at: Date | null;
 };
 
-// Column list shared by every SELECT/RETURNING (passed to postgres.js as an
-// identifier array, mirroring the CLINIC_COLS pattern in lib/db/clinics.ts).
-const SUBMISSION_COLS = [
+const BASE_COLS = [
   "clinic_id", "status", "submission_mode", "target_messaging_service_sid",
   "selected_phone_numbers", "twilio_customer_profile_sid",
   "twilio_secondary_customer_profile_sid", "twilio_trust_product_sid",
@@ -72,15 +74,20 @@ const SUBMISSION_COLS = [
   "last_error_message", "rejection_reason", "created_at", "updated_at",
 ] as const;
 
+// Base columns + the resumable progress columns added by migration 20260608000100.
+const FULL_COLS = [...BASE_COLS, "submission_step", "provider_state"] as const;
+
 function mapRow(row: SubmissionRow): A2pSubmissionRecord {
   return {
     clinicId: row.clinic_id,
     status: row.status,
     submissionMode: row.submission_mode,
+    submissionStep: row.submission_step ?? null,
+    providerState: (row.provider_state && typeof row.provider_state === "object"
+      ? row.provider_state
+      : {}) as JsonObject,
     targetMessagingServiceSid: row.target_messaging_service_sid,
-    selectedPhoneNumbers: Array.isArray(row.selected_phone_numbers)
-      ? row.selected_phone_numbers
-      : [],
+    selectedPhoneNumbers: Array.isArray(row.selected_phone_numbers) ? row.selected_phone_numbers : [],
     twilioCustomerProfileSid: row.twilio_customer_profile_sid,
     twilioSecondaryCustomerProfileSid: row.twilio_secondary_customer_profile_sid,
     twilioTrustProductSid: row.twilio_trust_product_sid,
@@ -99,24 +106,37 @@ function mapRow(row: SubmissionRow): A2pSubmissionRecord {
   };
 }
 
-// Tri-state read: available=false when the table is unreachable (migration not
-// applied), available=true with record=null when present but no row yet.
+// Tri-state read. Tries the full column set (post-migration), falls back to the
+// base columns if the progress columns don't exist yet, and reports
+// available=false only when the table itself is unreachable.
 export async function getA2pSubmissionState(
   clinicId: string,
 ): Promise<{ available: boolean; record: A2pSubmissionRecord | null }> {
   const sql = getDb();
   try {
     const rows = await sql<SubmissionRow[]>`
-      select ${sql(SUBMISSION_COLS as unknown as string[])}
+      select ${sql(FULL_COLS as unknown as string[])}
       from public.clinic_a2p_submissions
       where clinic_id = ${clinicId}
       limit 1
     `;
     return { available: true, record: rows[0] ? mapRow(rows[0]) : null };
   } catch {
-    return { available: false, record: null };
+    try {
+      const rows = await sql<SubmissionRow[]>`
+        select ${sql(BASE_COLS as unknown as string[])}
+        from public.clinic_a2p_submissions
+        where clinic_id = ${clinicId}
+        limit 1
+      `;
+      return { available: true, record: rows[0] ? mapRow(rows[0]) : null };
+    } catch {
+      return { available: false, record: null };
+    }
   }
 }
+
+// ---- dry-run write (unchanged column set; works without 20260608 migration) ----
 
 export type UpsertA2pSubmissionInput = {
   clinicId: string;
@@ -130,9 +150,6 @@ export type UpsertA2pSubmissionInput = {
   payloadSnapshot: JsonObject | null;
 };
 
-// Idempotent per-clinic upsert of the current review/submission state. Throws on
-// DB error (including a missing table) so the caller can fail closed and tell the
-// operator to apply the additive migration. Never mutates Twilio.
 export async function upsertA2pSubmission(
   input: UpsertA2pSubmissionInput,
 ): Promise<A2pSubmissionRecord> {
@@ -158,9 +175,92 @@ export async function upsertA2pSubmission(
       submitted_by_admin_user_id = excluded.submitted_by_admin_user_id,
       submitted_by_admin_email = excluded.submitted_by_admin_email,
       payload_snapshot = excluded.payload_snapshot
-    returning ${sql(SUBMISSION_COLS as unknown as string[])}
+    returning ${sql(BASE_COLS as unknown as string[])}
   `;
   const row = rows[0];
   if (!row) throw new Error("a2p submission upsert returned no row");
+  return mapRow(row);
+}
+
+// ---- live state-machine progress write (requires 20260608 migration) ----
+
+export type A2pProgressInput = {
+  clinicId: string;
+  status?: A2pSubmissionStatus;
+  submissionStep?: string | null;
+  // Merged into provider_state (jsonb ||). Must be redacted (no full EIN/secrets).
+  providerStatePatch?: JsonObject;
+  targetMessagingServiceSid?: string | null;
+  customerProfileSid?: string | null;
+  secondaryCustomerProfileSid?: string | null;
+  trustProductSid?: string | null;
+  brandRegistrationSid?: string | null;
+  campaignSid?: string | null;
+  messagingServiceSid?: string | null;
+  selectedPhoneNumbers?: A2pSubmissionSelectedNumber[];
+  submittedAt?: Date | null;
+  submittedByAdminUserId?: string | null;
+  submittedByAdminEmail?: string | null;
+  lastStatusSyncedAt?: Date | null;
+  lastErrorCode?: string | null;
+  lastErrorMessage?: string | null;
+  rejectionReason?: string | null;
+};
+
+// Idempotent per-clinic progress upsert. SIDs are coalesced (never nulled out by
+// a later step) and provider_state is JSON-merged so partial progress is durable
+// and retry-safe. Throws if the table/columns are missing so live mode can fail
+// closed and tell the operator to apply migration 20260608000100.
+export async function upsertA2pSubmissionProgress(
+  input: A2pProgressInput,
+): Promise<A2pSubmissionRecord> {
+  const sql = getDb();
+  const patch = input.providerStatePatch ?? {};
+  const sel = input.selectedPhoneNumbers ?? null;
+  const rows = await sql<SubmissionRow[]>`
+    insert into public.clinic_a2p_submissions
+      (clinic_id, status, submission_mode, submission_step, provider_state,
+       target_messaging_service_sid, selected_phone_numbers,
+       twilio_customer_profile_sid, twilio_secondary_customer_profile_sid,
+       twilio_trust_product_sid, twilio_brand_registration_sid,
+       twilio_campaign_sid, twilio_messaging_service_sid,
+       submitted_at, submitted_by_admin_user_id, submitted_by_admin_email,
+       last_status_synced_at, last_error_code, last_error_message, rejection_reason)
+    values
+      (${input.clinicId}, ${input.status ?? "submitted"}, 'live',
+       ${input.submissionStep ?? null}, ${sql.json(patch)},
+       ${input.targetMessagingServiceSid ?? null},
+       ${sel ? sql.json(sel) : sql.json([])},
+       ${input.customerProfileSid ?? null}, ${input.secondaryCustomerProfileSid ?? null},
+       ${input.trustProductSid ?? null}, ${input.brandRegistrationSid ?? null},
+       ${input.campaignSid ?? null}, ${input.messagingServiceSid ?? null},
+       ${input.submittedAt ?? null}, ${input.submittedByAdminUserId ?? null},
+       ${input.submittedByAdminEmail ?? null}, ${input.lastStatusSyncedAt ?? null},
+       ${input.lastErrorCode ?? null}, ${input.lastErrorMessage ?? null},
+       ${input.rejectionReason ?? null})
+    on conflict (clinic_id) do update set
+      status = coalesce(${input.status ?? null}, public.clinic_a2p_submissions.status),
+      submission_mode = 'live',
+      submission_step = coalesce(${input.submissionStep ?? null}, public.clinic_a2p_submissions.submission_step),
+      provider_state = public.clinic_a2p_submissions.provider_state || ${sql.json(patch)},
+      target_messaging_service_sid = coalesce(${input.targetMessagingServiceSid ?? null}, public.clinic_a2p_submissions.target_messaging_service_sid),
+      selected_phone_numbers = ${sel ? sql.json(sel) : sql`public.clinic_a2p_submissions.selected_phone_numbers`},
+      twilio_customer_profile_sid = coalesce(${input.customerProfileSid ?? null}, public.clinic_a2p_submissions.twilio_customer_profile_sid),
+      twilio_secondary_customer_profile_sid = coalesce(${input.secondaryCustomerProfileSid ?? null}, public.clinic_a2p_submissions.twilio_secondary_customer_profile_sid),
+      twilio_trust_product_sid = coalesce(${input.trustProductSid ?? null}, public.clinic_a2p_submissions.twilio_trust_product_sid),
+      twilio_brand_registration_sid = coalesce(${input.brandRegistrationSid ?? null}, public.clinic_a2p_submissions.twilio_brand_registration_sid),
+      twilio_campaign_sid = coalesce(${input.campaignSid ?? null}, public.clinic_a2p_submissions.twilio_campaign_sid),
+      twilio_messaging_service_sid = coalesce(${input.messagingServiceSid ?? null}, public.clinic_a2p_submissions.twilio_messaging_service_sid),
+      submitted_at = coalesce(public.clinic_a2p_submissions.submitted_at, ${input.submittedAt ?? null}),
+      submitted_by_admin_user_id = coalesce(${input.submittedByAdminUserId ?? null}, public.clinic_a2p_submissions.submitted_by_admin_user_id),
+      submitted_by_admin_email = coalesce(${input.submittedByAdminEmail ?? null}, public.clinic_a2p_submissions.submitted_by_admin_email),
+      last_status_synced_at = coalesce(${input.lastStatusSyncedAt ?? null}, public.clinic_a2p_submissions.last_status_synced_at),
+      last_error_code = ${input.lastErrorCode ?? null},
+      last_error_message = ${input.lastErrorMessage ?? null},
+      rejection_reason = coalesce(${input.rejectionReason ?? null}, public.clinic_a2p_submissions.rejection_reason)
+    returning ${sql(FULL_COLS as unknown as string[])}
+  `;
+  const row = rows[0];
+  if (!row) throw new Error("a2p submission progress upsert returned no row");
   return mapRow(row);
 }

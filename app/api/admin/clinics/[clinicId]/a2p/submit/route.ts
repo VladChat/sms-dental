@@ -11,6 +11,7 @@ import { recordAdminAuditEvent } from "@/lib/db/admin/audit";
 import { buildA2pReviewPackage } from "@/lib/a2p/review-package";
 import { upsertA2pSubmission } from "@/lib/db/a2p-submissions";
 import { getA2pSubmissionMode } from "@/lib/env";
+import { A2pSubmissionDisabledError, runRealA2pSubmission } from "@/lib/twilio/a2p-submission";
 import type { A2pReviewPackage, JsonObject } from "@/lib/a2p/types";
 
 export const runtime = "nodejs";
@@ -21,15 +22,13 @@ const UUID_RE =
 
 // POST /api/admin/clinics/[clinicId]/a2p/submit
 //
-// Platform-admin-only A2P review submission. Re-builds the review package
-// server-side, re-validates required fields, refuses duplicates, and persists a
-// LOCAL review/submission status. In the default "dry_run" mode this records a
-// "dry_run_reviewed" status meaning the operator reviewed the package and it is
-// ready for manual submission in the Twilio console.
+// Platform-admin-only A2P review submission. Re-builds and re-validates the
+// review package server-side, refuses terminal/ineligible states, then either:
+//   - dry_run mode: records a local "dry_run_reviewed" status (no Twilio), or
+//   - live mode (armed for this clinic): runs the REAL, idempotent, resumable
+//     Twilio A2P submission state machine.
 //
-// It NEVER submits a real A2P/10DLC registration, NEVER mutates Twilio, NEVER
-// attaches/detaches Messaging Service senders, NEVER sends SMS, and NEVER
-// enables sms_recovery_enabled. "live" mode is refused outright.
+// It NEVER sends SMS and NEVER enables sms_recovery_enabled.
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ clinicId: string }> },
@@ -41,30 +40,17 @@ export async function POST(
   }
 
   const { clinicId } = await ctx.params;
-  if (!UUID_RE.test(clinicId)) {
-    return jsonError(404, "not_found", "Clinic not found.");
-  }
+  if (!UUID_RE.test(clinicId)) return jsonError(404, "not_found", "Clinic not found.");
 
   const pkg = await buildA2pReviewPackage(clinicId).catch(() => null);
-  if (!pkg || !pkg.found) {
-    return jsonError(404, "not_found", "Clinic not found.");
-  }
+  if (!pkg || !pkg.found) return jsonError(404, "not_found", "Clinic not found.");
 
   const mode = getA2pSubmissionMode();
-
-  // Mode gate. Default config is "dry_run". Real submission is never performed.
   if (mode === "disabled") {
     return jsonError(409, "submission_disabled", "A2P submission is disabled in this environment.");
   }
-  if (mode === "live") {
-    return jsonError(
-      409,
-      "real_submission_disabled",
-      "Real Twilio A2P submission is not enabled in this build. No provider changes were made.",
-    );
-  }
 
-  // --- server-side re-validation (never trust the client) ---
+  // Shared server-side re-validation (never trust the client).
   if (!pkg.readinessAvailable) {
     return jsonError(
       409,
@@ -77,56 +63,48 @@ export async function POST(
       missing: pkg.missingFields.map((f) => f.key),
     });
   }
-
-  // --- duplicate / terminal-state protection ---
-  const currentStatus = pkg.submission.status;
-  if (currentStatus && ["submitted", "pending", "approved"].includes(currentStatus)) {
-    return jsonError(
-      409,
-      "already_submitted",
-      "This clinic has already been submitted, is pending, or is approved.",
-    );
-  }
-  if (currentStatus === "rejected") {
-    return jsonError(
-      409,
-      "rejected_no_resubmit",
-      "A previous submission was rejected. Operator review is required before resubmitting.",
-    );
-  }
   if (!pkg.submitEligible) {
     return jsonError(409, "not_eligible", pkg.submitBlockedReason ?? "This clinic is not eligible for submission.");
   }
 
-  // --- persist the dry-run reviewed status (no Twilio mutation) ---
-  const selectedPhoneNumbers = pkg.numbers.map((n) => ({
-    phoneNumber: n.phoneNumber,
-    twilioPhoneNumberSid: n.twilioPhoneNumberSid,
-  }));
+  // Audit the attempt before any provider call.
+  await recordAdminAuditEvent({
+    adminUserId: admin.userId,
+    adminEmail: admin.email,
+    action: "clinic.a2p.submit_attempt",
+    targetType: "clinic",
+    targetId: clinicId,
+    clinicId,
+    afterState: { mode, review_status: pkg.reviewStatus, number_count: pkg.numbers.length },
+    metadata: { authSource: admin.source },
+  }).catch(() => {});
 
-  let record;
-  try {
-    record = await upsertA2pSubmission({
-      clinicId,
-      status: "dry_run_reviewed",
-      submissionMode: "dry_run",
-      targetMessagingServiceSid: pkg.messagingServiceSid,
-      selectedPhoneNumbers,
-      submittedAt: new Date(),
-      submittedByAdminUserId: admin.userId,
-      submittedByAdminEmail: admin.email,
-      payloadSnapshot: redactedSnapshot(pkg),
-    });
-  } catch {
-    return jsonError(
-      503,
-      "tracking_unavailable",
-      "A2P submission tracking is unavailable. Apply the additive migration " +
-        "20260607000100_a2p_submission_tracking.sql in the target database and try again.",
-    );
-  }
-
-  try {
+  // ---------------- dry_run mode (no Twilio mutation) ----------------
+  if (mode === "dry_run") {
+    const selectedPhoneNumbers = pkg.numbers.map((n) => ({
+      phoneNumber: n.phoneNumber,
+      twilioPhoneNumberSid: n.twilioPhoneNumberSid,
+    }));
+    let record;
+    try {
+      record = await upsertA2pSubmission({
+        clinicId,
+        status: "dry_run_reviewed",
+        submissionMode: "dry_run",
+        targetMessagingServiceSid: pkg.messagingServiceSid,
+        selectedPhoneNumbers,
+        submittedAt: new Date(),
+        submittedByAdminUserId: admin.userId,
+        submittedByAdminEmail: admin.email,
+        payloadSnapshot: redactedSnapshot(pkg),
+      });
+    } catch {
+      return jsonError(
+        503,
+        "tracking_unavailable",
+        "A2P submission tracking is unavailable. Apply migration 20260607000100_a2p_submission_tracking.sql and try again.",
+      );
+    }
     await recordAdminAuditEvent({
       adminUserId: admin.userId,
       adminEmail: admin.email,
@@ -134,26 +112,80 @@ export async function POST(
       targetType: "clinic",
       targetId: clinicId,
       clinicId,
-      afterState: {
-        status: record.status,
-        mode: "dry_run",
-        number_count: selectedPhoneNumbers.length,
-        review_status: pkg.reviewStatus,
-      },
+      afterState: { status: record.status, mode: "dry_run", number_count: selectedPhoneNumbers.length },
       metadata: { authSource: admin.source, real_submission: false },
+    }).catch(() => {});
+
+    return jsonOk({
+      ok: true,
+      status: record.status,
+      mode: "dry_run",
+      realSubmission: false,
+      message:
+        "Recorded a dry-run review. The A2P package is marked ready for manual submission. " +
+        "No A2P registration was submitted and no Twilio resources were changed.",
     });
-  } catch {
-    // Persist already succeeded; never fail the operator on an audit hiccup.
   }
 
+  // ---------------- live mode (REAL Twilio submission) ----------------
+  if (!pkg.liveSubmitArmed) {
+    return jsonError(409, "not_armed", pkg.liveSubmitBlockedReason ?? "Real A2P submission is not armed for this clinic.");
+  }
+
+  let result;
+  try {
+    result = await runRealA2pSubmission({
+      clinicId,
+      adminUserId: admin.userId,
+      adminEmail: admin.email,
+    });
+  } catch (err) {
+    if (err instanceof A2pSubmissionDisabledError) {
+      return jsonError(409, "submission_disabled", err.message);
+    }
+    await recordAdminAuditEvent({
+      adminUserId: admin.userId,
+      adminEmail: admin.email,
+      action: "clinic.a2p.submit_failed",
+      targetType: "clinic",
+      targetId: clinicId,
+      clinicId,
+      afterState: { mode: "live" },
+      metadata: { authSource: admin.source, real_submission: true },
+    }).catch(() => {});
+    return jsonError(
+      502,
+      "provider_error",
+      "The A2P submission could not be completed against the provider. Created resources are reused on retry.",
+    );
+  }
+
+  await recordAdminAuditEvent({
+    adminUserId: admin.userId,
+    adminEmail: admin.email,
+    action: result.ok ? "clinic.a2p.submit_live" : "clinic.a2p.submit_failed",
+    targetType: "clinic",
+    targetId: clinicId,
+    clinicId,
+    afterState: {
+      mode: "live",
+      status: result.status,
+      step: result.step,
+      created_count: result.createdResources.length,
+    },
+    metadata: { authSource: admin.source, real_submission: true },
+  }).catch(() => {});
+
   return jsonOk({
-    ok: true,
-    status: record.status,
-    mode: "dry_run",
-    realSubmission: false,
-    message:
-      "Recorded a dry-run review. The A2P package is marked ready for manual submission in the Twilio console. " +
-      "No A2P registration was submitted and no Twilio resources were changed.",
+    ok: result.ok,
+    status: result.status,
+    mode: "live",
+    realSubmission: true,
+    step: result.step,
+    message: result.message,
+    createdResources: result.createdResources,
+    providerErrors: result.providerErrors,
+    nextAction: result.nextAction,
   });
 }
 
@@ -177,6 +209,7 @@ function redactedSnapshot(pkg: A2pReviewPackage): JsonObject {
     business_page: pkg.urls.businessPage,
     privacy_policy: pkg.urls.privacyPolicy,
     sms_terms: pkg.urls.smsTerms,
+    campaign_usecase: pkg.campaign.usecase,
     numbers: pkg.numbers.map((n) => ({
       phone_number: n.phoneNumber,
       pn_sid: n.twilioPhoneNumberSid,

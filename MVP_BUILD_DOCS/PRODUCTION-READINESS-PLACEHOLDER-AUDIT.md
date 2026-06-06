@@ -1,7 +1,7 @@
 # Production Readiness - Real vs Blocked Audit
 
 Status: Active canonical readiness reference
-Last updated: 2026-06-07
+Last updated: 2026-06-08
 
 This document is the current "what is real vs blocked" source of truth. When it
 conflicts with older numbered build-spec docs, trust this document and the
@@ -28,7 +28,7 @@ Vercel env was changed, and no secrets were printed.
 | Messaging Service attachment | Blocked/reconcile | Code attempts real attachment and fails closed, but read-only Twilio audit did not list either clinic number in the configured Messaging Service. |
 | A2P/10DLC | Blocked | No Twilio Brand registrations or service campaigns found. Live patient SMS is not production-safe. |
 | SMS readiness tracking | Pass in code; pending operational sync | Additive readiness tables, read-only admin sync, admin launch guard, and live send guard now fail closed when A2P/Messaging Service coverage is missing, stale, or unsynced. |
-| A2P approval review workflow | Review-only (dry-run) | Platform-admin-only review package + dry-run submit. Builds the clinic/campaign/service-aware A2P package, shows per-number coverage, and records a local "reviewed / ready for manual submission" status. No real Twilio A2P submission, no provider mutation. Clinic owners cannot submit. |
+| A2P approval review workflow | Implemented; real submission OFF by default | Platform-admin-only review package + one-click submit. Real Twilio A2P submission (Trust Hub Customer Profile + A2P Trust Product + Brand + Campaign + sender attachment) is implemented as an idempotent/resumable state machine, but the committed `submissionMode` default is `dry_run`. Real ("live") submission is armed only when mode=live AND the clinic is allowlisted AND a primary Customer Profile SID is configured. Clinic owners cannot submit. |
 | SMS recovery | Blocked by design | `sms_recovery_enabled=false`; outbound SMS count is zero. Do not enable until A2P and Messaging Service coverage are confirmed. |
 | Usage metering/overages | Not built | Prices are documented; no live metering or overage billing exists. |
 | Staff invites/team access | Not built | Workspace exists, real owner membership exists, but staff invitation/acceptance is still disabled/sample-only. |
@@ -183,14 +183,15 @@ A2P/10DLC:
 - Live Stripe billing.
 - A2P/10DLC Brand submission/status sync.
 - A2P Campaign submission/status sync.
-- Applying the SMS readiness migration in each target database and running the
-  read-only sync before any launch decision.
-- Applying the additive A2P submission-tracking migration
-  (`20260607000100_a2p_submission_tracking.sql`) in each target database.
-- Real Twilio A2P submission (Customer Profile, Trust Product, Brand, Campaign,
-  Messaging Service sender attachment). The new admin workflow is
-  review-only/dry-run and never mutates Twilio.
-- Live patient SMS recovery.
+- Running the read-only sync before any launch decision (readiness migration is
+  applied in production).
+- Applying the additive A2P submission-state migration
+  (`20260608000100_a2p_submission_state.sql`) — required before LIVE submission.
+- Arming real A2P submission: it is implemented but OFF by committed default
+  (`submissionMode=dry_run`). Live submission requires mode=live + the per-clinic
+  allowlist + a configured `trustHub.primaryCustomerProfileSid`, then a platform
+  admin clicking Submit. No real provider mutation happens until then.
+- Live patient SMS recovery (remains fail-closed even after A2P approval).
 - Messaging Service attachment reconciliation for current production numbers.
 - Twilio emergency-status refresh/reconciliation when Twilio moves from pending
   to registered after assignment.
@@ -294,16 +295,30 @@ Dry-run vs real submission:
   submission was rejected, or the mode is disabled. The endpoint re-validates all
   of this server-side and refuses duplicates.
 
-Exact steps required BEFORE any real A2P submission:
+Real one-click submission (implemented 2026-06-08): when armed, a single Submit
+click runs the real, idempotent, resumable Twilio Trust Hub flow in
+`lib/twilio/a2p-submission.ts` — business + representative EndUsers, Address +
+SupportingDocument, Secondary Customer Profile (assign + evaluate + submit), A2P
+Trust Product (assign + evaluate + submit), Brand Registration, A2P Campaign, and
+adding the clinic's PN SIDs as Messaging Service senders. Created SIDs are
+persisted after each step and reused on retry, so re-clicking resumes after async
+brand/campaign approval without creating duplicates. The full EIN is sent to
+Twilio but never logged or stored.
 
-1. Apply both additive migrations in the target DB
-   (`20260606000100_sms_readiness_tracking.sql` and
-   `20260607000100_a2p_submission_tracking.sql`).
-2. Run the read-only readiness sync for the clinic.
-3. Implement `lib/twilio/a2p-submission.ts` real provider calls behind an
-   explicit, confirmation-gated, audited, default-off server config flag.
+Exact steps required to ARM real A2P submission (deliberately not armed by default):
+
+1. Apply the additive state migration `20260608000100_a2p_submission_state.sql`
+   in the target DB (the readiness + submission-tracking migrations are already
+   applied in production).
+2. Set `runtimeConfig.a2p.trustHub.primaryCustomerProfileSid` to the account's
+   primary Customer Profile SID, and confirm the Trust Hub policy SIDs, brand
+   constants, and campaign use case are correct for the Twilio account.
+3. Set `runtimeConfig.a2p.submissionMode = "live"` and ensure the clinic is in
+   `liveSubmitClinicIds` (Fairstone is). Redeploy.
 4. Confirm fees/risks (one-time Brand fee, recurring Campaign fees, external
-   vetting) and obtain owner approval.
+   vetting that cannot be undone) and obtain owner approval.
+5. A platform admin reviews the package and clicks Submit. No real mutation
+   occurs before that click.
 
 Exact steps required AFTER approval before live SMS:
 
@@ -314,12 +329,12 @@ Exact steps required AFTER approval before live SMS:
 3. Only then, with Vlad's approval, use the admin launch action to set
    `sms_recovery_enabled=true`. Live send still fails closed otherwise.
 
-Production migration status: both the readiness migration and the new A2P
-submission-tracking migration are PENDING in production (read-only check on
-2026-06-07 confirmed `clinic_sms_readiness`, `clinic_sms_number_readiness`, and
-`clinic_a2p_submissions` do not exist). The admin page degrades gracefully — it
-shows "SMS readiness data unavailable", blocks submit, and blocks SMS enablement
-until they are applied.
+Production migration status: the readiness migrations
+(`20260606000100_sms_readiness_tracking.sql`, `20260607000100_a2p_submission_tracking.sql`)
+ARE applied in production. The new state migration
+`20260608000100_a2p_submission_state.sql` is PENDING — apply it before arming
+live mode. The admin page degrades gracefully if the progress columns are absent
+(it falls back to the base columns); live submission requires the state migration.
 
 ---
 
@@ -337,5 +352,13 @@ Validation for the 2026-06-07 A2P approval review workflow:
 - `npm run build` - pass.
 - `git diff --check` - pass.
 
+Validation for the 2026-06-08 real A2P submission workflow:
+
+- `npm run typecheck` - pass.
+- `npm run build` - pass.
+- `git diff --check` - pass.
+
 No SMS was sent, no Twilio configuration was changed, no number was purchased,
-no A2P registration was submitted, and `sms_recovery_enabled` remained unchanged.
+NO real A2P registration was submitted (live mode stays off by committed
+default; no real submit was run during development), and `sms_recovery_enabled`
+remained unchanged.

@@ -4982,3 +4982,71 @@ Safety: no SMS sent; Twilio calls read-only only (no mutation); no Messaging
 Service attach/detach; no A2P submitted; no Brand/Campaign created; no Stripe
 change; no Vercel env change; `sms_recovery_enabled` unchanged; no secrets
 printed.
+
+---
+
+## 2026-06-08 — Real one-click platform-admin A2P submission workflow (off by default)
+
+Implemented the REAL Twilio A2P/10DLC submission flow behind the existing
+review-first platform-admin workflow. Real submission is OFF by committed
+default; no real submit was run during development.
+
+Twilio API research (verified against installed SDK + official docs, not memory):
+
+- Installed SDK is `twilio@5.13.1` (exposes `trusthub.v1` customerProfiles /
+  endUsers / supportingDocuments / trustProducts + entity-assignment/evaluation
+  subresources, and `messaging.v1` brandRegistrations + service usAppToPerson /
+  phoneNumbers). Create-option shapes + status enums read from the `.d.ts` types.
+- Fixed policy SIDs from the Twilio A2P ISV API onboarding docs: Secondary
+  Customer Profile `RNdfbf3fae0e1107f8aded0e7cead80bf5`; A2P Trust Product
+  `RNb0d4771c2c98518d916a3d4cd70a8f8b`. EndUser types
+  `customer_profile_business_information`, `authorized_representative_1`,
+  `us_a2p_messaging_profile_information` and the 19-step REST sequence confirmed.
+- No API step is impossible for the standard ISV path; brand/campaign vetting is
+  asynchronous, so the flow stops-and-persists at pending and resumes on re-click.
+
+Design decision (Part C): real "live" mode is implemented but NOT armed by
+committed default (`a2p.submissionMode="dry_run"`), mirroring the
+`twilioNumberPurchaseMode` allowlist pattern. Rationale: real submission creates
+billable, externally-vetted, hard-to-reverse resources, needs an
+account-specific primary Customer Profile SID, and cannot be safely
+execute-tested here. Arming requires mode=live + per-clinic allowlist +
+configured `trustHub.primaryCustomerProfileSid` + an admin Submit click.
+`isRealA2pSubmissionEnabled()` is now config-driven (no longer hard-false).
+
+New files:
+
+- `lib/twilio/a2p-submission.ts` — real, idempotent, resumable state machine
+  (`runRealA2pSubmission`) + read-only `readA2pProviderStatus`. Persists each
+  created SID; reuses on retry; full EIN sent to Twilio but never logged/stored.
+- `lib/a2p/campaign-content.ts` — fixed missed-call-recovery campaign content
+  (use case, description, opt-in/message-flow, sample messages, STOP/HELP).
+- `app/api/admin/clinics/[clinicId]/a2p/status/route.ts` — read-only provider
+  status refresh (platform-admin guarded, audited).
+- `supabase/migrations/20260608000100_a2p_submission_state.sql` — additive
+  `submission_step` + `provider_state` columns for resumable progress.
+
+Changed files: `config/runtime.config.ts` (a2p block: live mode, allowlist,
+Trust Hub policy SIDs, primary profile, brand/campaign constants), `lib/env.ts`
+(config-driven gating helpers), `lib/a2p/types.ts` + `lib/a2p/review-package.ts`
+(campaign content, planned resources, fees/risk, live-arming, richer submission
+info), `lib/db/a2p-submissions.ts` (resumable progress upsert + degradation-safe
+read), `app/api/admin/clinics/[clinicId]/a2p/submit/route.ts` (live vs dry_run,
+before/after/failure audits), the admin A2P review panel (full package +
+confirmation-gated submit + status refresh), and `AdminUI` audit labels.
+
+Migration status: `20260608000100_a2p_submission_state.sql` is PENDING in
+production (apply before arming live mode). The submissions read path falls back
+to the base columns if the new columns are absent, so dry-run keeps working.
+
+Live SMS unchanged: `sendRecoverySms()`, `SMS_RECOVERY_MODE`, the readiness
+guards, and `sms_recovery_enabled` were not touched. Live SMS remains fail-closed
+after A2P approval until coverage is verified and Vlad separately enables it.
+
+Validation: `npm run typecheck` pass; `npm run build` pass; `git diff --check`
+pass.
+
+Safety: no SMS sent; NO real A2P submission run (live mode off; no real submit
+during development); no Twilio mutation during validation; no Messaging Service
+attach/detach; no Stripe change; no Vercel env change; no production DB migration
+applied; `sms_recovery_enabled` unchanged; no secrets or full EIN printed.

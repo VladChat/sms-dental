@@ -2463,3 +2463,74 @@ Safety invariants: the review workflow performs only DB reads + the existing
 read-only Twilio readiness sync. It never submits A2P, never attaches/detaches
 Messaging Service senders, never buys/releases numbers, never sends SMS, and
 never enables `sms_recovery_enabled`.
+
+---
+
+## Real one-click A2P submission (live mode) — 2026-06-08
+
+A single platform-admin Submit click can now perform the REAL Twilio A2P/10DLC
+registration for a clinic. This creates BILLABLE, externally-vetted,
+hard-to-reverse resources, so it is OFF by committed default and must be armed
+deliberately.
+
+What the real submit does (`lib/twilio/a2p-submission.ts`, idempotent + resumable):
+
+1. EndUser `customer_profile_business_information` (legal name, business type,
+   industry, EIN, regions, identity, website). The full EIN is sent to Twilio but
+   never logged or persisted.
+2. EndUser `authorized_representative_1` (rep name, email, phone, title).
+3. Address (v2010) + SupportingDocument `customer_profile_address`.
+4. Secondary Customer Profile (policy `RNdfbf3fae0e1107f8aded0e7cead80bf5`):
+   assign the two EndUsers + supporting doc + the account PRIMARY profile,
+   evaluate, then submit (`pending-review`).
+5. EndUser `us_a2p_messaging_profile_information` + A2P Trust Product (policy
+   `RNb0d4771c2c98518d916a3d4cd70a8f8b`): assign + evaluate + submit.
+6. Brand Registration (references both bundles) — async vetting.
+7. A2P Campaign / UsAppToPerson (requires APPROVED brand) — async.
+8. Add the clinic's active PN SIDs as Messaging Service senders.
+
+Each created SID is persisted to `clinic_a2p_submissions` after the step; the flow
+stops-and-persists at any async approval point (e.g. brand vetting) with status
+`pending` and a clear next step. Re-clicking Submit resumes from stored SIDs
+(no duplicate resources). A read-only "Refresh A2P provider status" action
+(`POST /api/admin/clinics/:clinicId/a2p/status`) reads back Customer Profile /
+Trust Product / Brand status without mutating anything.
+
+How to ARM live mode (all four required):
+
+1. Apply `supabase/migrations/20260608000100_a2p_submission_state.sql` (adds
+   `submission_step` + `provider_state` columns). Additive/idempotent.
+2. In `config/runtime.config.ts`, set `a2p.trustHub.primaryCustomerProfileSid`
+   to the account's primary Customer Profile SID, and verify the Trust Hub policy
+   SIDs, brand constants (industry, identity, company_type, business_type
+   mapping), and campaign use case are correct for the Twilio account. These are
+   account/policy-specific — verify before the first real submit.
+3. Set `a2p.submissionMode = "live"` and confirm the clinic id is in
+   `a2p.liveSubmitClinicIds` (Fairstone is). Redeploy.
+4. A platform admin opens the clinic's A2P review tab, reviews the full package,
+   ticks the authorization checkbox, and clicks "Submit to Twilio for A2P Review".
+
+Endpoints (all `resolvePlatformAdmin`-guarded, audited):
+
+- `POST /api/admin/clinics/:clinicId/a2p/submit` — dry_run records a review;
+  live runs the real state machine.
+- `POST /api/admin/clinics/:clinicId/a2p/status` — read-only provider status refresh.
+- `POST /api/admin/clinics/:clinicId/sms-readiness/sync` — read-only readiness sync.
+
+Verify Fairstone after a real submit:
+
+1. Refresh A2P provider status; confirm Brand reaches `APPROVED` (async, can take
+   time) and the Campaign is created.
+2. Run the read-only readiness sync; confirm each number reports
+   `messaging_service_sender_status='covered'`, `a2p_campaign_coverage_status='covered'`,
+   `production_safe=true`, fresh.
+
+Live SMS is NOT enabled by submission. After approval + verified coverage, and
+only with Vlad's separate approval, the admin launch action sets
+`sms_recovery_enabled=true`; `sendRecoverySms()` still fails closed until every
+guard passes.
+
+Safety invariants: real provider mutation happens ONLY on an authenticated admin
+Submit click in live mode for an allowlisted clinic. Dry-run and disabled modes
+never mutate Twilio. The workflow never sends SMS, never enables
+`sms_recovery_enabled`, and never changes `SMS_RECOVERY_MODE`.

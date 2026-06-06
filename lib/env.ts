@@ -240,12 +240,63 @@ export function getA2pSubmissionMode(): A2pSubmissionMode {
   return mode === "dry_run" || mode === "live" ? mode : "disabled";
 }
 
-// Whether REAL Twilio A2P submission is enabled. This is hard-wired OFF in this
-// build: even when the config mode is "live", real provider submission is not
-// implemented (see lib/twilio/a2p-submission.ts) and the submission endpoint
-// refuses to mutate Twilio. Flipping this on is a deliberate, separate task.
+// Whether REAL Twilio A2P submission is enabled at the platform level. Config
+// driven: true only when the committed submission mode is "live". The committed
+// default is "dry_run", so this is OFF by default. Real execution is further
+// gated per-clinic (isClinicAllowedForLiveA2pSubmit) and requires a configured
+// primary Customer Profile SID.
 export function isRealA2pSubmissionEnabled(): boolean {
-  return false;
+  return getA2pSubmissionMode() === "live";
+}
+
+// Whether THIS clinic may trigger a REAL A2P submission under the current mode.
+// Mirrors isClinicAllowedForLivePurchase: live mode + explicit per-clinic
+// allowlist. Empty allowlist = no clinic may submit for real.
+export function isClinicAllowedForLiveA2pSubmit(clinicId: string): boolean {
+  if (getA2pSubmissionMode() !== "live") return false;
+  const allow = runtimeConfig.a2p?.liveSubmitClinicIds ?? [];
+  return allow.includes(clinicId);
+}
+
+export type A2pTrustHubConfig = {
+  customerProfilePolicySid: string;
+  a2pTrustProductPolicySid: string;
+  primaryCustomerProfileSid: string;
+  notificationEmail: string;
+};
+
+// Trust Hub policy SIDs + account-specific primary profile + notification email.
+export function getA2pTrustHubConfig(): A2pTrustHubConfig {
+  const t = runtimeConfig.a2p?.trustHub;
+  return {
+    customerProfilePolicySid: t?.customerProfilePolicySid ?? "",
+    a2pTrustProductPolicySid: t?.a2pTrustProductPolicySid ?? "",
+    primaryCustomerProfileSid: (t?.primaryCustomerProfileSid ?? "").trim(),
+    notificationEmail: t?.notificationEmail ?? runtimeConfig.app.supportEmail,
+  };
+}
+
+export type A2pBrandConfig = {
+  brandType: "STANDARD" | "SOLE_PROPRIETOR";
+  businessIndustry: string;
+  businessIdentity: string;
+  businessRegistrationIdentifier: string;
+  companyType: string;
+  regionsOfOperation: string;
+  businessTypeFallback: string;
+};
+
+export function getA2pBrandConfig(): A2pBrandConfig {
+  const b = runtimeConfig.a2p?.brand;
+  return {
+    brandType: (b?.brandType ?? "STANDARD") as "STANDARD" | "SOLE_PROPRIETOR",
+    businessIndustry: b?.businessIndustry ?? "HEALTHCARE",
+    businessIdentity: b?.businessIdentity ?? "direct_customer",
+    businessRegistrationIdentifier: b?.businessRegistrationIdentifier ?? "EIN",
+    companyType: b?.companyType ?? "private",
+    regionsOfOperation: b?.regionsOfOperation ?? "USA_AND_CANADA",
+    businessTypeFallback: b?.businessTypeFallback ?? "Private Company",
+  };
 }
 
 // Safe presence check for health and runtime wiring. Returns booleans only,

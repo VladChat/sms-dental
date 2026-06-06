@@ -1,108 +1,633 @@
-// Future Twilio A2P/10DLC submission helper — NO LIVE MUTATION.
+import { getTwilioClient } from "./client";
+import {
+  getA2pBrandConfig,
+  getA2pTrustHubConfig,
+  getTwilioMessagingEnv,
+  getTwilioServerEnv,
+  isClinicAllowedForLiveA2pSubmit,
+} from "../env";
+import { findClinicById } from "../db/clinics";
+import { listActiveSmsNumbersForClinic } from "../db/sms-readiness";
+import {
+  getA2pSubmissionState,
+  upsertA2pSubmissionProgress,
+} from "../db/a2p-submissions";
+import { buildCampaignContent } from "../a2p/campaign-content";
+import type { A2pSubmissionStatus, JsonObject } from "../a2p/types";
+import { logger } from "../logging/logger";
+
+// Real Twilio A2P/10DLC submission, performed ONLY when a platform admin clicks
+// Submit after reviewing the package and live mode is armed for the clinic.
 //
-// ⚠️  Every function in this module is a guarded stub. None of them call a
-//     mutating Twilio API. They THROW `A2pSubmissionDisabledError` by default so
-//     that wiring them up accidentally can never create/modify provider state.
+// SDK surface verified against twilio@5.13.1 type definitions; policy SIDs and
+// the Trust Hub onboarding sequence verified against Twilio's A2P 10DLC ISV API
+// onboarding docs. The flow is idempotent + resumable: created SIDs are persisted
+// after each step and reused on retry, so a single click runs every currently
+// allowed step and the workflow stops-and-persists at any async/pending point.
 //
-// This module exists to (a) document Twilio's real A2P/10DLC process in code,
-// and (b) give a future, deliberate task a single, clearly-bounded place to
-// implement real submission behind its own explicit gate. Implementing any of
-// these for real is OUT OF SCOPE for the current sprint.
+// Standard ISV order (twilio.com/docs/messaging/compliance/a2p-10dlc):
+//   EndUser(business) + EndUser(rep) + Address + SupportingDocument
+//   -> Secondary Customer Profile (assign entities + primary profile, evaluate, submit)
+//   -> A2P Trust Product (assign a2p-profile EndUser + secondary profile, evaluate, submit)
+//   -> Brand Registration (references both bundles; async vetting)
+//   -> A2P Campaign / UsAppToPerson (requires APPROVED brand; async)
+//   -> add numbers as Messaging Service senders (after campaign approval)
 //
-// ---------------------------------------------------------------------------
-// Twilio A2P/10DLC standard registration order (for local US numbers):
-//
-//   1. Customer Profile (a.k.a. business/customer profile, Trust Hub)
-//        - Primary Customer Profile with business identity, address, EIN/tax id,
-//          and an authorized representative.
-//        - A Secondary Customer Profile is used by ISVs/resellers representing
-//          their end customers. Decide primary-vs-secondary before building.
-//   2. Trust Product (A2P Trust Bundle)
-//        - Links the Customer Profile to A2P messaging trust.
-//   3. Brand Registration
-//        - Registers the brand with TCR (The Campaign Registry). Has a one-time
-//          fee and a vetting/approval lifecycle. Status must reach an approved
-//          state before the brand can carry an approved campaign.
-//   4. Campaign / Use Case (US App To Person)
-//        - Registers the messaging use case (e.g. customer care / mixed) with
-//          sample messages, opt-in details, and message flow. Has recurring
-//          monthly carrier fees and a vetting/approval lifecycle.
-//   5. Messaging Service
-//        - The campaign is associated with a Messaging Service. The configured
-//          service SID lives in committed runtime config.
-//   6. Add phone numbers to the A2P Messaging Service
-//        - Each sending number (PN SID) must be attached as a sender on the
-//          Messaging Service that carries the approved campaign.
-//   7. Status sync
-//        - Brand/Campaign approval and per-number sender coverage are confirmed
-//          by READ-ONLY status reads (see status-sync note below).
-//
-// Risks / fees / irreversibility to surface before enabling real submission:
-//   - Brand registration incurs a one-time TCR fee.
-//   - Campaign registration incurs recurring monthly carrier fees.
-//   - Submissions enter external vetting; they cannot simply be "undone".
-//   - Incorrect business identity (EIN, legal name, address) can cause rejection
-//     and re-vetting fees/delays.
-//   - These are external, billable, hard-to-reverse provider mutations and MUST
-//     be confirmation-gated, platform-admin-only, audited, and disabled by
-//     default behind an explicit server-side config flag before going live.
-//
-// API uncertainty to resolve at implementation time (do NOT guess now):
-//   - Exact Twilio Node SDK call shapes for customerProfiles / trustProducts /
-//     brandRegistrations / messaging service usAppToPerson differ by SDK version
-//     and account type; verify against the installed `twilio` package and the
-//     current Twilio docs before writing real calls.
-// ---------------------------------------------------------------------------
+// Real submission creates BILLABLE, externally-vetted, hard-to-reverse resources.
+// The full EIN/tax id is sent to Twilio (business_registration_number) but is
+// NEVER logged or persisted to provider_state / payload_snapshot.
 
 export class A2pSubmissionDisabledError extends Error {
   readonly code = "a2p_real_submission_disabled";
-  constructor(step: string) {
-    super(
-      `Real Twilio A2P submission is disabled in this build (step: ${step}). ` +
-        "Implement this behind an explicit server-side gate before enabling.",
-    );
+  constructor(reason: string) {
+    super(reason);
     this.name = "A2pSubmissionDisabledError";
   }
 }
 
-export type A2pSubmissionContext = {
-  clinicId: string;
-  messagingServiceSid: string | null;
-  selectedPhoneNumberSids: string[];
+export type A2pCreatedResource = { key: string; sid: string; reused: boolean };
+
+export type A2pSubmissionResult = {
+  ok: boolean;
+  status: A2pSubmissionStatus;
+  step: string;
+  message: string;
+  createdResources: A2pCreatedResource[];
+  providerErrors: string[];
+  nextAction: string | null;
 };
 
-// Step 1 — Customer Profile (business identity). STUB: throws by default.
-export async function submitCustomerProfile(_ctx: A2pSubmissionContext): Promise<never> {
-  throw new A2pSubmissionDisabledError("customer_profile");
+export type RealA2pSubmissionInput = {
+  clinicId: string;
+  adminUserId: string | null;
+  adminEmail: string;
+};
+
+// ---------- isolated typed Twilio surfaces (only what we call) ----------
+
+type TrustHubEntityAssignmentList = {
+  create(p: { objectSid: string }): Promise<{ sid: string }>;
+};
+type TrustHubEvaluationList = {
+  create(p: { policySid: string }): Promise<{ sid: string; status?: string | null }>;
+};
+type BundleContext = {
+  fetch(): Promise<{ sid: string; status: string }>;
+  update(p: { status?: string }): Promise<{ sid: string; status: string }>;
+};
+type CustomerProfileContext = BundleContext & {
+  customerProfilesEntityAssignments: TrustHubEntityAssignmentList;
+  customerProfilesEvaluations: TrustHubEvaluationList;
+};
+type TrustProductContext = BundleContext & {
+  trustProductsEntityAssignments: TrustHubEntityAssignmentList;
+  trustProductsEvaluations: TrustHubEvaluationList;
+};
+interface CustomerProfilesList {
+  (sid: string): CustomerProfileContext;
+  create(p: { friendlyName: string; email: string; policySid: string }): Promise<{ sid: string; status: string }>;
+}
+interface TrustProductsList {
+  (sid: string): TrustProductContext;
+  create(p: { friendlyName: string; email: string; policySid: string }): Promise<{ sid: string; status: string }>;
+}
+type EndUsersList = {
+  create(p: { friendlyName: string; type: string; attributes?: Record<string, unknown> }): Promise<{ sid: string }>;
+};
+type SupportingDocumentsList = {
+  create(p: { friendlyName: string; type: string; attributes?: Record<string, unknown> }): Promise<{ sid: string }>;
+};
+type TrustHubV1 = {
+  customerProfiles: CustomerProfilesList;
+  trustProducts: TrustProductsList;
+  endUsers: EndUsersList;
+  supportingDocuments: SupportingDocumentsList;
+};
+type AddressesList = {
+  create(p: {
+    customerName: string;
+    street: string;
+    city: string;
+    region: string;
+    postalCode: string;
+    isoCountry: string;
+    streetSecondary?: string;
+  }): Promise<{ sid: string }>;
+};
+type BrandContext = { fetch(): Promise<{ sid: string; status: string; failureReason?: string | null }> };
+interface BrandRegistrationsList {
+  (sid: string): BrandContext;
+  create(p: {
+    customerProfileBundleSid: string;
+    a2PProfileBundleSid: string;
+    brandType?: string;
+  }): Promise<{ sid: string; status: string }>;
+}
+type UsAppToPersonList = {
+  create(p: {
+    brandRegistrationSid: string;
+    description: string;
+    messageFlow: string;
+    messageSamples: string[];
+    usAppToPersonUsecase: string;
+    hasEmbeddedLinks: boolean;
+    hasEmbeddedPhone: boolean;
+  }): Promise<{ sid: string; campaignStatus?: string | null }>;
+  list(p: { limit: number }): Promise<Array<{ sid?: string | null; campaignStatus?: string | null }>>;
+};
+type ServicePhoneNumberList = {
+  create(p: { phoneNumberSid: string }): Promise<{ sid: string }>;
+  list(p: { limit: number }): Promise<Array<{ phoneNumberSid?: string | null }>>;
+};
+type MessagingServiceContext = { usAppToPerson: UsAppToPersonList; phoneNumbers: ServicePhoneNumberList };
+type MessagingV1 = {
+  brandRegistrations: BrandRegistrationsList;
+  services(sid: string): MessagingServiceContext;
+};
+type TwilioLike = {
+  trusthub: { v1: TrustHubV1 };
+  messaging: { v1: MessagingV1 };
+  addresses: AddressesList;
+};
+
+function getClient(): TwilioLike {
+  // Validate Twilio credentials are present (throws a clear error otherwise).
+  getTwilioServerEnv();
+  return getTwilioClient() as unknown as TwilioLike;
 }
 
-// Step 2 — Trust Product (A2P trust bundle). STUB: throws by default.
-export async function submitTrustProduct(_ctx: A2pSubmissionContext): Promise<never> {
-  throw new A2pSubmissionDisabledError("trust_product");
+// Map the stored A2P business_type enum to a Trust Hub legal-structure string.
+// NOTE: acceptable values are account/policy-specific; verify against your Twilio
+// account before the first live submit. Overridable via config fallback.
+function mapBusinessType(value: string | null, fallback: string): string {
+  switch ((value ?? "").trim()) {
+    case "PRIVATE_PROFIT": return "Private Company";
+    case "PUBLIC_PROFIT": return "Public Company";
+    case "NON_PROFIT": return "Non-profit Corporation";
+    case "SOLE_PROPRIETOR": return "Sole Proprietorship";
+    case "GOVERNMENT": return "Government";
+    default: return fallback;
+  }
 }
 
-// Step 3 — Brand Registration (TCR). STUB: throws by default.
-export async function submitBrandRegistration(_ctx: A2pSubmissionContext): Promise<never> {
-  throw new A2pSubmissionDisabledError("brand_registration");
+function str(state: JsonObject, key: string): string | null {
+  const v = state[key];
+  return typeof v === "string" && v.length > 0 ? v : null;
 }
 
-// Step 4 — Campaign / Use Case (US App To Person). STUB: throws by default.
-export async function submitCampaign(_ctx: A2pSubmissionContext): Promise<never> {
-  throw new A2pSubmissionDisabledError("campaign");
+// Entry point. Performs every currently-allowed step, persisting progress, and
+// returns a structured result. Never sends SMS, never enables sms_recovery.
+export async function runRealA2pSubmission(
+  input: RealA2pSubmissionInput,
+): Promise<A2pSubmissionResult> {
+  const { clinicId, adminUserId, adminEmail } = input;
+
+  // Hard gate: live mode + per-clinic allowlist + configured primary profile.
+  if (!isClinicAllowedForLiveA2pSubmit(clinicId)) {
+    throw new A2pSubmissionDisabledError(
+      "Real A2P submission is not armed for this clinic (live mode + allowlist required).",
+    );
+  }
+  const trustHub = getA2pTrustHubConfig();
+  if (!trustHub.primaryCustomerProfileSid) {
+    throw new A2pSubmissionDisabledError(
+      "No primary Customer Profile SID configured. Set runtimeConfig.a2p.trustHub.primaryCustomerProfileSid before live submission.",
+    );
+  }
+
+  const clinic = await findClinicById(clinicId);
+  if (!clinic) throw new A2pSubmissionDisabledError("Clinic not found.");
+
+  const brandCfg = getA2pBrandConfig();
+  // Target Messaging Service from committed config (the service the campaign is
+  // linked to and the clinic's numbers are added to as senders).
+  const targetMsSid = getTwilioMessagingEnv().TWILIO_MESSAGING_SERVICE_SID;
+
+  const activeNumbers = await listActiveSmsNumbersForClinic(clinicId);
+  const ein = (clinic.ein_tax_id ?? "").trim();
+
+  // Load prior progress (idempotent resume).
+  const { record } = await getA2pSubmissionState(clinicId);
+  const state: JsonObject = { ...(record?.providerState ?? {}) };
+
+  const created: A2pCreatedResource[] = [];
+  const errors: string[] = [];
+  const client = getClient();
+  const th = client.trusthub.v1;
+
+  // Persist accumulated state + key SIDs after each milestone.
+  async function persist(
+    status: A2pSubmissionStatus,
+    step: string,
+    extra: Partial<{
+      customerProfileSid: string | null;
+      trustProductSid: string | null;
+      brandRegistrationSid: string | null;
+      campaignSid: string | null;
+      lastErrorCode: string | null;
+      lastErrorMessage: string | null;
+      rejectionReason: string | null;
+    }> = {},
+  ): Promise<void> {
+    await upsertA2pSubmissionProgress({
+      clinicId,
+      status,
+      submissionStep: step,
+      providerStatePatch: { ...state },
+      targetMessagingServiceSid: targetMsSid,
+      secondaryCustomerProfileSid: extra.customerProfileSid ?? str(state, "customerProfileSid"),
+      customerProfileSid: extra.customerProfileSid ?? str(state, "customerProfileSid"),
+      trustProductSid: extra.trustProductSid ?? str(state, "trustProductSid"),
+      brandRegistrationSid: extra.brandRegistrationSid ?? str(state, "brandRegistrationSid"),
+      campaignSid: extra.campaignSid ?? str(state, "campaignSid"),
+      messagingServiceSid: targetMsSid,
+      selectedPhoneNumbers: activeNumbers.map((n) => ({
+        phoneNumber: n.phone_number,
+        twilioPhoneNumberSid: n.twilio_phone_number_sid,
+      })),
+      submittedAt: new Date(),
+      submittedByAdminUserId: adminUserId,
+      submittedByAdminEmail: adminEmail,
+      lastErrorCode: extra.lastErrorCode ?? null,
+      lastErrorMessage: extra.lastErrorMessage ?? null,
+      rejectionReason: extra.rejectionReason ?? null,
+    });
+  }
+
+  function fail(step: string, err: unknown): A2pSubmissionResult {
+    const msg = err instanceof Error ? err.message.slice(0, 500) : "unknown_provider_error";
+    errors.push(msg);
+    logger.error("a2p.submit.step_failed", { clinicId, step });
+    return {
+      ok: false,
+      status: "failed",
+      step,
+      message: `A2P submission failed at step: ${step}.`,
+      createdResources: created,
+      providerErrors: errors,
+      nextAction: "Review the provider error, fix the data, and retry. Created resources are reused on retry.",
+    };
+  }
+
+  try {
+    // ---- 1. business information EndUser ----
+    let businessEndUserSid = str(state, "businessEndUserSid");
+    if (!businessEndUserSid) {
+      const eu = await th.endUsers.create({
+        friendlyName: `${clinic.name} business info`,
+        type: "customer_profile_business_information",
+        attributes: {
+          business_name: clinic.legal_business_name ?? clinic.name,
+          business_type: mapBusinessType(clinic.business_type, brandCfg.businessTypeFallback),
+          business_industry: brandCfg.businessIndustry,
+          business_registration_identifier: brandCfg.businessRegistrationIdentifier,
+          business_registration_number: ein, // EIN — never logged/persisted.
+          business_regions_of_operation: brandCfg.regionsOfOperation,
+          business_identity: brandCfg.businessIdentity,
+          website_url: clinic.website ?? "",
+        },
+      });
+      businessEndUserSid = eu.sid;
+      state.businessEndUserSid = businessEndUserSid;
+      created.push({ key: "business_end_user", sid: businessEndUserSid, reused: false });
+      await persist("submitted", "business_end_user_created");
+    }
+
+    // ---- 2. authorized representative EndUser ----
+    let repEndUserSid = str(state, "repEndUserSid");
+    if (!repEndUserSid) {
+      const eu = await th.endUsers.create({
+        friendlyName: `${clinic.name} authorized rep`,
+        type: "authorized_representative_1",
+        attributes: {
+          first_name: clinic.a2p_rep_first_name ?? "",
+          last_name: clinic.a2p_rep_last_name ?? "",
+          email: clinic.a2p_rep_email ?? "",
+          phone_number: clinic.a2p_rep_phone ?? "",
+          business_title: clinic.a2p_rep_business_title ?? "Owner",
+          job_position: clinic.a2p_rep_business_title ?? "Owner",
+        },
+      });
+      repEndUserSid = eu.sid;
+      state.repEndUserSid = repEndUserSid;
+      created.push({ key: "rep_end_user", sid: repEndUserSid, reused: false });
+      await persist("submitted", "rep_end_user_created");
+    }
+
+    // ---- 3. Address + SupportingDocument (customer_profile_address) ----
+    let addressSid = str(state, "addressSid");
+    if (!addressSid) {
+      const addr = await client.addresses.create({
+        customerName: clinic.legal_business_name ?? clinic.name,
+        street: clinic.street_address ?? "",
+        streetSecondary: clinic.address_line2 ?? undefined,
+        city: clinic.city ?? "",
+        region: clinic.state_region ?? "",
+        postalCode: clinic.postal_code ?? "",
+        isoCountry: clinic.country ?? "US",
+      });
+      addressSid = addr.sid;
+      state.addressSid = addressSid;
+      created.push({ key: "address", sid: addressSid, reused: false });
+      await persist("submitted", "address_created");
+    }
+    let supportingDocumentSid = str(state, "supportingDocumentSid");
+    if (!supportingDocumentSid) {
+      const doc = await th.supportingDocuments.create({
+        friendlyName: `${clinic.name} address proof`,
+        type: "customer_profile_address",
+        attributes: { address_sids: addressSid },
+      });
+      supportingDocumentSid = doc.sid;
+      state.supportingDocumentSid = supportingDocumentSid;
+      created.push({ key: "supporting_document", sid: supportingDocumentSid, reused: false });
+      await persist("submitted", "supporting_document_created");
+    }
+
+    // ---- 4. Secondary Customer Profile ----
+    let customerProfileSid = str(state, "customerProfileSid");
+    if (!customerProfileSid) {
+      const cp = await th.customerProfiles.create({
+        friendlyName: `${clinic.name} A2P customer profile`,
+        email: trustHub.notificationEmail,
+        policySid: trustHub.customerProfilePolicySid,
+      });
+      customerProfileSid = cp.sid;
+      state.customerProfileSid = customerProfileSid;
+      created.push({ key: "secondary_customer_profile", sid: customerProfileSid, reused: false });
+      await persist("submitted", "customer_profile_created", { customerProfileSid });
+    }
+
+    // ---- 5. assign entities to the Customer Profile (idempotent flag) ----
+    if (state.cpAssignmentsDone !== true) {
+      const cpCtx = th.customerProfiles(customerProfileSid);
+      for (const objectSid of [businessEndUserSid, repEndUserSid, supportingDocumentSid, trustHub.primaryCustomerProfileSid]) {
+        await cpCtx.customerProfilesEntityAssignments.create({ objectSid });
+      }
+      state.cpAssignmentsDone = true;
+      await persist("submitted", "customer_profile_assigned", { customerProfileSid });
+    }
+
+    // ---- 6 + 7. evaluate + submit the Customer Profile ----
+    if (state.cpSubmitted !== true) {
+      const cpCtx = th.customerProfiles(customerProfileSid);
+      const evalResult = await cpCtx.customerProfilesEvaluations.create({
+        policySid: trustHub.customerProfilePolicySid,
+      });
+      state.customerProfileEvaluation = (evalResult.status ?? "unknown") as string;
+      if ((evalResult.status ?? "").toLowerCase() !== "compliant") {
+        await persist("blocked", "customer_profile_evaluation_failed", { customerProfileSid });
+        return {
+          ok: false,
+          status: "blocked",
+          step: "customer_profile_evaluation",
+          message: "The Customer Profile did not pass evaluation. Check business/representative data.",
+          createdResources: created,
+          providerErrors: errors,
+          nextAction: "Correct the business or representative information, then retry submission.",
+        };
+      }
+      await cpCtx.update({ status: "pending-review" });
+      state.cpSubmitted = true;
+      state.customerProfileStatus = "pending-review";
+      await persist("pending", "customer_profile_submitted", { customerProfileSid });
+    }
+
+    // ---- 8. A2P messaging profile EndUser ----
+    let a2pProfileEndUserSid = str(state, "a2pProfileEndUserSid");
+    if (!a2pProfileEndUserSid) {
+      const eu = await th.endUsers.create({
+        friendlyName: `${clinic.name} a2p messaging profile`,
+        type: "us_a2p_messaging_profile_information",
+        attributes: { company_type: brandCfg.companyType },
+      });
+      a2pProfileEndUserSid = eu.sid;
+      state.a2pProfileEndUserSid = a2pProfileEndUserSid;
+      created.push({ key: "a2p_profile_end_user", sid: a2pProfileEndUserSid, reused: false });
+      await persist("pending", "a2p_profile_end_user_created", { customerProfileSid });
+    }
+
+    // ---- 9. A2P Trust Product ----
+    let trustProductSid = str(state, "trustProductSid");
+    if (!trustProductSid) {
+      const tp = await th.trustProducts.create({
+        friendlyName: `${clinic.name} A2P trust product`,
+        email: trustHub.notificationEmail,
+        policySid: trustHub.a2pTrustProductPolicySid,
+      });
+      trustProductSid = tp.sid;
+      state.trustProductSid = trustProductSid;
+      created.push({ key: "a2p_trust_product", sid: trustProductSid, reused: false });
+      await persist("pending", "trust_product_created", { customerProfileSid, trustProductSid });
+    }
+
+    // ---- 10. assign a2p-profile EndUser + secondary profile to Trust Product ----
+    if (state.tpAssignmentsDone !== true) {
+      const tpCtx = th.trustProducts(trustProductSid);
+      for (const objectSid of [a2pProfileEndUserSid, customerProfileSid]) {
+        await tpCtx.trustProductsEntityAssignments.create({ objectSid });
+      }
+      state.tpAssignmentsDone = true;
+      await persist("pending", "trust_product_assigned", { customerProfileSid, trustProductSid });
+    }
+
+    // ---- 11 + 12. evaluate + submit the Trust Product ----
+    if (state.tpSubmitted !== true) {
+      const tpCtx = th.trustProducts(trustProductSid);
+      const evalResult = await tpCtx.trustProductsEvaluations.create({
+        policySid: trustHub.a2pTrustProductPolicySid,
+      });
+      state.trustProductEvaluation = (evalResult.status ?? "unknown") as string;
+      if ((evalResult.status ?? "").toLowerCase() !== "compliant") {
+        await persist("blocked", "trust_product_evaluation_failed", { customerProfileSid, trustProductSid });
+        return {
+          ok: false,
+          status: "blocked",
+          step: "trust_product_evaluation",
+          message: "The A2P Trust Product did not pass evaluation.",
+          createdResources: created,
+          providerErrors: errors,
+          nextAction: "Correct the A2P messaging profile data, then retry submission.",
+        };
+      }
+      await tpCtx.update({ status: "pending-review" });
+      state.tpSubmitted = true;
+      state.trustProductStatus = "pending-review";
+      await persist("pending", "trust_product_submitted", { customerProfileSid, trustProductSid });
+    }
+
+    // ---- 13. Brand Registration (async vetting) ----
+    let brandSid = str(state, "brandRegistrationSid");
+    let brandStatus = str(state, "brandStatus");
+    if (!brandSid) {
+      const brand = await client.messaging.v1.brandRegistrations.create({
+        customerProfileBundleSid: customerProfileSid,
+        a2PProfileBundleSid: trustProductSid,
+        brandType: brandCfg.brandType,
+      });
+      brandSid = brand.sid;
+      brandStatus = brand.status;
+      state.brandRegistrationSid = brandSid;
+      state.brandStatus = brandStatus;
+      created.push({ key: "brand_registration", sid: brandSid, reused: false });
+      await persist("pending", "brand_registration_created", { customerProfileSid, trustProductSid, brandRegistrationSid: brandSid });
+    } else {
+      const brand = await client.messaging.v1.brandRegistrations(brandSid).fetch();
+      brandStatus = brand.status;
+      state.brandStatus = brandStatus;
+    }
+
+    if ((brandStatus ?? "").toUpperCase() !== "APPROVED") {
+      await persist("pending", "awaiting_brand_approval", { customerProfileSid, trustProductSid, brandRegistrationSid: brandSid });
+      return {
+        ok: true,
+        status: "pending",
+        step: "awaiting_brand_approval",
+        message: `Submitted. Brand registration status is ${brandStatus ?? "PENDING"}. Twilio vetting is asynchronous.`,
+        createdResources: created,
+        providerErrors: errors,
+        nextAction: "Run the read-only A2P status refresh later. Once the brand is APPROVED, click Submit again to create the campaign and add numbers.",
+      };
+    }
+
+    // ---- 14. A2P Campaign / UsAppToPerson (requires APPROVED brand) ----
+    const content = buildCampaignContent(clinic.name);
+    const svc = client.messaging.v1.services(targetMsSid);
+    let campaignSid = str(state, "campaignSid");
+    let campaignStatus = str(state, "campaignStatus");
+    if (!campaignSid) {
+      // Reuse an existing campaign on the service if one is already present.
+      const existing = await svc.usAppToPerson.list({ limit: 1 }).catch(() => []);
+      if (existing[0]?.sid) {
+        campaignSid = existing[0].sid ?? null;
+        campaignStatus = existing[0].campaignStatus ?? null;
+        if (campaignSid) created.push({ key: "campaign", sid: campaignSid, reused: true });
+      } else {
+        const campaign = await svc.usAppToPerson.create({
+          brandRegistrationSid: brandSid,
+          description: content.description,
+          messageFlow: content.messageFlow,
+          messageSamples: content.sampleMessages,
+          usAppToPersonUsecase: content.usecase,
+          hasEmbeddedLinks: content.hasEmbeddedLinks,
+          hasEmbeddedPhone: content.hasEmbeddedPhone,
+        });
+        campaignSid = campaign.sid;
+        campaignStatus = campaign.campaignStatus ?? null;
+        created.push({ key: "campaign", sid: campaignSid, reused: false });
+      }
+      state.campaignSid = campaignSid;
+      state.campaignStatus = campaignStatus;
+      await persist("pending", "campaign_created", { customerProfileSid, trustProductSid, brandRegistrationSid: brandSid, campaignSid });
+    }
+
+    // ---- 15. add active numbers as Messaging Service senders ----
+    const alreadyAdded = new Set(
+      Array.isArray(state.numbersAdded) ? (state.numbersAdded as unknown[]).filter((x): x is string => typeof x === "string") : [],
+    );
+    const existingSenders = await svc.phoneNumbers.list({ limit: 1000 }).catch(() => []);
+    for (const sid of existingSenders) {
+      if (sid.phoneNumberSid) alreadyAdded.add(sid.phoneNumberSid);
+    }
+    for (const n of activeNumbers) {
+      const pn = n.twilio_phone_number_sid;
+      if (!pn || alreadyAdded.has(pn)) continue;
+      try {
+        await svc.phoneNumbers.create({ phoneNumberSid: pn });
+        alreadyAdded.add(pn);
+        created.push({ key: "messaging_service_sender", sid: pn, reused: false });
+      } catch (err) {
+        errors.push(`add_sender ${pn}: ${err instanceof Error ? err.message.slice(0, 200) : "error"}`);
+      }
+    }
+    state.numbersAdded = Array.from(alreadyAdded);
+
+    const campaignApproved = (campaignStatus ?? "").toUpperCase() === "VERIFIED" || (campaignStatus ?? "").toUpperCase() === "APPROVED";
+    const finalStatus: A2pSubmissionStatus = campaignApproved ? "approved" : "pending";
+    await persist(finalStatus, campaignApproved ? "completed" : "awaiting_campaign_approval", {
+      customerProfileSid,
+      trustProductSid,
+      brandRegistrationSid: brandSid,
+      campaignSid,
+    });
+
+    return {
+      ok: true,
+      status: finalStatus,
+      step: campaignApproved ? "completed" : "awaiting_campaign_approval",
+      message: campaignApproved
+        ? "Brand approved and campaign active. Run the read-only readiness sync to confirm per-number coverage."
+        : `Campaign created (status ${campaignStatus ?? "PENDING"}). Numbers will become covered once the campaign is approved.`,
+      createdResources: created,
+      providerErrors: errors,
+      nextAction: campaignApproved
+        ? "Run the read-only readiness sync; confirm production_safe per number before enabling SMS."
+        : "Run the read-only A2P status refresh later to track campaign approval.",
+    };
+  } catch (err) {
+    const code = (err as { code?: string | number })?.code;
+    const result = fail(str(state, "lastStep") ?? "provider_call", err);
+    await upsertA2pSubmissionProgress({
+      clinicId,
+      status: "failed",
+      submissionStep: result.step,
+      providerStatePatch: { ...state },
+      submittedByAdminUserId: adminUserId,
+      submittedByAdminEmail: adminEmail,
+      lastErrorCode: code != null ? String(code) : "provider_error",
+      lastErrorMessage: err instanceof Error ? err.message.slice(0, 500) : "unknown",
+    }).catch(() => {});
+    return result;
+  }
 }
 
-// Step 6 — Attach numbers to the A2P Messaging Service. STUB: throws by default.
-// (This is a provider mutation and is explicitly forbidden in the current scope.)
-export async function attachNumbersToMessagingService(_ctx: A2pSubmissionContext): Promise<never> {
-  throw new A2pSubmissionDisabledError("attach_numbers");
+// Read-only provider status refresh. Fetches the stored Customer Profile, Trust
+// Product, Brand, and Campaign by SID and updates local status only. Creates
+// nothing and mutates no provider state. Safe to run any time.
+export async function readA2pProviderStatus(clinicId: string): Promise<{
+  ok: boolean;
+  statuses: Record<string, string>;
+}> {
+  const { record } = await getA2pSubmissionState(clinicId);
+  if (!record) return { ok: false, statuses: {} };
+  const client = getClient();
+  const statuses: Record<string, string> = {};
+  const patch: JsonObject = {};
+
+  await refresh(record.twilioSecondaryCustomerProfileSid ?? record.twilioCustomerProfileSid, async (sid) => {
+    const r = await client.trusthub.v1.customerProfiles(sid).fetch();
+    statuses.customerProfile = r.status;
+    patch.customerProfileStatus = r.status;
+  });
+  await refresh(record.twilioTrustProductSid, async (sid) => {
+    const r = await client.trusthub.v1.trustProducts(sid).fetch();
+    statuses.trustProduct = r.status;
+    patch.trustProductStatus = r.status;
+  });
+  await refresh(record.twilioBrandRegistrationSid, async (sid) => {
+    const r = await client.messaging.v1.brandRegistrations(sid).fetch();
+    statuses.brand = r.status;
+    patch.brandStatus = r.status;
+  });
+
+  if (Object.keys(patch).length > 0) {
+    await upsertA2pSubmissionProgress({
+      clinicId,
+      providerStatePatch: patch,
+      lastStatusSyncedAt: new Date(),
+    }).catch(() => {});
+  }
+  return { ok: true, statuses };
 }
 
-// Step 7 — Status sync.
-//
-// The ONLY safe, already-implemented part of this lifecycle is the read-only
-// status read. Use the existing read-only readiness sync — it fetches Messaging
-// Service, sender, Brand, and Campaign status and writes only local readiness
-// tables. It never mutates Twilio. Importers should call
-// `syncClinicSmsReadinessFromTwilio(clinicId)` from `./sms-readiness-sync`
-// directly; it is re-exported here only to keep the A2P lifecycle discoverable.
-export { syncClinicSmsReadinessFromTwilio as syncA2pStatusReadOnly } from "./sms-readiness-sync";
+async function refresh(sid: string | null, fn: (sid: string) => Promise<void>): Promise<void> {
+  if (!sid) return;
+  try {
+    await fn(sid);
+  } catch {
+    // read-only; ignore individual fetch errors
+  }
+}
+
+// Read-only status sync re-export kept for discoverability of the A2P lifecycle.
+export { syncClinicSmsReadinessFromTwilio as syncA2pReadinessReadOnly } from "./sms-readiness-sync";

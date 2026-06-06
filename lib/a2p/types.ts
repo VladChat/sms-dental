@@ -26,6 +26,18 @@ export type A2pSubmissionMode = "disabled" | "dry_run" | "live";
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
 
+// Fixed campaign content shown before submit and submitted to Twilio.
+export type A2pCampaignContent = {
+  usecase: string;
+  description: string;
+  messageFlow: string;
+  sampleMessages: string[];
+  hasEmbeddedLinks: boolean;
+  hasEmbeddedPhone: boolean;
+  optInStatement: string;
+  stopHelpStatement: string;
+};
+
 // Per-number coverage as shown to the platform admin. Anything other than
 // "covered" must be presented as "Not approved yet" / "Not covered yet".
 export type NumberCoverageDisplay =
@@ -63,15 +75,32 @@ export type A2pSubmissionInfo = {
   trackingAvailable: boolean;
   status: A2pSubmissionStatus | null;
   mode: A2pSubmissionMode | null;
+  submissionStep: string | null;
   submittedAt: string | null;
   submittedByEmail: string | null;
   lastStatusSyncedAt: string | null;
   lastErrorCode: string | null;
   lastErrorMessage: string | null;
   rejectionReason: string | null;
+  // Twilio resource SIDs created/reused so far (object references, not secrets).
+  customerProfileSid: string | null;
+  trustProductSid: string | null;
   brandRegistrationSid: string | null;
   campaignSid: string | null;
   messagingServiceSid: string | null;
+  // Provider statuses read back by the read-only status refresh.
+  customerProfileStatus: string | null;
+  trustProductStatus: string | null;
+  brandStatus: string | null;
+  campaignStatus: string | null;
+};
+
+// One Twilio resource the real submit will create (or reuse if already present).
+export type A2pPlannedResource = {
+  key: string;
+  label: string;
+  willCreate: boolean;
+  reuseSid: string | null;
 };
 
 export type A2pReviewBusiness = {
@@ -130,8 +159,20 @@ export type A2pReviewPackage = {
 
   submission: A2pSubmissionInfo;
   submissionMode: A2pSubmissionMode;
-  // Always false in this build — real Twilio A2P submission is not implemented.
+  // True at the platform level when submissionMode === "live".
   realSubmissionEnabled: boolean;
+  // True only when a REAL submission can actually run for THIS clinic right now
+  // (live mode + clinic allowlisted + primary Customer Profile configured).
+  liveSubmitArmed: boolean;
+  liveSubmitBlockedReason: string | null;
+
+  // Fixed campaign content (use case, samples, opt-in, STOP/HELP) shown before
+  // submit and submitted to Twilio.
+  campaign: A2pCampaignContent;
+  // Exact Twilio resources the real submit will create or reuse.
+  plannedResources: A2pPlannedResource[];
+  // Fee / risk notices to display before a real submit.
+  feesRiskNotice: string[];
 
   // Derived display status for the whole package.
   reviewStatus: string;

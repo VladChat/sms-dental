@@ -74,18 +74,60 @@ export const runtimeConfig = {
 
   a2p: {
     // Review/submission mode for the platform-admin A2P/10DLC approval workflow.
-    // This is a NON-secret safety switch. Default is "dry_run".
+    // This is a NON-secret safety switch. COMMITTED DEFAULT IS "dry_run".
     //  - "disabled": the submit action is fully off. The admin can still view the
     //     review package; the submit button is hidden and the endpoint refuses.
     //  - "dry_run": the platform admin can record a LOCAL "reviewed / ready for
     //     manual submission" status. NO Twilio mutation occurs and NO real A2P
-    //     registration is submitted. A human still submits in the Twilio console.
-    //  - "live": RESERVED. Real Twilio A2P submission is NOT implemented in this
-    //     build. The submission endpoint refuses "live" so provider state can
-    //     never be mutated from here. Enabling real submission is a deliberate
-    //     future task that also requires the lib/twilio/a2p-submission.ts helper
-    //     to be implemented behind its own explicit gate.
+    //     registration is submitted.
+    //  - "live": REAL Twilio A2P submission is performed by lib/twilio/a2p-submission.ts
+    //     when an authenticated platform admin clicks Submit AFTER reviewing the
+    //     package. This creates BILLABLE, externally-vetted, hard-to-reverse Twilio
+    //     resources (Brand has a one-time fee; Campaign has recurring carrier fees).
+    //     It is OFF by committed default on purpose. Arming it requires BOTH
+    //     setting this to "live" AND the per-clinic allowlist below AND a configured
+    //     trustHub.primaryCustomerProfileSid. See OPERATIONS-RUNBOOK.md.
     submissionMode: "dry_run" as "disabled" | "dry_run" | "live",
+
+    // Per-clinic allowlist for REAL ("live") A2P submission. Mirrors the
+    // twilioPurchaseTestClinicIds safety pattern: even when submissionMode="live",
+    // only clinics listed here may trigger real provider mutations. Empty = none.
+    //  - f37f24a1-...: Fairstone Dental Smile (controlled owner-test clinic).
+    liveSubmitClinicIds: [
+      "f37f24a1-070f-436b-b803-956f55466093",
+    ] as readonly string[],
+
+    trustHub: {
+      // Fixed Twilio policy SIDs (global constants, identical for every account).
+      // Source: Twilio A2P 10DLC ISV API onboarding docs
+      // (twilio.com/docs/messaging/compliance/a2p-10dlc/onboarding-isv-api).
+      customerProfilePolicySid: "RNdfbf3fae0e1107f8aded0e7cead80bf5",
+      a2pTrustProductPolicySid: "RNb0d4771c2c98518d916a3d4cd70a8f8b",
+      // ACCOUNT-SPECIFIC: the PRIMARY (account) Customer Profile SID that vouches
+      // for the per-clinic Secondary Customer Profiles. MUST be set before any
+      // live submission. Empty = live submission is blocked (fail-closed).
+      primaryCustomerProfileSid: "",
+      // Email that receives Trust Hub status-change callbacks.
+      notificationEmail: "support@missedcallsdental.com",
+    },
+
+    // Brand registration constants for the fixed missed-call-recovery product.
+    brand: {
+      // "STANDARD" or "SOLE_PROPRIETOR" (low volume). STANDARD by default.
+      brandType: "STANDARD" as "STANDARD" | "SOLE_PROPRIETOR",
+      businessIndustry: "HEALTHCARE",
+      // EndUser business_identity (direct end customer of the ISV).
+      businessIdentity: "direct_customer",
+      // EndUser business_registration_identifier — the kind of id stored in EIN.
+      businessRegistrationIdentifier: "EIN",
+      // us_a2p_messaging_profile_information company_type.
+      companyType: "private",
+      // EndUser business_regions_of_operation.
+      regionsOfOperation: "USA_AND_CANADA",
+      // EndUser business_type (legal structure). Defaults to the clinic's stored
+      // business_type when present; this is the fallback.
+      businessTypeFallback: "Private Company",
+    },
   },
 
   testClinic: {

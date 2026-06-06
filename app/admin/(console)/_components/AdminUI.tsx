@@ -128,6 +128,10 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   "clinic.business_profile.update": "Edited business profile",
   "clinic.a2p.update": "Edited SMS approval info",
   "clinic.a2p.submit_dry_run": "Recorded A2P dry-run review",
+  "clinic.a2p.submit_attempt": "Started A2P submission",
+  "clinic.a2p.submit_live": "Submitted A2P to Twilio",
+  "clinic.a2p.submit_failed": "A2P submission failed",
+  "clinic.a2p.status_refresh": "Refreshed A2P provider status",
   "clinic.provisioning.update": "Updated provisioning (legacy)",
 };
 
