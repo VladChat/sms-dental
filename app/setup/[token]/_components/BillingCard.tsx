@@ -93,19 +93,118 @@ export function BillingCard({
   const baseMonthlyLabel = `${formatUsdFromCents(baseMonthly)}/month`;
   const additionalMonthlyLabel = `${formatUsdFromCents(additionalMonthly)}/month`;
   const currentMonthlyTotalLabel = `${formatUsdFromCents(currentMonthlyTotal)}/month`;
+  const additionalPhoneNumberLabel =
+    additionalBilledQuantity === 1 ? "additional phone number" : "additional phone numbers";
+  const currentPlanName =
+    additionalBilledQuantity > 0
+      ? `${billingConfig.basePlan.displayName} + ${formatInteger(additionalBilledQuantity)} ${additionalPhoneNumberLabel}`
+      : billingConfig.basePlan.displayName;
+  const currentPlanBreakdown =
+    additionalBilledQuantity > 0
+      ? `${baseMonthlyLabel} base plan + ${formatInteger(additionalBilledQuantity)} × ${additionalMonthlyLabel} ${additionalPhoneNumberLabel}`
+      : `${baseMonthlyLabel} base plan`;
+
+  if (paidPlanActive) {
+    return (
+      <div className="acct-billing-stack">
+        <section className="acct-current-plan" aria-labelledby="billing-current-plan-title">
+          <div className="acct-current-plan-head">
+            <div>
+              <p className="t-eyebrow" id="billing-current-plan-title">Current plan</p>
+              <h3 className="acct-current-plan-name">{currentPlanName}</h3>
+            </div>
+            <StatusBadge kind="complete" label="Active" />
+          </div>
+          <p className="acct-current-plan-total">{currentMonthlyTotalLabel}</p>
+          <p className="t-small acct-current-plan-note">{currentPlanBreakdown}</p>
+        </section>
+
+        <section className="acct-billing-block" aria-labelledby="billing-included-title">
+          <p className="t-eyebrow" id="billing-included-title">Included each month</p>
+          <ul className="acct-plan-list">
+            <li>
+              {formatInteger(billingConfig.basePlan.includedBusinessNumbers)} business{" "}
+              {billingConfig.basePlan.includedBusinessNumbers === 1 ? "number" : "numbers"}
+            </li>
+            <li>{formatInteger(billingConfig.basePlan.includedCallMinutes)} call minutes</li>
+            <li>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
+                {formatInteger(billingConfig.basePlan.includedSmsSegments)} SMS segments
+                <InfoTooltip label="What is an SMS segment?" text={SMS_SEGMENT_TOOLTIP} />
+              </span>
+            </li>
+          </ul>
+          <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-2) 0 0" }}>
+            Included usage is shared across all business numbers on your account.
+          </p>
+        </section>
+
+        <section className="acct-billing-block" aria-labelledby="billing-overage-title">
+          <p className="t-eyebrow" id="billing-overage-title">Usage above included limits</p>
+          <ul className="acct-plan-list">
+            <li>{formatUsdFromCents(billingConfig.overage.callMinuteUnitAmountCents)} per additional call minute</li>
+            <li>{formatUsdFromCents(billingConfig.overage.smsSegmentUnitAmountCents)} per additional SMS segment</li>
+          </ul>
+        </section>
+
+        {paymentMethodSetup === "success" && hasPaymentMethod && (
+          <div className="alert alert-success" role="status" aria-live="polite">
+            <span>Payment method updated.</span>
+          </div>
+        )}
+        {paymentMethodSetup === "success" && !hasPaymentMethod && (
+          <div className="alert alert-info" role="status" aria-live="polite" style={{ alignItems: "center" }}>
+            <span style={{ flex: 1 }}>Payment setup is being confirmed. This can take a few seconds.</span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => router.refresh()}>
+              Refresh
+            </button>
+          </div>
+        )}
+        {paymentMethodSetup === "cancelled" && (
+          <div className="alert alert-info" role="status" aria-live="polite">
+            <span>Payment setup was cancelled. Your saved payment method was not changed.</span>
+          </div>
+        )}
+
+        <section className="acct-payment-method" aria-labelledby="billing-payment-method-title">
+          <div className="acct-payment-method-main">
+            <p className="t-eyebrow" id="billing-payment-method-title">Payment method</p>
+            {hasPaymentMethod && paymentMethod ? (
+              <div style={{ display: "grid", gap: "2px" }}>
+                <p className="t-small" style={{ color: "var(--text)", fontWeight: 700, margin: 0 }}>
+                  {paymentMethodLabel}
+                </p>
+                {expLabel && (
+                  <p className="t-helper" style={{ color: "var(--text-muted)", margin: 0 }}>Expires {expLabel}</p>
+                )}
+              </div>
+            ) : (
+              <p className="t-small" style={{ color: "var(--text-muted)", margin: 0 }}>No payment method on file</p>
+            )}
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={startSetup}
+            disabled={loading}
+            aria-busy={loading}
+          >
+            {loading ? "Starting secure setup…" : hasPaymentMethod ? "Update payment method" : "Add payment method"}
+          </button>
+        </section>
+
+        {error && (
+          <div className="alert alert-error" role="alert" aria-live="polite">
+            <span>{error}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: "var(--space-5)" }}>
       <div>
-        <StatusRow label="Payment method">
-          {hasPaymentMethod ? (
-            <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
-              {paymentMethodLabel}
-            </span>
-          ) : (
-            <StatusBadge kind="needs_setup" label="Not added" />
-          )}
-        </StatusRow>
         <StatusRow label="Plan">
           {paidPlanActive ? (
             <span className="t-small" style={{ color: "var(--text)", fontWeight: 600 }}>
@@ -303,9 +402,7 @@ export function BillingCard({
               : "Add payment method"}
         </button>
         <p className="t-small" style={{ color: "var(--text-muted)" }}>
-          {paidPlanActive
-            ? "Payment method updates are securely handled by Stripe."
-            : "Secure payment setup is handled by Stripe. You will not be charged today."}
+          Secure payment setup is handled by Stripe. You will not be charged today.
         </p>
         {error && (
           <div className="alert alert-error" role="alert" aria-live="polite">
