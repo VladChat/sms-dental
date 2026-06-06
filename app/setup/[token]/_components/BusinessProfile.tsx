@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Section, NavStatusIcon, type StatusKind } from "./AccountUI";
 import { BusinessProfileForm } from "./BusinessProfileForm";
 import { SmsApprovalForm } from "./SmsApprovalForm";
@@ -21,6 +21,7 @@ export type { BusinessProfileData } from "./account-types";
 type SetupSectionId = "phone" | "business" | "sms" | "billing";
 type AccountSectionId = "account_access" | "team_access";
 type SectionId = SetupSectionId | AccountSectionId;
+const ONE_TIME_RETURN_PARAMS = ["payment_method_setup", "paid_plan"] as const;
 
 export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [biz, setBiz] = useState<BusinessProfileFields>(stripCompleted(data.businessProfile));
@@ -30,9 +31,12 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const [smsDone, setSmsDone] = useState(data.smsApproval.completed);
   const [smsStatus, setSmsStatus] = useState<SmsStatus>(data.number.smsStatus);
   const router = useRouter();
+  const pathname = usePathname();
   const [startingPaidPlan, setStartingPaidPlan] = useState(false);
   const [paidPlanPending, setPaidPlanPending] = useState(false);
   const [paidPlanError, setPaidPlanError] = useState<string | null>(null);
+  const [paymentMethodSetup, setPaymentMethodSetup] = useState(data.paymentMethodSetup ?? null);
+  const [paidPlanResult, setPaidPlanResult] = useState(data.paidPlanResult ?? null);
 
   // Explicit trial -> paid conversion. The API creates the subscription using
   // the saved Stripe payment method; paid status is granted only by webhook-
@@ -103,6 +107,36 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   // exception: an explicit ?section=… (e.g. returning from Stripe billing setup).
   const [active, setActive] = useState<SectionId>(() => resolveInitialSection(data.initialSection));
 
+  useEffect(() => {
+    function syncSectionFromUrl() {
+      const next = resolveInitialSection(new URLSearchParams(window.location.search).get("section"));
+      setActive((prev) => (prev === next ? prev : next));
+    }
+
+    window.addEventListener("popstate", syncSectionFromUrl);
+    return () => window.removeEventListener("popstate", syncSectionFromUrl);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const hasOneTimeParams = ONE_TIME_RETURN_PARAMS.some((key) => params.has(key));
+    if (!hasOneTimeParams) return;
+    window.history.replaceState(null, "", buildAccountHref(pathname, active, params));
+  }, [active, pathname]);
+
+  function setActiveSection(section: SectionId) {
+    setActive(section);
+    setPaymentMethodSetup(null);
+    setPaidPlanResult(null);
+
+    const params = new URLSearchParams(window.location.search);
+    const href = buildAccountHref(pathname, section, params);
+    const currentHref = `${pathname}${window.location.search}`;
+    if (href !== currentHref) {
+      window.history.pushState(null, "", href);
+    }
+  }
+
   const phoneStatus = phoneSectionStatus(data.number.localNumberStatus, smsStatus, hasPaymentMethod);
   const bizStatus: StatusKind = bizDone ? "complete" : "needs_setup";
   const smsSectionStatus: StatusKind = smsDone ? "complete" : "needs_setup";
@@ -140,7 +174,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                   type="button"
                   className="acct-nav-item"
                   aria-current={isActive ? "page" : undefined}
-                  onClick={() => setActive(item.id)}
+                  onClick={() => setActiveSection(item.id)}
                 >
                   <span className="acct-nav-main">
                     <span className="acct-nav-num" aria-hidden="true">{i + 1}</span>
@@ -162,7 +196,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                   type="button"
                   className="acct-nav-item"
                   aria-current={isActive ? "page" : undefined}
-                  onClick={() => setActive(item.id)}
+                  onClick={() => setActiveSection(item.id)}
                 >
                   <span className="acct-nav-main">
                     <span className="acct-nav-text">{item.label}</span>
@@ -186,7 +220,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 postalCode={data.number.postalCode}
                 hasPaymentMethod={hasPaymentMethod}
                 entitlement={entitlement}
-                onGoToBilling={() => setActive("billing")}
+                onGoToBilling={() => setActiveSection("billing")}
                 onStartPaidPlan={startPaidPlan}
                 startingPaidPlan={startingPaidPlan}
                 paidPlanPending={paidPlanPending}
@@ -251,11 +285,11 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 additionalBilledQuantity={data.number.entitlement.additionalBilledQuantity}
                 trialDaysRemaining={data.billing.trialDaysRemaining}
                 trialEnded={data.billing.trialEnded}
-                paymentMethodSetup={data.paymentMethodSetup ?? null}
+                paymentMethodSetup={paymentMethodSetup}
                 paidPlanActive={data.billing.paidPlanActive}
                 canStartPaidPlan={canStartPaidPlan}
                 isTrialing={data.billing.isTrialing}
-                paidPlanResult={data.paidPlanResult ?? null}
+                paidPlanResult={paidPlanResult}
                 startingPaidPlan={startingPaidPlan}
                 paidPlanPending={paidPlanPending}
                 paidPlanError={paidPlanError}
@@ -305,6 +339,14 @@ function resolveInitialSection(section: string | null | undefined): SectionId {
     return section as SectionId;
   }
   return "phone";
+}
+
+function buildAccountHref(pathname: string, section: SectionId, sourceParams: URLSearchParams): string {
+  const params = new URLSearchParams(sourceParams);
+  for (const key of ONE_TIME_RETURN_PARAMS) params.delete(key);
+  params.set("section", section);
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
 }
 
 function stripCompleted(b: BusinessProfileData["businessProfile"]): BusinessProfileFields {

@@ -153,9 +153,9 @@ export function BillingCard({
             </button>
           </div>
         )}
-        {paymentMethodSetup === "cancelled" && (
+        {paymentMethodSetup === "cancelled" && !hasPaymentMethod && (
           <div className="alert alert-info" role="status" aria-live="polite">
-            <span>Payment setup was cancelled. Your saved payment method was not changed.</span>
+            <span>Payment method setup was cancelled.</span>
           </div>
         )}
 
@@ -348,9 +348,9 @@ export function BillingCard({
           </button>
         </div>
       )}
-      {paymentMethodSetup === "cancelled" && (
+      {paymentMethodSetup === "cancelled" && !hasPaymentMethod && (
         <div className="alert alert-info" role="status" aria-live="polite">
-          <span>Payment setup was cancelled. No payment method was added.</span>
+          <span>Payment method setup was cancelled.</span>
         </div>
       )}
 
