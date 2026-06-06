@@ -2,6 +2,7 @@ import { getTwilioClient } from "./client";
 import {
   getA2pBrandConfig,
   getA2pTrustHubConfig,
+  getAppDomainsSafe,
   getTwilioMessagingEnv,
   getTwilioServerEnv,
   isClinicAllowedForLiveA2pSubmit,
@@ -198,6 +199,8 @@ export async function runRealA2pSubmission(
 
   const activeNumbers = await listActiveSmsNumbersForClinic(clinicId);
   const ein = (clinic.ein_tax_id ?? "").trim();
+  const appBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
+  const businessPageUrl = appBaseUrl && clinic.slug ? `${appBaseUrl}/business/${clinic.slug}` : "";
 
   // Load prior progress (idempotent resume).
   const { record } = await getA2pSubmissionState(clinicId);
@@ -277,7 +280,7 @@ export async function runRealA2pSubmission(
           businessRegistrationNumber: ein, // raw EIN — sent to Twilio, never logged/persisted.
           regionsOfOperation: brandCfg.regionsOfOperation,
           identity: brandCfg.businessIdentity,
-          websiteUrl: clinic.website ?? "",
+          websiteUrl: businessPageUrl,
         }),
       });
       businessEndUserSid = eu.sid;

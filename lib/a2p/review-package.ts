@@ -11,7 +11,6 @@ import {
 import { getA2pSubmissionState } from "../db/a2p-submissions";
 import {
   getA2pBrandConfig,
-  getA2pDisallowedClinicWebsiteHosts,
   getA2pSubmissionMode,
   getA2pTrustHubConfig,
   getAppDomainsSafe,
@@ -21,7 +20,7 @@ import {
 import { runtimeConfig } from "../../config/runtime.config";
 import { BUSINESS_TYPE_LABELS, type BusinessType } from "../validation/url";
 import { buildCampaignContent } from "./campaign-content";
-import { addressParams, buildProviderPayloadView, isDisallowedClinicWebsite, mapBusinessType } from "./provider-payload";
+import { addressParams, buildProviderPayloadView, mapBusinessType } from "./provider-payload";
 import type {
   A2pPlannedResource,
   A2pReviewMissingField,
@@ -122,19 +121,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     "business_address",
     "Complete business address",
   );
-  // Website is a required attribute of the Twilio business-information EndUser, so
-  // it is a hard requirement here. We never substitute an unrelated URL: if the
-  // clinic has no website, OR the stored website is a disallowed platform/owner/
-  // placeholder domain (e.g. allyexp.com), submission is BLOCKED with a clear
-  // reason instead of sending wrong data to Twilio.
-  const websiteIsDisallowed = isDisallowedClinicWebsite(business.website, getA2pDisallowedClinicWebsiteHosts());
-  req(
-    Boolean(business.website) && !websiteIsDisallowed,
-    "website",
-    websiteIsDisallowed
-      ? "Business website — the stored value is a platform/placeholder domain, not this clinic’s own website. Set the clinic’s real website before submitting."
-      : "Business website (required by Twilio for A2P)",
-  );
+  req(Boolean(urls.businessPage), "website", "Public business page URL (clinic must have a slug and app base URL configured)");
   req(activeNumbers.length > 0, "active_number", "At least one active SMS number");
   req(Boolean(MESSAGING_SERVICE_SID), "messaging_service_sid", "Messaging Service SID");
 
@@ -241,7 +228,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     einMaskedValue: business.einProvided ? `Provided ···· ${business.einLast4 ?? "••••"}` : "(missing)",
     regionsOfOperation: brandCfg.regionsOfOperation,
     identity: brandCfg.businessIdentity,
-    websiteUrl: business.website ?? "(missing)",
+    websiteUrl: urls.businessPage ?? "(missing)",
     repFirstName: representative.firstName ?? "(missing)",
     repLastName: representative.lastName ?? "(missing)",
     repEmail: representative.email ?? "(missing)",
