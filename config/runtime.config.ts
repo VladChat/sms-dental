@@ -104,9 +104,14 @@ export const runtimeConfig = {
       customerProfilePolicySid: "RNdfbf3fae0e1107f8aded0e7cead80bf5",
       a2pTrustProductPolicySid: "RNb0d4771c2c98518d916a3d4cd70a8f8b",
       // ACCOUNT-SPECIFIC: the PRIMARY (account) Customer Profile SID that vouches
-      // for the per-clinic Secondary Customer Profiles. MUST be set before any
-      // live submission. Empty = live submission is blocked (fail-closed).
-      primaryCustomerProfileSid: "",
+      // for the per-clinic Secondary Customer Profiles. Discovered read-only on
+      // 2026-06-08 = AllyExporter LLC primary profile (twilio-approved).
+      // VERIFY BEFORE ARMING LIVE: the account already has an approved A2P Trust
+      // Product on a DIFFERENT policy SID and a draft "missedcallsdental.com"
+      // profile. Confirm the intended brand model (per-clinic vs shared platform
+      // brand) and that a2pTrustProductPolicySid matches your account, so a real
+      // submit does not create duplicate/wrong billable resources.
+      primaryCustomerProfileSid: "BUaeab21ee3b774f0293e17522e6a1337c",
       // Email that receives Trust Hub status-change callbacks.
       notificationEmail: "support@missedcallsdental.com",
     },

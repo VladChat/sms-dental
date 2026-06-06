@@ -5050,3 +5050,59 @@ Safety: no SMS sent; NO real A2P submission run (live mode off; no real submit
 during development); no Twilio mutation during validation; no Messaging Service
 attach/detach; no Stripe change; no Vercel env change; no production DB migration
 applied; `sms_recovery_enabled` unchanged; no secrets or full EIN printed.
+
+---
+
+## 2026-06-08 — A2P submission-state migration applied + Primary Profile SID configured (live NOT armed)
+
+Prepared the deployed app toward a one-click Fairstone A2P submit. Live mode was
+deliberately NOT armed (kept `dry_run`) pending operator verification — see the
+account-state finding below.
+
+Migration applied to production (`qfjpvbvfvhbtebwivcdc`):
+
+- `supabase/migrations/20260608000100_a2p_submission_state.sql` (additive). Verified
+  `clinic_a2p_submissions` now has `submission_step text` + `provider_state jsonb`.
+
+Read-only Twilio Trust Hub discovery (no mutation, no submit):
+
+- Primary Customer Profile found: `BUaeab21ee3b774f0293e17522e6a1337c`
+  ("AllyExporter LLC", twilio-approved — the ISV/account profile that vouches for
+  per-clinic secondary profiles). SIDs are object references, not secrets.
+- Also present: a draft "missedcallsdental.com" Customer Profile
+  (`BU668e1080d4cbf61beec1a8dac79c3353`), and an already-twilio-approved A2P Trust
+  Product (`BUe3685e30463e9317a51a3b24726c050f`) on policy
+  `RNa282dd7f3dbef8586501ca2e045e764c` — which DIFFERS from the configured
+  `a2pTrustProductPolicySid` (`RNb0d4771c2c98518d916a3d4cd70a8f8b`).
+
+Config change (committed):
+
+- Set `runtimeConfig.a2p.trustHub.primaryCustomerProfileSid =
+  "BUaeab21ee3b774f0293e17522e6a1337c"`.
+- `submissionMode` LEFT at `"dry_run"` (NOT flipped to "live"). `liveSubmitClinicIds`
+  unchanged (Fairstone only). No brand/campaign config values changed.
+
+Decision (operator): set the SID only and stay `dry_run`. Rationale: the account's
+Trust Hub is not a clean slate (existing approved A2P Trust Product on a different
+policy + a draft platform profile). Before arming live, verify (a) the intended
+brand model — per-clinic brand/campaign (what the helper builds) vs a shared
+platform brand — and (b) that `a2pTrustProductPolicySid` matches the account, so a
+real submit does not create duplicate/wrong billable resources.
+
+Fairstone review package (read-only build, no submit): `found=true`,
+`missingFields=[]`, both numbers present (`+12244009986`/`PNcfa…85`,
+`+12243442685`/`PN04b…12`) showing "Not covered yet", `submissionMode=dry_run`,
+`liveSubmitArmed=false` (mode is dry_run), `submitEligible=true` (dry-run review).
+
+Remaining to ARM live (follow-up, after operator verification): set
+`submissionMode="live"` and redeploy. The primary SID + migration are already in
+place. Real mutation still requires a platform admin to review + tick the
+authorization checkbox + click Submit.
+
+Validation: `npm run typecheck` pass; `npm run build` pass; `git diff --check`
+pass. Smoke: `/api/health` 200, `/login` 200, `/account` 200, `/admin/login` 200.
+
+Safety: no real A2P submission run; no SMS sent; Twilio calls read-only only (no
+mutation); no Messaging Service attach/detach; no Brand/Campaign created; no
+Stripe change; no Vercel env change; `sms_recovery_enabled` unchanged; no secrets
+or full EIN printed.

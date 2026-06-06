@@ -329,12 +329,17 @@ Exact steps required AFTER approval before live SMS:
 3. Only then, with Vlad's approval, use the admin launch action to set
    `sms_recovery_enabled=true`. Live send still fails closed otherwise.
 
-Production migration status: the readiness migrations
-(`20260606000100_sms_readiness_tracking.sql`, `20260607000100_a2p_submission_tracking.sql`)
-ARE applied in production. The new state migration
-`20260608000100_a2p_submission_state.sql` is PENDING — apply it before arming
-live mode. The admin page degrades gracefully if the progress columns are absent
-(it falls back to the base columns); live submission requires the state migration.
+Production migration status: ALL three migrations are applied in production
+(readiness `20260606000100`, submission-tracking `20260607000100`, and state
+`20260608000100_a2p_submission_state.sql`, applied 2026-06-08).
+
+Arming status (2026-06-08): `trustHub.primaryCustomerProfileSid` is configured to
+the account's approved primary profile (`BUaeab21…`, AllyExporter LLC), discovered
+via read-only Twilio. `submissionMode` is STILL `dry_run` — live is NOT armed.
+Open verification before arming: the account already has an approved A2P Trust
+Product on a different policy SID than configured, plus a draft platform Customer
+Profile; confirm the brand model (per-clinic vs shared) and the A2P policy match
+the account so a real submit does not create duplicate/wrong billable resources.
 
 ---
 
