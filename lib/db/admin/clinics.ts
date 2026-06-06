@@ -2,6 +2,7 @@ import { getDb } from "../client";
 import {
   listActiveMembershipsForClinic,
 } from "../clinic-memberships";
+import { getSmsReadinessSummary } from "../sms-readiness";
 import { listProfilesByIds } from "../profiles";
 import {
   maskPhone,
@@ -10,6 +11,7 @@ import {
   type AdminClinicFilters,
   type AdminClinicListItem,
   type AdminClinicPhoneNumber,
+  type AdminSmsReadiness,
 } from "./types";
 
 type ClinicListRow = {
@@ -264,6 +266,29 @@ export async function getAdminClinicDetail(
   const activeNumberCount = phoneRows.filter((p) => p.is_active).length;
   const additionalBilledQuantity = phoneRows.filter((p) => p.billing_class === "additional").length;
   const heldNumberCount = phoneRows.length + (heldAttemptRows[0]?.n ?? 0);
+  const smsReadiness = await getSmsReadinessSummary(clinicId)
+    .then((summary): AdminSmsReadiness => ({
+      launchReady: summary.launchReady,
+      blockingReason: summary.blockingReason,
+      messagingServiceSid: summary.clinic?.messagingServiceSid ?? null,
+      messagingServiceStatus: summary.clinic?.messagingServiceStatus ?? "unknown",
+      brandSid: summary.clinic?.brandSid ?? null,
+      brandStatus: summary.clinic?.brandStatus ?? "unknown",
+      campaignSid: summary.clinic?.campaignSid ?? null,
+      campaignStatus: summary.clinic?.campaignStatus ?? "unknown",
+      a2pStatus: summary.clinic?.a2pStatus ?? "unknown",
+      lastSyncedAt: summary.clinic?.lastSyncedAt ?? null,
+      numbers: summary.numbers.map((n) => ({
+        phoneNumber: n.phoneNumber,
+        twilioPhoneNumberSid: n.twilioPhoneNumberSid,
+        messagingServiceSenderStatus: n.messagingServiceSenderStatus,
+        a2pCampaignCoverageStatus: n.a2pCampaignCoverageStatus,
+        productionSafe: n.productionSafe,
+        launchBlockingReason: n.launchBlockingReason,
+        lastSyncedAt: n.lastSyncedAt,
+      })),
+    }))
+    .catch(() => null);
 
   // All open owner-requested numbers (pending/reviewed) + their pricing/consent
   // snapshot. Resilient to the table/columns not yet existing in an environment.
@@ -379,6 +404,7 @@ export async function getAdminClinicDetail(
     a2pRepBusinessTitle: r.a2p_rep_business_title,
     a2pRepEmail: r.a2p_rep_email,
     a2pRepPhone: r.a2p_rep_phone,
+    smsReadiness,
     setupStatus: r.setup_status,
     adminInternalNote: r.admin_internal_note,
     adminProvisioningStatus: r.admin_provisioning_status,

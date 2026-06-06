@@ -21,6 +21,7 @@ import {
   type ActionResult,
 } from "../../../../../../lib/db/admin/actions";
 import { recordAdminAuditEvent } from "../../../../../../lib/db/admin/audit";
+import { evaluateSmsReadinessForLaunch } from "../../../../../../lib/db/sms-readiness";
 
 type AdminCtx = { userId: string | null; email: string; source: string };
 
@@ -131,6 +132,15 @@ export async function POST(
       }
       if (detail.smsStatus !== "active") {
         return jsonError(409, "precondition_failed", "SMS approval is not active yet.");
+      }
+      const readiness = await evaluateSmsReadinessForLaunch(clinicId);
+      if (!readiness.ok) {
+        return jsonError(
+          409,
+          "sms_readiness_not_verified",
+          "SMS cannot be enabled yet. Messaging Service and A2P campaign coverage are not verified for all active numbers.",
+          { reason: readiness.reason },
+        );
       }
       result = await setSmsRecoveryEnabled(clinicId, true);
     } else if (action === "update_note") {

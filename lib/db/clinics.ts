@@ -5,6 +5,7 @@ export type ClinicRow = {
   name: string;
   is_active: boolean;
   sms_recovery_enabled: boolean;
+  sms_status: SmsStatus;
 };
 
 export type ClinicSetupStatus =
@@ -131,7 +132,7 @@ export async function lookupClinicByPhone(
   if (!phoneNumber) return null;
   const sql = getDb();
   const rows = await sql<ClinicRow[]>`
-    select c.id, c.name, c.is_active, c.sms_recovery_enabled
+    select c.id, c.name, c.is_active, c.sms_recovery_enabled, c.sms_status
     from public.clinics c
     join public.clinic_phone_numbers cpn on cpn.clinic_id = c.id
     where cpn.phone_number = ${phoneNumber}

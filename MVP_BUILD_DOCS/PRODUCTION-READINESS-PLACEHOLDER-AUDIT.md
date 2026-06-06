@@ -27,6 +27,7 @@ Vercel env was changed, and no secrets were printed.
 | Emergency address | Pass in Twilio; one DB status needs refresh | Twilio reports both numbers emergency registered. DB still stores pending-registration for the second number from the initial update. |
 | Messaging Service attachment | Blocked/reconcile | Code attempts real attachment and fails closed, but read-only Twilio audit did not list either clinic number in the configured Messaging Service. |
 | A2P/10DLC | Blocked | No Twilio Brand registrations or service campaigns found. Live patient SMS is not production-safe. |
+| SMS readiness tracking | Pass in code; pending operational sync | Additive readiness tables, read-only admin sync, admin launch guard, and live send guard now fail closed when A2P/Messaging Service coverage is missing, stale, or unsynced. |
 | SMS recovery | Blocked by design | `sms_recovery_enabled=false`; outbound SMS count is zero. Do not enable until A2P and Messaging Service coverage are confirmed. |
 | Usage metering/overages | Not built | Prices are documented; no live metering or overage billing exists. |
 | Staff invites/team access | Not built | Workspace exists, real owner membership exists, but staff invitation/acceptance is still disabled/sample-only. |
@@ -62,9 +63,11 @@ Current SMS behavior:
 
 - `SMS_RECOVERY_MODE` defaults safe.
 - `sendRecoverySms()` is guarded by recovery mode, owner-test allowlist/live
-  clinic launch flag, opt-out state, and duplicate suppression.
-- Next code sprint must add an explicit A2P/campaign/number-coverage guard
-  before any live patient SMS mode can be approved.
+  clinic launch flag, `sms_status='active'`, opt-out state, duplicate
+  suppression, and confirmed readiness data for live sends.
+- Owner-test sends remain limited to explicit `SMS_TEST_ALLOWED_TO` destinations.
+- Live patient SMS fails closed when A2P campaign, Messaging Service, or
+  per-number coverage is missing, stale, or unsynced.
 
 ---
 
@@ -179,9 +182,9 @@ A2P/10DLC:
 - Live Stripe billing.
 - A2P/10DLC Brand submission/status sync.
 - A2P Campaign submission/status sync.
-- Persisted campaign/service/number coverage checks.
+- Applying the SMS readiness migration in each target database and running the
+  read-only sync before any launch decision.
 - Live patient SMS recovery.
-- Explicit A2P/coverage guard inside outbound SMS send path.
 - Messaging Service attachment reconciliation for current production numbers.
 - Twilio emergency-status refresh/reconciliation when Twilio moves from pending
   to registered after assignment.
@@ -192,55 +195,44 @@ A2P/10DLC:
 
 ---
 
-## 6. Recommended Next Implementation Sprint
+## 6. SMS Readiness Guard Sprint
 
-Sprint goal: make SMS readiness observable and fail-closed before any live
-patient SMS launch.
+Implemented in code on 2026-06-06:
 
-Minimum tasks:
+- Additive readiness model in
+  `supabase/migrations/20260606000100_sms_readiness_tracking.sql`.
+- Read-only admin sync endpoint:
+  `POST /api/admin/clinics/:clinicId/sms-readiness/sync`.
+- Admin clinic console shows SMS readiness, Messaging Service coverage, A2P
+  Brand/Campaign status, and per-number readiness without changing Twilio.
+- Admin `enable_sms` fails closed unless confirmed readiness data is fresh and
+  production-safe for every active clinic number.
+- Live `sendRecoverySms()` fails closed unless `SMS_RECOVERY_MODE=live`,
+  `sms_recovery_enabled=true`, `sms_status='active'`, and the readiness tables
+  confirm A2P/Messaging Service/per-number coverage.
+- Owner-test sends remain limited to explicit `SMS_TEST_ALLOWED_TO`
+  destinations and were not broadened.
 
-1. Add A2P/10DLC status model.
-   Persist Brand SID/status, Campaign SID/status, Messaging Service SID, and
-   number coverage status. This likely needs an additive migration.
-2. Add read-only Twilio A2P sync.
-   Operator action or scheduled/admin sync reads Brand/Campaign/service/number
-   coverage and updates DB. Do not submit Brand/Campaign automatically yet unless
-   that sprint explicitly includes submission.
-3. Reconcile Messaging Service coverage.
-   Add an operator-safe verification path for each clinic number. Current
-   Fairstone numbers must be attached/covered before SMS can be launched.
-4. Refresh Twilio emergency status.
-   Add a safe read-only status refresh so DB status matches Twilio after
-   registration completes.
-5. Harden outbound SMS live guard.
-   `sendRecoverySms()` should require `sms_recovery_enabled=true`,
-   `sms_status='active'`, and confirmed A2P/service/number coverage before live
-   patient sends.
-6. Keep admin `enable_sms` fail-closed.
-   Admin launch should require confirmed A2P/campaign/service/number coverage,
-   not just locally saved A2P form fields.
-7. Document owner-test SMS recovery readiness.
-   Owner-test sends may remain limited to explicit `SMS_TEST_ALLOWED_TO` only;
-   live patient sends must remain blocked.
+Remaining operational steps before live SMS:
 
-Acceptance criteria:
-
-- No live SMS can send when Brand/Campaign/service/number coverage is missing.
-- Fairstone's two numbers show confirmed Messaging Service coverage before any
-  launch approval.
-- `clinics.sms_recovery_enabled` remains false until Vlad explicitly approves
-  launch.
-- Twilio status sync is read-only unless an operator explicitly approves a
-  configuration change.
+1. Apply the additive readiness migration in the approved target environment.
+2. Run the read-only readiness sync for Fairstone from the platform admin
+   console.
+3. Reconcile Messaging Service sender coverage for both Fairstone numbers if
+   the read-only sync still reports missing coverage.
+4. Complete A2P/10DLC Brand and Campaign approval in Twilio.
+5. Re-run readiness sync and verify every active number reports
+   `production_safe=true` before Vlad approves `sms_recovery_enabled=true`.
 
 ---
 
 ## 7. Validation
 
-Validation for the 2026-06-06 docs refresh:
+Validation for the 2026-06-06 readiness guard sprint:
 
-- `npm run typecheck` - see final report.
-- `npm run build` - see final report.
-- `git diff --check` - see final report.
+- `npm run typecheck` - pass.
+- `npm run build` - pass.
+- `git diff --check` - pass.
 
-This refresh changes documentation only.
+No SMS was sent, no Twilio configuration was changed, no number was purchased,
+and `sms_recovery_enabled` remained unchanged.

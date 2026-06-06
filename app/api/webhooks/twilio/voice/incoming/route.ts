@@ -11,6 +11,7 @@ import { normalizePhone } from "@/lib/phone/normalize";
 import { lookupClinicByPhone, type ClinicRow } from "@/lib/db/clinics";
 import { upsertCallEvent } from "@/lib/db/call-events";
 import { hasSentRecoverySmsSince } from "@/lib/db/messages";
+import { evaluateSmsReadinessForLiveSend } from "@/lib/db/sms-readiness";
 import { getSmsRecoveryConfig } from "@/lib/env";
 import { logger } from "@/lib/logging/logger";
 
@@ -33,6 +34,7 @@ type GreetingPrediction = "will_send" | "duplicate" | "none";
 
 async function predictGreeting(
   from: string,
+  to: string,
   clinic: ClinicRow,
 ): Promise<GreetingPrediction> {
   const config = getSmsRecoveryConfig();
@@ -42,6 +44,9 @@ async function predictGreeting(
     if (!config.allowedNumbers.includes(from)) return "none";
   } else if (config.mode === "live") {
     if (!clinic.sms_recovery_enabled) return "none";
+    if (clinic.sms_status !== "active") return "none";
+    const readiness = await evaluateSmsReadinessForLiveSend(clinic.id, to);
+    if (!readiness.ok) return "none";
   } else {
     return "none"; // disabled
   }
@@ -155,7 +160,7 @@ export async function POST(request: NextRequest) {
         // Predict greeting based on read-only state. Non-fatal — fall back to
         // "none" if prediction fails so TwiML is always returned.
         try {
-          prediction = await predictGreeting(from, clinic);
+          prediction = await predictGreeting(from, to, clinic);
         } catch (err) {
           logger.warn("twilio.voice.prediction_failed", {
             callSid,

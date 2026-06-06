@@ -2291,9 +2291,63 @@ Operational rule before SMS launch:
 - Do not enable `sms_recovery_enabled` for any clinic until Brand/Campaign
   approval, Messaging Service linkage, and per-number service/campaign coverage
   are confirmed and persisted.
-- `sendRecoverySms()` needs an explicit live A2P/coverage guard before broad live
-  SMS mode can be approved. The current mode/clinic/opt-out/duplicate guards are
-  necessary but not sufficient for production patient SMS.
+- `sendRecoverySms()` now has an explicit live A2P/Messaging Service/per-number
+  readiness guard. Missing, stale, errored, or unsafe readiness data blocks the
+  Twilio send call.
 - If Twilio status changes after assignment (for example emergency status moves
   from pending to registered), use a read-only reconciliation path first; do not
   manually edit DB status unless the operator procedure explicitly approves it.
+
+---
+
+## SMS readiness guard and read-only sync — 2026-06-06
+
+Purpose: make live SMS launch fail closed until Twilio A2P/10DLC and Messaging
+Service coverage are verified from provider read-back.
+
+Code/schema added:
+
+- Migration: `supabase/migrations/20260606000100_sms_readiness_tracking.sql`.
+- Clinic-level table: `clinic_sms_readiness`.
+- Number-level table: `clinic_sms_number_readiness`.
+- Shared guard helpers: `lib/db/sms-readiness.ts`.
+- Read-only Twilio sync helper: `lib/twilio/sms-readiness-sync.ts`.
+- Admin sync route:
+  `POST /api/admin/clinics/:clinicId/sms-readiness/sync`.
+
+Safety model:
+
+- The sync route is read-only against Twilio. It fetches Messaging Service,
+  sender, Brand, and Campaign data, then writes only local readiness tables.
+- It does not send SMS, buy/release phone numbers, submit A2P, attach/detach
+  senders, or change Twilio webhooks.
+- Admin `enable_sms` requires fresh production-safe readiness for every active
+  clinic number before it can set `sms_recovery_enabled=true`.
+- Live `sendRecoverySms()` requires `SMS_RECOVERY_MODE=live`,
+  `clinics.sms_recovery_enabled=true`, `clinics.sms_status='active'`, and
+  production-safe readiness for the specific called number.
+- Owner-test SMS remains restricted by `SMS_TEST_ALLOWED_TO`; this sprint did
+  not broaden owner-test behavior.
+
+Operator procedure before any live SMS launch:
+
+1. Apply the additive migration in the approved target database.
+2. Sign in as a platform admin and open the clinic detail page.
+3. In **SMS readiness**, click **Run read-only readiness sync**.
+4. Confirm `clinic_sms_readiness.production_safe=true`.
+5. Confirm every active `clinic_phone_numbers` row has a matching
+   `clinic_sms_number_readiness` row with:
+   - `messaging_service_sender_status='covered'`
+   - `a2p_campaign_coverage_status='covered'`
+   - `production_safe=true`
+   - `last_synced_at` within the guard freshness window
+6. Only after Vlad approves, use the admin launch action to enable SMS.
+
+Known current Fairstone blockers:
+
+- The read-only audit before this sprint found no Twilio Brand registrations and
+  no Messaging Service A2P campaigns.
+- The read-only audit did not show Fairstone's two PN SIDs as Messaging Service
+  senders.
+- `sms_recovery_enabled` must remain false until those provider-side issues are
+  resolved and a fresh readiness sync confirms coverage.

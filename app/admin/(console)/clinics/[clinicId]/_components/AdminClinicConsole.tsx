@@ -99,8 +99,12 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
   const router = useRouter();
   const [active, setActive] = useState<SectionId>("phone");
   const [isAddingNumber, setIsAddingNumber] = useState(false);
+  const [syncingReadiness, setSyncingReadiness] = useState(false);
+  const [readinessMessage, setReadinessMessage] = useState<string | null>(null);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
+  const readinessBlockedReason = smsReadinessBlockedReason(d);
   const launchBlockedReason = !d.isActive
     ? "Clinic is paused. Reactivate it before launching service."
     : !d.hasAssignedNumber
@@ -109,7 +113,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
       ? "SMS approval information is not complete yet."
       : d.smsStatus !== "active"
         ? "SMS approval is not active yet."
-        : null;
+        : readinessBlockedReason;
 
   const ownerEmail = d.ownerContactEmail ?? d.members.find((m) => m.role === "owner")?.email ?? null;
   const publicBase = d.slug && data.appBaseUrl ? `${data.appBaseUrl}/business/${d.slug}` : null;
@@ -132,6 +136,35 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
       const sec = SECTIONS[next]!;
       setActive(sec.id);
       tabRefs.current[next]?.focus();
+    }
+  }
+
+  async function runReadinessSync() {
+    setSyncingReadiness(true);
+    setReadinessMessage(null);
+    setReadinessError(null);
+    try {
+      const res = await fetch(`/api/admin/clinics/${d.id}/sms-readiness/sync`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; summary?: { launchReady?: boolean }; error?: { message?: string } }
+        | null;
+      if (!res.ok || !json?.ok) {
+        setReadinessError(json?.error?.message ?? "Could not run readiness sync.");
+        return;
+      }
+      setReadinessMessage(
+        json.summary?.launchReady
+          ? "Read-only readiness sync complete. SMS coverage is verified."
+          : "Read-only readiness sync complete. SMS launch remains blocked.",
+      );
+      router.refresh();
+    } catch {
+      setReadinessError("Could not run readiness sync.");
+    } finally {
+      setSyncingReadiness(false);
     }
   }
 
@@ -383,10 +416,63 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             />
             <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>Carrier submission</h3>
             <dl className="adm-rows">
-              <Row label="Submission status"><Badge tone="neutral">Not submitted</Badge></Row>
-              <Row label="Messaging brand reference"><Muted>Not available</Muted></Row>
-              <Row label="Messaging campaign reference"><Muted>Not available</Muted></Row>
+              <Row label="Submission status"><Badge tone="neutral">Not submitted by app</Badge></Row>
+              <Row label="Messaging brand reference">
+                {d.smsReadiness?.brandSid ? <span className="t-mono">{d.smsReadiness.brandSid}</span> : <Muted>Not verified</Muted>}
+              </Row>
+              <Row label="Messaging campaign reference">
+                {d.smsReadiness?.campaignSid ? <span className="t-mono">{d.smsReadiness.campaignSid}</span> : <Muted>Not verified</Muted>}
+              </Row>
             </dl>
+
+            <h3 className="adm-subhead" style={{ margin: "var(--space-5) 0 0" }}>SMS launch readiness</h3>
+            <p className="t-helper" style={{ margin: "var(--space-1) 0 var(--space-3)" }}>
+              Texting is not active yet. Carrier/A2P approval and Messaging Service coverage must be verified before SMS can be enabled.
+            </p>
+            {(readinessMessage || readinessError) && (
+              <div className={`alert ${readinessError ? "alert-error" : "alert-success"}`} role="status" aria-live="polite">
+                <span>{readinessError ?? readinessMessage}</span>
+              </div>
+            )}
+            <dl className="adm-rows">
+              <Row label="Current status">
+                <Badge tone={readinessTone(d.smsReadiness?.launchReady ?? false)}>
+                  {readinessLabel(d.smsReadiness)}
+                </Badge>
+              </Row>
+              <Row label="Blocking reason">
+                {d.smsReadiness?.blockingReason ? humanizeToken(d.smsReadiness.blockingReason) : d.smsReadiness?.launchReady ? "None" : "Not synced"}
+              </Row>
+              <Row label="Last read-only sync">{fmtDateTime(d.smsReadiness?.lastSyncedAt ?? null)}</Row>
+              <Row label="Messaging Service">
+                {d.smsReadiness?.messagingServiceSid ? <span className="t-mono">{d.smsReadiness.messagingServiceSid}</span> : <Muted>Not synced</Muted>}
+              </Row>
+              <Row label="Messaging Service status">{humanizeToken(d.smsReadiness?.messagingServiceStatus ?? "unknown")}</Row>
+              <Row label="Brand status">{humanizeToken(d.smsReadiness?.brandStatus ?? "unknown")}</Row>
+              <Row label="Campaign status">{humanizeToken(d.smsReadiness?.campaignStatus ?? "unknown")}</Row>
+            </dl>
+            {d.smsReadiness && d.smsReadiness.numbers.length > 0 && (
+              <div style={{ marginTop: "var(--space-3)", display: "grid", gap: "var(--space-2)" }}>
+                {d.smsReadiness.numbers.map((n) => (
+                  <div className="adm-phone-card" key={n.phoneNumber}>
+                    <div className="adm-phone-card-head">
+                      <span className="t-mono" style={{ fontWeight: 700 }}>{n.phoneNumber}</span>
+                      <Badge tone={readinessTone(n.productionSafe)}>{n.productionSafe ? "Covered" : "Blocked"}</Badge>
+                    </div>
+                    <dl className="adm-rows">
+                      <Row label="Messaging Service sender">{humanizeToken(n.messagingServiceSenderStatus)}</Row>
+                      <Row label="A2P campaign coverage">{humanizeToken(n.a2pCampaignCoverageStatus)}</Row>
+                      <Row label="Last sync">{fmtDateTime(n.lastSyncedAt)}</Row>
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: "var(--space-3)" }}>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={syncingReadiness} onClick={runReadinessSync}>
+                {syncingReadiness ? "Checking..." : "Run read-only readiness sync"}
+              </button>
+            </div>
             {publicBase && (
               <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
                 Compliance pages:{" "}
@@ -395,7 +481,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 <a className="link" href={`${publicBase}/sms-terms`} target="_blank" rel="noreferrer noopener">SMS terms</a>
               </p>
             )}
-            <DisabledAction label="Submit SMS approval" reason="A2P submission backend required" />
+            <DisabledAction label="Submit SMS approval" reason="A2P submission is not connected. Readiness sync is read-only only." />
           </Panel>
 
           {/* Billing (compact) */}
@@ -436,7 +522,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
               <Row label="Global SMS mode">{SMS_MODE_LABELS[data.smsMode] ?? humanizeToken(data.smsMode)}</Row>
             </dl>
             <p className="t-helper" style={{ marginTop: "var(--space-2)" }}>
-              Templates are fixed in code. Per-clinic SMS settings are not editable yet (no settings backend).
+              Templates are fixed in code. Live sending also requires verified A2P campaign and Messaging Service coverage for each active number.
             </p>
           </Panel>
 
@@ -573,7 +659,9 @@ function DisabledAction({ label, reason }: { label: string; reason: React.ReactN
 
 function sectionStatuses(d: AdminClinicDetail): Partial<Record<SectionId, { text: string; tone: Tone }>> {
   const a2p: { text: string; tone: Tone } =
-    d.a2pInfoCompleted && d.a2pAuthorized
+    d.smsReadiness?.launchReady
+      ? { text: "Verified", tone: "success" }
+      : d.a2pInfoCompleted && d.a2pAuthorized
       ? { text: "Ready", tone: "success" }
       : d.a2pInfoCompleted
         ? { text: "Waiting", tone: "info" }
@@ -585,6 +673,25 @@ function sectionStatuses(d: AdminClinicDetail): Partial<Record<SectionId, { text
     billing: d.stripeCustomerPresent ? { text: "Connected", tone: "success" } : { text: "Not connected", tone: "neutral" },
     behavior: { text: "Read-only", tone: "neutral" },
   };
+}
+
+function readinessTone(ok: boolean): Tone {
+  return ok ? "success" : "warning";
+}
+
+function readinessLabel(readiness: AdminClinicDetail["smsReadiness"]): string {
+  if (!readiness) return "Not synced";
+  return readiness.launchReady ? "Verified" : "Blocked";
+}
+
+function smsReadinessBlockedReason(d: AdminClinicDetail): string | null {
+  if (d.smsReadiness?.launchReady) return null;
+  if (!d.smsReadiness) {
+    return "SMS readiness has not been synced. Run read-only readiness sync before launch.";
+  }
+  return d.smsReadiness.blockingReason
+    ? `SMS readiness blocked: ${humanizeToken(d.smsReadiness.blockingReason)}.`
+    : "SMS readiness is not verified.";
 }
 
 function bannerFor(
@@ -606,6 +713,8 @@ function bannerFor(
   if (d.smsStatus !== "active") {
     return { tone: "warning", title: "Launch blocked: SMS approval not active", body: "Wait for active SMS approval before launching SMS recovery.", target: "sms", actionLabel: "Go to SMS approval" };
   }
-  void launchBlockedReason;
+  if (launchBlockedReason) {
+    return { tone: "warning", title: "Launch blocked: SMS readiness not verified", body: launchBlockedReason, target: "sms", actionLabel: "Go to SMS approval" };
+  }
   return { tone: "info", title: "Ready to launch", body: "All prerequisites met. Launch from Admin tools.", target: "admin", actionLabel: "Go to Admin tools" };
 }

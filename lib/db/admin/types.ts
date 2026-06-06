@@ -68,6 +68,30 @@ export type AdminClinicPhoneNumber = {
   suspensionReason: string | null;
 };
 
+export type AdminSmsReadinessNumber = {
+  phoneNumber: string;
+  twilioPhoneNumberSid: string | null;
+  messagingServiceSenderStatus: string;
+  a2pCampaignCoverageStatus: string;
+  productionSafe: boolean;
+  launchBlockingReason: string | null;
+  lastSyncedAt: string | null;
+};
+
+export type AdminSmsReadiness = {
+  launchReady: boolean;
+  blockingReason: string | null;
+  messagingServiceSid: string | null;
+  messagingServiceStatus: string;
+  brandSid: string | null;
+  brandStatus: string;
+  campaignSid: string | null;
+  campaignStatus: string;
+  a2pStatus: string;
+  lastSyncedAt: string | null;
+  numbers: AdminSmsReadinessNumber[];
+};
+
 export type AdminPurchaseAttempt = {
   id: string;
   requestedPhoneNumber: string;
@@ -176,6 +200,7 @@ export type AdminClinicDetail = {
   a2pRepBusinessTitle: string | null;
   a2pRepEmail: string | null;
   a2pRepPhone: string | null;
+  smsReadiness: AdminSmsReadiness | null;
   // lifecycle
   setupStatus: string;
   // internal-only operator fields

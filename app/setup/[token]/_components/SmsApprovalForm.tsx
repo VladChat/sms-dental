@@ -205,19 +205,24 @@ export function SmsApprovalForm({
           onChange={(e) => onChange({ authorized: e.target.checked })}
         />
         <span>
-          I confirm these details are accurate and authorize Missed Calls Dental to submit them for
-          SMS approval.
+          I confirm these details are accurate and authorize Missed Calls Dental to use them for
+          SMS approval review.
         </span>
       </label>
       <div className="acct-texting-row">
         <span className="t-small" style={{ color: "var(--text-secondary)" }}>Texting</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}>
           {smsStatus !== "active" && (
-            <span className="t-helper">Starts after approval</span>
+            <span className="t-helper">Not active yet</span>
           )}
           <StatusBadge kind={textingKind} />
         </span>
       </div>
+      {smsStatus !== "active" && (
+        <p className="t-helper" style={{ margin: 0 }}>
+          Carrier/A2P approval and Messaging Service coverage must be verified before SMS can be enabled.
+        </p>
+      )}
 
       <SaveBar label="Save approval information" saving={saving} savedAt={savedAt} error={error} />
     </form>

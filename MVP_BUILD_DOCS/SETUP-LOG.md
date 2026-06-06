@@ -4738,3 +4738,75 @@ Safety:
 - No Vercel env changed.
 - No `sms_recovery_enabled` change.
 - No secrets printed or documented.
+
+## 2026-06-06 — Fail-closed SMS readiness guards
+
+Scope:
+
+- Added additive readiness tracking for A2P/Messaging Service launch state:
+  `clinic_sms_readiness` and `clinic_sms_number_readiness`.
+- Added a platform-admin read-only readiness sync endpoint for clinic SMS launch
+  checks. The sync reads Twilio Messaging Service, sender, Brand, and Campaign
+  status and writes only local readiness tables.
+- Hardened admin `enable_sms` so it fails closed unless every active number has
+  fresh production-safe A2P/Messaging Service coverage.
+- Hardened live `sendRecoverySms()` so no Twilio SMS send call happens unless
+  `SMS_RECOVERY_MODE=live`, `sms_recovery_enabled=true`,
+  `sms_status='active'`, and readiness data confirms the called number is
+  covered.
+- Preserved owner-test SMS behavior: still restricted to explicit
+  `SMS_TEST_ALLOWED_TO` destinations.
+- Updated admin SMS console copy/status display and owner-facing SMS approval
+  copy so saved A2P information is not presented as a submitted/approved carrier
+  launch.
+
+Files changed:
+
+- `supabase/migrations/20260606000100_sms_readiness_tracking.sql`
+- `lib/db/sms-readiness.ts`
+- `lib/twilio/sms-readiness-sync.ts`
+- `app/api/admin/clinics/[clinicId]/sms-readiness/sync/route.ts`
+- `app/api/admin/clinics/[clinicId]/action/route.ts`
+- `app/api/webhooks/twilio/voice/incoming/route.ts`
+- `lib/twilio/outbound-sms.ts`
+- `lib/db/clinics.ts`
+- `lib/db/admin/clinics.ts`
+- `lib/db/admin/types.ts`
+- `app/admin/(console)/clinics/[clinicId]/_components/AdminClinicConsole.tsx`
+- `app/setup/[token]/_components/SmsApprovalForm.tsx`
+- `MVP_BUILD_DOCS/PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md`
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Validation:
+
+- `npm run typecheck` — pass.
+- `npm run build` — pass.
+- `git diff --check` — pass.
+
+Operational notes:
+
+- Migration is additive only. Apply it in the approved target database before
+  using the admin readiness sync route.
+- The readiness sync is read-only against Twilio. It does not submit A2P, attach
+  senders, mutate webhooks, send SMS, buy/release numbers, or change provider
+  configuration.
+- Missing readiness rows, stale sync data, sync errors, missing Brand/Campaign,
+  missing Messaging Service sender coverage, or unsafe status all block live SMS.
+- Fairstone still needs provider-side Messaging Service/A2P readiness verified
+  by fresh read-only sync before any SMS launch approval.
+
+Commit/push:
+
+- Pending at time of log entry; see final report for exact commit hash and
+  deployment status.
+
+Safety:
+
+- No SMS sent.
+- No Twilio number purchased, released, attached, detached, or configured.
+- No A2P submission.
+- No Stripe state changed.
+- No Vercel env changed.
+- `sms_recovery_enabled` unchanged.
+- No secrets printed or documented.

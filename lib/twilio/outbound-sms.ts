@@ -6,10 +6,16 @@ import {
   recordOutboundMessage,
 } from "../db/messages";
 import { touchConversation } from "../db/conversations";
+import { evaluateSmsReadinessForLiveSend } from "../db/sms-readiness";
 import { logger } from "../logging/logger";
 
 export type SendRecoverySmsInput = {
-  clinic: { id: string; name: string; sms_recovery_enabled: boolean };
+  clinic: {
+    id: string;
+    name: string;
+    sms_recovery_enabled: boolean;
+    sms_status?: string;
+  };
   patientPhone: string;
   twilioPhone: string;
   conversationId: string | null;
@@ -42,6 +48,30 @@ export async function sendRecoverySms(
       clinicId: input.clinic.id,
     });
     return { sent: false, reason: "clinic_sms_disabled" };
+  }
+
+  // Guard 2b (live mode only): clinic status + provider readiness must be
+  // production-safe. Missing/stale readiness rows fail closed before Twilio.
+  if (config.mode === "live") {
+    if (input.clinic.sms_status !== "active") {
+      logger.info("twilio.sms.skipped_sms_status_not_active", {
+        clinicId: input.clinic.id,
+        smsStatus: input.clinic.sms_status ?? "unknown",
+      });
+      return { sent: false, reason: "sms_status_not_active" };
+    }
+
+    const readiness = await evaluateSmsReadinessForLiveSend(
+      input.clinic.id,
+      input.twilioPhone,
+    );
+    if (!readiness.ok) {
+      logger.info("twilio.sms.skipped_readiness_blocked", {
+        clinicId: input.clinic.id,
+        reason: readiness.reason,
+      });
+      return { sent: false, reason: readiness.reason };
+    }
   }
 
   // Guard 3 (owner_test mode only): patient phone must be in the explicit allowlist.
