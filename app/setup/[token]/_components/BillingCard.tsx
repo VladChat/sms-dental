@@ -95,10 +95,6 @@ export function BillingCard({
   const currentMonthlyTotalLabel = `${formatUsdFromCents(currentMonthlyTotal)}/month`;
   const additionalPhoneNumberLabel =
     additionalBilledQuantity === 1 ? "additional phone number" : "additional phone numbers";
-  const currentPlanName =
-    additionalBilledQuantity > 0
-      ? `${billingConfig.basePlan.displayName} + ${formatInteger(additionalBilledQuantity)} ${additionalPhoneNumberLabel}`
-      : billingConfig.basePlan.displayName;
   const currentPlanBreakdown =
     additionalBilledQuantity > 0
       ? `${baseMonthlyLabel} base plan + ${formatInteger(additionalBilledQuantity)} × ${additionalMonthlyLabel} ${additionalPhoneNumberLabel}`
@@ -109,10 +105,7 @@ export function BillingCard({
       <div className="acct-billing-stack">
         <section className="acct-current-plan" aria-labelledby="billing-current-plan-title">
           <div className="acct-current-plan-head">
-            <div>
-              <p className="t-eyebrow" id="billing-current-plan-title">Current plan</p>
-              <h3 className="acct-current-plan-name">{currentPlanName}</h3>
-            </div>
+            <p className="t-eyebrow" id="billing-current-plan-title">Current plan</p>
             <StatusBadge kind="complete" label="Active" />
           </div>
           <p className="acct-current-plan-total">{currentMonthlyTotalLabel}</p>

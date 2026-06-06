@@ -292,9 +292,8 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
   background:linear-gradient(135deg, var(--primary-soft), var(--surface));
   box-shadow:var(--shadow-sm);
 }
-.acct-current-plan-head { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-4); }
-.acct-current-plan-name { margin:var(--space-1) 0 0; font:var(--h4); color:var(--text); }
-.acct-current-plan-total { margin:0; font:var(--h1); color:var(--text); letter-spacing:-.03em; }
+.acct-current-plan-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); flex-wrap:wrap; }
+.acct-current-plan-total { margin:0; font:var(--h2); color:var(--text); letter-spacing:-.03em; }
 .acct-current-plan-note { margin:0; color:var(--text-secondary); }
 .acct-billing-block {
   display:grid;
