@@ -1,331 +1,246 @@
-# Production Readiness — Placeholder Audit
+# Production Readiness - Real vs Blocked Audit
 
-Status: Active (audit pass)
-Last updated: 2026-06-01
-Owner doc: this is the canonical "what is real vs placeholder right now" reference.
-When this conflicts with older numbered build-spec docs (`00`–`15`), trust this doc
-for current state.
+Status: Active canonical readiness reference
+Last updated: 2026-06-06
 
-This audit is **read-only on product behavior**. No placeholder features were
-implemented in this pass. The only code/doc changes are documentation accuracy
-fixes (see "Documentation mismatches"). Goal: order the next implementation tasks
-correctly.
+This document is the current "what is real vs blocked" source of truth. When it
+conflicts with older numbered build-spec docs, trust this document and the
+current source code.
 
----
-
-## 1. Executive summary
-
-The backend foundation, real auth, onboarding capture, and the read+write
-workspace outcome flow are genuinely working. The **money and team surfaces are
-not**: billing/payment method, staff invitations, in-session password change, and
-phone-number assignment are placeholders or blocked on external wiring. Several
-primary buttons look active but do nothing real (open a "contact support" /
-"will open here" modal), which is the highest-risk category because it implies a
-working SaaS.
-
-Most current operational docs are accurately hedged (they already say
-"presentational", "shell", "placeholder"). The main doc risk is a stale
-`PROJECT-CONTEXT.md` note that says voice testing is trial-blocked (it is now
-verified) and the broad numbered build-spec docs that describe the full intended
-product.
-
-**Product-billing decision (reaffirmed):** a payment method may be *collected*
-during setup, but **do not begin paid billing until automatic SMS recovery is
-approved and active**.
+Safety note for this audit: provider checks were read-only. No SMS was sent, no
+Twilio number was purchased/released/configured, no Stripe state was changed, no
+Vercel env was changed, and no secrets were printed.
 
 ---
 
-## 2. Current product readiness status
+## 1. Executive Status
 
-| Capability | Status |
-|---|---|
-| Marketing site + Start trial → setup email | working |
-| Auth: login / logout / forgot / reset / callback (PKCE + token_hash) | working |
-| Setup link validation + idempotency + completed-state | working |
-| Onboarding capture (clinic, business profile, SMS-approval data) + owner account creation | working |
-| Account dashboard display (real clinic data, trial countdown) | working |
-| Workspace: real cards + outcome/note saving; labeled samples | working |
-| Public business pages `/business/{slug}` (+ privacy, sms-terms) | working (generated) |
-| Twilio voice + inbound SMS webhooks, STOP/START/HELP | working (verified) |
-| In-session **Change password** | placeholder |
-| **Billing / payment method** (Stripe collect + subscribe) | placeholder + blocked_external |
-| **Staff invite / team access** | placeholder |
-| **Phone number assignment** (reserve/purchase) | blocked_external (gate off) |
-| **A2P / carrier registration** (live patient SMS) | blocked_external (manual/not wired) |
+| Area | Status | Current truth |
+|---|---|---|
+| Auth + setup + owner account | Pass | Real Supabase Auth/session flow, owner account, clinic membership, setup completion. |
+| Payment method | Pass for Stripe test mode | Real Stripe-hosted setup flow stores safe card metadata. Fairstone has `visa **** 4242`. |
+| Paid plan | Pass for Stripe test mode | In-app server-side paid-plan start creates/persists an active Stripe test-mode subscription. It does not return a Checkout URL. |
+| Billing UI | Pass | Uses config pricing and entitlement quantity; Fairstone shows base + 1 additional number = current monthly total. |
+| Included number purchase | Pass for controlled owner-test clinic | Real Twilio number `+12244009986` assigned as included. Broad live purchase is not enabled. |
+| Additional number purchase | Pass for controlled owner-test clinic | Real Twilio number `+12243442685` assigned as additional with $20/month consent and Stripe test-mode quantity sync. |
+| Twilio webhooks | Pass | Both audited numbers have the app voice, voice-status, and SMS webhook URLs configured. |
+| Emergency address | Pass in Twilio; one DB status needs refresh | Twilio reports both numbers emergency registered. DB still stores pending-registration for the second number from the initial update. |
+| Messaging Service attachment | Blocked/reconcile | Code attempts real attachment and fails closed, but read-only Twilio audit did not list either clinic number in the configured Messaging Service. |
+| A2P/10DLC | Blocked | No Twilio Brand registrations or service campaigns found. Live patient SMS is not production-safe. |
+| SMS recovery | Blocked by design | `sms_recovery_enabled=false`; outbound SMS count is zero. Do not enable until A2P and Messaging Service coverage are confirmed. |
+| Usage metering/overages | Not built | Prices are documented; no live metering or overage billing exists. |
+| Staff invites/team access | Not built | Workspace exists, real owner membership exists, but staff invitation/acceptance is still disabled/sample-only. |
+| Workspace reply workflow | Partial | Workspace displays real conversations and saves outcomes; full operational reply/scheduling workflow is not complete. |
 
-Overall: **working prototype + real onboarding/auth/workspace; not yet a
-self-serve paid SaaS.**
+Overall: the app is now a controlled owner-test paid SaaS path for one clinic,
+not a broad production SMS recovery launch. Billing and number assignment are no
+longer placeholders. Live patient SMS remains intentionally blocked.
 
 ---
 
-## 3. Placeholders / gaps inventory
+## 2. Controlled Production/Test Configuration
 
-> Risk = user-facing risk of implying the product works. Copy is quoted verbatim.
+Current committed runtime config:
 
-### 3.1 `placeholder` — active UI that does not perform its function
+- `runtimeConfig.onboarding.twilioNumberPurchaseMode = "owner_test_live"`
+- `runtimeConfig.onboarding.twilioPurchaseTestClinicIds` includes only
+  `f37f24a1-070f-436b-b803-956f55466093` (Fairstone Dental Smile).
+- Broad `live` Twilio purchase mode is off.
+- `"mock"` remains local/staging UX only and does not call Twilio purchase APIs.
+- `"disabled"` remains the safe default mode to use when testing is complete.
 
-| # | Area | File(s) | Label / copy | Current behavior | Expected real behavior | Impact | Risk | Next action | Future task title |
-|---|---|---|---|---|---|---|---|---|---|
-| P1 | Billing | `app/setup/[token]/_components/BillingCard.tsx` | `Add payment method` / `Update payment method`; modal: `Secure payment setup will open here when billing is connected.` | Opens an inert modal; no Stripe call, no card capture | Stripe Checkout/SetupIntent collects a card, sets `stripe_customer_id`, marks payment method on file | Owner believes they added payment; phone/setup can never complete | high | implement_now | Implement Stripe payment-method collection (no charge until SMS active) |
-| P2 | Team access | `app/setup/[token]/_components/TeamAccessCard.tsx` | `Send invite`; modal: `Please contact support to add staff access.` | Validates email, then shows support modal; no invite sent | Create invite, email staff, allow password creation + front_desk membership | Owner cannot add front-desk staff; "support" implies a manual process that doesn't exist | high | implement_now (or hide_or_disable short-term) | Build staff invitation + acceptance flow |
-| P3 | Account access | `app/setup/[token]/_components/AccountAccessCard.tsx` | `Change password`; modal: `Password change will be available after secure account settings are connected.` | Opens inert modal | In-session password update (reauth + Supabase `updateUser`) | Signed-in users cannot change password (must use forgot-password) | medium | implement_now | In-session change-password flow |
-| P4 | Team access | `app/setup/[token]/_components/TeamAccessCard.tsx` | Sample `Remove` / `Restore`; modal: `Please contact support to update staff access.` | Sample-row buttons open support modal | Real member management once invites exist | Lower — rows are in a labeled Sample block | medium | keep_as_sample (until P2) | (covered by P2) |
-| P5 | Marketing | `docs/script.js` (~L87) | "Sign-in form (front-end demo: always show inline error)" | Dead/demo handler; `sign-in.html` now redirects to app `/login` | None — remove dead handler | None (page redirects before form shows) | low | backlog (cleanup) | Remove dead marketing sign-in demo handler |
+Current Stripe behavior:
 
-### 3.2 `blocked_external` — depends on integration/config not enabled
+- Stripe is test/sandbox mode only.
+- Paid-plan start is server-side and in-app.
+- `/api/account/billing/start-paid-plan` returns JSON status, not a Stripe URL.
+- The Stripe webhook has real billing lifecycle handling and persists
+  subscription state idempotently/fail-closed.
+- No live Stripe resources or live charges are enabled.
 
-| # | Area | File(s) | Current behavior | Expected real behavior | Impact | Risk | Next action | Future task title |
-|---|---|---|---|---|---|---|---|---|
-| B1 | Billing | `app/api/webhooks/stripe/route.ts`, `lib/stripe/*` | Verifies signature + records `webhook_events`; **no billing logic**; nothing ever sets `stripe_customer_id`/`billing_status` | Subscription lifecycle handlers; payment-method + trial state | `hasPaymentMethod` is effectively always false in prod | high | implement_now (with P1) | Stripe subscription + webhook billing handlers |
-| B2 | Phone number | `app/api/onboarding/[token]/numbers/purchase/route.ts`, `lib/env.ts` (`isTwilioNumberPurchaseEnabled`), `lib/onboarding/local-number.ts` | Purchase gated by `TWILIO_NUMBER_PURCHASE_ENABLED` (default false) → `503 purchase_disabled`; "prepare" is a read-only Twilio search, not a reservation | Controlled reserve/purchase after billing gate passes | No number is actually assigned in production today | high | implement_now (after P1/G1) | Enable controlled number reservation/purchase |
-| B3 | SMS approval / compliance | `app/api/account/a2p/route.ts`, `MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md` | A2P data saved; displayed status → `Waiting for approval`; **nothing submitted to Twilio/carrier** | Submit/track toll-free or 10DLC registration | "Waiting for approval" implies a submission that hasn't happened | high | document_as_known_gap (manual op today) | Wire A2P/toll-free submission + status sync |
-| B4 | SMS recovery | `lib/env.ts` (`SMS_RECOVERY_MODE`), `clinics.sms_recovery_enabled` | Disabled / owner_test only; per-clinic flag false | Live patient SMS after approval + owner enable | Intentional safety gate; correct for now | high (intentional) | document_as_known_gap | (gated by B3) |
+Current SMS behavior:
 
-### 3.3 `partially_working`
+- `SMS_RECOVERY_MODE` defaults safe.
+- `sendRecoverySms()` is guarded by recovery mode, owner-test allowlist/live
+  clinic launch flag, opt-out state, and duplicate suppression.
+- Next code sprint must add an explicit A2P/campaign/number-coverage guard
+  before any live patient SMS mode can be approved.
 
-| # | Area | File(s) | Current behavior | Gap | Risk | Next action | Future task title |
-|---|---|---|---|---|---|---|---|
-| PW1 | Phone number | `app/setup/[token]/_components/AssignedNumberCard.tsx`, `BusinessProfile.tsx` (`phoneSectionStatus`) | Shows statuses + `Add a payment method to receive your phone number.` | billing→phone gate is **presentational only** (no server enforcement); and payment can't be added (P1) nor number purchased (B2), so the promise can't be fulfilled | high | implement_now | Server-side billing→phone provisioning gate |
-| PW2 | Workspace access | `app/workspace/page.tsx`, `lib/auth/access.ts` | Auth membership + legacy token fallback; `front_desk` role supported | No invite flow exists to create front_desk users → workspace is effectively owner-only today | medium | backlog (after P2) | Front-desk-only workspace access |
-| PW3 | SMS approval | `app/api/account/a2p/route.ts` | Real save + status advance | Not connected to carrier submission (see B3) | medium | document_as_known_gap | (gated by B3) |
-| PW4 | Account billing block | `app/account/page.tsx` (`hasPaymentMethod` derivation) | Trial countdown real; `hasPaymentMethod` derived from `stripe_customer_id`/`billing_status` | Those fields are never set by any real flow yet (B1) | medium | implement_now (with P1/B1) | (covered by P1/B1) |
+---
 
-### 3.4 `sample_demo` (keep only while clearly labeled)
+## 3. Read-Only Production Audit - Fairstone Dental Smile
 
-| # | Area | File(s) | Current behavior | Verdict | Risk |
+Clinic:
+
+- `clinic_id`: `f37f24a1-070f-436b-b803-956f55466093`
+- Name: Fairstone Dental Smile
+- Required business/address fields for real purchase: present.
+- `owner_contact_phone`: missing; recommended but not purchase-blocking.
+- `business_info_completed`: true
+- `a2p_info_completed`: true locally saved only; not a Twilio approval.
+- `sms_status`: `waiting_for_approval`
+- `sms_recovery_enabled`: false
+- `billing_status`: active
+- Stripe payment method: present (`visa **** 4242`, exp `12/2034`)
+- Stripe subscription: present and active in test mode
+- Trial started: 2026-06-05
+- Paid plan started: 2026-06-05
+
+Assigned numbers:
+
+| Number | PN SID | Billing class | Active | Monthly amount | DB emergency status |
+|---|---|---|---|---:|---|
+| `+12244009986` | `PNcfa04ebbb3c99d346473979781eb8785` | included | true | 0 | registered |
+| `+12243442685` | `PN04b5bd6be9a95f26412c58bafea04512` | additional | true | 2000 cents | pending-registration |
+
+Entitlement counts:
+
+- Total held rows: 2
+- Active rows: 2
+- Included active: 1
+- Additional billed quantity: 1
+
+Purchase attempts:
+
+- `+12244009986`: `assigned`, slot `included`, no error.
+- `+12243442685`: `assigned`, slot `additional`, no error.
+
+Patient-message/call safety counts:
+
+- `messages`: 0 total, 0 outbound, 0 inbound.
+- `call_events`: 0.
+- No patient message bodies or patient phone data were printed.
+
+Stripe test-mode audit:
+
+- Customer present.
+- Subscription present and `active`.
+- Subscription items found:
+  - 9900 cents/month quantity 1.
+  - 2000 cents/month quantity 1.
+- One saved card payment method found (`visa **** 4242`).
+
+Twilio read-only audit:
+
+| Number | Exists | Voice webhook | Voice status callback | SMS webhook | Emergency status |
 |---|---|---|---|---|---|
-| S1 | Workspace | `app/workspace/_components/Workspace.tsx` | Sample cards in a separate labeled `Sample requests` section, Hide/Show, disabled non-persistent outcome preview (`Sample preview · not saved`) | keep_as_sample — properly separated, never writes | low |
-| S2 | Team access | `app/setup/[token]/_components/TeamAccessCard.tsx` | `Sample staff examples` (`frontdesk@example.com`, …) labeled `Sample`, Hide/Show | keep_as_sample (until P2 ships real members) | low |
-| S3 | Team access | `TeamAccessCard.tsx` (`teamActionLabel`) | Real member rows render action text `Remove`/`—` as **plain text** (not buttons) | Minor: looks actionable but isn't; fold into P2 | low |
+| `+12244009986` | yes | app voice incoming URL | app voice status URL | app SMS incoming URL | Active / registered |
+| `+12243442685` | yes | app voice incoming URL | app voice status URL | app SMS incoming URL | Active / registered |
+
+Twilio Address:
+
+- Both numbers use emergency Address SID `ADe303a7e8801efdff77e94b6bec887a59`.
+- Twilio now reports both numbers as emergency registered.
+- DB should be refreshed/reconciled for the second number because it still stores
+  `pending-registration`.
+
+Messaging Service:
+
+- Configured service: `MG83239dc7dfdf8aa6c9b397e8258f7d93`
+- Friendly name: `Missed Call SMS - Dental MVP`
+- Read-only service sender list did not show either Fairstone PN SID attached.
+- Incoming number records also did not expose a matching `messagingServiceSid`.
+- Treat outbound SMS as blocked until service coverage is reconciled and verified.
+
+A2P/10DLC:
+
+- Brand registrations found: 0.
+- Service A2P campaigns found: 0.
+- Messaging Service is not linked to an A2P campaign.
+- Neither audited number is covered by an approved campaign/service.
+- Outbound patient SMS is not production-safe.
 
 ---
 
-## 4. Working features inventory
+## 4. What Is Real Now
 
-| Area | File(s) | Why it's real |
-|---|---|---|
-| Marketing handoff | `docs/index.html`, `docs/pricing.html`, `docs/sign-in.html` | Sign in → `app/login`; Start trial → form POST to `/api/setup-requests`; `sign-in.html` redirects to `/login` |
-| Setup request + email | `app/api/setup-requests/route.ts`, `lib/email/setup-link-email.ts` | Creates `setup_requests` row, hashed token, sends Resend email |
-| Setup link + idempotency | `app/setup/[token]/page.tsx`, `lib/onboarding/verify.ts` | Validates token; completed links show completed-state / redirect; no form re-render |
-| Owner account creation | `app/api/onboarding/[token]/clinic/route.ts` | Creates clinic + Supabase auth user + profile + owner membership + session |
-| Auth flows | `app/api/auth/{login,logout,forgot-password,update-password}/route.ts`, `app/auth/callback/route.ts`, `app/reset-password/*` | Real Supabase Auth; branded reset email via app-domain `token_hash` link |
-| Save: business profile / SMS-approval data | `app/api/account/business-info`, `app/api/account/a2p` (+ token variants) | Persist real clinic fields, clinic-scoped |
-| Account dashboard display | `app/account/page.tsx`, `app/setup/[token]/_components/BusinessProfile.tsx` | Real clinic data, trial countdown, assigned-phone display, sign out |
-| Workspace outcomes | `app/workspace/*`, `app/api/workspace/outcome/route.ts`, `lib/db/front-desk.ts` | Auth + clinic-scoped outcome/note save; status mapping; persists across refresh |
-| Public business pages | `app/business/[slug]/*` | Generated from the clinic row (profile, privacy, SMS terms) |
-| Number search | `app/api/onboarding/[token]/numbers/route.ts` | Real read-only Twilio search (purchase is separate/gated) |
-| Twilio webhooks | `app/api/webhooks/twilio/**` | Voice + inbound SMS verified; STOP/START/HELP opt-out enforced |
-| Health | `app/api/health/route.ts` | Public liveness |
-| Stripe webhook (ingress only) | `app/api/webhooks/stripe/route.ts` | Signature verify + idempotent event record (no billing logic — see B1) |
-
----
-
-## 5. API route inventory
-
-| Route | Method | Classification |
-|---|---|---|
-| `/api/health` | GET | working |
-| `/api/auth/login` `/logout` `/forgot-password` `/update-password` | POST | working |
-| `/auth/callback` | GET | working (PKCE + token_hash) |
-| `/api/setup-requests` | POST | working (marketing entry; sends email) |
-| `/api/onboarding/[token]/clinic` | POST | working (account creation; idempotent) |
-| `/api/onboarding/[token]/business-info` `/a2p` | POST | working (token-based save) |
-| `/api/account/business-info` `/a2p` | POST | working (auth-based save) |
-| `/api/onboarding/[token]/numbers` | GET | working — read-only search |
-| `/api/onboarding/[token]/numbers/purchase` | POST | blocked_external (gate off → 503) |
-| `/api/account/session` | POST | working — legacy setup-token cookie fallback (intentional during rollout) |
-| `/api/workspace/outcome` | POST | working |
-| `/api/webhooks/twilio/voice/{incoming,status}` `/messaging/{incoming,status}` | POST | working (verified) |
-| `/api/webhooks/stripe` | POST | partially_working — verifies + records; no billing logic |
-
-No placeholder/unsafe public routes were found. All write routes validate input
-and (for account/workspace) enforce clinic-scoped auth.
+- Real owner login/session authorization.
+- Real setup completion and account dashboard.
+- Real payment-method setup in Stripe test mode.
+- Real saved payment method metadata in `clinics`.
+- Real in-app server-side paid-plan subscription start in Stripe test mode.
+- Real Stripe webhook subscription/payment-method persistence.
+- Real number entitlement calculation from DB state.
+- Real first-number assignment for the allowlisted owner-test clinic.
+- Real additional-number consent, Stripe test-mode quantity sync, and assignment.
+- Real Twilio purchase readiness check before any Twilio purchase call.
+- Real Twilio emergency address create/reuse and number update sequence in code.
+- Real purchase-attempt reconciliation status when post-purchase configuration
+  cannot be completed.
+- Real Billing UI current monthly total from `billingConfig` plus entitlement.
+- Real default-safe SMS gates; SMS is not enabled automatically by billing or
+  number assignment.
 
 ---
 
-## 6. Documentation mismatches
+## 5. What Is Still Blocked
 
-| # | Doc | Issue | Action taken this pass |
-|---|---|---|---|
-| D1 | `MVP_BUILD_DOCS/PROJECT-CONTEXT.md` §11 | Says "real voice testing is blocked until Twilio account trial restrictions are resolved" — Twilio was upgraded to Full and voice verified end-to-end (SETUP-LOG 2026-05-26) | **Corrected** (small edit) |
-| D2 | `MVP_BUILD_DOCS/PROJECT-CONTEXT.md` §16 | "Current Immediate Next Step" predates auth/workspace/billing audit | **Corrected** to point at this audit |
-| D3 | Numbered build-spec docs (`00`–`15`) | Describe the full intended product; can be misread as current state | Noted; this audit is the canonical current-state ref (no rewrite) |
-| D4 | `MVP_BUILD_DOCS/MANIFEST.md` | Did not reference current operational docs (auth, front-desk, this audit) | **Added** reference to this audit |
-| D5 | `MVP_BUILD_DOCS/SETUP-LOG.md` | No audit entry | **Added** short entry |
-
-Current operational docs (`SETUP-LOG`, `OPERATIONS-RUNBOOK`,
-`AUTH-AND-ACCESS-CONTROL`, `FRONT-DESK-WORKSPACE`, `REPEATABLE-SETUP-CHECKLIST`)
-are otherwise accurate — they already label billing as presentational, team
-access as a shell, and change-password as a placeholder.
-
----
-
-## 7. Priority implementation sequence
-
-1. **Fix misleading active UI** (P1–P4): wire real flows, or honestly disable /
-   relabel until wired. Highest trust risk.
-2. **Account/team access basics**: in-session change password (P3); prep team
-   access for real members.
-3. **Stripe billing / payment method** (P1, B1, PW4): collect a card during
-   setup; **do not charge** until SMS recovery active.
-4. **Server-side billing → phone provisioning gate** (PW1) + controlled number
-   reservation/purchase (B2).
-5. **Staff invitation/access flow** (P2, S2, S3, PW2).
-6. **Real workspace workflow** beyond outcome saving (reply/call/assignment).
-7. **Sample/demo cleanup** once real data paths exist (S1–S3).
-8. **Docs/runbook polish** (D3, ongoing).
+- Broad Twilio live purchase mode.
+- Live Stripe billing.
+- A2P/10DLC Brand submission/status sync.
+- A2P Campaign submission/status sync.
+- Persisted campaign/service/number coverage checks.
+- Live patient SMS recovery.
+- Explicit A2P/coverage guard inside outbound SMS send path.
+- Messaging Service attachment reconciliation for current production numbers.
+- Twilio emergency-status refresh/reconciliation when Twilio moves from pending
+  to registered after assignment.
+- Usage metering and overage billing.
+- Staff invite creation, email delivery, acceptance, and member management.
+- Full front-desk reply/scheduling workflow.
+- Final onboarding polish for non-test production clinics.
 
 ---
 
-## 8. Recommended next 5 tasks (in order)
+## 6. Recommended Next Implementation Sprint
 
-1. **Make placeholder actions honest** — convert Change password / Add payment
-   method / Send invite / sample actions to either real flows or clearly disabled
-   "Coming soon" states (no inert "contact support" modals on primary buttons).
-2. **Stripe payment-method collection** — SetupIntent/Checkout to capture a card
-   and set `stripe_customer_id`; **no charge yet**; webhook updates billing state.
-3. **Server-side billing → phone provisioning gate** — enforce in the API (not
-   just UI), then enable controlled number reservation/purchase.
-4. **Staff invitation + acceptance** — real front_desk invites, password
-   creation, `front_desk` membership; replace sample staff block.
-5. **In-session change password** — reauthenticate + Supabase `updateUser`,
-   removing the placeholder modal.
+Sprint goal: make SMS readiness observable and fail-closed before any live
+patient SMS launch.
 
----
+Minimum tasks:
 
-## 9. Do NOT treat as working yet
+1. Add A2P/10DLC status model.
+   Persist Brand SID/status, Campaign SID/status, Messaging Service SID, and
+   number coverage status. This likely needs an additive migration.
+2. Add read-only Twilio A2P sync.
+   Operator action or scheduled/admin sync reads Brand/Campaign/service/number
+   coverage and updates DB. Do not submit Brand/Campaign automatically yet unless
+   that sprint explicitly includes submission.
+3. Reconcile Messaging Service coverage.
+   Add an operator-safe verification path for each clinic number. Current
+   Fairstone numbers must be attached/covered before SMS can be launched.
+4. Refresh Twilio emergency status.
+   Add a safe read-only status refresh so DB status matches Twilio after
+   registration completes.
+5. Harden outbound SMS live guard.
+   `sendRecoverySms()` should require `sms_recovery_enabled=true`,
+   `sms_status='active'`, and confirmed A2P/service/number coverage before live
+   patient sends.
+6. Keep admin `enable_sms` fail-closed.
+   Admin launch should require confirmed A2P/campaign/service/number coverage,
+   not just locally saved A2P form fields.
+7. Document owner-test SMS recovery readiness.
+   Owner-test sends may remain limited to explicit `SMS_TEST_ALLOWED_TO` only;
+   live patient sends must remain blocked.
 
-- **Billing / payment method** — "Add/Update payment method" is a placeholder; no
-  Stripe charge, customer, subscription, or stored card. `hasPaymentMethod` is
-  effectively always false in production.
-- **Staff invites / team management** — "Send invite" does not send anything;
-  sample staff rows are demo-only.
-- **In-session change password** — placeholder modal.
-- **Phone number assignment** — number purchase is disabled; no real number is
-  assigned in production; "prepare" is search-only.
-- **A2P / carrier approval** — "Waiting for approval" is a local status only;
-  nothing is submitted to a carrier.
-- **Live patient SMS recovery** — disabled by config + per-clinic flag.
+Acceptance criteria:
 
----
-
-## 10. Validation commands run
-
-- `npm run typecheck` — see final report (pass).
-- `npm run build` — see final report (pass).
-- **Lint/test:** `package.json` defines **no `lint` and no `test` script** (only
-  `dev`, `build`, `start`, `typecheck`). None to run.
-
-This pass changed only documentation, so behavior is unchanged.
-
----
-
-## 11. Files inspected (summary)
-
-- App UI: `app/account/page.tsx`; `app/setup/[token]/_components/*`
-  (BusinessProfile, BillingCard, AccountAccessCard, TeamAccessCard,
-  AssignedNumberCard, SmsApprovalForm, ClinicForm, SetupInvalid, SetupComplete);
-  `app/workspace/*`; `app/business/[slug]/*`.
-- API: all routes under `app/api/**` (auth, account, onboarding, workspace,
-  setup-requests, webhooks/twilio, webhooks/stripe, health).
-- Lib: `lib/onboarding/*`, `lib/auth/access.ts`, `lib/db/*` (front-desk,
-  setup-requests, clinics, clinic-memberships, auth-users), `lib/env.ts`,
-  `lib/workspace/outcome.ts`, `lib/http/responses.ts`.
-- Marketing: `docs/*.html`, `docs/script.js`.
-- Schema: `supabase/migrations/*` (status enums, onboarding fields, front-desk
-  outcome).
-- Docs: `MVP_BUILD_DOCS/{PROJECT-CONTEXT,SETUP-LOG,OPERATIONS-RUNBOOK,AUTH-AND-ACCESS-CONTROL,MANIFEST,REPEATABLE-SETUP-CHECKLIST,FRONT-DESK-WORKSPACE}.md`,
-  `package.json`, `AGENTS.md` context.
-- Searched terms: `contact support`, `placeholder`, `coming soon`,
-  `not implemented`, `not saved`, `will open here`, `after secure`, `sample`,
-  `demo`, `TODO`, `FIXME`, `mock`, `stub`, `connected`, `disabled`, `future`.
+- No live SMS can send when Brand/Campaign/service/number coverage is missing.
+- Fairstone's two numbers show confirmed Messaging Service coverage before any
+  launch approval.
+- `clinics.sms_recovery_enabled` remains false until Vlad explicitly approves
+  launch.
+- Twilio status sync is read-only unless an operator explicitly approves a
+  configuration change.
 
 ---
 
-## 12. Commit
+## 7. Validation
 
-Commit hash: `ce401ea` (`docs: audit production readiness placeholders`); pushed to `origin/main`.
+Validation for the 2026-06-06 docs refresh:
 
----
+- `npm run typecheck` - see final report.
+- `npm run build` - see final report.
+- `git diff --check` - see final report.
 
-## 13. Update — trust fix applied (2026-06-01)
-
-First recommended task (§8.1) is done: misleading active placeholder actions were
-removed. Status changes to the §3 inventory:
-
-- **P3 Change password — RESOLVED (now real).** `POST /api/account/change-password`
-  + real modal. See `AUTH-AND-ACCESS-CONTROL.md` §16.
-- **P1 Add/Update payment method — RESOLVED as honest disabled state.** Fake modal
-  removed; disabled `Payment setup not connected yet` + helper. Stripe still not
-  built (B1 remains open).
-- **P2 Send invite — RESOLVED as honest disabled state.** Fake support modal
-  removed; disabled `Staff invitations not connected yet` + helper. Invite backend
-  still not built.
-- **P4 Sample Remove/Restore — RESOLVED.** Modal removed; sample actions are plain
-  text; real member actions render `—`.
-- **P5 Marketing sign-in demo handler — RESOLVED.** Removed from `docs/script.js`.
-
-Still open (unchanged, future tasks): B1 Stripe billing, B2 phone purchase, B3
-A2P/carrier submission, B4 live SMS, PW1 server-side billing→phone gate, P2 real
-staff invitations. Next recommended task: **Stripe payment-method collection**
-(collect during setup; no charge until SMS recovery is active).
-
----
-
-## 14. Related plan — platform admin console
-
-Several gaps above (billing readiness, phone provisioning, A2P status, SMS
-activation, clinic kill switch) will be **operated** from a future internal
-platform-owner console at `/admin`. Its architecture/spec is in
-`PLATFORM-ADMIN-CONSOLE-PLAN.md` (separate from clinic `/account` and front-desk
-`/workspace`; plan only, not implemented). The admin console does not change these
-gaps' status — it is the operator surface that will manage them once their
-prerequisites (Stripe, Twilio purchase, A2P) are wired.
-
----
-
-## 15. Auth decision — role-specific login entry points (2026-06-01)
-
-Recorded a required product rule: **one Supabase Auth system** with **separate
-role-specific login pages** — `/admin/login` → `/admin` (platform admin),
-`/login` (→ `/account`, clinic owner; may later become `/account/login`),
-`/workspace/login` → `/workspace` (front desk) — all with strict server-side role
-redirects. First platform admin (`allyexporter@gmail.com`) via
-`PLATFORM_ADMIN_EMAILS` env (not hardcoded). Details:
-`AUTH-AND-ACCESS-CONTROL.md` §17 and `PLATFORM-ADMIN-CONSOLE-PLAN.md` §3.
-
-Status update (2026-06-01): platform-admin route separation is implemented and
-live (`/admin/login` -> `/admin`) with production allowlist env configured.
-`/workspace/login` remains planned.
-
----
-
-## 16. Platform admin console v1 implemented (2026-06-01)
-
-A real, guarded `/admin` console now exists for the platform operator (separate
-from clinic `/account` and front-desk `/workspace`). It provides live cross-tenant
-visibility and real, audited admin actions (deactivate/reactivate clinic,
-disable/enable SMS recovery, internal note, provisioning status). The blocked
-items above (B1 Stripe billing, B2 Twilio purchase, B3 A2P submission) are now
-surfaced **honestly in `/admin` as disabled controls with the prerequisite
-reason** — they remain blocked until their integrations land. See
-`PLATFORM-ADMIN-CONSOLE-PLAN.md` §15.
-
-## 17. Clinic detail simplified — placeholder honesty preserved (2026-06-01)
-
-`/admin/clinics/[clinicId]` was simplified into the operator launch workflow (plan
-§16). The three essential-but-unbuilt capabilities remain visible **only** as honest
-disabled placeholders — never fake-clickable:
-
-| Disabled control | Reason shown | Real blocker |
-|---|---|---|
-| **Add phone number** | `Twilio purchase flow required` | Twilio number purchase/assign not wired into `/admin` (B2) |
-| **Manage billing** | `Stripe billing backend required` | No Stripe billing integration (B1) |
-| **Submit SMS approval** | `A2P submission backend required` | No A2P/carrier submission integration (B3) |
-
-Working, audited actions on the page: Pause/Reactivate clinic (`is_active`), Launch
-service / Pause SMS sending (`sms_recovery_enabled`, gated), Save internal note. The
-duplicate SMS-recovery toggle and the Provisioning review were removed from the UI;
-no new fake actions were added. Billing is shown as a readiness row but is not a hard
-launch gate in this MVP (so launch is not permanently blocked by the missing Stripe
-backend).
+This refresh changes documentation only.

@@ -2244,3 +2244,56 @@ with the saved payment method and the webhook marks the subscription active. The
 a second number — it makes a real Twilio purchase only after the Stripe additional-number
 quantity sync succeeds (test mode → no live charge). SMS recovery stays off the entire time
 (`sms_recovery_enabled` is never changed by number assignment or billing).
+
+---
+
+## Production readiness audit: Fairstone billing/numbers/SMS gate — 2026-06-06
+
+Read-only audit scope: Supabase, Stripe test mode, and Twilio. Do not use this
+procedure to buy/release/configure numbers, send SMS, enable
+`sms_recovery_enabled`, change Vercel env, or switch broad live mode.
+
+Confirmed current production/test state:
+
+- Clinic: Fairstone Dental Smile,
+  `f37f24a1-070f-436b-b803-956f55466093`.
+- `runtimeConfig.onboarding.twilioNumberPurchaseMode` is `owner_test_live` and
+  this is the only committed allowlisted clinic. Broad `live` mode is off.
+- Stripe is test/sandbox mode. The saved payment method is present, the paid
+  plan subscription is active, and subscription items show base plan quantity 1
+  plus additional-number quantity 1.
+- Assigned numbers:
+  - `+12244009986`, `PNcfa04ebbb3c99d346473979781eb8785`, included.
+  - `+12243442685`, `PN04b5bd6be9a95f26412c58bafea04512`, additional.
+- `clinic_phone_numbers` has two active rows; additional billed quantity is 1.
+- `messages` and `call_events` counts for the clinic were both 0 at audit time.
+- `clinics.sms_recovery_enabled` remained false and `sms_status` remained
+  `waiting_for_approval`.
+
+Twilio readiness findings:
+
+- Both numbers exist as active IncomingPhoneNumbers.
+- Both numbers have the app voice incoming URL, voice status callback URL, and
+  SMS incoming webhook URL configured.
+- Twilio reports emergency status `Active` and emergency address status
+  `registered` for both numbers.
+- The DB status for the second number still stores `pending-registration` from
+  the initial assignment; add a future read-only status refresh/reconciliation.
+- The configured Messaging Service `MG83239dc7dfdf8aa6c9b397e8258f7d93`
+  (`Missed Call SMS - Dental MVP`) did not list either Fairstone PN SID as a
+  sender in the read-only audit. Treat this as an SMS launch blocker until
+  reconciled and verified.
+- Twilio A2P/10DLC API checks returned no Brand registrations and no service
+  campaigns for the configured Messaging Service.
+
+Operational rule before SMS launch:
+
+- Do not enable `sms_recovery_enabled` for any clinic until Brand/Campaign
+  approval, Messaging Service linkage, and per-number service/campaign coverage
+  are confirmed and persisted.
+- `sendRecoverySms()` needs an explicit live A2P/coverage guard before broad live
+  SMS mode can be approved. The current mode/clinic/opt-out/duplicate guards are
+  necessary but not sufficient for production patient SMS.
+- If Twilio status changes after assignment (for example emergency status moves
+  from pending to registered), use a read-only reconciliation path first; do not
+  manually edit DB status unless the operator procedure explicitly approves it.

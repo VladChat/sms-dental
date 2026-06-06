@@ -88,15 +88,24 @@ wiring, **never** hard-coded next to the amounts in `billing.config.ts`.
 ## Current deployed-but-gated reality
 
 - Supabase migration `20260603000200_self_service_number_purchasing.sql` has been applied and verified.
+- Supabase migration `20260605000100_twilio_number_address_status.sql` has been applied and verified.
 - `STRIPE_BASE_PLAN_PRICE_ID` and `STRIPE_ADDITIONAL_NUMBER_PRICE_ID` are set in Vercel Production with test-mode Price IDs.
 - Paid-plan start creates a Stripe test-mode subscription server-side using the
   saved Stripe Customer and saved PaymentMethod.
-- Twilio purchase mode defaults to `"disabled"` in committed runtime config.
-- Real Twilio purchases are still blocked unless the mode is deliberately changed to `"live"`.
+- Twilio purchase mode is currently `"owner_test_live"` in committed runtime
+  config for the single allowlisted Fairstone Dental Smile clinic. Broad
+  `"live"` mode remains off.
+- Real Twilio purchases are blocked for every non-allowlisted clinic unless the
+  mode is deliberately changed to broad `"live"`.
 - Mock mode can exercise assignment UX and DB/entitlement behavior in local/staging without buying a Twilio number.
 - No live Stripe charge can occur while Stripe remains test-mode.
 - SMS recovery enablement is separate and is not changed by payment-method setup, first-number assignment, or subscription status.
 - Usage metering/reporting remains a future billing milestone.
+- Production audit on 2026-06-06 confirmed Fairstone has one included active
+  number and one active additional number, so the current monthly total is
+  computed as base plan + one additional-number quantity. The UI must continue
+  to compute this from `billingConfig` plus
+  `entitlement.additionalBilledQuantity`, never hardcoded amounts.
 
 ---
 
@@ -104,7 +113,9 @@ wiring, **never** hard-coded next to the amounts in `billing.config.ts`.
 
 This supersedes the old owner "request a number for admin review" workflow.
 Production code is deployed, Stripe remains **sandbox/test only**, and
-`runtimeConfig.onboarding.twilioNumberPurchaseMode` defaults to `"disabled"`.
+`runtimeConfig.onboarding.twilioNumberPurchaseMode` is currently
+`"owner_test_live"` for the single allowlisted Fairstone test clinic only.
+Broad `"live"` remains off.
 
 **First number (included).** When an owner selects their first number, the app
 assigns it through the shared provisioning flow — no admin approval. A saved
@@ -158,11 +169,14 @@ attempts, and reconciliation issues. Legacy `clinic_number_requests` remain visi
 under "Legacy number requests" (retired; never auto-purchased/billed/cancelled;
 optional admin Dismiss).
 
-**Real-purchase go-live (still gated, separate approval):** only a deliberate
-future change to `runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"`
-permits real Twilio purchases. Live Stripe billing requires a separate approved
-live-mode rollout. Until then the flow is fully built and deployed for safe
-testing, but no real Twilio number or live Stripe charge occurs.
+**Real-purchase go-live (still gated, separate approval):** the current
+`owner_test_live` mode permits real Twilio purchases only for committed
+allowlisted clinic ids. A deliberate future change to
+`runtimeConfig.onboarding.twilioNumberPurchaseMode = "live"` is required before
+all eligible clinics can purchase real numbers. Live Stripe billing requires a
+separate approved live-mode rollout. Until then, the current real purchases are
+controlled owner-test production purchases only, and Stripe remains sandbox/test
+mode.
 
 ## Controlled real-purchase test mode (`owner_test_live`)
 

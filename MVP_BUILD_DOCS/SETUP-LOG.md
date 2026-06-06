@@ -4681,3 +4681,60 @@ Follow-up after deploy:
 - Existing phone-number state after remediation: one active included number (`+12244009986`).
 - `sms_recovery_enabled=false` and `sms_status='waiting_for_approval'` remained unchanged.
 - No SMS sent, no Twilio number purchased, broad Twilio live mode unchanged.
+## 2026-06-06 — Production readiness docs refresh after Fairstone billing/number audit
+
+Scope:
+
+- Refreshed the canonical real-vs-blocked readiness reference after read-only
+  Supabase, Stripe test-mode, Twilio, and A2P checks for Fairstone Dental Smile
+  (`f37f24a1-070f-436b-b803-956f55466093`).
+- Documentation-only change; no source code behavior changed.
+
+Confirmed current state:
+
+- Billing/payment method is no longer a placeholder for the controlled test
+  flow: Fairstone has a saved Stripe test-mode card, active test-mode
+  subscription, base plan item, and one additional-number item.
+- Phone number assignment is no longer `blocked_external` for the controlled
+  allowlisted owner-test clinic: Fairstone has one included active Twilio number
+  and one additional active Twilio number.
+- Broad Twilio `"live"` mode remains off. Current purchase mode is
+  `owner_test_live` for the single committed Fairstone allowlist entry only.
+- SMS recovery remains off: `sms_recovery_enabled=false`,
+  `sms_status=waiting_for_approval`, and audited `messages`/`call_events` counts
+  were 0.
+- Twilio reports both Fairstone numbers emergency registered, but the DB still
+  stores `pending-registration` for the second number's emergency status and
+  should be refreshed by a future reconciliation path.
+- Twilio Messaging Service coverage is not ready: read-only audit did not show
+  either Fairstone PN SID attached to the configured Messaging Service.
+- A2P/10DLC is not ready: no Brand registrations or Messaging Service campaigns
+  were found.
+
+Docs changed:
+
+- `MVP_BUILD_DOCS/PRODUCTION-READINESS-PLACEHOLDER-AUDIT.md`
+- `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`
+- `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md`
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`
+- `MVP_BUILD_DOCS/SETUP-LOG.md`
+
+Validation:
+
+- `npm run typecheck` — pending in this entry; see final report.
+- `npm run build` — pending in this entry; see final report.
+- `git diff --check` — pending in this entry; see final report.
+
+Commit/push:
+
+- Pending at time of log entry; see final report for the exact commit hash and
+  push/deployment status.
+
+Safety:
+
+- No SMS sent.
+- No Twilio number purchased, released, or configured.
+- No Stripe state changed.
+- No Vercel env changed.
+- No `sms_recovery_enabled` change.
+- No secrets printed or documented.

@@ -351,17 +351,30 @@ Always follow these rules:
 Current operational status:
 
 - Production app/backend is live at `https://app.missedcallsdental.com`.
-- Main and `origin/main` are at `627a560` after the self-service number purchasing rollout.
-- Self-service owner number purchasing is deployed in code, with production migration `20260603000200_self_service_number_purchasing.sql` applied and verified.
-- Owners search and select business numbers from `/account`; the first assigned number is included with the $99/month base plan and requires a saved payment method.
+- Self-service owner number purchasing is deployed in code, with production
+  migrations `20260603000200_self_service_number_purchasing.sql` and
+  `20260605000100_twilio_number_address_status.sql` applied and verified.
+- Owners search and select business numbers from `/account`; the first assigned
+  number is included with the $99/month base plan and requires a saved payment
+  method.
 - The old owner request workflow is retired: `POST /api/account/phone-numbers/request` returns 410, and `clinic_number_requests` remains legacy data for admin view/dismiss only.
-- Stripe test-mode paid-plan subscription creation and webhooks exist. Paid entitlement is granted only by webhook-confirmed active subscription.
+- Stripe test-mode payment-method setup, paid-plan subscription creation, and
+  webhooks are real. Paid entitlement is granted only by active subscription
+  state persisted server-side/webhook-side; the paid-plan API returns JSON, not a
+  Stripe Checkout URL.
 - Stripe Price IDs configured in production are test-mode only. `STRIPE_SECRET_KEY` remains test-mode, so no live Stripe charge can occur.
-- `runtimeConfig.onboarding.twilioNumberPurchaseMode` defaults to `"disabled"`.
-  No real Twilio number purchase can occur unless that mode is deliberately set
-  to `"live"`; `"mock"` is local/staging assignment UX only and does not call
-  Twilio purchase APIs.
-- SMS recovery remains separately gated by compliance, QA, owner approval, runtime mode, and `clinics.sms_recovery_enabled`; it is not enabled automatically by number assignment or billing.
+- `runtimeConfig.onboarding.twilioNumberPurchaseMode` is currently
+  `"owner_test_live"` for the single allowlisted Fairstone Dental Smile clinic
+  (`f37f24a1-070f-436b-b803-956f55466093`). Broad `"live"` mode remains off;
+  `"mock"` is local/staging assignment UX only and does not call Twilio purchase
+  APIs.
+- Fairstone currently has two real assigned Twilio numbers: one included number
+  and one additional $20/month number. This is controlled owner-test production
+  behavior, not broad go-live.
+- SMS recovery remains separately gated by compliance, QA, owner approval,
+  runtime mode, A2P/10DLC readiness, Messaging Service coverage, and
+  `clinics.sms_recovery_enabled`; it is not enabled automatically by number
+  assignment or billing.
 
 Current backend trial behavior:
 
@@ -370,7 +383,11 @@ Current backend trial behavior:
 
 Next safe work:
 
-- Production owner/admin browser QA.
-- UI cleanup and documentation cleanup.
-- A deliberate go-live decision before enabling real Twilio purchasing.
-- Live Stripe billing rollout only after explicit future approval.
+- A2P/10DLC Brand/Campaign/status sync and explicit live-send guards.
+- Messaging Service coverage reconciliation for the current Fairstone numbers.
+- Twilio emergency-status refresh/reconciliation when Twilio registration moves
+  from pending to registered.
+- Staff invite/team access implementation.
+- Usage metering/overage billing design before any live usage charges.
+- A deliberate go-live decision before broad Twilio purchasing or live Stripe
+  billing.
