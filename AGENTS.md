@@ -193,17 +193,18 @@ Never write secrets, passwords, full database URLs with passwords, API keys, tok
 - Never add fake placeholder secrets such as `local-dev-secret-change-later`.
 - `INTERNAL_ADMIN_SECRET` is intentionally removed from MVP and must not be reintroduced unless a real internal/admin auth design is explicitly requested and documented.
 
-## Destructive Confirmation Modal Rule (Project-Wide)
+## Destructive Confirmation Rule (Project-Wide)
 
-Destructive confirmation modals with consent checkboxes must use the shared `ConfirmationDialog` shell and the existing standardized consent/authorization panel pattern. Do not create custom one-off modal components or custom one-off warning panels.
+Destructive confirmations with consent checkboxes must appear **inline inside the same card**, not as a modal, pop-up, overlay, or centered dialog. The `ConfirmationDialog` component is for purchase/billing confirmations only — do not use it for inline card-level destructive actions.
 
-- Use `ConfirmationDialog` (from `./ConfirmationDialog`) as the modal wrapper/backdrop/shell for all confirmation dialogs — including destructive ones.
-- Render the consequence content as `children` of `ConfirmationDialog` using the `acct-consent` CSS class, exactly as the local-number authorization block does in `OwnerNumberSearch`.
-- Emphasize the primary consequence through typography/weight (`fontWeight: 700`, `t-body`) inside the standard `acct-consent` panel — not through a separate loose red warning block and not through one-off custom panel styles.
-- Do not use one-off inline panel styles with error tokens (`--error-bg`, `--error-border`, `--error-text`) for the panel background/border. The `acct-consent` class provides the standard tinted panel.
-- Integrate the consent checkbox inside the `acct-consent` panel, below the consequence text.
-- For destructive actions, use `ConfirmationDialog` optional props: `primaryDisabled={!acknowledged}`, `actionsLayout="stacked"`, `primaryClassName="btn btn-danger acct-primary-action"`. These props have safe defaults that do not affect existing callers.
-- Do not extend `ConfirmationDialog` beyond the documented optional props without updating this rule.
+- Render the inline confirmation block using `<div className="acct-cand-actions">` as the wrapper, matching the structure in `OwnerNumberSearch` (selected candidate actions block).
+- Inside it, place a `<div className="acct-consent">` panel with: a consequence header (`t-small`, `fontWeight: 700`), the primary consequence message (`t-body`, `fontWeight: 700`), supporting body lines (`t-small`), and the consent checkbox (`label.check`) at the bottom of the panel.
+- Emphasize the primary consequence through typography/weight inside the `acct-consent` panel — not through a separate red/error panel or one-off custom styles.
+- Place the primary action button (`btn btn-primary acct-primary-action`, full-width) directly after the `acct-consent` panel, outside it.
+- Place the cancel action (`btn btn-ghost btn-sm`, `justifySelf: center`) below the primary button.
+- Place the action error alert (`alert alert-error`) below the cancel button, inside the `acct-cand-actions` wrapper.
+- When the inline confirmation is open, hide the normal trigger button. When closed, hide the inline confirmation block.
+- `ConfirmationDialog` is used for purchase/billing confirmations that appropriately open as a modal (e.g., `AddPhoneNumberConfirmation`). Do not use it for inline card destructive actions.
 
 ## Project Structure Rules
 

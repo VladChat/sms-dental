@@ -179,8 +179,8 @@ function AssignedRow({
         </p>
       )}
 
-      <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginTop: "var(--space-3)" }}>
-        {scheduled ? (
+      {scheduled && (
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginTop: "var(--space-3)" }}>
           <button
             type="button"
             className="btn btn-secondary btn-sm"
@@ -190,7 +190,11 @@ function AssignedRow({
           >
             {loadingAction === "restore" ? "Restoring..." : "Restore number"}
           </button>
-        ) : (
+        </div>
+      )}
+
+      {!scheduled && !confirmRemove && (
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginTop: "var(--space-3)" }}>
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -203,32 +207,23 @@ function AssignedRow({
           >
             Remove number
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      {actionError && (
+      {actionError && !confirmRemove && (
         <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
           <span>{actionError}</span>
         </div>
       )}
 
-      {confirmRemove && (
-        <ConfirmationDialog
-          title="Remove number"
-          primaryLabel="Remove number"
-          secondaryLabel="Cancel"
-          loading={loadingAction === "remove"}
-          loadingLabel="Removing..."
-          error={actionError}
-          primaryDisabled={!removeAcknowledged}
-          actionsLayout="stacked"
-          primaryClassName="btn btn-danger acct-primary-action"
-          onConfirm={() => void runAction("remove")}
-          onCancel={() => setConfirmRemove(false)}
-        >
+      {!scheduled && confirmRemove && (
+        <div className="acct-cand-actions" style={{ marginTop: "var(--space-3)" }}>
           <div className="acct-consent">
             <div>
-              <p className="t-body" style={{ margin: 0, fontWeight: 700 }}>
+              <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>
+                Remove number
+              </p>
+              <p className="t-body" style={{ margin: "var(--space-2) 0 0", fontWeight: 700 }}>
                 This number will stop working immediately.
               </p>
               <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-secondary)" }}>
@@ -250,7 +245,37 @@ function AssignedRow({
               <span>I understand and want to remove this number.</span>
             </label>
           </div>
-        </ConfirmationDialog>
+
+          <button
+            type="button"
+            className="btn btn-primary acct-primary-action"
+            onClick={() => void runAction("remove")}
+            disabled={!removeAcknowledged || loadingAction !== null}
+            aria-busy={loadingAction === "remove"}
+          >
+            {loadingAction === "remove" ? "Removing..." : "Remove number"}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ justifySelf: "center" }}
+            onClick={() => {
+              setConfirmRemove(false);
+              setRemoveAcknowledged(false);
+              setActionError(null);
+            }}
+            disabled={loadingAction !== null}
+          >
+            Cancel
+          </button>
+
+          {actionError && (
+            <div className="alert alert-error" role="alert" aria-live="polite">
+              <span>{actionError}</span>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
