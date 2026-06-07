@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "./AccountUI";
 import { ConfirmationDialog } from "./ConfirmationDialog";
@@ -107,6 +107,7 @@ function AssignedRow({
   const isLocal = n.numberType === "local";
   const scheduled = n.removalStatus === "scheduled";
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removeAcknowledged, setRemoveAcknowledged] = useState(false);
   const [loadingAction, setLoadingAction] = useState<"remove" | "restore" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -195,6 +196,7 @@ function AssignedRow({
             className="btn btn-ghost btn-sm"
             onClick={() => {
               setActionError(null);
+              setRemoveAcknowledged(false);
               setConfirmRemove(true);
             }}
             disabled={loadingAction !== null}
@@ -211,13 +213,44 @@ function AssignedRow({
       )}
 
       {confirmRemove && (
-        <RemoveNumberDialog
-          permanentRemovalAt={n.permanentRemovalAt}
+        <ConfirmationDialog
+          title="Remove number"
+          primaryLabel="Remove number"
+          secondaryLabel="Cancel"
           loading={loadingAction === "remove"}
+          loadingLabel="Removing..."
           error={actionError}
+          primaryDisabled={!removeAcknowledged}
+          actionsLayout="stacked"
+          primaryClassName="btn btn-danger acct-primary-action"
           onConfirm={() => void runAction("remove")}
           onCancel={() => setConfirmRemove(false)}
-        />
+        >
+          <div className="acct-consent">
+            <div>
+              <p className="t-body" style={{ margin: 0, fontWeight: 700 }}>
+                This number will stop working immediately.
+              </p>
+              <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-secondary)" }}>
+                Billing updates next cycle.
+              </p>
+              {n.permanentRemovalAt && (
+                <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-secondary)" }}>
+                  Restore available until {formatShortDate(n.permanentRemovalAt)}.
+                </p>
+              )}
+            </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={removeAcknowledged}
+                onChange={(e) => setRemoveAcknowledged(e.target.checked)}
+                disabled={loadingAction === "remove"}
+              />
+              <span>I understand and want to remove this number.</span>
+            </label>
+          </div>
+        </ConfirmationDialog>
       )}
     </div>
   );
@@ -495,99 +528,6 @@ function AddPhoneNumberConfirmation({
   );
 }
 
-function RemoveNumberDialog({
-  permanentRemovalAt,
-  loading,
-  error,
-  onConfirm,
-  onCancel,
-}: {
-  permanentRemovalAt: string | null;
-  loading: boolean;
-  error: string | null;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const titleId = useId();
-  const [checked, setChecked] = useState(false);
-  const disabled = loading || !checked;
-
-  return (
-    <div
-      className="acct-modal-backdrop"
-      role="presentation"
-      onClick={() => { if (!loading) onCancel(); }}
-    >
-      <div
-        className="acct-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id={titleId} className="t-h4">Remove number</h3>
-
-        {/* acct-consent structure mirrored with error tokens for destructive intent */}
-        <div style={{
-          display: "grid",
-          gap: "var(--space-3)",
-          padding: "var(--space-4)",
-          border: "1px solid var(--error-border)",
-          borderLeft: "3px solid var(--error)",
-          borderRadius: "var(--r-md)",
-          background: "var(--error-bg)",
-        }}>
-          <div style={{ display: "grid", gap: "var(--space-1)" }}>
-            <p className="t-body" style={{ margin: 0, fontWeight: 700, color: "var(--error-text)" }}>
-              This number will stop working immediately.
-            </p>
-            <p className="t-small" style={{ margin: 0 }}>Billing updates next cycle.</p>
-            {permanentRemovalAt && (
-              <p className="t-small" style={{ margin: 0 }}>
-                Restore available until {formatShortDate(permanentRemovalAt)}.
-              </p>
-            )}
-          </div>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={(e) => setChecked(e.target.checked)}
-              disabled={loading}
-            />
-            <span>I understand and want to remove this number.</span>
-          </label>
-        </div>
-
-        <div style={{ display: "grid", gap: "var(--space-3)" }}>
-          {error && (
-            <div className="alert alert-error" role="alert" aria-live="polite">
-              <span>{error}</span>
-            </div>
-          )}
-          <button
-            type="button"
-            className="btn btn-danger btn-block"
-            onClick={onConfirm}
-            disabled={disabled}
-            aria-busy={loading}
-          >
-            {loading ? "Removing..." : "Remove number"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            style={{ alignSelf: "center" }}
-            onClick={onCancel}
-            disabled={loading}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function Note({ text }: { text: string }) {
   return (

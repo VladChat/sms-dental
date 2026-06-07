@@ -195,14 +195,15 @@ Never write secrets, passwords, full database URLs with passwords, API keys, tok
 
 ## Destructive Confirmation Modal Rule (Project-Wide)
 
-Destructive confirmation modals with consent checkboxes must reuse the existing standardized confirmation/authorization pattern. Do not create one-off modal layouts.
+Destructive confirmation modals with consent checkboxes must use the shared `ConfirmationDialog` shell and the existing standardized consent/authorization panel pattern. Do not create custom one-off modal components or custom one-off warning panels.
 
-- Use the `acct-modal-backdrop` + `acct-modal` shell for any modal overlay.
-- Place consequence content inside a tinted panel that mirrors the `acct-consent` class structure: `display:grid`, `gap`, `padding`, `border`, `border-left` accent, `border-radius`, `background`.
-- For destructive actions use error tokens (`--error`, `--error-border`, `--error-bg`, `--error-text`) on the panel. For informational/purchase actions use info tokens (`--info`, `--info-border`, `--info-bg`, `--info-text`).
-- The primary consequence message must be visually dominant inside the standard confirmation surface — not as loose standalone red text outside a panel.
-- Integrate the consent checkbox inside the tinted panel, below the consequence text.
-- Place the primary action button (full-width, `btn-block`) below the panel. For destructive actions use `btn-danger`. Place the secondary cancel action below the primary button as a `btn-ghost`.
+- Use `ConfirmationDialog` (from `./ConfirmationDialog`) as the modal wrapper/backdrop/shell for all confirmation dialogs — including destructive ones.
+- Render the consequence content as `children` of `ConfirmationDialog` using the `acct-consent` CSS class, exactly as the local-number authorization block does in `OwnerNumberSearch`.
+- Emphasize the primary consequence through typography/weight (`fontWeight: 700`, `t-body`) inside the standard `acct-consent` panel — not through a separate loose red warning block and not through one-off custom panel styles.
+- Do not use one-off inline panel styles with error tokens (`--error-bg`, `--error-border`, `--error-text`) for the panel background/border. The `acct-consent` class provides the standard tinted panel.
+- Integrate the consent checkbox inside the `acct-consent` panel, below the consequence text.
+- For destructive actions, use `ConfirmationDialog` optional props: `primaryDisabled={!acknowledged}`, `actionsLayout="stacked"`, `primaryClassName="btn btn-danger acct-primary-action"`. These props have safe defaults that do not affect existing callers.
+- Do not extend `ConfirmationDialog` beyond the documented optional props without updating this rule.
 
 ## Project Structure Rules
 

@@ -25,6 +25,9 @@ export function ConfirmationDialog({
   onConfirm,
   onCancel,
   children,
+  primaryDisabled: externalPrimaryDisabled,
+  actionsLayout = "inline",
+  primaryClassName = "btn btn-primary",
 }: {
   title: string;
   description?: string;
@@ -42,11 +45,14 @@ export function ConfirmationDialog({
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
+  primaryDisabled?: boolean;
+  actionsLayout?: "inline" | "stacked";
+  primaryClassName?: string;
 }) {
   const titleId = useId();
   const descriptionId = useId();
   const [checked, setChecked] = useState(false);
-  const primaryDisabled = loading || pending || (checkboxRequired && !checked);
+  const isPrimaryDisabled = loading || pending || (checkboxRequired && !checked) || (externalPrimaryDisabled ?? false);
   const closeDisabled = loading || pending;
 
   return (
@@ -116,20 +122,43 @@ export function ConfirmationDialog({
               <span>{error}</span>
             </div>
           )}
-          <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={closeDisabled}>
-              {secondaryLabel}
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={onConfirm}
-              disabled={primaryDisabled}
-              aria-busy={loading || pending}
-            >
-              {loading ? loadingLabel : pending ? pendingLabel : primaryLabel}
-            </button>
-          </div>
+          {actionsLayout === "stacked" ? (
+            <div style={{ display: "grid", gap: "var(--space-2)" }}>
+              <button
+                type="button"
+                className={primaryClassName}
+                onClick={onConfirm}
+                disabled={isPrimaryDisabled}
+                aria-busy={loading || pending}
+              >
+                {loading ? loadingLabel : pending ? pendingLabel : primaryLabel}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ justifySelf: "center" }}
+                onClick={onCancel}
+                disabled={closeDisabled}
+              >
+                {secondaryLabel}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={closeDisabled}>
+                {secondaryLabel}
+              </button>
+              <button
+                type="button"
+                className={primaryClassName}
+                onClick={onConfirm}
+                disabled={isPrimaryDisabled}
+                aria-busy={loading || pending}
+              >
+                {loading ? loadingLabel : pending ? pendingLabel : primaryLabel}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
