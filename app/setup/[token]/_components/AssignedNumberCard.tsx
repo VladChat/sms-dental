@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "./AccountUI";
 import { ConfirmationDialog } from "./ConfirmationDialog";
@@ -211,19 +211,9 @@ function AssignedRow({
       )}
 
       {confirmRemove && (
-        <ConfirmationDialog
-          title="Remove number"
-          description="Calls and texts to this number will stop now. The number can be restored until its permanent removal date."
-          summaryLabel="Billing"
-          summaryRows={[
-            { label: "Current cycle", value: "No credit or immediate charge" },
-            { label: "Next cycle", value: "Recurring billing recalculates", emphasis: true },
-          ]}
-          checkboxRequired
-          checkboxLabel="I understand this number will stop receiving calls and texts now."
-          primaryLabel="Remove number"
+        <RemoveNumberDialog
+          permanentRemovalAt={n.permanentRemovalAt}
           loading={loadingAction === "remove"}
-          loadingLabel="Removing..."
           error={actionError}
           onConfirm={() => void runAction("remove")}
           onCancel={() => setConfirmRemove(false)}
@@ -502,6 +492,92 @@ function AddPhoneNumberConfirmation({
       onConfirm={onContinue}
       onCancel={onClose}
     />
+  );
+}
+
+function RemoveNumberDialog({
+  permanentRemovalAt,
+  loading,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  permanentRemovalAt: string | null;
+  loading: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const titleId = useId();
+  const [checked, setChecked] = useState(false);
+  const disabled = loading || !checked;
+
+  return (
+    <div
+      className="acct-modal-backdrop"
+      role="presentation"
+      onClick={() => { if (!loading) onCancel(); }}
+    >
+      <div
+        className="acct-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "grid", gap: "var(--space-3)" }}>
+          <h3 id={titleId} className="t-h4">Remove number</h3>
+          <p className="t-h4" style={{ margin: 0, color: "var(--error-text)" }}>
+            This number will stop working immediately.
+          </p>
+          <div style={{ display: "grid", gap: "var(--space-1)" }}>
+            <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+              Billing updates next cycle.
+            </p>
+            {permanentRemovalAt && (
+              <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+                Restore available until {formatShortDate(permanentRemovalAt)}.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: "var(--space-3)", paddingTop: "var(--space-2)" }}>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => setChecked(e.target.checked)}
+              disabled={loading}
+            />
+            <span>I understand and want to remove this number.</span>
+          </label>
+          {error && (
+            <div className="alert alert-error" role="alert" aria-live="polite">
+              <span>{error}</span>
+            </div>
+          )}
+          <button
+            type="button"
+            className="btn btn-danger btn-block"
+            onClick={onConfirm}
+            disabled={disabled}
+            aria-busy={loading}
+          >
+            {loading ? "Removing..." : "Remove number"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ alignSelf: "center" }}
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
