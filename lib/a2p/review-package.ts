@@ -10,9 +10,11 @@ import {
 } from "../db/sms-readiness";
 import { getA2pSubmissionState } from "../db/a2p-submissions";
 import {
-  BUSINESS_TYPE_LABELS,
+  isLegacyBusinessType,
+  legacyBusinessTypeLabel,
   mapBusinessTypeForTwilio,
   maskEin,
+  normalizeBusinessTypeForStorage,
   validateEin,
 } from "./validation";
 import {
@@ -86,13 +88,13 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   // ---- business identity (EIN never exposed in full) ----
   const einDigits = (clinic.ein_tax_id ?? "").replace(/\D/g, "");
   const einError = validateEin(clinic.ein_tax_id ?? "");
-  const businessTypeLabel = isBusinessType(clinic.business_type)
-    ? BUSINESS_TYPE_LABELS[clinic.business_type]
-    : null;
+  const normalizedBusinessType = normalizeBusinessTypeForStorage(clinic.business_type);
+  const businessTypeLabel = normalizedBusinessType
+    ?? (isLegacyBusinessType(clinic.business_type) ? legacyBusinessTypeLabel(clinic.business_type) : null);
 
   const business = {
     legalBusinessName: emptyToNull(clinic.legal_business_name),
-    businessType: emptyToNull(clinic.business_type),
+    businessType: emptyToNull(normalizedBusinessType ?? clinic.business_type),
     businessTypeLabel,
     einProvided: einDigits.length > 0,
     einLast4: einDigits.length >= 4 ? einDigits.slice(-4) : null,
@@ -237,7 +239,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   const providerPayload = buildProviderPayloadView({
     clinicName: clinic.name,
     legalBusinessName: business.legalBusinessName ?? clinic.name,
-    businessTypeMapped: mapBusinessTypeForTwilio(clinic.business_type ?? "") ?? "(invalid)",
+    businessTypeMapped: mapBusinessTypeForTwilio(clinic.business_type ?? "") ?? "Needs correction before submission",
     industry: brandCfg.businessIndustry,
     registrationIdentifier: brandCfg.businessRegistrationIdentifier,
     einMaskedValue: business.einMasked ?? "(missing)",
@@ -588,10 +590,6 @@ function notFoundPackage(
 function emptyToNull(value: string | null | undefined): string | null {
   const v = (value ?? "").trim();
   return v.length > 0 ? v : null;
-}
-
-function isBusinessType(value: string | null): value is keyof typeof BUSINESS_TYPE_LABELS {
-  return value != null && value in BUSINESS_TYPE_LABELS;
 }
 
 function composeAddress(clinic: {

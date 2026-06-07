@@ -10,6 +10,7 @@ import {
 import { getNumberEntitlement } from "../../lib/billing/number-entitlements";
 import { buildClinicBillingSummary } from "../../lib/billing/clinic-billing-summary";
 import { getAppDomainsSafe, hasLocalNumberBillingConfigured } from "../../lib/env";
+import { normalizeBusinessTypeForStorage } from "../../lib/a2p/validation";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
 import { listActiveMembershipsForClinic } from "../../lib/db/clinic-memberships";
 import { listProfilesByIds } from "../../lib/db/profiles";
@@ -309,7 +310,7 @@ function buildData(args: {
     smsApproval: {
       legalBusinessName: clinic.legal_business_name ?? "",
       einTaxId: clinic.ein_tax_id ?? "",
-      businessType: clinic.business_type ?? "",
+      businessType: normalizeBusinessTypeForStorage(clinic.business_type) ?? clinic.business_type ?? "",
       repFirstName: clinic.a2p_rep_first_name ?? "",
       repLastName: clinic.a2p_rep_last_name ?? "",
       repBusinessTitle: clinic.a2p_rep_business_title ?? "",

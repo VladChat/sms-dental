@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import {
-  BUSINESS_TYPES,
-  BUSINESS_TYPE_LABELS,
+  BUSINESS_TYPE_OPTIONS,
   formatEinForDisplay,
+  normalizeBusinessTypeForStorage,
   normalizeRepresentativePhone,
   validateBusinessType,
   validateEin,
@@ -19,11 +19,6 @@ import type { SmsApprovalFields, SmsStatus } from "./account-types";
 
 type FieldErrors = Partial<Record<keyof SmsApprovalFields, string>>;
 type Touched = Partial<Record<keyof SmsApprovalFields, boolean>>;
-
-const BUSINESS_TYPE_OPTIONS = BUSINESS_TYPES.map((v) => ({
-  value: v,
-  label: BUSINESS_TYPE_LABELS[v],
-}));
 
 export function SmsApprovalForm({
   token,
@@ -43,6 +38,7 @@ export function SmsApprovalForm({
   onSaved: (persisted: SmsApprovalFields) => void;
 }) {
   const docsBase = slug ? `${publicBaseUrl}/business/${slug}` : null;
+  const businessTypeValue = normalizeBusinessTypeForStorage(value.businessType) ?? "";
 
   // Texting approval is a separate concept from form completion: saving the form
   // marks the section "Complete", but patient texting only turns on after a
@@ -168,11 +164,15 @@ export function SmsApprovalForm({
   return (
     <form onSubmit={onSubmit} noValidate className="acct-form">
       <Field
-        label={<LabelWithInfo label="Legal business name" tooltip="Use the exact legal business name registered with the EIN. This should match the IRS CP 575 or 147C letter." />}
+        label="Legal business name"
         name="legal_business_name"
         value={value.legalBusinessName}
         onChange={(v) => patch({ legalBusinessName: v })}
         onBlur={() => touch("legalBusinessName")}
+        infoTooltip={{
+          label: "Legal business name help",
+          text: "Use the exact legal business name registered with the EIN. For a U.S. business, this should match the IRS CP 575 EIN Confirmation Letter or IRS 147C letter.",
+        }}
         required
         helper="The exact registered name on your business paperwork."
         error={fieldErrors.legalBusinessName}
@@ -181,22 +181,30 @@ export function SmsApprovalForm({
       <SelectField
         label="Business type"
         name="business_type"
-        value={value.businessType}
+        value={businessTypeValue}
         onChange={(v) => patch({ businessType: v })}
         onBlur={() => touch("businessType")}
+        infoTooltip={{
+          label: "Business type help",
+          text: "Choose the legal structure that matches the business registration. For an LLC, choose Limited Liability Corporation.",
+        }}
         options={BUSINESS_TYPE_OPTIONS}
-        placeholder="Select business type…"
+        placeholder="Select business type..."
         required
-        helper="Select the legal business structure that matches your registration."
+        helper={fieldErrors.businessType ? undefined : "Select the exact legal structure submitted for A2P review."}
         error={fieldErrors.businessType}
       />
 
       <Field
-        label={<LabelWithInfo label="EIN" tooltip="Enter the EIN exactly as issued by the IRS. It must match the legal business name." />}
+        label="EIN"
         name="ein_tax_id"
         value={value.einTaxId}
         onChange={(v) => patch({ einTaxId: v })}
         onBlur={() => touch("einTaxId")}
+        infoTooltip={{
+          label: "EIN help",
+          text: "Enter the EIN exactly as issued by the IRS. It must match the legal business name.",
+        }}
         required
         inputMode="numeric"
         helper="Enter a valid 9-digit EIN, for example 12-3456789."
@@ -205,10 +213,13 @@ export function SmsApprovalForm({
 
       <fieldset className="acct-fieldset">
         <legend className="t-label">
-          <LabelWithInfo
-            label="Authorized representative"
-            tooltip="This should be a person authorized to register the business for SMS messaging."
-          />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+            <span>Authorized representative</span>
+            <InfoTooltip
+              label="Authorized representative help"
+              text="This should be a person authorized to register the business for SMS messaging."
+            />
+          </span>
         </legend>
         <div className="acct-grid-2">
           <Field
@@ -237,28 +248,40 @@ export function SmsApprovalForm({
             value={value.repBusinessTitle}
             onChange={(v) => patch({ repBusinessTitle: v })}
             onBlur={() => touch("repBusinessTitle")}
+            infoTooltip={{
+              label: "Business title help",
+              text: "Use the representative’s real business title, such as Owner, Director, or Office Manager.",
+            }}
             required
             helper="For example: Owner, Director, or Office Manager."
             error={fieldErrors.repBusinessTitle}
           />
           <Field
-            label={<LabelWithInfo label="Email" tooltip="Use a real email for the authorized representative. Disposable or temporary emails can fail review." />}
+            label="Email"
             name="rep_email"
             type="email"
             value={value.repEmail}
             onChange={(v) => patch({ repEmail: v })}
             onBlur={() => touch("repEmail")}
+            infoTooltip={{
+              label: "Representative email help",
+              text: "Use a real email for the authorized representative. Disposable or temporary emails can fail review.",
+            }}
             required
             inputMode="email"
             autoComplete="email"
             error={fieldErrors.repEmail}
           />
           <Field
-            label={<LabelWithInfo label="Phone" tooltip="Use a direct phone number for the authorized representative in U.S./Canada format." />}
+            label="Phone"
             name="rep_phone"
             value={value.repPhone}
             onChange={(v) => patch({ repPhone: v })}
             onBlur={() => touch("repPhone")}
+            infoTooltip={{
+              label: "Representative phone help",
+              text: "Use a direct phone number for the authorized representative in U.S./Canada format.",
+            }}
             required
             inputMode="tel"
             autoComplete="tel"
@@ -306,14 +329,5 @@ export function SmsApprovalForm({
 
       <SaveBar label="Save approval information" saving={saving} savedAt={savedAt} error={error} />
     </form>
-  );
-}
-
-function LabelWithInfo({ label, tooltip }: { label: string; tooltip: string }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
-      <span>{label}</span>
-      <InfoTooltip label={`${label} help`} text={tooltip} />
-    </span>
   );
 }

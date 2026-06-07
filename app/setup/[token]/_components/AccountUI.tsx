@@ -143,6 +143,7 @@ export function Field({
   value,
   onChange,
   onBlur,
+  infoTooltip,
   type = "text",
   required = false,
   optional = false,
@@ -157,6 +158,7 @@ export function Field({
   value: string;
   onChange: (v: string) => void;
   onBlur?: () => void;
+  infoTooltip?: { label: string; text: string };
   type?: string;
   required?: boolean;
   optional?: boolean;
@@ -173,7 +175,8 @@ export function Field({
       <label htmlFor={name}>
         {label}
         {required && <span className="req" aria-hidden="true"> *</span>}
-        {optional && <span className="t-helper"> (optional)</span>}
+        {infoTooltip && <InfoTooltip label={infoTooltip.label} text={infoTooltip.text} />}
+        {optional && !infoTooltip && <span className="t-helper"> (optional)</span>}
       </label>
       <input
         id={name}
@@ -208,6 +211,7 @@ export function SelectField({
   value,
   onChange,
   onBlur,
+  infoTooltip,
   options,
   placeholder,
   required = false,
@@ -219,6 +223,7 @@ export function SelectField({
   value: string;
   onChange: (v: string) => void;
   onBlur?: () => void;
+  infoTooltip?: { label: string; text: string };
   options: { value: string; label: string }[];
   placeholder?: string;
   required?: boolean;
@@ -232,6 +237,7 @@ export function SelectField({
       <label htmlFor={name}>
         {label}
         {required && <span className="req" aria-hidden="true"> *</span>}
+        {infoTooltip && <InfoTooltip label={infoTooltip.label} text={infoTooltip.text} />}
       </label>
       <select
         id={name}

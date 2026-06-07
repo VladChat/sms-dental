@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   firstValidationMessage,
   formatEinForDisplay,
+  normalizeBusinessTypeForStorage,
   normalizeRepresentativePhone,
   validateBusinessType,
   validateEin,
@@ -94,6 +95,10 @@ export async function POST(
   }
   const repPhone = normalizeRepresentativePhone(parsed.data.rep_phone);
   const einTaxId = formatEinForDisplay(parsed.data.ein_tax_id);
+  const businessType = normalizeBusinessTypeForStorage(parsed.data.business_type);
+  if (!businessType) {
+    return jsonError(400, "A2P_BUSINESS_TYPE_UNSUPPORTED", "Choose the exact legal business structure before A2P submission.");
+  }
 
   const current = await findClinicById(clinicId).catch(() => null);
   if (!current) return jsonError(404, "not_found", "Clinic not found.");
@@ -101,7 +106,7 @@ export async function POST(
   const next: Record<string, string | boolean | null> = {
     legal_business_name: parsed.data.legal_business_name,
     ein_tax_id: parsed.data.ein_tax_id,
-    business_type: parsed.data.business_type,
+    business_type: businessType,
     a2p_rep_first_name: parsed.data.rep_first_name,
     a2p_rep_last_name: parsed.data.rep_last_name,
     a2p_rep_business_title: parsed.data.rep_business_title,
@@ -136,7 +141,7 @@ export async function POST(
     clinic = await updateA2pInformation(clinicId, {
       legalBusinessName: parsed.data.legal_business_name,
       einTaxId,
-      businessType: parsed.data.business_type,
+      businessType,
       repFirstName: parsed.data.rep_first_name,
       repLastName: parsed.data.rep_last_name,
       repBusinessTitle: parsed.data.rep_business_title,

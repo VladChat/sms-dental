@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  BUSINESS_TYPES,
-  BUSINESS_TYPE_LABELS,
+  BUSINESS_TYPE_OPTIONS,
   formatEinForDisplay,
+  normalizeBusinessTypeForStorage,
   normalizeRepresentativePhone,
   validateBusinessType,
   validateEin,
@@ -32,11 +32,6 @@ export type AdminA2pValue = {
 type FieldErrors = Partial<Record<keyof AdminA2pValue, string>>;
 type Touched = Partial<Record<keyof AdminA2pValue, boolean>>;
 
-const BUSINESS_TYPE_OPTIONS = BUSINESS_TYPES.map((value) => ({
-  value,
-  label: BUSINESS_TYPE_LABELS[value],
-}));
-
 // Admin-scoped A2P / SMS-approval editor. Same fields + client validation as the
 // owner form (SmsApprovalForm), posting to the platform-admin-guarded
 // /api/admin/clinics/{clinicId}/a2p endpoint. Saving stores data only — it never
@@ -55,6 +50,7 @@ export function AdminA2pForm({
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [touched, setTouched] = useState<Touched>({});
+  const businessTypeValue = normalizeBusinessTypeForStorage(v.businessType) ?? "";
 
   function set(patch: Partial<AdminA2pValue>) {
     setV((prev) => ({ ...prev, ...patch }));
@@ -166,17 +162,22 @@ export function AdminA2pForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="acct-form">
-      <Field label={<LabelWithInfo label="Legal business name" tooltip="Use the exact legal business name registered with the EIN. This should match the IRS CP 575 or 147C letter." />} name="a2p_legal" value={v.legalBusinessName} onChange={(x) => patch({ legalBusinessName: x })} onBlur={() => touch("legalBusinessName")} required helper="The exact registered name on the business paperwork." error={fieldErrors.legalBusinessName} />
-      <SelectField label="Business type" name="a2p_type" value={v.businessType} onChange={(x) => patch({ businessType: x })} onBlur={() => touch("businessType")} options={BUSINESS_TYPE_OPTIONS} placeholder="Select business type…" required error={fieldErrors.businessType} />
-      <Field label={<LabelWithInfo label="EIN / Tax ID" tooltip="Enter the EIN exactly as issued by the IRS. It must match the legal business name." />} name="a2p_ein" value={v.einTaxId} onChange={(x) => patch({ einTaxId: x })} onBlur={() => touch("einTaxId")} required inputMode="numeric" helper="Enter a valid 9-digit EIN, for example 12-3456789." error={fieldErrors.einTaxId} />
+      <Field label="Legal business name" name="a2p_legal" value={v.legalBusinessName} onChange={(x) => patch({ legalBusinessName: x })} onBlur={() => touch("legalBusinessName")} infoTooltip={{ label: "Legal business name help", text: "Use the exact legal business name registered with the EIN. For a U.S. business, this should match the IRS CP 575 EIN Confirmation Letter or IRS 147C letter." }} required helper="The exact registered name on the business paperwork." error={fieldErrors.legalBusinessName} />
+      <SelectField label="Business type" name="a2p_type" value={businessTypeValue} onChange={(x) => patch({ businessType: x })} onBlur={() => touch("businessType")} infoTooltip={{ label: "Business type help", text: "Choose the legal structure that matches the business registration. For an LLC, choose Limited Liability Corporation." }} options={BUSINESS_TYPE_OPTIONS} placeholder="Select business type..." required helper={fieldErrors.businessType ? undefined : "Select the exact legal structure submitted for A2P review."} error={fieldErrors.businessType} />
+      <Field label="EIN / Tax ID" name="a2p_ein" value={v.einTaxId} onChange={(x) => patch({ einTaxId: x })} onBlur={() => touch("einTaxId")} infoTooltip={{ label: "EIN help", text: "Enter the EIN exactly as issued by the IRS. It must match the legal business name." }} required inputMode="numeric" helper="Enter a valid 9-digit EIN, for example 12-3456789." error={fieldErrors.einTaxId} />
       <fieldset className="acct-fieldset">
-        <legend className="t-label"><LabelWithInfo label="Authorized representative" tooltip="This should be a person authorized to register the business for SMS messaging." /></legend>
+        <legend className="t-label">
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+            <span>Authorized representative</span>
+            <InfoTooltip label="Authorized representative help" text="This should be a person authorized to register the business for SMS messaging." />
+          </span>
+        </legend>
         <div className="acct-grid-2">
           <Field label="First name" name="a2p_rep_first" value={v.repFirstName} onChange={(x) => patch({ repFirstName: x })} onBlur={() => touch("repFirstName")} required autoComplete="given-name" error={fieldErrors.repFirstName} />
           <Field label="Last name" name="a2p_rep_last" value={v.repLastName} onChange={(x) => patch({ repLastName: x })} onBlur={() => touch("repLastName")} required autoComplete="family-name" error={fieldErrors.repLastName} />
-          <Field label="Business title" name="a2p_rep_title" value={v.repBusinessTitle} onChange={(x) => patch({ repBusinessTitle: x })} onBlur={() => touch("repBusinessTitle")} required helper="For example: Owner, Director, or Office Manager." error={fieldErrors.repBusinessTitle} />
-          <Field label={<LabelWithInfo label="Email" tooltip="Use a real email for the authorized representative. Disposable or temporary emails can fail review." />} name="a2p_rep_email" type="email" value={v.repEmail} onChange={(x) => patch({ repEmail: x })} onBlur={() => touch("repEmail")} required inputMode="email" autoComplete="email" error={fieldErrors.repEmail} />
-          <Field label={<LabelWithInfo label="Phone" tooltip="Use a direct phone number for the authorized representative in U.S./Canada format." />} name="a2p_rep_phone" value={v.repPhone} onChange={(x) => patch({ repPhone: x })} onBlur={() => touch("repPhone")} required inputMode="tel" autoComplete="tel" error={fieldErrors.repPhone} />
+          <Field label="Business title" name="a2p_rep_title" value={v.repBusinessTitle} onChange={(x) => patch({ repBusinessTitle: x })} onBlur={() => touch("repBusinessTitle")} infoTooltip={{ label: "Business title help", text: "Use the representative’s real business title, such as Owner, Director, or Office Manager." }} required helper="For example: Owner, Director, or Office Manager." error={fieldErrors.repBusinessTitle} />
+          <Field label="Email" name="a2p_rep_email" type="email" value={v.repEmail} onChange={(x) => patch({ repEmail: x })} onBlur={() => touch("repEmail")} infoTooltip={{ label: "Representative email help", text: "Use a real email for the authorized representative. Disposable or temporary emails can fail review." }} required inputMode="email" autoComplete="email" error={fieldErrors.repEmail} />
+          <Field label="Phone" name="a2p_rep_phone" value={v.repPhone} onChange={(x) => patch({ repPhone: x })} onBlur={() => touch("repPhone")} infoTooltip={{ label: "Representative phone help", text: "Use a direct phone number for the authorized representative in U.S./Canada format." }} required inputMode="tel" autoComplete="tel" error={fieldErrors.repPhone} />
         </div>
       </fieldset>
       <label className="check">
@@ -185,14 +186,5 @@ export function AdminA2pForm({
       </label>
       <SaveBar label="Save approval information" saving={saving} savedAt={savedAt} error={error} />
     </form>
-  );
-}
-
-function LabelWithInfo({ label, tooltip }: { label: string; tooltip: string }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
-      <span>{label}</span>
-      <InfoTooltip label={`${label} help`} text={tooltip} />
-    </span>
   );
 }

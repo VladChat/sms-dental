@@ -11,69 +11,34 @@ export type A2pValidationResult = {
   operatorMessage?: string;
 };
 
-const SUPPORTED_BUSINESS_TYPE_MAP = {
-  LIMITED_LIABILITY_COMPANY: {
-    label: "Limited liability company (LLC)",
-    twilioValue: "Limited Liability Corporation",
-  },
-  CORPORATION: {
-    label: "Corporation",
-    twilioValue: "Corporation",
-  },
-  NON_PROFIT_CORPORATION: {
-    label: "Non-profit corporation",
-    twilioValue: "Non-profit Corporation",
-  },
-  PARTNERSHIP: {
-    label: "Partnership",
-    twilioValue: "Partnership",
-  },
-  CO_OPERATIVE: {
-    label: "Co-operative",
-    twilioValue: "Co-operative",
-  },
-  SOLE_PROPRIETORSHIP: {
-    label: "Sole proprietorship",
-    twilioValue: "Sole Proprietorship",
-  },
-} as const;
+export const TWILIO_BUSINESS_TYPES = [
+  "Co-operative",
+  "Corporation",
+  "Limited Liability Corporation",
+  "Non-profit Corporation",
+  "Partnership",
+] as const;
 
-const LEGACY_BUSINESS_TYPE_LABELS = {
+export type TwilioBusinessType = (typeof TWILIO_BUSINESS_TYPES)[number];
+
+export const BUSINESS_TYPE_OPTIONS: Array<{ value: TwilioBusinessType; label: string }> =
+  TWILIO_BUSINESS_TYPES.map((value) => ({ value, label: value }));
+
+const LEGACY_BUSINESS_TYPE_LABELS: Record<string, string> = {
   PRIVATE_PROFIT: "Private company (legacy - choose exact structure)",
   PUBLIC_PROFIT: "Public company (legacy - choose exact structure)",
   NON_PROFIT: "Non-profit (legacy)",
   SOLE_PROPRIETOR: "Sole proprietor (legacy)",
+  SOLE_PROPRIETORSHIP: "Sole proprietorship",
   GOVERNMENT: "Government (not supported for this A2P flow)",
-} as const;
-
-export const BUSINESS_TYPES = [
-  "LIMITED_LIABILITY_COMPANY",
-  "CORPORATION",
-  "NON_PROFIT_CORPORATION",
-  "PARTNERSHIP",
-  "CO_OPERATIVE",
-  "SOLE_PROPRIETORSHIP",
-  "PRIVATE_PROFIT",
-  "PUBLIC_PROFIT",
-  "NON_PROFIT",
-  "SOLE_PROPRIETOR",
-  "GOVERNMENT",
-] as const;
-
-export type BusinessType = (typeof BUSINESS_TYPES)[number];
-
-export const BUSINESS_TYPE_LABELS: Record<BusinessType, string> = {
-  LIMITED_LIABILITY_COMPANY: SUPPORTED_BUSINESS_TYPE_MAP.LIMITED_LIABILITY_COMPANY.label,
-  CORPORATION: SUPPORTED_BUSINESS_TYPE_MAP.CORPORATION.label,
-  NON_PROFIT_CORPORATION: SUPPORTED_BUSINESS_TYPE_MAP.NON_PROFIT_CORPORATION.label,
-  PARTNERSHIP: SUPPORTED_BUSINESS_TYPE_MAP.PARTNERSHIP.label,
-  CO_OPERATIVE: SUPPORTED_BUSINESS_TYPE_MAP.CO_OPERATIVE.label,
-  SOLE_PROPRIETORSHIP: SUPPORTED_BUSINESS_TYPE_MAP.SOLE_PROPRIETORSHIP.label,
-  PRIVATE_PROFIT: LEGACY_BUSINESS_TYPE_LABELS.PRIVATE_PROFIT,
-  PUBLIC_PROFIT: LEGACY_BUSINESS_TYPE_LABELS.PUBLIC_PROFIT,
-  NON_PROFIT: LEGACY_BUSINESS_TYPE_LABELS.NON_PROFIT,
-  SOLE_PROPRIETOR: LEGACY_BUSINESS_TYPE_LABELS.SOLE_PROPRIETOR,
-  GOVERNMENT: LEGACY_BUSINESS_TYPE_LABELS.GOVERNMENT,
+  "Private Company": "Private Company",
+  "Private company": "Private company",
+  "Public Company": "Public Company",
+  "Public company": "Public company",
+  "Non-profit": "Non-profit",
+  "Sole proprietor": "Sole proprietor",
+  "Sole proprietorship": "Sole proprietorship",
+  Government: "Government",
 };
 
 const SUPPORTED_JOB_POSITIONS = new Set([
@@ -318,24 +283,40 @@ export function validateBusinessAddress(input: {
 }
 
 export function validateBusinessType(value: string): A2pValidationResult | null {
-  const normalized = (value ?? "").trim();
-  if (!normalized) {
-    return unsupportedBusinessType();
-  }
-  if (normalized in SUPPORTED_BUSINESS_TYPE_MAP || normalized === "NON_PROFIT" || normalized === "SOLE_PROPRIETOR") {
-    return null;
-  }
-  return unsupportedBusinessType();
+  return normalizeBusinessTypeForStorage(value) ? null : unsupportedBusinessType();
 }
 
 export function mapBusinessTypeForTwilio(value: string): string | null {
+  return normalizeBusinessTypeForStorage(value);
+}
+
+export function normalizeBusinessTypeForStorage(value: string | null | undefined): TwilioBusinessType | null {
   const normalized = (value ?? "").trim();
-  if (normalized in SUPPORTED_BUSINESS_TYPE_MAP) {
-    return SUPPORTED_BUSINESS_TYPE_MAP[normalized as keyof typeof SUPPORTED_BUSINESS_TYPE_MAP].twilioValue;
+  if (!normalized) return null;
+  if ((TWILIO_BUSINESS_TYPES as readonly string[]).includes(normalized)) {
+    return normalized as TwilioBusinessType;
   }
-  if (normalized === "NON_PROFIT") return "Non-profit Corporation";
-  if (normalized === "SOLE_PROPRIETOR") return "Sole Proprietorship";
+  const lower = normalized.toLowerCase();
+  if (lower === "llc" || lower === "limited liability company (llc)") {
+    return "Limited Liability Corporation";
+  }
   return null;
+}
+
+export function isSupportedBusinessType(value: string | null | undefined): value is TwilioBusinessType {
+  return normalizeBusinessTypeForStorage(value) !== null;
+}
+
+export function isLegacyBusinessType(value: string | null | undefined): boolean {
+  const normalized = (value ?? "").trim();
+  if (!normalized) return false;
+  return normalizeBusinessTypeForStorage(normalized) === null;
+}
+
+export function legacyBusinessTypeLabel(value: string | null | undefined): string | null {
+  const normalized = (value ?? "").trim();
+  if (!normalized) return null;
+  return LEGACY_BUSINESS_TYPE_LABELS[normalized] ?? normalized;
 }
 
 export function mapJobPositionForTwilio(value: string): string | null {
@@ -493,10 +474,10 @@ export function validateA2pPreflight(reviewPackage: A2pReviewPackage): A2pValida
   if (!mapBusinessTypeForTwilio(reviewPackage.business.businessType ?? "")) {
     issues.push({
       field: "business_type",
-      code: "UNMAPPED_BUSINESS_TYPE",
+      code: "A2P_BUSINESS_TYPE_UNSUPPORTED",
       severity: "error",
       message: "Choose the clinic's exact legal business structure before A2P submission.",
-      operatorMessage: "Cannot submit: business type is not mapped to a Twilio-supported value.",
+      operatorMessage: "Cannot submit: business type is not mapped to a Twilio-supported legal structure.",
     });
   }
 
@@ -596,10 +577,10 @@ function invalidWebsiteResult(): A2pValidationResult {
 function unsupportedBusinessType(): A2pValidationResult {
   return {
     field: "business_type",
-    code: "UNMAPPED_BUSINESS_TYPE",
+    code: "A2P_BUSINESS_TYPE_UNSUPPORTED",
     severity: "error",
     message: "Choose the clinic's exact legal business structure before A2P submission.",
-    operatorMessage: "Cannot submit: business type is not mapped to a Twilio-supported value.",
+    operatorMessage: "Cannot submit: business type is not mapped to a Twilio-supported legal structure.",
   };
 }
 

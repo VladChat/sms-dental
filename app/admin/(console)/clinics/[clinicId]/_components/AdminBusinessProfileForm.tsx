@@ -7,7 +7,7 @@ import {
   validateBusinessAddress,
   validateWebsiteUrl,
 } from "../../../../../../lib/a2p/validation";
-import { Field, InfoTooltip, SaveBar, nowLabel } from "../../../../../setup/[token]/_components/AccountUI";
+import { Field, SaveBar, nowLabel } from "../../../../../setup/[token]/_components/AccountUI";
 
 export type AdminBusinessProfileValue = {
   name: string;
@@ -139,24 +139,15 @@ export function AdminBusinessProfileForm({
     <form onSubmit={onSubmit} noValidate className="acct-form">
       <Field label="Public clinic name" name="bp_name" value={v.name} onChange={(x) => patch({ name: x })} onBlur={() => touch("name")} required error={fieldErrors.name} helper="The name patients know this office by." />
       <Field label="Main office phone" name="bp_main_phone" value={v.mainPhone} onChange={(x) => patch({ mainPhone: x })} onBlur={() => touch("mainPhone")} required inputMode="tel" autoComplete="tel" error={fieldErrors.mainPhone} />
-      <Field label={<LabelWithInfo label="Street address" tooltip="Use the business address associated with the clinic or business registration when possible." />} name="bp_street" value={v.streetAddress} onChange={(x) => patch({ streetAddress: x })} onBlur={() => touch("streetAddress")} required autoComplete="address-line1" error={fieldErrors.streetAddress} />
+      <Field label="Street address" name="bp_street" value={v.streetAddress} onChange={(x) => patch({ streetAddress: x })} onBlur={() => touch("streetAddress")} required infoTooltip={{ label: "Street address help", text: "Use the business address associated with the clinic or business registration when possible." }} autoComplete="address-line1" error={fieldErrors.streetAddress} />
       <Field label="Address line 2" name="bp_line2" value={v.addressLine2} onChange={(x) => patch({ addressLine2: x })} optional placeholder="Suite, unit, floor" autoComplete="address-line2" />
       <div className="acct-grid-3">
         <Field label="City" name="bp_city" value={v.city} onChange={(x) => patch({ city: x })} onBlur={() => touch("city")} required autoComplete="address-level2" error={fieldErrors.city} />
         <Field label="State" name="bp_state" value={v.stateRegion} onChange={(x) => patch({ stateRegion: x })} onBlur={() => touch("stateRegion")} required placeholder="IL" autoComplete="address-level1" error={fieldErrors.stateRegion} />
         <Field label="ZIP code" name="bp_zip" value={v.postalCode} onChange={(x) => patch({ postalCode: x })} onBlur={() => touch("postalCode")} required inputMode="numeric" autoComplete="postal-code" error={fieldErrors.postalCode} />
       </div>
-      <Field label={<LabelWithInfo label="Website" tooltip="The website must be public, functional, and related to the legal business name or clinic name. Twilio may review it during A2P verification." />} name="bp_website" value={v.website} onChange={(x) => patch({ website: x })} onBlur={() => touch("website")} optional placeholder="https://example.com" autoComplete="url" error={fieldErrors.website} />
+      <Field label="Website" name="bp_website" value={v.website} onChange={(x) => patch({ website: x })} onBlur={() => touch("website")} optional infoTooltip={{ label: "Website help", text: "The website must be public, functional, and related to the legal business name or clinic name. Twilio may review it during A2P verification." }} placeholder="https://example.com" autoComplete="url" error={fieldErrors.website} />
       <SaveBar label="Save business profile" saving={saving} savedAt={savedAt} error={error} />
     </form>
-  );
-}
-
-function LabelWithInfo({ label, tooltip }: { label: string; tooltip: string }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
-      <span>{label}</span>
-      <InfoTooltip label={`${label} help`} text={tooltip} />
-    </span>
   );
 }

@@ -6,7 +6,7 @@ import {
   validateBusinessAddress,
   validateWebsiteUrl,
 } from "../../../../lib/a2p/validation";
-import { Field, InfoTooltip, ReadonlyField, SaveBar, nowLabel } from "./AccountUI";
+import { Field, ReadonlyField, SaveBar, nowLabel } from "./AccountUI";
 import type { BusinessProfileFields } from "./account-types";
 
 type FieldErrors = Partial<Record<keyof BusinessProfileFields, string>>;
@@ -161,12 +161,16 @@ export function BusinessProfileForm({
       />
 
       <Field
-        label={<LabelWithInfo label="Street address" tooltip="Use the business address associated with the clinic or business registration when possible." />}
+        label="Street address"
         name="street_address"
         value={value.streetAddress}
         onChange={(v) => patch({ streetAddress: v })}
         onBlur={() => touch("streetAddress")}
         required
+        infoTooltip={{
+          label: "Street address help",
+          text: "Use the business address associated with the clinic or business registration when possible.",
+        }}
         autoComplete="address-line1"
         error={fieldErrors.streetAddress}
       />
@@ -217,12 +221,16 @@ export function BusinessProfileForm({
       </div>
 
       <Field
-        label={<LabelWithInfo label="Website" tooltip="The website must be public, functional, and related to the legal business name or clinic name. Twilio may review it during A2P verification." />}
+        label="Website"
         name="website"
         value={value.website}
         onChange={(v) => patch({ website: v })}
         onBlur={() => touch("website")}
         optional
+        infoTooltip={{
+          label: "Website help",
+          text: "The website must be public, functional, and related to the legal business name or clinic name. Twilio may review it during A2P verification.",
+        }}
         placeholder="https://yourpractice.com"
         autoComplete="url"
         error={fieldErrors.website}
@@ -230,14 +238,5 @@ export function BusinessProfileForm({
 
       <SaveBar label="Save business profile" saving={saving} savedAt={savedAt} error={error} />
     </form>
-  );
-}
-
-function LabelWithInfo({ label, tooltip }: { label: string; tooltip: string }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
-      <span>{label}</span>
-      <InfoTooltip label={`${label} help`} text={tooltip} />
-    </span>
   );
 }

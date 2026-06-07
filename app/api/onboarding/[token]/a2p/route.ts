@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   firstValidationMessage,
   formatEinForDisplay,
+  normalizeBusinessTypeForStorage,
   normalizeRepresentativePhone,
   validateBusinessType,
   validateEin,
@@ -95,6 +96,10 @@ export async function POST(
   }
   const repPhone = normalizeRepresentativePhone(parsed.data.rep_phone);
   const einTaxId = formatEinForDisplay(parsed.data.ein_tax_id);
+  const businessType = normalizeBusinessTypeForStorage(parsed.data.business_type);
+  if (!businessType) {
+    return jsonError(400, "A2P_BUSINESS_TYPE_UNSUPPORTED", "Choose the exact legal business structure before A2P submission.");
+  }
 
   // Persist. A DB failure must surface as a structured error, never a silent
   // "success" that disappears on reload.
@@ -103,7 +108,7 @@ export async function POST(
     clinic = await updateA2pInformation(setupRequest.clinic_id, {
       legalBusinessName: parsed.data.legal_business_name,
       einTaxId,
-      businessType: parsed.data.business_type,
+      businessType,
       repFirstName: parsed.data.rep_first_name,
       repLastName: parsed.data.rep_last_name,
       repBusinessTitle: parsed.data.rep_business_title,
