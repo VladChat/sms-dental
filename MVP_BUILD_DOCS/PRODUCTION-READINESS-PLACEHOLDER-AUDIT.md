@@ -371,21 +371,31 @@ remained unchanged.
 
 ---
 
-## Local number billing — Stripe wiring PENDING (2026-06-09)
+## Local number billing — Stripe wiring COMPLETE in test mode (2026-06-09)
 
-The toll-free vs local number model is implemented and production-safe, but the
-LOCAL number fee items are NOT yet wired in Stripe. Local purchase is fail-closed
-server-side: owners can search local numbers, but the server refuses to buy or
-assign one (`local_billing_not_configured`, 503) until ALL of these env vars are
-set (presence-checked by `hasLocalNumberBillingConfigured()` in lib/env.ts):
+The toll-free vs local number model is implemented and local billing is wired in
+Stripe test/sandbox mode. Owners can search local numbers. Assignment is enabled
+only when ALL five local Price ID env vars are present, the clinic has a saved
+Stripe Customer + PaymentMethod, the paid subscription is active, and the owner
+explicitly authorizes the local fees.
 
-- STRIPE_LOCAL_NUMBER_PRICE_ID            ($20/month)
-- STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID    ($15/month)
-- STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID  ($9 one-time)
-- STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID ($30 one-time)
-- STRIPE_LOCAL_SETUP_FEE_PRICE_ID         ($20 one-time)
+Vercel Production env vars are set:
 
-Next step to enable real local purchase: create the Stripe Prices, set the env
-vars, then extend `decideTypedPurchase` + the provisioning local path to attach
-these recurring + one-time items (synchronize billing BEFORE assignment). Toll-free
-(first included / additional $20/month) is fully wired and unaffected.
+- `STRIPE_LOCAL_NUMBER_PRICE_ID=price_1TfVza4ZSHLicmej2cXgpYIs`
+- `STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID=price_1TfVza4ZSHLicmejludIWYyF`
+- `STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID=price_1TfVzb4ZSHLicmejQQ06FrWw`
+- `STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID=price_1TfVzb4ZSHLicmej4B1C0Jmg`
+- `STRIPE_LOCAL_SETUP_FEE_PRICE_ID=price_1TfVzb4ZSHLicmejOvsW01KQ`
+
+Behavior:
+
+- Recurring local number + SMS compliance subscription items are created before
+  Twilio purchase.
+- Brand registration, campaign registration/vetting, and setup fee are charged
+  as a paid one-time invoice before Twilio purchase.
+- If local env is missing: `local_billing_not_configured`, no charge, no number.
+- If payment fails: `payment_failed`, no number.
+- If Stripe succeeds but Twilio/DB activation later fails:
+  `reconciliation_required` and billing state is preserved for operator action.
+- Toll-free behavior is unchanged. SMS/A2P behavior is unchanged; no SMS is
+  enabled by local billing.

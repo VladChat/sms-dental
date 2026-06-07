@@ -30,6 +30,14 @@ const StripeBillingSchema = z.object({
   STRIPE_ADDITIONAL_NUMBER_PRICE_ID: requiredString,
 });
 
+const LocalNumberBillingSchema = z.object({
+  STRIPE_LOCAL_NUMBER_PRICE_ID: requiredString,
+  STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID: requiredString,
+  STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID: requiredString,
+  STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID: requiredString,
+  STRIPE_LOCAL_SETUP_FEE_PRICE_ID: requiredString,
+});
+
 const SupabaseDbSchema = z.object({
   SUPABASE_DB_URL: requiredString,
 });
@@ -122,6 +130,23 @@ export function hasLocalNumberBillingConfigured(): boolean {
 // returns names, never values).
 export function missingLocalNumberBillingEnvVars(): string[] {
   return LOCAL_NUMBER_BILLING_ENV_VARS.filter((name) => !present(name));
+}
+
+export function getLocalNumberBillingEnv(): {
+  localNumberPriceId: string;
+  localSmsCompliancePriceId: string;
+  localBrandRegistrationPriceId: string;
+  localCampaignRegistrationPriceId: string;
+  localSetupFeePriceId: string;
+} {
+  const parsed = LocalNumberBillingSchema.parse(process.env);
+  return {
+    localNumberPriceId: parsed.STRIPE_LOCAL_NUMBER_PRICE_ID,
+    localSmsCompliancePriceId: parsed.STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID,
+    localBrandRegistrationPriceId: parsed.STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID,
+    localCampaignRegistrationPriceId: parsed.STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID,
+    localSetupFeePriceId: parsed.STRIPE_LOCAL_SETUP_FEE_PRICE_ID,
+  };
 }
 
 export function getSupabaseDbEnv() {

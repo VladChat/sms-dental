@@ -22,7 +22,8 @@ export type NumberPurchaseBlockReason =
   // Local number requested but its regulatory + MCD fee billing is not wired in
   // Stripe yet. Local purchase is fail-closed until configured (search is still
   // allowed). See lib/env.ts hasLocalNumberBillingConfigured.
-  | "local_billing_not_configured";
+  | "local_billing_not_configured"
+  | "local_billing_authorization_required";
 
 export type NextSlotClass = "included" | "additional";
 
@@ -34,9 +35,9 @@ export type RequestedNumberType = "toll_free" | "local";
 // "included"; the first toll-free is included, additional toll-free is paid.
 export type TypedPurchaseDecision = {
   type: RequestedNumberType;
-  // For toll_free: 'included' (first) or 'additional' (paid). For local: 'local'
-  // (always paid add-on). 'local' is informational only while local is fail-closed.
-  billingClass: "included" | "additional" | "local";
+  // For toll_free: 'included' (first) or 'additional' (paid). For local:
+  // 'additional' (always paid add-on).
+  billingClass: "included" | "additional";
   requiresAdditionalConsent: boolean; // additional toll-free $20/month consent
   requiresLocalBilling: boolean; // local regulatory + MCD fees path
   blockReason: NumberPurchaseBlockReason | null;
@@ -227,10 +228,9 @@ function baseHardBlock(ent: NumberEntitlement): NumberPurchaseBlockReason | null
  *   - Toll-free: the first number is included; an additional toll-free number is
  *     a paid add-on (reuses the existing count-based included/additional gating
  *     and the $20/month additional Stripe item).
- *   - Local: ALWAYS a paid add-on (never included), even as the first number and
- *     during trial. Local billing (regulatory + MCD fees) is not wired in Stripe
- *     yet, so local purchase is fail-closed (`local_billing_not_configured`) —
- *     the owner may search local numbers but the server refuses to assign one.
+ *   - Local: ALWAYS a paid add-on (never included). Local requires the local
+ *     Stripe Price IDs plus an active paid subscription/payment method before
+ *     assignment. The owner may search local numbers while blocked.
  */
 export function decideTypedPurchase(
   ent: NumberEntitlement,
@@ -238,11 +238,16 @@ export function decideTypedPurchase(
 ): TypedPurchaseDecision {
   if (type === "local") {
     const base = baseHardBlock(ent);
+    const localBlock: NumberPurchaseBlockReason | null =
+      !hasLocalNumberBillingConfigured() ? "local_billing_not_configured"
+      : !ent.hasActivePaidSubscription
+        ? ent.stripeSubscriptionPresent ? "subscription_not_active" : "paid_plan_required"
+      : null;
     const blockReason: NumberPurchaseBlockReason | null =
-      base ?? (hasLocalNumberBillingConfigured() ? null : "local_billing_not_configured");
+      base ?? localBlock;
     return {
       type,
-      billingClass: "local",
+      billingClass: "additional",
       requiresAdditionalConsent: false,
       requiresLocalBilling: true,
       blockReason,

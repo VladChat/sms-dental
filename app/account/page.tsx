@@ -8,7 +8,7 @@ import {
   type ClinicPhoneNumberRow,
 } from "../../lib/db/clinic-phone-numbers";
 import { getNumberEntitlement } from "../../lib/billing/number-entitlements";
-import { getAppDomainsSafe } from "../../lib/env";
+import { getAppDomainsSafe, hasLocalNumberBillingConfigured } from "../../lib/env";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
 import { listActiveMembershipsForClinic } from "../../lib/db/clinic-memberships";
 import { listProfilesByIds } from "../../lib/db/profiles";
@@ -105,6 +105,7 @@ async function loadOwnerEntitlement(
       isTrialing: e.isTrialing,
       trialEnded: e.trialEnded,
       hasActivePaidSubscription: e.hasActivePaidSubscription,
+      localBillingConfigured: hasLocalNumberBillingConfigured(),
       canPurchaseNext: e.canPurchaseNext,
       blockReason: e.blockReason,
       trialStartedAt: e.trialStartedAt,
@@ -123,6 +124,7 @@ async function loadOwnerEntitlement(
       isTrialing: false,
       trialEnded: false,
       hasActivePaidSubscription: false,
+      localBillingConfigured: false,
       canPurchaseNext: false,
       blockReason: "billing_configuration_missing",
       trialStartedAt: null,

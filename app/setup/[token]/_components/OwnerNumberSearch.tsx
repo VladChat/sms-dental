@@ -3,10 +3,12 @@
 import { useRef, useState } from "react";
 
 import type { AssignedBusinessNumberSummary } from "./account-types";
+import { NumberBreakdown } from "./NumberTypeChooser";
 import {
   additionalNumberConsentText,
   billingConfig,
   formatUsdFromCents,
+  localNumberBreakdown,
 } from "../../../../config/billing.config";
 
 const ADDITIONAL_MONTHLY = formatUsdFromCents(
@@ -49,6 +51,9 @@ type PurchaseResponse = {
   error?: { message?: string; code?: string };
 };
 
+const LOCAL_BILLING_CONSENT =
+  "I authorize Missed Calls Dental to bill the local number fees shown here.";
+
 // Step 2 of the add-number flow: search + assign a number of the chosen type.
 // Rendered by AssignedNumberCard after the type chooser. The server purchase API
 // remains the final authority on price/classification and is the only place that
@@ -56,9 +61,8 @@ type PurchaseResponse = {
 //
 //  - toll_free: no area code / ZIP. Voice + SMS only. The first toll-free number
 //    is included; an additional toll-free number needs the $20/month consent.
-//  - local: area code / ZIP search with smart fallback. Local assignment is
-//    fail-closed (purchaseEnabled=false) until local billing is configured — the
-//    owner can browse availability but cannot assign yet.
+//  - local: area code / ZIP search with smart fallback. Local assignment requires
+//    explicit authorization for the config-driven local fees.
 export function OwnerNumberSearch({
   numberType,
   tollFreeSlotClass,
@@ -92,6 +96,7 @@ export function OwnerNumberSearch({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const isTollFree = numberType === "toll_free";
+  const isLocal = numberType === "local";
   const isAdditionalTollFree = isTollFree && tollFreeSlotClass === "additional";
   const typeBadgeClass = isTollFree ? "badge-info" : "badge-neutral";
   const typeBadgeLabel = isTollFree ? "Toll-free" : "Local";
@@ -160,6 +165,7 @@ export function OwnerNumberSearch({
           capabilities: candidate.capabilities,
           type: numberType,
           additional_billing_authorized: isAdditionalTollFree ? consentChecked : undefined,
+          local_billing_authorized: isLocal ? consentChecked : undefined,
         }),
       });
       const json = (await res.json().catch(() => null)) as PurchaseResponse | null;
@@ -298,13 +304,29 @@ export function OwnerNumberSearch({
                           </div>
                         )}
 
+                        {isLocal && (
+                          <div className="acct-consent">
+                            <div style={{ display: "grid", gap: "var(--space-2)" }}>
+                              <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>Local number fees</p>
+                              <NumberBreakdown groups={localNumberBreakdown()} />
+                            </div>
+                            <label className="check">
+                              <input type="checkbox" checked={consentChecked}
+                                onChange={(e) => setConsentChecked(e.target.checked)} />
+                              <span>{LOCAL_BILLING_CONSENT}</span>
+                            </label>
+                          </div>
+                        )}
+
                         <button type="button" className="btn btn-primary acct-primary-action"
                           onClick={() => void confirmPurchase()}
-                          disabled={(isAdditionalTollFree && !consentChecked) || purchasing}
+                          disabled={((isAdditionalTollFree || isLocal) && !consentChecked) || purchasing}
                           aria-busy={purchasing}>
                           {purchasing
                             ? "Assigning…"
-                            : isAdditionalTollFree
+                            : isLocal
+                              ? "Authorize and assign local number"
+                              : isAdditionalTollFree
                               ? "Purchase this number"
                               : "Assign this number"}
                         </button>

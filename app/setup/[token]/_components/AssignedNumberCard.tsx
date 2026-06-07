@@ -25,10 +25,8 @@ const ADD_NUMBER_TOTAL_MONTHLY = formatUsdFromCents(
     billingConfig.additionalBusinessNumber.monthlyUnitAmountCents,
 );
 
-// Local number assignment is fail-closed until local billing is configured. The
-// owner can browse local availability but cannot assign one yet.
 const LOCAL_NOTICE =
-  "Local numbers can't be assigned yet — local number billing is being finalized. You can browse available local numbers now.";
+  "Local number billing is not configured yet. No charge was made.";
 
 const TAG_ROW: CSSProperties = {
   display: "flex",
@@ -212,9 +210,10 @@ function NumberAction({
 
   // ── Otherwise the add-number flow is available ──────────────────────────────
   // reason may still be paid_plan_required / subscription_not_active, which only
-  // blocks the ADDITIONAL toll-free purchase (handled inside the toll-free branch).
+  // blocks paid number assignment (handled inside the type branches).
   const tollFreeNeedsPaidPlan =
     reason === "paid_plan_required" || reason === "subscription_not_active";
+  const localNeedsPaidPlan = tollFreeNeedsPaidPlan;
 
   if (flow.step === "idle") {
     return (
@@ -306,13 +305,65 @@ function NumberAction({
     );
   }
 
-  // flow.type === "local" — searchable, but assignment is fail-closed for now.
+  // flow.type === "local"
+  if (localNeedsPaidPlan) {
+    return (
+      <div className="acct-callout">
+        <div className="acct-search-head">
+          <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>Local number</p>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFlow({ step: "choose" })}>Back</button>
+        </div>
+        {reason === "subscription_not_active" ? (
+          <>
+            <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+              Your subscription is not active. Update billing to assign a local number.
+            </p>
+            <div style={{ marginTop: "var(--space-2)" }}>
+              <button type="button" className="btn btn-primary acct-primary-action" onClick={onGoToBilling}>Go to billing</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+              Start the paid plan to assign a local number.
+            </p>
+            {paidPlanError && (
+              <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
+                <span>{paidPlanError}</span>
+              </div>
+            )}
+            <div style={{ marginTop: "var(--space-2)" }}>
+              <button
+                type="button"
+                className="btn btn-primary acct-primary-action"
+                onClick={() => setShowPaidPlanConfirm(true)}
+                disabled={startingPaidPlan || paidPlanPending}
+                aria-busy={startingPaidPlan || paidPlanPending}
+              >
+                Start paid plan
+              </button>
+            </div>
+            {showPaidPlanConfirm && (
+              <AddPhoneNumberConfirmation
+                onClose={() => setShowPaidPlanConfirm(false)}
+                onContinue={() => void onStartPaidPlan()}
+                starting={startingPaidPlan}
+                pending={paidPlanPending}
+                error={paidPlanError}
+              />
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <OwnerNumberSearch
       numberType="local"
       tollFreeSlotClass="additional"
-      purchaseEnabled={false}
-      localNotice={LOCAL_NOTICE}
+      purchaseEnabled={entitlement.localBillingConfigured}
+      localNotice={entitlement.localBillingConfigured ? null : LOCAL_NOTICE}
       initialAreaCode={areaCode}
       initialPostalCode={postalCode}
       onPurchased={onPurchased}

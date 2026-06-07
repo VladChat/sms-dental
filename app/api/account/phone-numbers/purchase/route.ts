@@ -39,6 +39,7 @@ const BodySchema = z.object({
   // Number type is REQUIRED: the UI always picks toll-free or local before search.
   type: z.enum(["local", "toll_free"]),
   additional_billing_authorized: z.boolean().optional(),
+  local_billing_authorized: z.boolean().optional(),
 });
 
 // Stable error code -> HTTP status. Messages come from the provisioning service.
@@ -51,12 +52,14 @@ const ERROR_STATUS: Record<ProvisionErrorCode, number> = {
   subscription_not_active: 409,
   billing_configuration_missing: 503,
   local_billing_not_configured: 503,
+  local_billing_authorization_required: 400,
   additional_billing_authorization_required: 400,
   number_already_assigned: 409,
   number_no_longer_available: 409,
   purchase_disabled: 503,
   missing_fields: 400,
   billing_sync_failed: 502,
+  payment_failed: 402,
   reconciliation_required: 500,
   purchase_failed: 502,
 };
@@ -103,6 +106,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     actorEmail: access.userEmail ?? clinic.owner_contact_email ?? null,
     source: "owner_self_service",
     additionalBillingAuthorized: b.additional_billing_authorized === true,
+    localBillingAuthorized: b.local_billing_authorized === true,
   });
 
   if (!result.ok) {

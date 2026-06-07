@@ -20,6 +20,10 @@ import {
   type TwilioBusinessAddress,
 } from "../twilio/numbers";
 import { syncAdditionalNumberQuantity } from "../billing/stripe-number-quantity";
+import {
+  syncStripeLocalNumberBilling,
+  type LocalNumberBillingResult,
+} from "../billing/stripe-local-number-billing";
 import { logger } from "../logging/logger";
 
 // Shared, race-safe phone-number provisioning service used by BOTH the owner
@@ -50,16 +54,19 @@ export type ProvisionInput = {
   actorEmail: string | null;
   source: ProvisionSource;
   additionalBillingAuthorized: boolean;
+  localBillingAuthorized: boolean;
 };
 
 export type ProvisionErrorCode =
   | NumberPurchaseBlockReason
   | "additional_billing_authorization_required"
+  | "local_billing_authorization_required"
   | "number_already_assigned"
   | "number_no_longer_available"
   | "purchase_disabled"
   | "missing_fields"
   | "billing_sync_failed"
+  | "payment_failed"
   | "reconciliation_required"
   | "purchase_failed";
 
@@ -111,7 +118,9 @@ const BLOCK_MESSAGES: Record<NumberPurchaseBlockReason, string> = {
   billing_configuration_missing:
     "Number billing is not configured yet. Please try again later.",
   local_billing_not_configured:
-    "Local numbers can't be assigned yet — local number billing is being finalized. You can still browse available local numbers.",
+    "Local number billing is not configured yet. No charge was made.",
+  local_billing_authorization_required:
+    "Authorize local number fees before assigning this number.",
 };
 
 /**
@@ -145,9 +154,11 @@ export async function provisionClinicPhoneNumber(
           message: BLOCK_MESSAGES[decision.blockReason],
         };
       }
-      // Local must never be assigned as included; while fail-closed it is also
-      // never reachable here (decision.blockReason set above). Backstop:
-      if (numberType === "local" && decision.billingClass !== "additional") {
+      // Local must never be assigned as included. Backstop in case the typed
+      // decision ever regresses.
+      const slotClass: "included" | "additional" =
+        decision.billingClass === "included" ? "included" : "additional";
+      if (numberType === "local" && slotClass !== "additional") {
         return {
           kind: "blocked" as const,
           error: "local_billing_not_configured" as const,
@@ -169,14 +180,19 @@ export async function provisionClinicPhoneNumber(
         };
       }
 
-      const slotClass: "included" | "additional" =
-        decision.billingClass === "included" ? "included" : "additional";
       if (decision.requiresAdditionalConsent && !input.additionalBillingAuthorized) {
         return {
           kind: "blocked" as const,
           error: "additional_billing_authorization_required" as const,
           message:
             "Authorize the additional $20/month charge before purchasing this number.",
+        };
+      }
+      if (decision.requiresLocalBilling && !input.localBillingAuthorized) {
+        return {
+          kind: "blocked" as const,
+          error: "local_billing_authorization_required" as const,
+          message: BLOCK_MESSAGES.local_billing_authorization_required,
         };
       }
 
@@ -235,7 +251,53 @@ export async function provisionClinicPhoneNumber(
     };
   }
 
-  // ── 3. Purchase the Twilio number ──────────────────────────────────────────
+  // ── 3. Local number billing: charge/sync Stripe BEFORE any Twilio purchase ─
+  let localBilling: Extract<LocalNumberBillingResult, { ok: true }> | null = null;
+  if (numberType === "local") {
+    await markAttempt(attemptId, { status: "billing_pending" });
+    const billingRows = await sql<
+      {
+        stripe_customer_id: string | null;
+        stripe_subscription_id: string | null;
+        stripe_payment_method_id: string | null;
+        billing_status: string;
+      }[]
+    >`
+      select stripe_customer_id, stripe_subscription_id, stripe_payment_method_id, billing_status
+      from public.clinics
+      where id = ${clinicId}
+      limit 1
+    `;
+    const billing = billingRows[0];
+    if (!billing) {
+      await markAttempt(attemptId, { status: "failed", error_code: "clinic_not_found" });
+      return {
+        ok: false,
+        error: "purchase_failed",
+        message: "Could not verify billing before purchase. Please try again.",
+        attemptId,
+      };
+    }
+    const sync = await syncStripeLocalNumberBilling({
+      clinicId,
+      stripeCustomerId: billing.stripe_customer_id,
+      stripeSubscriptionId: billing.stripe_subscription_id,
+      stripePaymentMethodId: billing.stripe_payment_method_id,
+      billingStatus: billing.billing_status,
+      attemptId,
+    });
+    if (!sync.ok) {
+      await markAttempt(attemptId, {
+        status: "failed",
+        error_code: sync.error,
+        error_message: sync.error,
+      });
+      return { ok: false, error: sync.error, message: sync.message, attemptId };
+    }
+    localBilling = sync;
+  }
+
+  // ── 4. Purchase the Twilio number ──────────────────────────────────────────
   let sid: string;
   let purchasedNumber: string;
   let twilioAddressSid: string | null = null;
@@ -336,17 +398,33 @@ export async function provisionClinicPhoneNumber(
             err.step === "address_configuration"
               ? "twilio_address_configuration_failed"
               : "messaging_service_attach_failed",
-          error_message: err.message,
+          error_message: localBilling ? `local_billing_synced:${err.message}` : err.message,
         });
         return {
           ok: false,
           error: "reconciliation_required",
           message:
-            "The number was purchased but provider configuration did not complete. Our team will finish setup.",
+            localBilling
+              ? "Local billing was completed, but provider configuration did not complete. Our team will finish setup."
+              : "The number was purchased but provider configuration did not complete. Our team will finish setup.",
           attemptId,
         };
       }
       if (isNumberNoLongerAvailableError(err)) {
+        if (localBilling) {
+          await markAttempt(attemptId, {
+            status: "reconciliation_required",
+            error_code: "number_no_longer_available_after_billing",
+            error_message: "local_billing_synced",
+          });
+          return {
+            ok: false,
+            error: "reconciliation_required",
+            message:
+              "Local billing was completed, but that number is no longer available. Our team will reconcile billing before you retry.",
+            attemptId,
+          };
+        }
         await markAttempt(attemptId, {
           status: "failed",
           error_code: "number_no_longer_available",
@@ -359,6 +437,20 @@ export async function provisionClinicPhoneNumber(
         };
       }
       if (isDefiniteTwilioApiError(err)) {
+        if (localBilling) {
+          await markAttempt(attemptId, {
+            status: "reconciliation_required",
+            error_code: "purchase_failed_after_billing",
+            error_message: "local_billing_synced",
+          });
+          return {
+            ok: false,
+            error: "reconciliation_required",
+            message:
+              "Local billing was completed, but number purchase failed. Our team will reconcile billing before you retry.",
+            attemptId,
+          };
+        }
         await markAttempt(attemptId, { status: "failed", error_code: "purchase_failed" });
         return {
           ok: false,
@@ -377,19 +469,49 @@ export async function provisionClinicPhoneNumber(
       await markAttempt(attemptId, {
         status: "reconciliation_required",
         error_code: "twilio_outcome_uncertain",
+        error_message: localBilling ? "local_billing_synced" : undefined,
       });
       return {
         ok: false,
         error: "reconciliation_required",
         message:
-          "We could not confirm the number purchase. Our team will verify it before any charge — please do not retry.",
+          localBilling
+            ? "Local billing was completed, but we could not confirm the number purchase. Our team will reconcile it — please do not retry."
+            : "We could not confirm the number purchase. Our team will verify it before any charge — please do not retry.",
         attemptId,
       };
     }
   }
 
-  // ── 4. Additional (paid) number: sync Stripe quantity BEFORE activating ─────
+  // ── 5. Additional/local paid number activation ─────────────────────────────
   if (slotClass === "additional") {
+    if (numberType === "local") {
+      if (!localBilling) {
+        await markAttempt(attemptId, {
+          status: "reconciliation_required",
+          error_code: "billing_sync_failed",
+        });
+        return {
+          ok: false,
+          error: "billing_sync_failed",
+          message: "Payment could not be completed. No number was assigned.",
+          attemptId,
+        };
+      }
+      return assignLocalNumber({
+        clinicId,
+        attemptId,
+        sid,
+        purchasedNumber,
+        twilioAddressSid,
+        twilioEmergencyAddressSid,
+        twilioEmergencyAddressStatus,
+        actorProfileId,
+        actorEmail,
+        source,
+        localBilling,
+      });
+    }
     return assignAdditionalNumber({
       clinicId,
       attemptId,
@@ -405,7 +527,7 @@ export async function provisionClinicPhoneNumber(
     });
   }
 
-  // ── 4b. Included (first) number: assign + start trial (no charge) ───────────
+  // ── 5b. Included (first) number: assign + start trial (no charge) ──────────
   const trialDays = runtimeConfig.billing.trialDaysAfterActivation;
   const twilioAddressConfiguredAt = twilioAddressSid ? new Date() : null;
   try {
@@ -527,6 +649,163 @@ export async function provisionClinicPhoneNumber(
       error: "reconciliation_required",
       message:
         "The number was purchased but could not be assigned automatically. Our team will finish setup.",
+      attemptId,
+    };
+  }
+}
+
+// Local number activation. Stripe local billing has already succeeded before
+// Twilio purchase. This function only persists the active local mapping and the
+// safe Stripe references that fit the existing attempt table.
+async function assignLocalNumber(args: {
+  clinicId: string;
+  attemptId: string;
+  sid: string;
+  purchasedNumber: string;
+  twilioAddressSid: string | null;
+  twilioEmergencyAddressSid: string | null;
+  twilioEmergencyAddressStatus: string | null;
+  actorProfileId: string | null;
+  actorEmail: string | null;
+  source: ProvisionSource;
+  localBilling: Extract<LocalNumberBillingResult, { ok: true }>;
+}): Promise<ProvisionResult> {
+  const sql = getDb();
+  const {
+    clinicId,
+    attemptId,
+    sid,
+    purchasedNumber,
+    twilioAddressSid,
+    twilioEmergencyAddressSid,
+    twilioEmergencyAddressStatus,
+    actorProfileId,
+    actorEmail,
+    source,
+    localBilling,
+  } = args;
+
+  const amount = billingConfig.numberModel.local.mcdFees.monthlyNumberCents;
+  const twilioAddressConfiguredAt = twilioAddressSid ? new Date() : null;
+  const ctxRows = await sql<{ subscription_id: string | null }[]>`
+    select stripe_subscription_id as subscription_id
+    from public.clinics where id = ${clinicId} limit 1
+  `;
+  const subscriptionId = ctxRows[0]?.subscription_id ?? null;
+
+  try {
+    const assigned = await sql.begin(async (tx) => {
+      await tx`select 1 from public.clinics where id = ${clinicId} for update`;
+      const rows = await tx<
+        {
+          id: string;
+          phone_number: string;
+          number_type: string;
+          role: string;
+          is_active: boolean;
+          billing_class: string;
+          monthly_unit_amount_cents: number;
+          currency: string;
+          activated_at: Date | null;
+          created_at: Date;
+        }[]
+      >`
+        insert into public.clinic_phone_numbers
+          (clinic_id, phone_number, number_type, twilio_phone_number_sid, role, is_active,
+           source, billing_class, monthly_unit_amount_cents, currency,
+           purchased_by_profile_id, purchased_by_email, activated_at,
+           twilio_address_sid, twilio_emergency_address_sid,
+           twilio_emergency_address_status, twilio_address_configured_at)
+        values
+          (${clinicId}, ${purchasedNumber}, 'local', ${sid}, 'office_texting', true,
+           ${source}, 'additional', ${amount}, ${billingConfig.currency},
+           ${actorProfileId}, ${actorEmail}, now(),
+           ${twilioAddressSid}, ${twilioEmergencyAddressSid},
+           ${twilioEmergencyAddressStatus},
+           ${twilioAddressConfiguredAt})
+        on conflict (phone_number) do update set
+          clinic_id = excluded.clinic_id,
+          number_type = excluded.number_type,
+          twilio_phone_number_sid = excluded.twilio_phone_number_sid,
+          role = 'office_texting',
+          is_active = true,
+          source = excluded.source,
+          billing_class = excluded.billing_class,
+          monthly_unit_amount_cents = excluded.monthly_unit_amount_cents,
+          currency = excluded.currency,
+          purchased_by_profile_id = excluded.purchased_by_profile_id,
+          purchased_by_email = excluded.purchased_by_email,
+          twilio_address_sid = excluded.twilio_address_sid,
+          twilio_emergency_address_sid = excluded.twilio_emergency_address_sid,
+          twilio_emergency_address_status = excluded.twilio_emergency_address_status,
+          twilio_address_configured_at = excluded.twilio_address_configured_at,
+          activated_at = now(),
+          suspended_at = null,
+          suspended_by_profile_id = null,
+          suspension_reason = null
+        returning id, phone_number, number_type, role, is_active, billing_class,
+                  monthly_unit_amount_cents, currency, activated_at, created_at
+      `;
+      const row = rows[0];
+      if (!row) throw new Error("clinic_phone_numbers insert returned no row");
+
+      await tx`
+        update public.clinics set local_number_status = 'assigned'
+        where id = ${clinicId}
+      `;
+
+      await tx`
+        update public.clinic_phone_number_purchase_attempts set
+          status = 'assigned',
+          stripe_subscription_id = ${subscriptionId},
+          error_message = ${`local_billing_invoice:${localBilling.oneTimeInvoiceId}:${localBilling.oneTimeInvoiceStatus ?? "unknown"}`}
+        where id = ${attemptId}
+      `;
+      return row;
+    });
+
+    logger.info("provisioning.assigned", {
+      clinicId,
+      attemptId,
+      source,
+      slotClass: "additional",
+      numberType: "local",
+      areaCode: phoneAreaCode(purchasedNumber),
+    });
+
+    return {
+      ok: true,
+      attemptId,
+      twilioSid: sid,
+      assigned: {
+        id: assigned.id,
+        phoneNumber: assigned.phone_number,
+        numberType: assigned.number_type as RequestedNumberType,
+        role: assigned.role,
+        isActive: assigned.is_active,
+        billingClass: assigned.billing_class,
+        monthlyUnitAmountCents: assigned.monthly_unit_amount_cents,
+        currency: assigned.currency,
+        activatedAt: assigned.activated_at ? assigned.activated_at.toISOString() : null,
+        createdAt: assigned.created_at.toISOString(),
+      },
+    };
+  } catch (err) {
+    logger.error("provisioning.local_assignment_save_failed", {
+      clinicId,
+      attemptId,
+      message: err instanceof Error ? err.message : "unknown",
+    });
+    await markAttempt(attemptId, {
+      status: "reconciliation_required",
+      error_code: "assignment_save_failed",
+      error_message: `local_billing_invoice:${localBilling.oneTimeInvoiceId}:${localBilling.oneTimeInvoiceStatus ?? "unknown"}`,
+    });
+    return {
+      ok: false,
+      error: "reconciliation_required",
+      message:
+        "The number was purchased and local billing updated, but it could not be activated automatically. Our team will finish setup.",
       attemptId,
     };
   }

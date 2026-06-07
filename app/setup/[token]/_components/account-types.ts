@@ -68,6 +68,7 @@ export type OwnerNumberEntitlement = {
   isTrialing: boolean;
   trialEnded: boolean;
   hasActivePaidSubscription: boolean;
+  localBillingConfigured: boolean;
   canPurchaseNext: boolean;
   // null when purchasable; otherwise a stable machine-readable block reason.
   blockReason: string | null;

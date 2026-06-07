@@ -2627,13 +2627,44 @@ Verify (read-only):
   (no area/ZIP) or local search (area/ZIP).
 - Fairstone (`f37f24a1-...`): both numbers show Local + "Local number · $20/month".
 
-LOCAL PURCHASE IS FAIL-CLOSED. To enable real local purchase, create Stripe Prices
-and set ALL of these env vars (then `hasLocalNumberBillingConfigured()` flips true):
-- STRIPE_LOCAL_NUMBER_PRICE_ID            ($20/month)
-- STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID    ($15/month)
-- STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID  ($9 one-time)
-- STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID ($30 one-time)
-- STRIPE_LOCAL_SETUP_FEE_PRICE_ID         ($20 one-time)
-Then extend `decideTypedPurchase` (lib/billing/number-entitlements.ts) and the
-provisioning additional/local path to charge these items before assignment. Until
-then the server returns `local_billing_not_configured` and assigns nothing.
+Local purchase billing is wired in Stripe test/sandbox mode. These Vercel
+Production env vars must all be present; otherwise the server returns
+`local_billing_not_configured` with "Local number billing is not configured yet.
+No charge was made." and does not buy/assign a local number:
+
+- `STRIPE_LOCAL_NUMBER_PRICE_ID` ($20/month)
+- `STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID` ($15/month)
+- `STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID` ($9 one-time)
+- `STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID` ($30 one-time)
+- `STRIPE_LOCAL_SETUP_FEE_PRICE_ID` ($20 one-time)
+
+Current test-mode Price IDs:
+
+- `STRIPE_LOCAL_NUMBER_PRICE_ID=price_1TfVza4ZSHLicmej2cXgpYIs`
+- `STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID=price_1TfVza4ZSHLicmejludIWYyF`
+- `STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID=price_1TfVzb4ZSHLicmejQQ06FrWw`
+- `STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID=price_1TfVzb4ZSHLicmej4B1C0Jmg`
+- `STRIPE_LOCAL_SETUP_FEE_PRICE_ID=price_1TfVzb4ZSHLicmejOvsW01KQ`
+
+Operational order for local assignment:
+
+1. Open a durable `clinic_phone_number_purchase_attempts` row.
+2. Require explicit local fee authorization, saved Stripe Customer, saved
+   PaymentMethod, and active paid subscription.
+3. Add recurring Stripe subscription items for local number + SMS compliance,
+   tagged with the purchase attempt id.
+4. Create/finalize/pay a one-time invoice for brand registration, campaign
+   registration/vetting, and setup fee.
+5. Only after Stripe succeeds, purchase/configure the Twilio local number.
+6. Insert the active `clinic_phone_numbers` row as `number_type='local'`,
+   `billing_class='additional'`, and local monthly amount.
+7. Mark the attempt `assigned`.
+
+Failure behavior:
+
+- Missing local env vars or failed payment: no Twilio purchase, no active number.
+- Stripe succeeds but Twilio purchase/configuration fails:
+  `reconciliation_required`; do not hide the billing state.
+- Twilio succeeds but DB activation fails: `reconciliation_required`; Twilio SID
+  and local invoice marker are preserved.
+- Toll-free behavior is unchanged.

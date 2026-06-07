@@ -5202,3 +5202,64 @@ Validation: `npm run typecheck` pass; `npm run build` pass; `git diff --check` p
 
 Safety: no real Twilio purchase; no Stripe charge; no A2P submit; SMS remains
 fail-closed; `sms_recovery_enabled` / `SMS_RECOVERY_MODE` unchanged.
+
+---
+
+## 2026-06-09 — Local number billing wired in Stripe test mode
+
+Implemented production-ready local number billing in code and configured the
+required Stripe test-mode Prices in Vercel Production.
+
+Stripe test-mode Prices created:
+
+- Local number $20/month:
+  `price_1TfVza4ZSHLicmej2cXgpYIs`
+- Monthly SMS compliance fee $15/month:
+  `price_1TfVza4ZSHLicmejludIWYyF`
+- Carrier brand registration $9 one-time:
+  `price_1TfVzb4ZSHLicmejQQ06FrWw`
+- Campaign registration / vetting $30 one-time:
+  `price_1TfVzb4ZSHLicmej4B1C0Jmg`
+- Local setup fee $20 one-time:
+  `price_1TfVzb4ZSHLicmejOvsW01KQ`
+
+Vercel Production env vars set as encrypted/sensitive values:
+
+- `STRIPE_LOCAL_NUMBER_PRICE_ID`
+- `STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID`
+- `STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID`
+- `STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID`
+- `STRIPE_LOCAL_SETUP_FEE_PRICE_ID`
+
+Code changes:
+
+- Added typed `getLocalNumberBillingEnv()` in `lib/env.ts`.
+- Added `lib/billing/stripe-local-number-billing.ts`.
+- Local provisioning now requires explicit local fee authorization, all five
+  Price IDs, saved Stripe Customer + PaymentMethod, and active paid subscription.
+- Stripe recurring local items and the paid one-time local invoice complete
+  before Twilio purchase/configuration begins.
+- Local DB activation writes `number_type='local'`, `billing_class='additional'`,
+  and the local monthly amount only after Stripe and Twilio are both safe.
+- If payment fails, no Twilio purchase is attempted and no number is assigned.
+- If Stripe succeeds but Twilio/DB activation fails, the attempt is marked
+  `reconciliation_required` with billing state preserved for operator action.
+- Owner local UI shows the exact fee breakdown from `billing.config.ts`, uses
+  the button label "Authorize and assign local number", and keeps the exact
+  missing-config / payment-failed messages.
+
+Validation before commit/deploy:
+
+- `npm run typecheck` pass.
+- `npm run build` pass.
+- `git diff --check` pass.
+
+Safety:
+
+- No SMS sent.
+- No A2P submitted.
+- No SMS recovery enabled.
+- No real Twilio purchase during validation.
+- Stripe resources were test/sandbox mode only.
+- No customer Stripe charge was made during validation.
+- Toll-free behavior unchanged.

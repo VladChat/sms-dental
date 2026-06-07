@@ -751,3 +751,7 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       active status before unlocking paid entitlement.
 - [ ] Trial source of truth = the tenant's own trial columns set at first activation, not a
       registration/setup date.
+- [ ] For a paid provider resource with required one-time fees, create/sync Stripe billing BEFORE
+      the provider purchase. If Stripe fails, do not call the provider. If Stripe succeeds but the
+      provider purchase/configuration or DB activation fails, preserve the billing and provider
+      state in a reconciliation record instead of retrying silently or hiding the charge.

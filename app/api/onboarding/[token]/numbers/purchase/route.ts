@@ -41,12 +41,14 @@ const ERROR_STATUS: Record<ProvisionErrorCode, number> = {
   subscription_not_active: 409,
   billing_configuration_missing: 503,
   local_billing_not_configured: 503,
+  local_billing_authorization_required: 400,
   additional_billing_authorization_required: 400,
   number_already_assigned: 409,
   number_no_longer_available: 409,
   purchase_disabled: 503,
   missing_fields: 400,
   billing_sync_failed: 502,
+  payment_failed: 402,
   reconciliation_required: 500,
   purchase_failed: 502,
 };
@@ -102,6 +104,7 @@ export async function POST(
     actorEmail: setupRequest.owner_email,
     source: "owner_self_service",
     additionalBillingAuthorized: false,
+    localBillingAuthorized: false,
   });
 
   if (!result.ok) {

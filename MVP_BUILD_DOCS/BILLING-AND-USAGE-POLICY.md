@@ -255,5 +255,38 @@ MCD fees
 
 Server rules: first toll-free = included; additional toll-free = paid (existing
 $20/month Stripe item); local = always paid. The client never decides type, slot
-class, price, Stripe quantity, or fees. Local purchase is fail-closed until the
-local Stripe Price IDs are configured (see OPERATIONS-RUNBOOK.md).
+class, price, Stripe quantity, or fees.
+
+### Local Stripe billing wiring (test/sandbox)
+
+Local number billing is wired in Stripe test mode with these Prices:
+
+- Local number $20/month:
+  `price_1TfVza4ZSHLicmej2cXgpYIs`
+- Monthly SMS compliance fee $15/month:
+  `price_1TfVza4ZSHLicmejludIWYyF`
+- Carrier brand registration $9 one-time:
+  `price_1TfVzb4ZSHLicmejQQ06FrWw`
+- Campaign registration / vetting $30 one-time:
+  `price_1TfVzb4ZSHLicmej4B1C0Jmg`
+- Local setup fee $20 one-time:
+  `price_1TfVzb4ZSHLicmejOvsW01KQ`
+
+Production Vercel env vars set:
+
+- `STRIPE_LOCAL_NUMBER_PRICE_ID`
+- `STRIPE_LOCAL_SMS_COMPLIANCE_PRICE_ID`
+- `STRIPE_LOCAL_BRAND_REGISTRATION_PRICE_ID`
+- `STRIPE_LOCAL_CAMPAIGN_REGISTRATION_PRICE_ID`
+- `STRIPE_LOCAL_SETUP_FEE_PRICE_ID`
+
+Local assignment requires all five env vars, a saved Stripe Customer, saved
+PaymentMethod, a webhook-confirmed active paid subscription, and explicit local
+fee authorization from the owner. The recurring local number and SMS-compliance
+subscription items are created per purchase attempt with quantity 1. The three
+one-time local fees are placed on a separate invoice and paid with the saved
+payment method before Twilio purchase/configuration begins. If payment fails,
+the API returns "Payment could not be completed. No number was assigned." If
+Stripe succeeds but Twilio purchase/configuration or DB activation later fails,
+the attempt is marked `reconciliation_required` and the billing state is not
+hidden. Toll-free billing is unchanged.
