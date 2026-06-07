@@ -5254,6 +5254,22 @@ Validation before commit/deploy:
 - `npm run build` pass.
 - `git diff --check` pass.
 
+Commit/push/deploy:
+
+- Implementation commit: `b444991 feat: wire local number billing`.
+- Pushed to `origin/main`: yes.
+- Vercel Production deployment:
+  `dpl_EJjpQEWjwZBA2UJkeDEDNG1bZQu1`.
+- Deployment status: READY.
+- Aliases include `https://app.missedcallsdental.com`.
+
+Production smoke:
+
+- `https://app.missedcallsdental.com/api/health` -> 200.
+- `https://app.missedcallsdental.com/login` -> 200.
+- `https://app.missedcallsdental.com/account` -> 200.
+- `https://app.missedcallsdental.com/admin/login` -> 200.
+
 Safety:
 
 - No SMS sent.
