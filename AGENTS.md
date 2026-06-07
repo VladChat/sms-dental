@@ -88,6 +88,23 @@ fixed product rule:
   (`hasLocalNumberBillingConfigured` in `lib/env.ts`), the server refuses to buy
   or assign a local number. Owners may still SEARCH local numbers.
 
+## Phone Number Removal Lifecycle (Project-Wide)
+
+- Customer-facing action text is `Remove number`, never `Release number`.
+- Remove number immediately deactivates routing/service for that number.
+- Twilio release is delayed until permanent removal; customer removal does not
+  immediately release the Twilio number.
+- Customer can restore the number before permanent removal if release has not
+  completed.
+- Billing changes apply next cycle only; do not promise or create a refund or
+  credit for the current period from the remove/restore action itself.
+- Local SMS compliance is charged once if at least one billable local number
+  remains for that billing view.
+- Number rows are not physically deleted from `clinic_phone_numbers`; preserve
+  lifecycle history for audit/reconciliation.
+- If delayed Twilio release fails, preserve the existing Twilio SID and the
+  release error for reconciliation. Do not silently clear or overwrite them.
+
 ## Sample Domain Rule
 
 When fake/demo/sample domains or emails are needed in UI copy, docs, tests, or
