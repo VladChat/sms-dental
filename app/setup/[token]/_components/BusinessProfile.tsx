@@ -283,7 +283,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
               <BillingCard
                 hasPaymentMethod={hasPaymentMethod}
                 paymentMethod={data.billing.paymentMethod}
-                additionalBilledQuantity={data.number.entitlement.additionalBilledQuantity}
+                summary={data.billing.summary}
                 trialDaysRemaining={data.billing.trialDaysRemaining}
                 trialEnded={data.billing.trialEnded}
                 paymentMethodSetup={paymentMethodSetup}

@@ -8,6 +8,7 @@ import {
   type ClinicPhoneNumberRow,
 } from "../../lib/db/clinic-phone-numbers";
 import { getNumberEntitlement } from "../../lib/billing/number-entitlements";
+import { buildClinicBillingSummary } from "../../lib/billing/clinic-billing-summary";
 import { getAppDomainsSafe, hasLocalNumberBillingConfigured } from "../../lib/env";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
 import { listActiveMembershipsForClinic } from "../../lib/db/clinic-memberships";
@@ -49,6 +50,7 @@ function buildBilling(
   clinic: ClinicOnboardingRow,
   ent: OwnerNumberEntitlement,
   trialDaysRemaining: number,
+  assignedRows: ClinicPhoneNumberRow[],
 ): BusinessProfileData["billing"] {
   const hasPaymentMethod = Boolean(clinic.stripe_payment_method_id);
   const paymentMethod: PaymentMethodSummary | null = hasPaymentMethod
@@ -70,6 +72,7 @@ function buildBilling(
     isTrialing: ent.isTrialing,
     paidPlanActive: ent.hasActivePaidSubscription,
     billingStatus: ent.billingStatus,
+    summary: buildClinicBillingSummary(assignedRows),
   };
 }
 
@@ -83,6 +86,13 @@ function toAssignedSummary(row: ClinicPhoneNumberRow): AssignedBusinessNumberSum
     isActive: row.is_active,
     billingClass: row.billing_class,
     createdAt: row.created_at ? row.created_at.toISOString() : null,
+    removalStatus: row.removal_status ?? "active",
+    removalRequestedAt: row.removal_requested_at ? row.removal_requested_at.toISOString() : null,
+    removalRequestedByEmail: row.removal_requested_by_email,
+    permanentRemovalAt: row.permanent_removal_at ? row.permanent_removal_at.toISOString() : null,
+    restoredAt: row.restored_at ? row.restored_at.toISOString() : null,
+    twilioReleasedAt: row.twilio_released_at ? row.twilio_released_at.toISOString() : null,
+    twilioReleaseStatus: row.twilio_release_status ?? "not_required",
   };
 }
 
@@ -167,9 +177,8 @@ export default async function AccountPage({
 
     const clinic = access.clinic;
     const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
-    const assignedNumbers = await listClinicPhoneNumbersForClinic(clinic.id)
-      .then((rows) => rows.map(toAssignedSummary))
-      .catch(() => []);
+    const assignedRows = await listClinicPhoneNumbersForClinic(clinic.id).catch(() => []);
+    const assignedNumbers = assignedRows.map(toAssignedSummary);
     const entitlement = await loadOwnerEntitlement(clinic.id, assignedNumbers);
 
     const memberships = await listActiveMembershipsForClinic(clinic.id).catch(() => []);
@@ -201,6 +210,7 @@ export default async function AccountPage({
       loginEmail: access.userEmail ?? clinic.owner_contact_email ?? "",
       publicBaseUrl,
       assignedNumbers,
+      assignedRows,
       entitlement,
       teamMembers,
       initialSection,
@@ -240,9 +250,8 @@ export default async function AccountPage({
     );
   }
   const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
-  const assignedNumbers = await listClinicPhoneNumbersForClinic(clinic.id)
-    .then((rows) => rows.map(toAssignedSummary))
-    .catch(() => []);
+  const assignedRows = await listClinicPhoneNumbersForClinic(clinic.id).catch(() => []);
+  const assignedNumbers = assignedRows.map(toAssignedSummary);
   const entitlement = await loadOwnerEntitlement(clinic.id, assignedNumbers);
 
   const data = buildData({
@@ -251,6 +260,7 @@ export default async function AccountPage({
     loginEmail: setupRequest.owner_email,
     publicBaseUrl,
     assignedNumbers,
+    assignedRows,
     entitlement,
     teamMembers: [
       { email: setupRequest.owner_email.trim().toLowerCase(), role: "owner", status: "active" as const },
@@ -268,6 +278,7 @@ function buildData(args: {
   loginEmail: string;
   publicBaseUrl: string;
   assignedNumbers: AssignedBusinessNumberSummary[];
+  assignedRows: ClinicPhoneNumberRow[];
   entitlement: OwnerNumberEntitlement;
   teamMembers: BusinessProfileData["teamAccess"]["members"];
   initialSection: string | null;
@@ -314,7 +325,7 @@ function buildData(args: {
       postalCode: clinic.postal_code,
       entitlement,
     },
-    billing: buildBilling(clinic, entitlement, trialDaysRemaining),
+    billing: buildBilling(clinic, entitlement, trialDaysRemaining, args.assignedRows),
     security: { passwordEnabled: true },
     teamAccess: { members: args.teamMembers },
   };

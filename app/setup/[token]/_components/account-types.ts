@@ -53,6 +53,37 @@ export type AssignedBusinessNumberSummary = {
   isActive: boolean;
   billingClass: "legacy" | "included" | "additional";
   createdAt: string | null;
+  removalStatus: "active" | "scheduled" | "permanently_removed";
+  removalRequestedAt: string | null;
+  removalRequestedByEmail: string | null;
+  permanentRemovalAt: string | null;
+  restoredAt: string | null;
+  twilioReleasedAt: string | null;
+  twilioReleaseStatus: "not_required" | "pending" | "released" | "failed";
+};
+
+export type BillingSummaryLineItem = {
+  key: string;
+  label: string;
+  detail: string | null;
+  quantity: number;
+  unitAmountCents: number;
+  amountCents: number;
+};
+
+export type BillingPeriodSummary = {
+  lineItems: BillingSummaryLineItem[];
+  totalAmountCents: number;
+};
+
+export type ClinicBillingSummary = {
+  current: BillingPeriodSummary;
+  nextCycle: BillingPeriodSummary;
+  localNumberCount: number;
+  additionalTollFreeCount: number;
+  pendingRemovalCount: number;
+  localComplianceFeeApplies: boolean;
+  notices: string[];
 };
 
 // Owner-safe number-purchase entitlement (computed server-side from live state).
@@ -141,6 +172,7 @@ export type BusinessProfileData = {
     // True only when a webhook-confirmed active paid subscription exists.
     paidPlanActive: boolean;
     billingStatus: string;
+    summary: ClinicBillingSummary;
   };
   security: {
     passwordEnabled: boolean;

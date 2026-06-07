@@ -580,7 +580,14 @@ export async function provisionClinicPhoneNumber(
           activated_at = now(),
           suspended_at = null,
           suspended_by_profile_id = null,
-          suspension_reason = null
+          suspension_reason = null,
+          removal_status = 'active',
+          removal_requested_at = null,
+          removal_requested_by_profile_id = null,
+          removal_requested_by_email = null,
+          permanent_removal_at = null,
+          twilio_release_status = 'not_required',
+          twilio_release_error = null
         returning id, phone_number, number_type, role, is_active, billing_class,
                   monthly_unit_amount_cents, currency, activated_at, created_at
       `;
@@ -742,7 +749,14 @@ async function assignLocalNumber(args: {
           activated_at = now(),
           suspended_at = null,
           suspended_by_profile_id = null,
-          suspension_reason = null
+          suspension_reason = null,
+          removal_status = 'active',
+          removal_requested_at = null,
+          removal_requested_by_profile_id = null,
+          removal_requested_by_email = null,
+          permanent_removal_at = null,
+          twilio_release_status = 'not_required',
+          twilio_release_error = null
         returning id, phone_number, number_type, role, is_active, billing_class,
                   monthly_unit_amount_cents, currency, activated_at, created_at
       `;
@@ -856,7 +870,9 @@ async function assignAdditionalNumber(args: {
       stripe_subscription_id as subscription_id,
       stripe_additional_number_subscription_item_id as additional_item_id,
       (select count(*)::int from public.clinic_phone_numbers
-         where clinic_id = ${clinicId} and billing_class = 'additional') as additional_count
+         where clinic_id = ${clinicId}
+           and billing_class = 'additional'
+           and removal_status <> 'permanently_removed') as additional_count
     from public.clinics where id = ${clinicId} limit 1
   `;
   const subscriptionId = ctxRows[0]?.subscription_id ?? null;
@@ -941,7 +957,14 @@ async function assignAdditionalNumber(args: {
           activated_at = now(),
           suspended_at = null,
           suspended_by_profile_id = null,
-          suspension_reason = null
+          suspension_reason = null,
+          removal_status = 'active',
+          removal_requested_at = null,
+          removal_requested_by_profile_id = null,
+          removal_requested_by_email = null,
+          permanent_removal_at = null,
+          twilio_release_status = 'not_required',
+          twilio_release_error = null
         returning id, phone_number, number_type, role, is_active, billing_class,
                   monthly_unit_amount_cents, currency, activated_at, created_at
       `;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { StatusBadge } from "./AccountUI";
 import { ConfirmationDialog } from "./ConfirmationDialog";
 import { NumberTypeChooser } from "./NumberTypeChooser";
@@ -102,7 +103,39 @@ function AssignedRow({
   n: AssignedBusinessNumberSummary;
   smsStatus: SmsStatus;
 }) {
+  const router = useRouter();
   const isLocal = n.numberType === "local";
+  const scheduled = n.removalStatus === "scheduled";
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [loadingAction, setLoadingAction] = useState<"remove" | "restore" | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function runAction(action: "remove" | "restore") {
+    setLoadingAction(action);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/account/phone-numbers/${n.id}/${action}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; error?: { message?: string } }
+        | null;
+      if (!res.ok || !json?.ok) {
+        setActionError(json?.error?.message ?? "Could not update this number. Please try again.");
+        setLoadingAction(null);
+        return;
+      }
+      setConfirmRemove(false);
+      setLoadingAction(null);
+      router.refresh();
+    } catch {
+      setActionError("Could not update this number. Please try again.");
+      setLoadingAction(null);
+    }
+  }
+
   return (
     <div className="acct-number" key={n.id}>
       <span className="t-eyebrow">Business number</span>
@@ -111,26 +144,90 @@ function AssignedRow({
         <span className={`badge ${isLocal ? "badge-neutral" : "badge-info"}`}>
           {isLocal ? "Local" : "Toll-free"}
         </span>
+        {scheduled && <span className="badge badge-warning">Removal scheduled</span>}
       </div>
 
       <dl className="acct-rows" style={{ marginTop: "var(--space-2)" }}>
         <Row label="Calls">
-          {n.isActive ? <StatusBadge kind="active" /> : <StatusBadge kind="not_active" />}
+          {n.isActive && !scheduled ? <StatusBadge kind="active" /> : <StatusBadge kind="not_active" />}
         </Row>
         <Row label="Texting">
-          {smsStatus === "active" ? <StatusBadge kind="active" /> : <StatusBadge kind="waiting" />}
+          {smsStatus === "active" && !scheduled ? <StatusBadge kind="active" /> : <StatusBadge kind="waiting" />}
         </Row>
         <Row label="Billing">
           <span className="t-small" style={{ color: "var(--text-muted)" }}>
-            {assignedNumberBillingLabel(n.numberType, n.billingClass)}
+            {scheduled ? "Updates next cycle" : assignedNumberBillingLabel(n.numberType, n.billingClass)}
           </span>
         </Row>
+        {scheduled && n.permanentRemovalAt && (
+          <Row label="Permanent removal">
+            <span className="t-small" style={{ color: "var(--text-muted)" }}>
+              {formatShortDate(n.permanentRemovalAt)}
+            </span>
+          </Row>
+        )}
       </dl>
 
-      {!n.isActive && (
+      {scheduled ? (
+        <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+          Calls and texts are stopped. The number can be restored until the permanent removal date.
+        </p>
+      ) : !n.isActive && (
         <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
           This number is still assigned to your clinic and counts toward your account limit.
         </p>
+      )}
+
+      <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginTop: "var(--space-3)" }}>
+        {scheduled ? (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => void runAction("restore")}
+            disabled={loadingAction !== null}
+            aria-busy={loadingAction === "restore"}
+          >
+            {loadingAction === "restore" ? "Restoring..." : "Restore number"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setActionError(null);
+              setConfirmRemove(true);
+            }}
+            disabled={loadingAction !== null}
+          >
+            Remove number
+          </button>
+        )}
+      </div>
+
+      {actionError && (
+        <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {confirmRemove && (
+        <ConfirmationDialog
+          title="Remove number"
+          description="Calls and texts to this number will stop now. The number can be restored until its permanent removal date."
+          summaryLabel="Billing"
+          summaryRows={[
+            { label: "Current cycle", value: "No credit or immediate charge" },
+            { label: "Next cycle", value: "Recurring billing recalculates", emphasis: true },
+          ]}
+          checkboxRequired
+          checkboxLabel="I understand this number will stop receiving calls and texts now."
+          primaryLabel="Remove number"
+          loading={loadingAction === "remove"}
+          loadingLabel="Removing..."
+          error={actionError}
+          onConfirm={() => void runAction("remove")}
+          onCancel={() => setConfirmRemove(false)}
+        />
       )}
     </div>
   );
@@ -420,4 +517,14 @@ function Note({ text }: { text: string }) {
 function formatUsPhone(e164: string): string {
   const m = e164.match(/^\+1(\d{3})(\d{3})(\d{4})$/);
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : e164;
+}
+
+function formatShortDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
 }

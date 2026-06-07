@@ -4,7 +4,12 @@ import {
   saveClinicSubscriptionState,
   type BillingStatus,
 } from "../db/clinics";
-import { getStripeBillingEnv, hasStripeBillingPriceIds } from "../env";
+import {
+  getLocalNumberBillingEnv,
+  getStripeBillingEnv,
+  hasLocalNumberBillingConfigured,
+  hasStripeBillingPriceIds,
+} from "../env";
 
 // Shared subscription-state helpers for the direct paid-plan API and the
 // Stripe webhook. Only "active" unlocks paid entitlement.
@@ -40,33 +45,61 @@ export function extractStripeSubscriptionItemIds(
   sub: Stripe.Subscription,
   basePriceId: string,
   additionalPriceId: string,
-): { baseItemId: string | null; additionalItemId: string | null } {
+  localNumberPriceId?: string | null,
+  localSmsCompliancePriceId?: string | null,
+): {
+  baseItemId: string | null;
+  additionalItemId: string | null;
+  localNumberItemId: string | null;
+  localSmsComplianceItemId: string | null;
+} {
   let baseItemId: string | null = null;
   let additionalItemId: string | null = null;
+  let localNumberItemId: string | null = null;
+  let localSmsComplianceItemId: string | null = null;
   for (const item of sub.items?.data ?? []) {
     const priceId = item.price?.id ?? null;
     if (priceId && priceId === basePriceId) baseItemId = item.id;
     else if (priceId && priceId === additionalPriceId) additionalItemId = item.id;
+    else if (priceId && priceId === localNumberPriceId) localNumberItemId = item.id;
+    else if (priceId && priceId === localSmsCompliancePriceId) localSmsComplianceItemId = item.id;
   }
-  return { baseItemId, additionalItemId };
+  return { baseItemId, additionalItemId, localNumberItemId, localSmsComplianceItemId };
 }
 
 export function getConfiguredSubscriptionItemIds(sub: Stripe.Subscription): {
   baseItemId: string | null;
   additionalItemId: string | null;
+  localNumberItemId: string | null;
+  localSmsComplianceItemId: string | null;
 } {
   if (!hasStripeBillingPriceIds()) {
-    return { baseItemId: null, additionalItemId: null };
+    return {
+      baseItemId: null,
+      additionalItemId: null,
+      localNumberItemId: null,
+      localSmsComplianceItemId: null,
+    };
   }
   try {
     const priceIds = getStripeBillingEnv();
+    const localPriceIds = hasLocalNumberBillingConfigured()
+      ? getLocalNumberBillingEnv()
+      : null;
     return extractStripeSubscriptionItemIds(
       sub,
       priceIds.basePlanPriceId,
       priceIds.additionalNumberPriceId,
+      localPriceIds?.localNumberPriceId ?? null,
+      localPriceIds?.localSmsCompliancePriceId ?? null,
     );
   } catch {
-    return { baseItemId: null, additionalItemId: null };
+    return {
+      baseItemId: null,
+      additionalItemId: null,
+      localNumberItemId: null,
+      localSmsComplianceItemId: null,
+    };
   }
 }
 
@@ -80,6 +113,8 @@ export async function persistStripeSubscriptionForClinic(args: {
     stripeSubscriptionId: args.subscription.id,
     baseSubscriptionItemId: items.baseItemId,
     additionalSubscriptionItemId: items.additionalItemId,
+    localNumberSubscriptionItemId: items.localNumberItemId,
+    localSmsComplianceSubscriptionItemId: items.localSmsComplianceItemId,
     billingStatus,
     markPaidPlanStarted: billingStatus === "active",
   });

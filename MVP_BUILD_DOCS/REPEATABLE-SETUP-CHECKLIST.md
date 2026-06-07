@@ -755,3 +755,23 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       the provider purchase. If Stripe fails, do not call the provider. If Stripe succeeds but the
       provider purchase/configuration or DB activation fails, preserve the billing and provider
       state in a reconciliation record instead of retrying silently or hiding the charge.
+
+---
+
+## Delayed provider-resource removal + next-cycle billing (reusable lessons)
+
+- [ ] Model customer removal as lifecycle state first (`active -> scheduled ->
+      permanently_removed`), not immediate deletion, so the user can restore and
+      operators retain audit history.
+- [ ] Stop routing/access immediately on scheduled removal, but delay destructive
+      provider release until a scheduled job processes rows due for permanent
+      removal.
+- [ ] For recurring billing removals/restores, compute desired quantities
+      server-side from live DB rows and sync Stripe before changing the DB state.
+      If Stripe fails, leave the provider resource unchanged.
+- [ ] Use no-proration lifecycle updates when the product promise is "updates
+      next cycle"; document that no immediate credit/refund/charge is issued.
+- [ ] Hide permanently removed rows from normal customer lists but keep them in
+      the database for audit and reconciliation.
+- [ ] Secure cron/job routes with a bearer secret; for Vercel Cron, use
+      `CRON_SECRET` so Vercel automatically supplies the Authorization header.

@@ -2668,3 +2668,65 @@ Failure behavior:
 - Twilio succeeds but DB activation fails: `reconciliation_required`; Twilio SID
   and local invoice marker are preserved.
 - Toll-free behavior is unchanged.
+
+---
+
+## Phone-number removal lifecycle — operate & verify (2026-06-07)
+
+Customer-facing removal is delayed release, not immediate deletion.
+
+States on `clinic_phone_numbers.removal_status`:
+
+- `active`: normal assigned/held number.
+- `scheduled`: customer requested removal. App routing stops immediately
+  (`is_active=false`), but the row remains visible and restorable until
+  `permanent_removal_at`.
+- `permanently_removed`: delayed release completed; normal owner/account lists
+  hide the row, but audit history remains in the DB.
+
+Customer actions:
+
+- Remove: `POST /api/account/phone-numbers/{id}/remove`.
+- Restore: `POST /api/account/phone-numbers/{id}/restore`.
+- Owner/admin roles only. Front desk is denied.
+- Stripe next-cycle recurring quantities are synced before the DB lifecycle
+  state changes. If Stripe sync fails, the number remains unchanged.
+- Stripe sync uses `proration_behavior:"none"` for remove/restore so there is
+  no immediate credit/charge. The next invoice reflects the new quantities.
+
+Type-aware billing display:
+
+- Current cycle includes active/suspended numbers and scheduled removals.
+- Next cycle excludes scheduled removals.
+- Toll-free: only `billing_class='additional'` toll-free rows add `$20/month`.
+- Local: every active/held local row adds the configured local-number monthly
+  fee; local SMS compliance applies once while any local number remains.
+- Prices are sourced from `config/billing.config.ts`.
+
+Delayed Twilio release job:
+
+- Vercel Cron calls `GET /api/jobs/release-removed-phone-numbers` daily.
+- The route requires `Authorization: Bearer <secret>`.
+- Prefer Vercel's `CRON_SECRET` env var; Vercel sends it automatically to cron
+  invocations. `PHONE_NUMBER_RELEASE_CRON_SECRET` is also accepted as a
+  project-specific fallback for manual/external scheduling.
+- The job releases only rows where `removal_status='scheduled'`,
+  `permanent_removal_at <= now()`, and `twilio_release_status in
+  ('pending','failed')`.
+- On success it marks `twilio_release_status='released'`,
+  `twilio_released_at=now()`, and `removal_status='permanently_removed'`.
+- On Twilio error it records `twilio_release_status='failed'` and a truncated
+  internal error message for retry/troubleshooting.
+
+Manual verification:
+
+1. Apply migration `20260610000100_phone_number_removal_lifecycle.sql` before
+   deploying code that selects the new columns.
+2. Confirm production has `CRON_SECRET` or `PHONE_NUMBER_RELEASE_CRON_SECRET`.
+3. On a test/owner clinic, remove a number and confirm account UI shows
+   "Removal scheduled", routing status is not active, and Billing shows current
+   vs next-cycle totals when totals differ.
+4. Restore before the permanent removal date and confirm routing status returns
+   active and next-cycle billing returns to the active-number quantity.
+5. Do not manually release Twilio numbers except as an explicit operator
+   reconciliation task.

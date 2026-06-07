@@ -290,3 +290,35 @@ the API returns "Payment could not be completed. No number was assigned." If
 Stripe succeeds but Twilio purchase/configuration or DB activation later fails,
 the attempt is marked `reconciliation_required` and the billing state is not
 hidden. Toll-free billing is unchanged.
+
+## Phone-number removal and next-cycle billing
+
+Customer Remove/Restore is lifecycle-based:
+
+- Remove immediately stops calls/text routing for the selected number by setting
+  the row inactive and `removal_status='scheduled'`.
+- The number remains assigned, visible, and restorable until
+  `permanent_removal_at`.
+- Permanent removal is completed later by the secured release job, which releases
+  the Twilio IncomingPhoneNumber SID and marks the row
+  `removal_status='permanently_removed'`.
+- Restore is allowed only while the row is still scheduled, before the permanent
+  removal date, and before Twilio release has completed.
+
+Billing behavior:
+
+- Current-cycle display counts scheduled removals as still billed/held.
+- Next-cycle display excludes scheduled removals.
+- Remove/Restore syncs recurring Stripe subscription items before the lifecycle
+  DB update. If Stripe sync fails, the number is not changed.
+- Remove/Restore uses Stripe `proration_behavior:"none"`; no immediate credit,
+  refund, or charge is created by the lifecycle action.
+- Additional toll-free billing quantity = active/held toll-free rows with
+  `billing_class='additional'`, excluding scheduled removals for next cycle.
+- Local number billing quantity = active/held local rows, excluding scheduled
+  removals for next cycle.
+- Local SMS compliance recurring quantity = 1 when at least one local number
+  remains for that billing view, else 0.
+
+The client never supplies lifecycle state, Stripe quantity, number type, slot
+class, or price. All lifecycle and billing decisions are server-side.

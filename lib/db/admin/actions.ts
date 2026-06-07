@@ -120,7 +120,9 @@ export async function countHeldNumbers(clinicId: string): Promise<number> {
   const sql = getDb();
   const rows = await sql<{ n: number }[]>`
     select (
-      (select count(*) from public.clinic_phone_numbers where clinic_id = ${clinicId})
+      (select count(*) from public.clinic_phone_numbers
+         where clinic_id = ${clinicId}
+           and removal_status <> 'permanently_removed')
       + (select count(*) from public.clinic_phone_number_purchase_attempts
            where clinic_id = ${clinicId}
              and status in ('twilio_purchased', 'billing_pending', 'reconciliation_required'))

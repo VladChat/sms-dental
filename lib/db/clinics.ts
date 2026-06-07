@@ -95,6 +95,10 @@ export type ClinicOnboardingRow = ClinicRow & {
   trial_ends_at: Date | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  stripe_base_subscription_item_id: string | null;
+  stripe_additional_number_subscription_item_id: string | null;
+  stripe_local_number_subscription_item_id: string | null;
+  stripe_local_sms_compliance_subscription_item_id: string | null;
   // Saved payment method (Stripe sandbox/test mode). Safe, non-secret metadata
   // only — Stripe holds the sensitive card data. No raw card number/CVC here.
   stripe_payment_method_id: string | null;
@@ -119,6 +123,8 @@ const CLINIC_COLS = [
   "a2p_rep_email", "a2p_rep_phone", "a2p_authorized", "a2p_info_completed",
   "local_number_status", "sms_status", "billing_status",
   "trial_started_at", "trial_ends_at", "stripe_customer_id", "stripe_subscription_id",
+  "stripe_base_subscription_item_id", "stripe_additional_number_subscription_item_id",
+  "stripe_local_number_subscription_item_id", "stripe_local_sms_compliance_subscription_item_id",
   "stripe_payment_method_id", "stripe_payment_method_brand", "stripe_payment_method_last4",
   "stripe_payment_method_exp_month", "stripe_payment_method_exp_year",
   "stripe_payment_method_added_at", "stripe_payment_method_updated_at",
@@ -137,6 +143,7 @@ export async function lookupClinicByPhone(
     join public.clinic_phone_numbers cpn on cpn.clinic_id = c.id
     where cpn.phone_number = ${phoneNumber}
       and cpn.is_active = true
+      and cpn.removal_status = 'active'
       and c.is_active = true
     limit 1
   `;
@@ -487,6 +494,24 @@ export async function saveClinicAdditionalSubscriptionItemId(
   `;
 }
 
+export async function saveClinicNumberSubscriptionItemIds(
+  clinicId: string,
+  ids: {
+    additionalSubscriptionItemId?: string | null;
+    localNumberSubscriptionItemId?: string | null;
+    localSmsComplianceSubscriptionItemId?: string | null;
+  },
+): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.clinics set
+      stripe_additional_number_subscription_item_id = coalesce(${ids.additionalSubscriptionItemId ?? null}, stripe_additional_number_subscription_item_id),
+      stripe_local_number_subscription_item_id = coalesce(${ids.localNumberSubscriptionItemId ?? null}, stripe_local_number_subscription_item_id),
+      stripe_local_sms_compliance_subscription_item_id = coalesce(${ids.localSmsComplianceSubscriptionItemId ?? null}, stripe_local_sms_compliance_subscription_item_id)
+    where id = ${clinicId}
+  `;
+}
+
 // Subscription billing state persisted from verified Stripe webhook events.
 // Subscription/item ids and timestamp are coalesced (null leaves existing); the
 // billing_status is mapped conservatively by the caller. Idempotent.
@@ -494,6 +519,8 @@ export type ClinicSubscriptionState = {
   stripeSubscriptionId: string | null;
   baseSubscriptionItemId: string | null;
   additionalSubscriptionItemId: string | null;
+  localNumberSubscriptionItemId?: string | null;
+  localSmsComplianceSubscriptionItemId?: string | null;
   billingStatus: BillingStatus;
   // Set paid_plan_started_at once, the first time the plan becomes active.
   markPaidPlanStarted: boolean;
@@ -514,6 +541,8 @@ export async function saveClinicSubscriptionState(
       stripe_subscription_id = coalesce(${s.stripeSubscriptionId ?? null}, stripe_subscription_id),
       stripe_base_subscription_item_id = coalesce(${s.baseSubscriptionItemId ?? null}, stripe_base_subscription_item_id),
       stripe_additional_number_subscription_item_id = coalesce(${s.additionalSubscriptionItemId ?? null}, stripe_additional_number_subscription_item_id),
+      stripe_local_number_subscription_item_id = coalesce(${s.localNumberSubscriptionItemId ?? null}, stripe_local_number_subscription_item_id),
+      stripe_local_sms_compliance_subscription_item_id = coalesce(${s.localSmsComplianceSubscriptionItemId ?? null}, stripe_local_sms_compliance_subscription_item_id),
       billing_status = ${s.billingStatus},
       paid_plan_started_at = case
         when ${s.markPaidPlanStarted} and paid_plan_started_at is null then now()

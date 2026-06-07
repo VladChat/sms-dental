@@ -233,6 +233,17 @@ export function getSetupEmailEnv(): {
   };
 }
 
+export function getPhoneNumberReleaseCronSecret(): string {
+  const secret =
+    process.env.PHONE_NUMBER_RELEASE_CRON_SECRET ??
+    process.env.CRON_SECRET ??
+    "";
+  if (!secret) {
+    throw new Error("Phone-number release cron secret is not configured");
+  }
+  return secret;
+}
+
 // Twilio number purchase safety mode. Search is always allowed when the
 // Twilio client is configured. Live Twilio purchase proceeds only when the
 // committed runtime config explicitly sets mode to "live".
@@ -380,6 +391,7 @@ export type EnvPresenceReport = {
   publicSiteUrl: boolean;
   resendApiKey: boolean;
   setupEmailFrom: boolean;
+  phoneNumberReleaseCronSecret: boolean;
   twilioNumberPurchaseMode: TwilioNumberPurchaseMode;
   twilioNumberPurchaseEnabled: boolean;
 };
@@ -411,6 +423,8 @@ export function getEnvPresenceReport(): EnvPresenceReport {
     publicSiteUrl: runtimeConfig.app.publicSiteUrl.trim().length > 0,
     resendApiKey: present("RESEND_API_KEY"),
     setupEmailFrom: runtimeConfig.email.defaultSetupFrom.trim().length > 0,
+    phoneNumberReleaseCronSecret:
+      present("PHONE_NUMBER_RELEASE_CRON_SECRET") || present("CRON_SECRET"),
     twilioNumberPurchaseMode: getTwilioNumberPurchaseMode(),
     twilioNumberPurchaseEnabled: isTwilioNumberPurchaseEnabled(),
   };

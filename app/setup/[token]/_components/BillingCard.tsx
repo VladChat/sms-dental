@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge, StatusRow, InfoTooltip } from "./AccountUI";
-import type { PaymentMethodSummary, PaymentMethodSetupResult } from "./account-types";
+import type {
+  ClinicBillingSummary,
+  PaymentMethodSummary,
+  PaymentMethodSetupResult,
+} from "./account-types";
 import {
   billingConfig,
   formatInteger,
@@ -16,7 +20,7 @@ const SMS_SEGMENT_TOOLTIP =
 export function BillingCard({
   hasPaymentMethod,
   paymentMethod,
-  additionalBilledQuantity,
+  summary,
   trialDaysRemaining,
   trialEnded,
   paymentMethodSetup,
@@ -31,7 +35,7 @@ export function BillingCard({
 }: {
   hasPaymentMethod: boolean;
   paymentMethod: PaymentMethodSummary | null;
-  additionalBilledQuantity: number;
+  summary: ClinicBillingSummary;
   trialDaysRemaining: number;
   trialEnded: boolean;
   paymentMethodSetup: PaymentMethodSetupResult;
@@ -88,17 +92,11 @@ export function BillingCard({
       : "Not added";
   const baseMonthly = billingConfig.basePlan.monthlyUnitAmountCents;
   const additionalMonthly = billingConfig.additionalBusinessNumber.monthlyUnitAmountCents;
-  const additionalTotal = additionalBilledQuantity * additionalMonthly;
-  const currentMonthlyTotal = baseMonthly + additionalTotal;
   const baseMonthlyLabel = `${formatUsdFromCents(baseMonthly)}/month`;
   const additionalMonthlyLabel = `${formatUsdFromCents(additionalMonthly)}/month`;
-  const currentMonthlyTotalLabel = `${formatUsdFromCents(currentMonthlyTotal)}/month`;
-  const additionalPhoneNumberLabel =
-    additionalBilledQuantity === 1 ? "additional phone number" : "additional phone numbers";
-  const currentPlanBreakdown =
-    additionalBilledQuantity > 0
-      ? `${baseMonthlyLabel} base plan + ${formatInteger(additionalBilledQuantity)} × ${additionalMonthlyLabel} ${additionalPhoneNumberLabel}`
-      : `${baseMonthlyLabel} base plan`;
+  const currentMonthlyTotalLabel = `${formatUsdFromCents(summary.current.totalAmountCents)}/month`;
+  const nextCycleTotalLabel = `${formatUsdFromCents(summary.nextCycle.totalAmountCents)}/month`;
+  const showNextCycle = summary.nextCycle.totalAmountCents !== summary.current.totalAmountCents;
 
   if (paidPlanActive) {
     return (
@@ -109,7 +107,23 @@ export function BillingCard({
             <StatusBadge kind="complete" label="Active" />
           </div>
           <p className="acct-current-plan-total">{currentMonthlyTotalLabel}</p>
-          <p className="t-small acct-current-plan-note">{currentPlanBreakdown}</p>
+          <div className="acct-current-plan-note">
+            <BillingLineList lines={summary.current.lineItems} />
+            {showNextCycle && (
+              <div style={{ marginTop: "var(--space-3)" }}>
+                <p className="t-eyebrow" style={{ margin: 0 }}>Next cycle</p>
+                <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text)", fontWeight: 700 }}>
+                  {nextCycleTotalLabel}
+                </p>
+                <BillingLineList lines={summary.nextCycle.lineItems} />
+              </div>
+            )}
+            {summary.notices.map((notice) => (
+              <p key={notice} className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+                {notice}
+              </p>
+            ))}
+          </div>
         </section>
 
         <section className="acct-billing-block" aria-labelledby="billing-included-title">
@@ -271,12 +285,19 @@ export function BillingCard({
             <p className="t-eyebrow">Monthly billing</p>
             <ul className="acct-plan-list">
               <li>{billingConfig.basePlan.displayName}: {baseMonthlyLabel}</li>
-              <li>
-                Additional phone numbers: {formatInteger(additionalBilledQuantity)} × {additionalMonthlyLabel}
-              </li>
+              {summary.current.lineItems.filter((line) => line.key !== "base").map((line) => (
+                <li key={line.key}>
+                  {line.label}: {formatInteger(line.quantity)} × {formatUsdFromCents(line.unitAmountCents)}/month
+                </li>
+              ))}
               <li style={{ fontWeight: 700, color: "var(--text)" }}>
                 Current monthly total: {currentMonthlyTotalLabel}
               </li>
+              {showNextCycle && (
+                <li style={{ fontWeight: 700, color: "var(--text)" }}>
+                  Next cycle: {nextCycleTotalLabel}
+                </li>
+              )}
             </ul>
           </div>
         ) : (
@@ -404,6 +425,24 @@ export function BillingCard({
         )}
       </div>
     </div>
+  );
+}
+
+function BillingLineList({
+  lines,
+}: {
+  lines: ClinicBillingSummary["current"]["lineItems"];
+}) {
+  return (
+    <ul className="acct-plan-list" style={{ marginTop: "var(--space-2)" }}>
+      {lines.map((line) => (
+        <li key={line.key}>
+          {line.quantity > 1
+            ? `${line.label}: ${formatInteger(line.quantity)} × ${formatUsdFromCents(line.unitAmountCents)}/month`
+            : `${line.label}: ${formatUsdFromCents(line.amountCents)}/month`}
+        </li>
+      ))}
+    </ul>
   );
 }
 

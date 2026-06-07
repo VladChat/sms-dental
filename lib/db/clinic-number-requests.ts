@@ -141,7 +141,9 @@ export async function createClinicNumberRequest(
 
     const assignedCount = await tx<{ n: number }[]>`
       select count(*)::int as n from public.clinic_phone_numbers
-      where clinic_id = ${clinicId} and is_active = true
+      where clinic_id = ${clinicId}
+        and is_active = true
+        and removal_status <> 'permanently_removed'
     `;
     const openCount = await tx<{ n: number }[]>`
       select count(*)::int as n from public.clinic_number_requests

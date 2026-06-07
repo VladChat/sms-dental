@@ -118,6 +118,7 @@ export async function computeNumberEntitlement(
       count(*) filter (where billing_class = 'additional')::int as additional_held
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
+      and removal_status <> 'permanently_removed'
   `;
   const agg = cpnAgg[0] ?? { total: 0, active: 0, included_active: 0, additional_held: 0 };
 

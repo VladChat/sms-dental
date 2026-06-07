@@ -5279,3 +5279,51 @@ Safety:
 - Stripe resources were test/sandbox mode only.
 - No customer Stripe charge was made during validation.
 - Toll-free behavior unchanged.
+
+---
+
+## 2026-06-07 — Phone-number removal lifecycle implemented
+
+Implemented customer-facing Remove/Restore lifecycle for assigned business
+numbers, plus type-aware account billing display and a secured delayed Twilio
+release job.
+
+Code changes:
+
+- Added migration `20260610000100_phone_number_removal_lifecycle.sql`.
+- Added lifecycle columns on `clinic_phone_numbers` and shared local recurring
+  Stripe item-id columns on `clinics`.
+- Added customer APIs:
+  `/api/account/phone-numbers/{phoneNumberId}/remove` and
+  `/api/account/phone-numbers/{phoneNumberId}/restore`.
+- Added secured job route:
+  `/api/jobs/release-removed-phone-numbers`.
+- Added `vercel.json` daily cron schedule for the release job.
+- Added type-aware billing summary from active/held phone-number rows:
+  toll-free additional quantities, local-number quantities, and once-per-account
+  local SMS compliance.
+- Added Stripe recurring item sync for remove/restore using
+  `proration_behavior:"none"` so the next invoice reflects the new quantity
+  without immediate credits/charges.
+- Added `releaseIncomingPhoneNumber()` Twilio helper used only by the delayed
+  release job.
+- Account UI now shows scheduled removals, permanent removal date, Restore
+  action, and current vs next-cycle billing totals when different.
+
+Operational notes:
+
+- Production migration applied via local Node/postgres runner using the direct
+  DB URL (secret not printed). Verified columns:
+  `removal_status`, `permanent_removal_at`, `twilio_release_status`.
+- Vercel Production env var `CRON_SECRET` was added as an encrypted value for
+  Vercel Cron authentication. The route also accepts
+  `PHONE_NUMBER_RELEASE_CRON_SECRET` for external/manual scheduling.
+- The release job does not run without a bearer token matching one of those env
+  values.
+- No manual Twilio number release was performed during implementation.
+- No SMS was sent and no SMS recovery/A2P state was changed.
+
+Validation before commit/deploy:
+
+- `npm run typecheck` pass.
+- `npm run build` pass.

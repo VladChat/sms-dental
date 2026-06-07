@@ -381,6 +381,11 @@ export async function purchaseNumberAndConfigure(
   };
 }
 
+export async function releaseIncomingPhoneNumber(twilioPhoneNumberSid: string): Promise<void> {
+  const client = getTwilioClient();
+  await client.incomingPhoneNumbers(twilioPhoneNumberSid).remove();
+}
+
 async function createOrReuseEmergencyAddress(
   input: TwilioBusinessAddress,
 ): Promise<{ sid: string }> {

@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 
 import { getLocalNumberBillingEnv } from "../env";
+import { saveClinicNumberSubscriptionItemIds } from "../db/clinics";
 import { logger } from "../logging/logger";
 import { getStripeServerClient } from "../stripe/server";
 
@@ -112,6 +113,10 @@ export async function syncStripeLocalNumberBilling(args: {
       clinicId: args.clinicId,
       attemptId: args.attemptId,
       invoiceStatus: invoice.status,
+    });
+    await saveClinicNumberSubscriptionItemIds(args.clinicId, {
+      localNumberSubscriptionItemId: localNumberItem.id,
+      localSmsComplianceSubscriptionItemId: smsComplianceItem.id,
     });
     return {
       ok: true,

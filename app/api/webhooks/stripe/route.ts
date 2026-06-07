@@ -326,6 +326,8 @@ async function handleStripeBillingEvent(event: Stripe.Event): Promise<void> {
         stripeSubscriptionId: sub.id,
         baseSubscriptionItemId: items.baseItemId,
         additionalSubscriptionItemId: items.additionalItemId,
+        localNumberSubscriptionItemId: items.localNumberItemId,
+        localSmsComplianceSubscriptionItemId: items.localSmsComplianceItemId,
         billingStatus: status,
         markPaidPlanStarted: false,
       });

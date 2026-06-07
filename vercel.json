@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/jobs/release-removed-phone-numbers",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}

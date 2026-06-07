@@ -182,6 +182,13 @@ export function OwnerNumberSearch({
         isActive: a.isActive,
         billingClass: a.billingClass,
         createdAt: a.createdAt,
+        removalStatus: "active",
+        removalRequestedAt: null,
+        removalRequestedByEmail: null,
+        permanentRemovalAt: null,
+        restoredAt: null,
+        twilioReleasedAt: null,
+        twilioReleaseStatus: "not_required",
       });
       onBack();
     } catch {

@@ -25,6 +25,17 @@ export type ClinicPhoneNumberRow = {
   suspended_at: Date | null;
   suspended_by_profile_id: string | null;
   suspension_reason: string | null;
+  removal_status: "active" | "scheduled" | "permanently_removed";
+  removal_requested_at: Date | null;
+  removal_requested_by_profile_id: string | null;
+  removal_requested_by_email: string | null;
+  permanent_removal_at: Date | null;
+  restored_at: Date | null;
+  restored_by_profile_id: string | null;
+  restored_by_email: string | null;
+  twilio_released_at: Date | null;
+  twilio_release_status: "not_required" | "pending" | "released" | "failed";
+  twilio_release_error: string | null;
 };
 
 /**
@@ -40,7 +51,57 @@ export async function listClinicPhoneNumbersForClinic(
     select *
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
-    order by is_active desc, created_at asc
+      and removal_status <> 'permanently_removed'
+    order by
+      case when removal_status = 'scheduled' then 1 else 0 end asc,
+      is_active desc,
+      created_at asc
+  `;
+}
+
+export type DuePhoneNumberReleaseRow = ClinicPhoneNumberRow & {
+  clinic_name: string | null;
+};
+
+export async function listDuePhoneNumberReleases(limit = 25): Promise<DuePhoneNumberReleaseRow[]> {
+  const sql = getDb();
+  return sql<DuePhoneNumberReleaseRow[]>`
+    select cpn.*, c.name as clinic_name
+    from public.clinic_phone_numbers cpn
+    join public.clinics c on c.id = cpn.clinic_id
+    where cpn.removal_status = 'scheduled'
+      and cpn.permanent_removal_at <= now()
+      and cpn.twilio_release_status in ('pending', 'failed')
+    order by cpn.permanent_removal_at asc, cpn.created_at asc
+    limit ${Math.max(1, Math.min(100, Math.floor(limit)))}
+  `;
+}
+
+export async function markPhoneNumberReleaseFailed(
+  phoneNumberId: string,
+  error: string,
+): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.clinic_phone_numbers set
+      twilio_release_status = 'failed',
+      twilio_release_error = ${error.slice(0, 500)}
+    where id = ${phoneNumberId}
+      and removal_status = 'scheduled'
+  `;
+}
+
+export async function markPhoneNumberReleased(phoneNumberId: string): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.clinic_phone_numbers set
+      removal_status = 'permanently_removed',
+      is_active = false,
+      twilio_release_status = 'released',
+      twilio_released_at = now(),
+      twilio_release_error = null
+    where id = ${phoneNumberId}
+      and removal_status = 'scheduled'
   `;
 }
 
@@ -108,7 +169,14 @@ export async function upsertOfficeTextingNumber(params: {
       clinic_id = excluded.clinic_id,
       twilio_phone_number_sid = excluded.twilio_phone_number_sid,
       role = excluded.role,
-      is_active = true
+      is_active = true,
+      removal_status = 'active',
+      removal_requested_at = null,
+      removal_requested_by_profile_id = null,
+      removal_requested_by_email = null,
+      permanent_removal_at = null,
+      twilio_release_status = 'not_required',
+      twilio_release_error = null
     returning *
   `;
   const row = rows[0];
