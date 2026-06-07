@@ -23,10 +23,12 @@ export function buildCampaignContent(clinicNameRaw: string | null): A2pCampaignC
   const clinicName = (clinicNameRaw ?? "").trim() || "your dental office";
 
   const description =
-    "Missed Calls Dental sends a single appointment follow-up text message to a " +
-    "patient who called a participating dental clinic and did not reach the " +
-    "office. The message helps the patient request an appointment or a callback. " +
-    "Volume is low and strictly tied to the patient's own inbound phone call.";
+    `${clinicName} sends a single appointment follow-up text message to a ` +
+    "patient who called the clinic and did not reach the office. The message " +
+    "helps the patient request an appointment or a callback. Messages are sent " +
+    `through the Missed Calls Dental software platform, but the communication is ` +
+    `from ${clinicName}. Volume is low and strictly tied to the patient's own ` +
+    "inbound phone call.";
 
   const messageFlow =
     "Consumers provide consent by placing a phone call to the dental clinic's own " +

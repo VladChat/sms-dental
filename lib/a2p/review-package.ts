@@ -22,6 +22,8 @@ import { BUSINESS_TYPE_LABELS, type BusinessType } from "../validation/url";
 import { buildCampaignContent } from "./campaign-content";
 import { addressParams, buildProviderPayloadView, mapBusinessType } from "./provider-payload";
 import type {
+  A2pAuthorizationState,
+  A2pInternalDiagnostics,
   A2pPlannedResource,
   A2pReviewMissingField,
   A2pReviewNumber,
@@ -48,6 +50,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   const submissionMode = getA2pSubmissionMode();
   const realSubmissionEnabled = isRealA2pSubmissionEnabled();
   const appBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? null;
+  const trustHub = getA2pTrustHubConfig();
 
   const clinic = await findClinicById(clinicId).catch(() => null);
   if (!clinic) {
@@ -210,7 +213,6 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   });
 
   // ---- live-submit arming (real provider mutation) ----
-  const trustHub = getA2pTrustHubConfig();
   const { liveSubmitArmed, liveSubmitBlockedReason } = evaluateLiveArming({
     clinicId,
     submissionMode,
@@ -250,10 +252,22 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
       postalCode: clinic.postal_code ?? "(missing)",
       isoCountry: clinic.country ?? "US",
     }),
+    notificationEmail: trustHub.notificationEmail,
+    primaryCustomerProfileSid: trustHub.primaryCustomerProfileSid ?? "(missing)",
+    messagingServiceSid: MESSAGING_SERVICE_SID ?? "(missing)",
     customerProfilePolicySid: trustHub.customerProfilePolicySid,
     a2pTrustProductPolicySid: trustHub.a2pTrustProductPolicySid,
-    brandType: brandCfg.brandType,
     campaign,
+    existingSids: {
+      businessEndUserSid: psStr("businessEndUserSid"),
+      repEndUserSid: psStr("repEndUserSid"),
+      addressSid: psStr("addressSid"),
+      supportingDocumentSid: psStr("supportingDocumentSid"),
+      customerProfileSid: submission.customerProfileSid,
+      a2pProfileEndUserSid: psStr("a2pProfileEndUserSid"),
+      trustProductSid: submission.trustProductSid,
+      brandRegistrationSid: submission.brandRegistrationSid,
+    },
     numbers: localActiveNumbers.map((n) => ({ phoneNumber: n.phone_number, twilioPhoneNumberSid: n.twilio_phone_number_sid })),
   });
 
@@ -272,6 +286,27 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     "Incorrect business identity (EIN, legal name, address) can cause rejection and re-vetting fees/delays.",
   ];
 
+  const authorizationState: A2pAuthorizationState = {
+    submissionMode,
+    realSubmissionEnabled,
+    liveSubmitArmed,
+    liveSubmitBlockedReason,
+    reviewStatus,
+    submitEligible,
+    submitBlockedReason,
+    feesRiskNotice,
+  };
+
+  const internalDiagnostics: A2pInternalDiagnostics = {
+    messagingServiceSid: MESSAGING_SERVICE_SID,
+    clinicReadiness,
+    submission,
+    numberDiagnostics: numbers,
+    plannedResources,
+    warnings,
+    complianceUrls: urls,
+  };
+
   return {
     clinicId,
     clinicName: clinic.name,
@@ -287,18 +322,17 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     tollFreeActiveCount,
     missingFields,
     warnings,
-    submission,
-    submissionMode,
-    realSubmissionEnabled,
-    liveSubmitArmed,
-    liveSubmitBlockedReason,
     campaign,
     providerPayload,
-    plannedResources,
-    feesRiskNotice,
-    reviewStatus,
-    submitEligible,
-    submitBlockedReason,
+    includedSenders: {
+      numbers: localActiveNumbers.map((n) => ({
+        phoneNumber: n.phone_number,
+        twilioPhoneNumberSid: n.twilio_phone_number_sid,
+        includedInSubmission: true,
+      })),
+    },
+    authorizationState,
+    internalDiagnostics,
   };
 }
 
@@ -496,38 +530,48 @@ function notFoundPackage(
     tollFreeActiveCount: 0,
     missingFields: [],
     warnings: [],
-    submission: {
-      trackingAvailable: false,
-      status: null,
-      mode: null,
-      submissionStep: null,
-      submittedAt: null,
-      submittedByEmail: null,
-      lastStatusSyncedAt: null,
-      lastErrorCode: null,
-      lastErrorMessage: null,
-      rejectionReason: null,
-      customerProfileSid: null,
-      trustProductSid: null,
-      brandRegistrationSid: null,
-      campaignSid: null,
-      messagingServiceSid: null,
-      customerProfileStatus: null,
-      trustProductStatus: null,
-      brandStatus: null,
-      campaignStatus: null,
-    },
-    submissionMode,
-    realSubmissionEnabled,
-    liveSubmitArmed: false,
-    liveSubmitBlockedReason: "Clinic not found.",
     campaign: buildCampaignContent(null),
     providerPayload: { resources: [] },
-    plannedResources: [],
-    feesRiskNotice: [],
-    reviewStatus: "not_found",
-    submitEligible: false,
-    submitBlockedReason: "Clinic not found.",
+    includedSenders: { numbers: [] },
+    authorizationState: {
+      submissionMode,
+      realSubmissionEnabled,
+      liveSubmitArmed: false,
+      liveSubmitBlockedReason: "Clinic not found.",
+      reviewStatus: "not_found",
+      submitEligible: false,
+      submitBlockedReason: "Clinic not found.",
+      feesRiskNotice: [],
+    },
+    internalDiagnostics: {
+      messagingServiceSid: MESSAGING_SERVICE_SID,
+      clinicReadiness: null,
+      submission: {
+        trackingAvailable: false,
+        status: null,
+        mode: null,
+        submissionStep: null,
+        submittedAt: null,
+        submittedByEmail: null,
+        lastStatusSyncedAt: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        rejectionReason: null,
+        customerProfileSid: null,
+        trustProductSid: null,
+        brandRegistrationSid: null,
+        campaignSid: null,
+        messagingServiceSid: null,
+        customerProfileStatus: null,
+        trustProductStatus: null,
+        brandStatus: null,
+        campaignStatus: null,
+      },
+      numberDiagnostics: [],
+      plannedResources: [],
+      warnings: [],
+      complianceUrls: { businessPage: null, privacyPolicy: null, smsTerms: null },
+    },
   };
 }
 

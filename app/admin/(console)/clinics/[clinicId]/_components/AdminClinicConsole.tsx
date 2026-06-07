@@ -696,7 +696,7 @@ function sectionStatuses(
 }
 
 function a2pNavStatus(review: A2pReviewPackage): { text: string; tone: Tone } {
-  const status = review.submission.status;
+  const status = review.internalDiagnostics.submission.status;
   if (status === "approved") return { text: "Approved", tone: "success" };
   if (status === "dry_run_reviewed" || status === "ready_for_manual_submission") {
     return { text: "Reviewed", tone: "success" };
@@ -705,7 +705,7 @@ function a2pNavStatus(review: A2pReviewPackage): { text: string; tone: Tone } {
   if (status === "rejected") return { text: "Rejected", tone: "warning" };
   if (!review.readinessAvailable) return { text: "Readiness off", tone: "warning" };
   if (review.missingFields.length > 0) return { text: "Missing info", tone: "warning" };
-  if (review.submitEligible) return { text: "Ready", tone: "info" };
+  if (review.authorizationState.submitEligible) return { text: "Ready", tone: "info" };
   return { text: "Review", tone: "neutral" };
 }
 

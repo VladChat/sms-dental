@@ -63,8 +63,12 @@ export async function POST(
       missing: pkg.missingFields.map((f) => f.key),
     });
   }
-  if (!pkg.submitEligible) {
-    return jsonError(409, "not_eligible", pkg.submitBlockedReason ?? "This clinic is not eligible for submission.");
+  if (!pkg.authorizationState.submitEligible) {
+    return jsonError(
+      409,
+      "not_eligible",
+      pkg.authorizationState.submitBlockedReason ?? "This clinic is not eligible for submission.",
+    );
   }
 
   // Audit the attempt before any provider call.
@@ -75,13 +79,17 @@ export async function POST(
     targetType: "clinic",
     targetId: clinicId,
     clinicId,
-    afterState: { mode, review_status: pkg.reviewStatus, number_count: pkg.numbers.length },
+    afterState: {
+      mode,
+      review_status: pkg.authorizationState.reviewStatus,
+      number_count: pkg.includedSenders.numbers.length,
+    },
     metadata: { authSource: admin.source },
   }).catch(() => {});
 
   // ---------------- dry_run mode (no Twilio mutation) ----------------
   if (mode === "dry_run") {
-    const selectedPhoneNumbers = pkg.numbers.map((n) => ({
+    const selectedPhoneNumbers = pkg.includedSenders.numbers.map((n) => ({
       phoneNumber: n.phoneNumber,
       twilioPhoneNumberSid: n.twilioPhoneNumberSid,
     }));
@@ -91,7 +99,7 @@ export async function POST(
         clinicId,
         status: "dry_run_reviewed",
         submissionMode: "dry_run",
-        targetMessagingServiceSid: pkg.messagingServiceSid,
+        targetMessagingServiceSid: pkg.internalDiagnostics.messagingServiceSid,
         selectedPhoneNumbers,
         submittedAt: new Date(),
         submittedByAdminUserId: admin.userId,
@@ -128,8 +136,12 @@ export async function POST(
   }
 
   // ---------------- live mode (REAL Twilio submission) ----------------
-  if (!pkg.liveSubmitArmed) {
-    return jsonError(409, "not_armed", pkg.liveSubmitBlockedReason ?? "Real A2P submission is not armed for this clinic.");
+  if (!pkg.authorizationState.liveSubmitArmed) {
+    return jsonError(
+      409,
+      "not_armed",
+      pkg.authorizationState.liveSubmitBlockedReason ?? "Real A2P submission is not armed for this clinic.",
+    );
   }
 
   let result;
@@ -205,12 +217,12 @@ function redactedSnapshot(pkg: A2pReviewPackage): JsonObject {
     rep_email: pkg.representative.email,
     rep_phone: pkg.representative.phone,
     authorized: pkg.representative.authorized,
-    messaging_service_sid: pkg.messagingServiceSid,
+    messaging_service_sid: pkg.internalDiagnostics.messagingServiceSid,
     business_page: pkg.urls.businessPage,
     privacy_policy: pkg.urls.privacyPolicy,
     sms_terms: pkg.urls.smsTerms,
     campaign_usecase: pkg.campaign.usecase,
-    numbers: pkg.numbers.map((n) => ({
+    numbers: pkg.internalDiagnostics.numberDiagnostics.map((n) => ({
       phone_number: n.phoneNumber,
       pn_sid: n.twilioPhoneNumberSid,
       coverage: n.coverageDisplay,

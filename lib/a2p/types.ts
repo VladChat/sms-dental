@@ -109,6 +109,16 @@ export type A2pPayloadField = { label: string; value: string };
 export type A2pPayloadResource = { step: string; fields: A2pPayloadField[] };
 export type A2pProviderPayloadView = { resources: A2pPayloadResource[] };
 
+export type A2pIncludedSender = {
+  phoneNumber: string;
+  twilioPhoneNumberSid: string | null;
+  includedInSubmission: boolean;
+};
+
+export type A2pIncludedSendersView = {
+  numbers: A2pIncludedSender[];
+};
+
 export type A2pReviewBusiness = {
   legalBusinessName: string | null;
   businessType: string | null;
@@ -137,6 +147,31 @@ export type A2pReviewClinicReadiness = {
   a2pStatus: string;
   lastSyncedAt: string | null;
   blockingReason: string | null;
+};
+
+export type A2pAuthorizationState = {
+  submissionMode: A2pSubmissionMode;
+  realSubmissionEnabled: boolean;
+  liveSubmitArmed: boolean;
+  liveSubmitBlockedReason: string | null;
+  reviewStatus: string;
+  submitEligible: boolean;
+  submitBlockedReason: string | null;
+  feesRiskNotice: string[];
+};
+
+export type A2pInternalDiagnostics = {
+  messagingServiceSid: string | null;
+  clinicReadiness: A2pReviewClinicReadiness | null;
+  submission: A2pSubmissionInfo;
+  numberDiagnostics: A2pReviewNumber[];
+  plannedResources: A2pPlannedResource[];
+  warnings: string[];
+  complianceUrls: {
+    businessPage: string | null;
+    privacyPolicy: string | null;
+    smsTerms: string | null;
+  };
 };
 
 export type A2pReviewPackage = {
@@ -168,27 +203,12 @@ export type A2pReviewPackage = {
   missingFields: A2pReviewMissingField[];
   warnings: string[];
 
-  submission: A2pSubmissionInfo;
-  submissionMode: A2pSubmissionMode;
-  // True at the platform level when submissionMode === "live".
-  realSubmissionEnabled: boolean;
-  // True only when a REAL submission can actually run for THIS clinic right now
-  // (live mode + clinic allowlisted + primary Customer Profile configured).
-  liveSubmitArmed: boolean;
-  liveSubmitBlockedReason: string | null;
-
   // Fixed campaign content (use case, samples, opt-in, STOP/HELP) shown before
   // submit and submitted to Twilio.
   campaign: A2pCampaignContent;
   // Minimal provider payload — exactly what will be submitted to Twilio.
   providerPayload: A2pProviderPayloadView;
-  // Exact Twilio resources the real submit will create or reuse.
-  plannedResources: A2pPlannedResource[];
-  // Fee / risk notices to display before a real submit.
-  feesRiskNotice: string[];
-
-  // Derived display status for the whole package.
-  reviewStatus: string;
-  submitEligible: boolean;
-  submitBlockedReason: string | null;
+  includedSenders: A2pIncludedSendersView;
+  authorizationState: A2pAuthorizationState;
+  internalDiagnostics: A2pInternalDiagnostics;
 };

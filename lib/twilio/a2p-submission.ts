@@ -15,11 +15,19 @@ import {
 } from "../db/a2p-submissions";
 import { buildCampaignContent } from "../a2p/campaign-content";
 import {
-  a2pProfileAttributes,
   addressParams,
-  businessInfoAttributes,
+  buildA2pMessagingProfileEndUserPayload,
+  buildA2pTrustProductCreatePayload,
+  buildBrandRegistrationPayload,
+  buildBusinessEndUserPayload,
+  buildCampaignCreatePayload,
+  buildCustomerProfileEvaluationPayload,
+  buildMessagingServiceSenderPayload,
+  buildRepresentativeEndUserPayload,
+  buildSecondaryCustomerProfileCreatePayload,
+  buildSupportingDocumentPayload,
+  buildTrustProductEvaluationPayload,
   mapBusinessType,
-  representativeAttributes,
 } from "../a2p/provider-payload";
 import type { A2pSubmissionStatus, JsonObject } from "../a2p/types";
 import { logger } from "../logging/logger";
@@ -273,19 +281,21 @@ export async function runRealA2pSubmission(
     // ---- 1. business information EndUser ----
     let businessEndUserSid = str(state, "businessEndUserSid");
     if (!businessEndUserSid) {
+      const businessPayload = buildBusinessEndUserPayload({
+        clinicName: clinic.name,
+        businessName: clinic.legal_business_name ?? clinic.name,
+        businessType: mapBusinessType(clinic.business_type, brandCfg.businessTypeFallback),
+        industry: brandCfg.businessIndustry,
+        registrationIdentifier: brandCfg.businessRegistrationIdentifier,
+        businessRegistrationNumber: ein,
+        regionsOfOperation: brandCfg.regionsOfOperation,
+        identity: brandCfg.businessIdentity,
+        websiteUrl: businessPageUrl,
+      });
       const eu = await th.endUsers.create({
-        friendlyName: `${clinic.name} business info`,
-        type: "customer_profile_business_information",
-        attributes: businessInfoAttributes({
-          businessName: clinic.legal_business_name ?? clinic.name,
-          businessType: mapBusinessType(clinic.business_type, brandCfg.businessTypeFallback),
-          industry: brandCfg.businessIndustry,
-          registrationIdentifier: brandCfg.businessRegistrationIdentifier,
-          businessRegistrationNumber: ein, // raw EIN — sent to Twilio, never logged/persisted.
-          regionsOfOperation: brandCfg.regionsOfOperation,
-          identity: brandCfg.businessIdentity,
-          websiteUrl: businessPageUrl,
-        }),
+        friendlyName: businessPayload.friendlyName,
+        type: businessPayload.type,
+        attributes: businessPayload.attributes,
       });
       businessEndUserSid = eu.sid;
       state.businessEndUserSid = businessEndUserSid;
@@ -296,17 +306,19 @@ export async function runRealA2pSubmission(
     // ---- 2. authorized representative EndUser ----
     let repEndUserSid = str(state, "repEndUserSid");
     if (!repEndUserSid) {
+      const representativePayload = buildRepresentativeEndUserPayload({
+        clinicName: clinic.name,
+        firstName: clinic.a2p_rep_first_name ?? "",
+        lastName: clinic.a2p_rep_last_name ?? "",
+        email: clinic.a2p_rep_email ?? "",
+        phone: clinic.a2p_rep_phone ?? "",
+        jobPosition: clinic.a2p_rep_business_title ?? "Owner",
+        businessTitle: clinic.a2p_rep_business_title ?? "Owner",
+      });
       const eu = await th.endUsers.create({
-        friendlyName: `${clinic.name} authorized rep`,
-        type: "authorized_representative_1",
-        attributes: representativeAttributes({
-          firstName: clinic.a2p_rep_first_name ?? "",
-          lastName: clinic.a2p_rep_last_name ?? "",
-          email: clinic.a2p_rep_email ?? "",
-          phone: clinic.a2p_rep_phone ?? "",
-          jobPosition: clinic.a2p_rep_business_title ?? "Owner",
-          businessTitle: clinic.a2p_rep_business_title ?? "Owner",
-        }),
+        friendlyName: representativePayload.friendlyName,
+        type: representativePayload.type,
+        attributes: representativePayload.attributes,
       });
       repEndUserSid = eu.sid;
       state.repEndUserSid = repEndUserSid;
@@ -333,10 +345,14 @@ export async function runRealA2pSubmission(
     }
     let supportingDocumentSid = str(state, "supportingDocumentSid");
     if (!supportingDocumentSid) {
+      const supportingDocumentPayload = buildSupportingDocumentPayload({
+        clinicName: clinic.name,
+        addressSid,
+      });
       const doc = await th.supportingDocuments.create({
-        friendlyName: `${clinic.name} address proof`,
-        type: "customer_profile_address",
-        attributes: { address_sids: addressSid },
+        friendlyName: supportingDocumentPayload.friendlyName,
+        type: supportingDocumentPayload.type,
+        attributes: supportingDocumentPayload.attributes,
       });
       supportingDocumentSid = doc.sid;
       state.supportingDocumentSid = supportingDocumentSid;
@@ -347,10 +363,15 @@ export async function runRealA2pSubmission(
     // ---- 4. Secondary Customer Profile ----
     let customerProfileSid = str(state, "customerProfileSid");
     if (!customerProfileSid) {
-      const cp = await th.customerProfiles.create({
-        friendlyName: `${clinic.name} A2P customer profile`,
-        email: trustHub.notificationEmail,
+      const customerProfilePayload = buildSecondaryCustomerProfileCreatePayload({
+        clinicName: clinic.name,
+        notificationEmail: trustHub.notificationEmail,
         policySid: trustHub.customerProfilePolicySid,
+      });
+      const cp = await th.customerProfiles.create({
+        friendlyName: customerProfilePayload.friendlyName,
+        email: customerProfilePayload.email,
+        policySid: customerProfilePayload.policySid,
       });
       customerProfileSid = cp.sid;
       state.customerProfileSid = customerProfileSid;
@@ -371,9 +392,11 @@ export async function runRealA2pSubmission(
     // ---- 6 + 7. evaluate + submit the Customer Profile ----
     if (state.cpSubmitted !== true) {
       const cpCtx = th.customerProfiles(customerProfileSid);
-      const evalResult = await cpCtx.customerProfilesEvaluations.create({
-        policySid: trustHub.customerProfilePolicySid,
-      });
+      const evalResult = await cpCtx.customerProfilesEvaluations.create(
+        buildCustomerProfileEvaluationPayload({
+          policySid: trustHub.customerProfilePolicySid,
+        }),
+      );
       state.customerProfileEvaluation = (evalResult.status ?? "unknown") as string;
       if ((evalResult.status ?? "").toLowerCase() !== "compliant") {
         await persist("blocked", "customer_profile_evaluation_failed", { customerProfileSid });
@@ -396,10 +419,14 @@ export async function runRealA2pSubmission(
     // ---- 8. A2P messaging profile EndUser ----
     let a2pProfileEndUserSid = str(state, "a2pProfileEndUserSid");
     if (!a2pProfileEndUserSid) {
+      const a2pProfilePayload = buildA2pMessagingProfileEndUserPayload({
+        clinicName: clinic.name,
+        companyType: brandCfg.companyType,
+      });
       const eu = await th.endUsers.create({
-        friendlyName: `${clinic.name} a2p messaging profile`,
-        type: "us_a2p_messaging_profile_information",
-        attributes: a2pProfileAttributes({ companyType: brandCfg.companyType }),
+        friendlyName: a2pProfilePayload.friendlyName,
+        type: a2pProfilePayload.type,
+        attributes: a2pProfilePayload.attributes,
       });
       a2pProfileEndUserSid = eu.sid;
       state.a2pProfileEndUserSid = a2pProfileEndUserSid;
@@ -410,10 +437,15 @@ export async function runRealA2pSubmission(
     // ---- 9. A2P Trust Product ----
     let trustProductSid = str(state, "trustProductSid");
     if (!trustProductSid) {
-      const tp = await th.trustProducts.create({
-        friendlyName: `${clinic.name} A2P trust product`,
-        email: trustHub.notificationEmail,
+      const trustProductPayload = buildA2pTrustProductCreatePayload({
+        clinicName: clinic.name,
+        notificationEmail: trustHub.notificationEmail,
         policySid: trustHub.a2pTrustProductPolicySid,
+      });
+      const tp = await th.trustProducts.create({
+        friendlyName: trustProductPayload.friendlyName,
+        email: trustProductPayload.email,
+        policySid: trustProductPayload.policySid,
       });
       trustProductSid = tp.sid;
       state.trustProductSid = trustProductSid;
@@ -434,9 +466,11 @@ export async function runRealA2pSubmission(
     // ---- 11 + 12. evaluate + submit the Trust Product ----
     if (state.tpSubmitted !== true) {
       const tpCtx = th.trustProducts(trustProductSid);
-      const evalResult = await tpCtx.trustProductsEvaluations.create({
-        policySid: trustHub.a2pTrustProductPolicySid,
-      });
+      const evalResult = await tpCtx.trustProductsEvaluations.create(
+        buildTrustProductEvaluationPayload({
+          policySid: trustHub.a2pTrustProductPolicySid,
+        }),
+      );
       state.trustProductEvaluation = (evalResult.status ?? "unknown") as string;
       if ((evalResult.status ?? "").toLowerCase() !== "compliant") {
         await persist("blocked", "trust_product_evaluation_failed", { customerProfileSid, trustProductSid });
@@ -460,11 +494,12 @@ export async function runRealA2pSubmission(
     let brandSid = str(state, "brandRegistrationSid");
     let brandStatus = str(state, "brandStatus");
     if (!brandSid) {
-      const brand = await client.messaging.v1.brandRegistrations.create({
-        customerProfileBundleSid: customerProfileSid,
-        a2PProfileBundleSid: trustProductSid,
-        brandType: brandCfg.brandType,
-      });
+      const brand = await client.messaging.v1.brandRegistrations.create(
+        buildBrandRegistrationPayload({
+          customerProfileSid,
+          trustProductSid,
+        }),
+      );
       brandSid = brand.sid;
       brandStatus = brand.status;
       state.brandRegistrationSid = brandSid;
@@ -503,15 +538,12 @@ export async function runRealA2pSubmission(
         campaignStatus = existing[0].campaignStatus ?? null;
         if (campaignSid) created.push({ key: "campaign", sid: campaignSid, reused: true });
       } else {
-        const campaign = await svc.usAppToPerson.create({
-          brandRegistrationSid: brandSid,
-          description: content.description,
-          messageFlow: content.messageFlow,
-          messageSamples: content.sampleMessages,
-          usAppToPersonUsecase: content.usecase,
-          hasEmbeddedLinks: content.hasEmbeddedLinks,
-          hasEmbeddedPhone: content.hasEmbeddedPhone,
-        });
+        const campaign = await svc.usAppToPerson.create(
+          buildCampaignCreatePayload({
+            brandRegistrationSid: brandSid,
+            campaign: content,
+          }),
+        );
         campaignSid = campaign.sid;
         campaignStatus = campaign.campaignStatus ?? null;
         created.push({ key: "campaign", sid: campaignSid, reused: false });
@@ -533,7 +565,7 @@ export async function runRealA2pSubmission(
       const pn = n.twilio_phone_number_sid;
       if (!pn || alreadyAdded.has(pn)) continue;
       try {
-        await svc.phoneNumbers.create({ phoneNumberSid: pn });
+        await svc.phoneNumbers.create(buildMessagingServiceSenderPayload({ phoneNumberSid: pn }));
         alreadyAdded.add(pn);
         created.push({ key: "messaging_service_sender", sid: pn, reused: false });
       } catch (err) {

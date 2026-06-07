@@ -156,6 +156,200 @@ function fieldsFromAttrs(attrs: Record<string, string>): A2pPayloadResource["fie
   return Object.entries(attrs).map(([k, v]) => ({ label: ATTR_LABELS[k] ?? k, value: v }));
 }
 
+function boolLabel(value: boolean): string {
+  return value ? "Yes" : "No";
+}
+
+function generatedOrSid(value: string | null | undefined): string {
+  return (value ?? "").trim() || "Generated during this submission";
+}
+
+function fieldsFromValues(
+  values: Record<string, string | boolean | null | undefined>,
+): A2pPayloadResource["fields"] {
+  return Object.entries(values).flatMap(([label, value]) => {
+    if (value == null) return [];
+    return [{
+      label,
+      value: typeof value === "boolean" ? boolLabel(value) : value,
+    }];
+  });
+}
+
+export function buildBusinessEndUserPayload(i: {
+  clinicName: string;
+  businessName: string;
+  businessType: string;
+  industry: string;
+  registrationIdentifier: string;
+  businessRegistrationNumber: string;
+  regionsOfOperation: string;
+  identity: string;
+  websiteUrl: string;
+}): {
+  friendlyName: string;
+  type: string;
+  attributes: Record<string, string>;
+} {
+  return {
+    friendlyName: `${i.clinicName} business info`,
+    type: "customer_profile_business_information",
+    attributes: businessInfoAttributes({
+      businessName: i.businessName,
+      businessType: i.businessType,
+      industry: i.industry,
+      registrationIdentifier: i.registrationIdentifier,
+      businessRegistrationNumber: i.businessRegistrationNumber,
+      regionsOfOperation: i.regionsOfOperation,
+      identity: i.identity,
+      websiteUrl: i.websiteUrl,
+    }),
+  };
+}
+
+export function buildRepresentativeEndUserPayload(i: {
+  clinicName: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  jobPosition: string;
+  businessTitle: string;
+}): {
+  friendlyName: string;
+  type: string;
+  attributes: Record<string, string>;
+} {
+  return {
+    friendlyName: `${i.clinicName} authorized rep`,
+    type: "authorized_representative_1",
+    attributes: representativeAttributes({
+      firstName: i.firstName,
+      lastName: i.lastName,
+      email: i.email,
+      phone: i.phone,
+      jobPosition: i.jobPosition,
+      businessTitle: i.businessTitle,
+    }),
+  };
+}
+
+export function buildA2pMessagingProfileEndUserPayload(i: {
+  clinicName: string;
+  companyType: string;
+}): {
+  friendlyName: string;
+  type: string;
+  attributes: Record<string, string>;
+} {
+  return {
+    friendlyName: `${i.clinicName} a2p messaging profile`,
+    type: "us_a2p_messaging_profile_information",
+    attributes: a2pProfileAttributes({ companyType: i.companyType }),
+  };
+}
+
+export function buildSupportingDocumentPayload(i: {
+  clinicName: string;
+  addressSid: string;
+}): {
+  friendlyName: string;
+  type: string;
+  attributes: Record<string, string>;
+} {
+  return {
+    friendlyName: `${i.clinicName} address proof`,
+    type: "customer_profile_address",
+    attributes: { address_sids: i.addressSid },
+  };
+}
+
+export function buildSecondaryCustomerProfileCreatePayload(i: {
+  clinicName: string;
+  notificationEmail: string;
+  policySid: string;
+}): {
+  friendlyName: string;
+  email: string;
+  policySid: string;
+} {
+  return {
+    friendlyName: `${i.clinicName} A2P customer profile`,
+    email: i.notificationEmail,
+    policySid: i.policySid,
+  };
+}
+
+export function buildCustomerProfileEvaluationPayload(i: {
+  policySid: string;
+}): { policySid: string } {
+  return { policySid: i.policySid };
+}
+
+export function buildA2pTrustProductCreatePayload(i: {
+  clinicName: string;
+  notificationEmail: string;
+  policySid: string;
+}): {
+  friendlyName: string;
+  email: string;
+  policySid: string;
+} {
+  return {
+    friendlyName: `${i.clinicName} A2P trust product`,
+    email: i.notificationEmail,
+    policySid: i.policySid,
+  };
+}
+
+export function buildTrustProductEvaluationPayload(i: {
+  policySid: string;
+}): { policySid: string } {
+  return { policySid: i.policySid };
+}
+
+export function buildBrandRegistrationPayload(i: {
+  customerProfileSid: string;
+  trustProductSid: string;
+}): {
+  customerProfileBundleSid: string;
+  a2PProfileBundleSid: string;
+} {
+  return {
+    customerProfileBundleSid: i.customerProfileSid,
+    a2PProfileBundleSid: i.trustProductSid,
+  };
+}
+
+export function buildCampaignCreatePayload(i: {
+  brandRegistrationSid: string;
+  campaign: A2pCampaignContent;
+}): {
+  brandRegistrationSid: string;
+  description: string;
+  messageFlow: string;
+  messageSamples: string[];
+  usAppToPersonUsecase: string;
+  hasEmbeddedLinks: boolean;
+  hasEmbeddedPhone: boolean;
+} {
+  return {
+    brandRegistrationSid: i.brandRegistrationSid,
+    description: i.campaign.description,
+    messageFlow: i.campaign.messageFlow,
+    messageSamples: i.campaign.sampleMessages,
+    usAppToPersonUsecase: i.campaign.usecase,
+    hasEmbeddedLinks: i.campaign.hasEmbeddedLinks,
+    hasEmbeddedPhone: i.campaign.hasEmbeddedPhone,
+  };
+}
+
+export function buildMessagingServiceSenderPayload(i: {
+  phoneNumberSid: string;
+}): { phoneNumberSid: string } {
+  return { phoneNumberSid: i.phoneNumberSid };
+}
+
 export type ProviderPayloadViewInput = {
   clinicName: string;
   // business (display): masked EIN only
@@ -179,17 +373,30 @@ export type ProviderPayloadViewInput = {
   // address
   address: A2pAddressParams;
   // bundles / brand / campaign / numbers
+  notificationEmail: string;
+  primaryCustomerProfileSid: string;
+  messagingServiceSid: string;
   customerProfilePolicySid: string;
   a2pTrustProductPolicySid: string;
-  brandType: string;
   campaign: A2pCampaignContent;
+  existingSids: {
+    businessEndUserSid: string | null;
+    repEndUserSid: string | null;
+    addressSid: string | null;
+    supportingDocumentSid: string | null;
+    customerProfileSid: string | null;
+    a2pProfileEndUserSid: string | null;
+    trustProductSid: string | null;
+    brandRegistrationSid: string | null;
+  };
   numbers: Array<{ phoneNumber: string; twilioPhoneNumberSid: string | null }>;
 };
 
 // Build the display-only "what will be submitted to Twilio" view. EIN is masked.
 // Field SETS are derived from the same builders the helper submits with.
 export function buildProviderPayloadView(i: ProviderPayloadViewInput): A2pProviderPayloadView {
-  const businessAttrs = businessInfoAttributes({
+  const businessPayload = buildBusinessEndUserPayload({
+    clinicName: i.clinicName,
     businessName: i.legalBusinessName,
     businessType: i.businessTypeMapped,
     industry: i.industry,
@@ -199,7 +406,8 @@ export function buildProviderPayloadView(i: ProviderPayloadViewInput): A2pProvid
     identity: i.identity,
     websiteUrl: i.websiteUrl,
   });
-  const repAttrs = representativeAttributes({
+  const representativePayload = buildRepresentativeEndUserPayload({
+    clinicName: i.clinicName,
     firstName: i.repFirstName,
     lastName: i.repLastName,
     email: i.repEmail,
@@ -207,7 +415,28 @@ export function buildProviderPayloadView(i: ProviderPayloadViewInput): A2pProvid
     jobPosition: i.repJobPosition,
     businessTitle: i.repBusinessTitle,
   });
-  const a2pAttrs = a2pProfileAttributes({ companyType: i.companyType });
+  const a2pProfilePayload = buildA2pMessagingProfileEndUserPayload({
+    clinicName: i.clinicName,
+    companyType: i.companyType,
+  });
+  const secondaryProfileCreate = buildSecondaryCustomerProfileCreatePayload({
+    clinicName: i.clinicName,
+    notificationEmail: i.notificationEmail,
+    policySid: i.customerProfilePolicySid,
+  });
+  const trustProductCreate = buildA2pTrustProductCreatePayload({
+    clinicName: i.clinicName,
+    notificationEmail: i.notificationEmail,
+    policySid: i.a2pTrustProductPolicySid,
+  });
+  const brandPayload = buildBrandRegistrationPayload({
+    customerProfileSid: generatedOrSid(i.existingSids.customerProfileSid),
+    trustProductSid: generatedOrSid(i.existingSids.trustProductSid),
+  });
+  const campaignPayload = buildCampaignCreatePayload({
+    brandRegistrationSid: generatedOrSid(i.existingSids.brandRegistrationSid),
+    campaign: i.campaign,
+  });
 
   const addrFields: A2pPayloadResource["fields"] = [
     { label: "Customer name", value: i.address.customerName },
@@ -220,42 +449,106 @@ export function buildProviderPayloadView(i: ProviderPayloadViewInput): A2pProvid
   ];
 
   const resources: A2pPayloadResource[] = [
-    { step: "Business information (EndUser)", fields: fieldsFromAttrs(businessAttrs) },
-    { step: "Authorized representative (EndUser)", fields: fieldsFromAttrs(repAttrs) },
-    { step: "A2P messaging profile (EndUser)", fields: fieldsFromAttrs(a2pAttrs) },
+    {
+      step: "Business information (EndUser)",
+      fields: [
+        ...fieldsFromValues({
+          "Friendly name": businessPayload.friendlyName,
+          "Resource type": businessPayload.type,
+        }),
+        ...fieldsFromAttrs(businessPayload.attributes),
+      ],
+    },
+    {
+      step: "Authorized representative (EndUser)",
+      fields: [
+        ...fieldsFromValues({
+          "Friendly name": representativePayload.friendlyName,
+          "Resource type": representativePayload.type,
+        }),
+        ...fieldsFromAttrs(representativePayload.attributes),
+      ],
+    },
+    {
+      step: "A2P messaging profile (EndUser)",
+      fields: [
+        ...fieldsFromValues({
+          "Friendly name": a2pProfilePayload.friendlyName,
+          "Resource type": a2pProfilePayload.type,
+        }),
+        ...fieldsFromAttrs(a2pProfilePayload.attributes),
+      ],
+    },
     { step: "Business address", fields: addrFields },
     {
       step: "Secondary Customer Profile",
-      fields: [
-        { label: "Friendly name", value: `${i.clinicName} A2P customer profile` },
-        { label: "Policy SID", value: i.customerProfilePolicySid },
-      ],
+      fields: fieldsFromValues({
+        "Friendly name": secondaryProfileCreate.friendlyName,
+        "Notification email": secondaryProfileCreate.email,
+        "Policy SID": secondaryProfileCreate.policySid,
+        "Business info EndUser SID": generatedOrSid(i.existingSids.businessEndUserSid),
+        "Authorized rep EndUser SID": generatedOrSid(i.existingSids.repEndUserSid),
+        "Address supporting doc SID": generatedOrSid(i.existingSids.supportingDocumentSid),
+        "Primary Customer Profile SID": i.primaryCustomerProfileSid,
+        "Evaluation policy SID": buildCustomerProfileEvaluationPayload({
+          policySid: i.customerProfilePolicySid,
+        }).policySid,
+        "Submit status": "pending-review",
+      }),
     },
     {
       step: "A2P Trust Product",
-      fields: [
-        { label: "Friendly name", value: `${i.clinicName} A2P trust product` },
-        { label: "Policy SID", value: i.a2pTrustProductPolicySid },
-      ],
+      fields: fieldsFromValues({
+        "Friendly name": trustProductCreate.friendlyName,
+        "Notification email": trustProductCreate.email,
+        "Policy SID": trustProductCreate.policySid,
+        "A2P profile EndUser SID": generatedOrSid(i.existingSids.a2pProfileEndUserSid),
+        "Secondary Customer Profile SID": generatedOrSid(i.existingSids.customerProfileSid),
+        "Evaluation policy SID": buildTrustProductEvaluationPayload({
+          policySid: i.a2pTrustProductPolicySid,
+        }).policySid,
+        "Submit status": "pending-review",
+      }),
     },
-    { step: "Brand Registration", fields: [{ label: "Brand type", value: i.brandType }] },
+    {
+      step: "Brand Registration",
+      fields: fieldsFromValues({
+        "Secondary Customer Profile SID": brandPayload.customerProfileBundleSid,
+        "A2P Trust Product SID": brandPayload.a2PProfileBundleSid,
+      }),
+    },
     {
       step: "A2P Campaign",
       fields: [
-        { label: "Use case", value: i.campaign.usecase },
-        { label: "Embedded links", value: i.campaign.hasEmbeddedLinks ? "Yes" : "No" },
-        { label: "Embedded phone", value: i.campaign.hasEmbeddedPhone ? "Yes" : "No" },
-        { label: "Description", value: i.campaign.description },
-        { label: "Opt-in / message flow", value: i.campaign.messageFlow },
-        ...i.campaign.sampleMessages.map((m, idx) => ({ label: `Sample message ${idx + 1}`, value: m })),
+        ...fieldsFromValues({
+          "Messaging Service SID": i.messagingServiceSid,
+          "Brand Registration SID": campaignPayload.brandRegistrationSid,
+          "Use case": campaignPayload.usAppToPersonUsecase,
+          "Embedded links": campaignPayload.hasEmbeddedLinks,
+          "Embedded phone": campaignPayload.hasEmbeddedPhone,
+          Description: campaignPayload.description,
+          "Opt-in / message flow": campaignPayload.messageFlow,
+        }),
+        ...campaignPayload.messageSamples.map((m, idx) => ({
+          label: `Sample message ${idx + 1}`,
+          value: m,
+        })),
       ],
     },
     {
       step: "Messaging Service senders",
-      fields: i.numbers.map((n) => ({
-        label: n.phoneNumber,
-        value: n.twilioPhoneNumberSid ?? "(missing PN SID)",
-      })),
+      fields: [
+        ...fieldsFromValues({ "Messaging Service SID": i.messagingServiceSid }),
+        ...i.numbers.map((n) => {
+          const senderPayload = buildMessagingServiceSenderPayload({
+            phoneNumberSid: n.twilioPhoneNumberSid ?? "(missing PN SID)",
+          });
+          return {
+            label: n.phoneNumber,
+            value: senderPayload.phoneNumberSid,
+          };
+        }),
+      ],
     },
   ];
 
