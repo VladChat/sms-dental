@@ -5253,6 +5253,46 @@ Validation before commit/deploy:
 - `npm run typecheck` pass.
 - `npm run build` pass.
 
+---
+
+## 2026-06-07 — Corrected Twilio platform Primary Customer Profile + safe A2P retry guard
+
+Fixed the Twilio A2P platform parent-profile wiring after confirming the prior
+configured SID was a Starter Customer Profile, not the account Primary Customer
+Profile required for per-clinic secondary profile assignment.
+
+What changed:
+
+- Corrected `config/runtime.config.ts`:
+  `a2p.trustHub.primaryCustomerProfileSid = BU668e1080d4cbf61beec1a8dac79c3353`.
+- Added a live-submit preflight that reads the configured Twilio Customer
+  Profile + policy, blocks submission before any clinic Trust Hub mutation when
+  the profile is missing, Starter, non-Primary, or not in an allowed ready
+  status, and records safe diagnostics in local provider state.
+- Added customer-profile recovery logic so stale `cpAssignmentsDone` state no
+  longer blindly skips Fairstone retry work when the old secondary profile was
+  assigned under the wrong platform bundle. Safe behavior:
+  reuse valid assignment state, re-enter assignment when the current platform
+  bundle is missing, rebuild only the stale secondary customer-profile step when
+  downstream resources do not exist yet, and block for manual review if
+  downstream Trust Product / Brand / Campaign resources already exist.
+- Updated the admin review surface to open diagnostics/history more readily for
+  blocked submissions and to show the platform-profile/recovery warnings saved in
+  provider state.
+
+Operational rule clarified:
+
+- The platform Primary Customer Profile only supports the per-clinic secondary
+  customer-profile flow.
+- Do NOT manually register an AllyExporter LLC / Missed Calls Dental brand for
+  this Dental SaaS flow. Each clinic/customer remains the Brand.
+
+Validation before commit/deploy:
+
+- `npm run typecheck` pass.
+- `npm run test:a2p` pass.
+- `npm run build` pass.
+
 Commit/push/deploy:
 
 - Implementation commit: `dc1b06b feat: add phone number removal lifecycle`.

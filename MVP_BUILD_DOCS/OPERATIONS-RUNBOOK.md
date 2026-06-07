@@ -2496,20 +2496,21 @@ stops-and-persists at any async approval point (e.g. brand vetting) with status
 (`POST /api/admin/clinics/:clinicId/a2p/status`) reads back Customer Profile /
 Trust Product / Brand status without mutating anything.
 
-Current arming status (2026-06-08): steps 1–2 are DONE — the state migration is
-applied in production and `primaryCustomerProfileSid` is set to
-`BUaeab21ee3b774f0293e17522e6a1337c` (AllyExporter LLC, the account's approved
-primary profile). `submissionMode` is still `dry_run` (NOT armed). Before flipping
-to live, resolve the open verification below.
+Current arming status (2026-06-08, corrected 2026-06-07): steps 1–2 are DONE —
+the state migration is applied in production and
+`primaryCustomerProfileSid` must point to
+`BU668e1080d4cbf61beec1a8dac79c3353` (the account's Primary Customer Profile).
+`BUaeab21ee3b774f0293e17522e6a1337c` is a Starter Customer Profile and must not
+be used as the platform parent profile for clinic secondary profiles. Before
+flipping to live, resolve the open verification below.
 
 Open verification before arming live (found via read-only discovery 2026-06-08):
 the account's Trust Hub already contains an approved A2P Trust Product on a
 DIFFERENT policy SID (`RNa282dd7f3dbef8586501ca2e045e764c`) than the configured
-`a2pTrustProductPolicySid` (`RNb0d4771c2c98518d916a3d4cd70a8f8b`), plus a draft
-"missedcallsdental.com" Customer Profile. Confirm the intended brand model —
-per-clinic brand/campaign (what `runRealA2pSubmission` builds) vs a shared
-platform brand — and that the configured policy/use-case values match the account,
-so a real submit does not create duplicate or wrong billable resources.
+`a2pTrustProductPolicySid` (`RNb0d4771c2c98518d916a3d4cd70a8f8b`). The product
+model remains per-clinic brand/campaign: the platform Primary Customer Profile
+only supports the secondary customer profile flow and must not be used to
+register an AllyExporter LLC / Missed Calls Dental A2P brand.
 
 How to ARM live mode (all four required):
 

@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".tmp-tests",
+    "rootDir": ".",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "verbatimModuleSyntax": false,
+    "incremental": false
+  },
+  "include": [
+    "tests/**/*.ts",
+    "lib/twilio/platform-customer-profile.ts",
+    "lib/twilio/a2p-recovery.ts",
+    "lib/db/sms-readiness.ts",
+    "lib/db/client.ts"
+  ]
+}

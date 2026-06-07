@@ -1,4 +1,6 @@
 import { getTwilioClient } from "./client";
+import { planCustomerProfileRecovery } from "./a2p-recovery";
+import { readConfiguredPlatformCustomerProfile } from "./platform-customer-profile";
 import {
   getA2pBrandConfig,
   getA2pTrustHubConfig,
@@ -98,6 +100,7 @@ export type RealA2pSubmissionInput = {
 
 type TrustHubEntityAssignmentList = {
   create(p: { objectSid: string }): Promise<{ sid: string }>;
+  list?(p: { limit: number }): Promise<Array<{ sid?: string | null; objectSid?: string | null; object_sid?: string | null }>>;
 };
 type TrustHubEvaluationList = {
   create(p: { policySid: string }): Promise<{ sid: string; status?: string | null }>;
@@ -133,6 +136,11 @@ type TrustHubV1 = {
   trustProducts: TrustProductsList;
   endUsers: EndUsersList;
   supportingDocuments: SupportingDocumentsList;
+  policies: {
+    (sid: string): {
+      fetch(): Promise<{ sid: string; friendlyName?: string | null; friendly_name?: string | null }>;
+    };
+  };
 };
 type AddressesList = {
   create(p: {
@@ -200,6 +208,33 @@ function safeProviderError(err: unknown): { code: string | null; message: string
   return { code: code != null ? String(code) : null, message };
 }
 
+function normalizeObjectSidList(
+  values: Array<{ objectSid?: string | null; object_sid?: string | null }>,
+): string[] {
+  return Array.from(new Set(values
+    .map((value) => value.objectSid ?? value.object_sid ?? null)
+    .filter((value): value is string => typeof value === "string" && value.length > 0)));
+}
+
+function resetCustomerProfileProgress(state: JsonObject): void {
+  delete state.customerProfileSid;
+  delete state.customerProfileEvaluation;
+  delete state.customerProfileStatus;
+  delete state.cpAssignmentsDone;
+  delete state.cpSubmitted;
+  delete state.a2pProfileEndUserSid;
+  delete state.trustProductSid;
+  delete state.trustProductEvaluation;
+  delete state.trustProductStatus;
+  delete state.tpAssignmentsDone;
+  delete state.tpSubmitted;
+  delete state.brandRegistrationSid;
+  delete state.brandStatus;
+  delete state.campaignSid;
+  delete state.campaignStatus;
+  delete state.numbersAdded;
+}
+
 // Entry point. Performs every currently-allowed step, persisting progress, and
 // returns a structured result. Never sends SMS, never enables sms_recovery.
 export async function runRealA2pSubmission(
@@ -260,6 +295,7 @@ export async function runRealA2pSubmission(
       lastErrorCode: string | null;
       lastErrorMessage: string | null;
       rejectionReason: string | null;
+      replaceProviderState: boolean;
     }> = {},
   ): Promise<void> {
     try {
@@ -268,6 +304,7 @@ export async function runRealA2pSubmission(
         status,
         submissionStep: step,
         providerStatePatch: { ...state, lastStep: step },
+        replaceProviderState: extra.replaceProviderState === true,
         targetMessagingServiceSid: targetMsSid,
         secondaryCustomerProfileSid: extra.customerProfileSid ?? str(state, "customerProfileSid"),
         customerProfileSid: extra.customerProfileSid ?? str(state, "customerProfileSid"),
@@ -336,6 +373,35 @@ export async function runRealA2pSubmission(
       requestId: clinicId,
       createdCount: created.length,
     });
+    const platformProfile = await readConfiguredPlatformCustomerProfile(
+      client,
+      trustHub.primaryCustomerProfileSid,
+    );
+    state.configuredPlatformCustomerProfileSid = trustHub.primaryCustomerProfileSid;
+    state.platformCustomerProfileFriendlyName = platformProfile.diagnostics.friendlyName;
+    state.platformCustomerProfileStatus = platformProfile.diagnostics.status;
+    state.platformCustomerProfilePolicySid = platformProfile.diagnostics.policySid;
+    state.platformCustomerProfilePolicyName = platformProfile.diagnostics.policyFriendlyName;
+    state.platformCustomerProfileKind = platformProfile.diagnostics.profileKind;
+    state.platformCustomerProfileValidatedAt = new Date().toISOString();
+    if (!platformProfile.ok) {
+      state.platformCustomerProfileValidationCode = platformProfile.code;
+      state.platformCustomerProfileValidationMessage = platformProfile.message;
+      await persist("blocked", "platform_customer_profile_preflight_failed", {
+        lastErrorCode: platformProfile.code ?? "TWILIO_PLATFORM_CUSTOMER_PROFILE_INVALID",
+        lastErrorMessage: platformProfile.message,
+      });
+      return {
+        ok: false,
+        status: "blocked",
+        step: "platform_customer_profile_preflight",
+        message: platformProfile.message ?? "Configured Twilio platform customer profile is invalid.",
+        createdResources: created,
+        providerErrors: platformProfile.message ? [platformProfile.message] : [],
+        nextAction:
+          "Fix the configured platform Primary Customer Profile, then retry the A2P submission.",
+      };
+    }
     if (!businessType || !jobPosition || !ein) {
       throw new Error("A2P provider payload is incomplete after normalization.");
     }
@@ -423,6 +489,65 @@ export async function runRealA2pSubmission(
 
     // ---- 4. Secondary Customer Profile ----
     let customerProfileSid = str(state, "customerProfileSid");
+    let customerProfileAssignedObjectSids = new Set<string>();
+    if (customerProfileSid) {
+      const cpCtx = th.customerProfiles(customerProfileSid);
+      const listAssignments = cpCtx.customerProfilesEntityAssignments.list;
+      if (typeof listAssignments !== "function" && state.cpAssignmentsDone === true) {
+        throw new Error(
+          "Could not verify existing Twilio customer profile assignments for safe retry.",
+        );
+      }
+      const assignmentList = typeof listAssignments === "function"
+        ? await listAssignments({ limit: 50 })
+        : [];
+      const assignedObjectSids = normalizeObjectSidList(assignmentList ?? []);
+      const recoveryPlan = planCustomerProfileRecovery({
+        customerProfileSid,
+        cpAssignmentsDone: state.cpAssignmentsDone === true,
+        currentPlatformCustomerProfileSid: trustHub.primaryCustomerProfileSid,
+        assignedObjectSids,
+        trustProductSid: str(state, "trustProductSid"),
+        brandRegistrationSid: str(state, "brandRegistrationSid"),
+        campaignSid: str(state, "campaignSid"),
+      });
+
+      state.customerProfileRecoveryAction = recoveryPlan.action;
+      state.customerProfileRecoveryReason = recoveryPlan.reason;
+      state.assignedPlatformCustomerProfileSid = recoveryPlan.assignedPlatformCustomerProfileSid;
+
+      if (recoveryPlan.action === "manual_review") {
+        await persist("blocked", "customer_profile_recovery_required", {
+          customerProfileSid,
+          lastErrorCode: "A2P_CUSTOMER_PROFILE_RECOVERY_REQUIRED",
+          lastErrorMessage: recoveryPlan.reason,
+        });
+        return {
+          ok: false,
+          status: "blocked",
+          step: "customer_profile_recovery",
+          message: recoveryPlan.reason,
+          createdResources: created,
+          providerErrors: [recoveryPlan.reason],
+          nextAction:
+            "Review the existing Twilio A2P resources before retrying this clinic.",
+        };
+      }
+
+      if (recoveryPlan.action === "rebuild") {
+        state.staleCustomerProfileSid = customerProfileSid;
+        resetCustomerProfileProgress(state);
+        state.customerProfileRecoveryAction = recoveryPlan.action;
+        state.customerProfileRecoveryReason = recoveryPlan.reason;
+        state.assignedPlatformCustomerProfileSid = recoveryPlan.assignedPlatformCustomerProfileSid;
+        customerProfileSid = null;
+        await persist("submitted", "customer_profile_rebuild_planned", {
+          replaceProviderState: true,
+        });
+      } else {
+        customerProfileAssignedObjectSids = new Set(assignedObjectSids);
+      }
+    }
     if (!customerProfileSid) {
       const customerProfilePayload = buildSecondaryCustomerProfileCreatePayload({
         clinicName: clinic.name,
@@ -436,17 +561,29 @@ export async function runRealA2pSubmission(
       });
       customerProfileSid = cp.sid;
       state.customerProfileSid = customerProfileSid;
+      state.assignedPlatformCustomerProfileSid = null;
       created.push({ key: "secondary_customer_profile", sid: customerProfileSid, reused: false });
       await persist("submitted", "customer_profile_created", { customerProfileSid });
     }
 
     // ---- 5. assign entities to the Customer Profile (idempotent flag) ----
-    if (state.cpAssignmentsDone !== true) {
+    const requiredCustomerProfileAssignments = [
+      businessEndUserSid,
+      repEndUserSid,
+      supportingDocumentSid,
+      trustHub.primaryCustomerProfileSid,
+    ];
+    const missingCustomerProfileAssignments = requiredCustomerProfileAssignments.filter(
+      (objectSid) => !customerProfileAssignedObjectSids.has(objectSid),
+    );
+    if (state.cpAssignmentsDone !== true || missingCustomerProfileAssignments.length > 0) {
       const cpCtx = th.customerProfiles(customerProfileSid);
-      for (const objectSid of [businessEndUserSid, repEndUserSid, supportingDocumentSid, trustHub.primaryCustomerProfileSid]) {
+      for (const objectSid of missingCustomerProfileAssignments) {
         await cpCtx.customerProfilesEntityAssignments.create({ objectSid });
+        customerProfileAssignedObjectSids.add(objectSid);
       }
       state.cpAssignmentsDone = true;
+      state.assignedPlatformCustomerProfileSid = trustHub.primaryCustomerProfileSid;
       await persist("submitted", "customer_profile_assigned", { customerProfileSid });
     }
 
@@ -465,10 +602,10 @@ export async function runRealA2pSubmission(
           ok: false,
           status: "blocked",
           step: "customer_profile_evaluation",
-          message: "The Customer Profile did not pass evaluation. Check business/representative data.",
+          message: "The Customer Profile did not pass evaluation. Review the Twilio evaluation details and platform profile wiring.",
           createdResources: created,
           providerErrors: errors,
-          nextAction: "Correct the business or representative information, then retry submission.",
+          nextAction: "Review the Twilio evaluation details, correct the blocking profile data or platform wiring, then retry submission.",
         };
       }
       await cpCtx.update({ status: "pending-review" });

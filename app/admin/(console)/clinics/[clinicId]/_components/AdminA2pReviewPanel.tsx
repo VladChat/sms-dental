@@ -438,6 +438,8 @@ function nextActionFromSubmissionStatus(status: string | null): string {
       return "Review the provider error and technical wiring details, then retry when corrected.";
     case "rejected":
       return "Operator review is required before another submission attempt.";
+    case "blocked":
+      return "Review the current blocker and internal diagnostics, then retry when the platform profile or Twilio state is corrected.";
     case "approved":
       return "Confirm sender coverage, then enable patient SMS separately when appropriate.";
     default:
@@ -562,7 +564,11 @@ export function AdminA2pReviewPanel({
   const isDryRun = auth.submissionMode === "dry_run";
   const isApproved = sub.status === "approved";
   const isRejected = sub.status === "rejected";
-  const isResume = sub.status === "pending" || sub.status === "submitted" || sub.status === "failed";
+  const isResume =
+    sub.status === "pending" ||
+    sub.status === "submitted" ||
+    sub.status === "failed" ||
+    sub.status === "blocked";
   const hasPreflightErrors = hasValidationErrors(preflightValidations);
   const primaryPreflightError = preflightValidations[0] ?? null;
   const canSubmitNow =
@@ -587,14 +593,21 @@ export function AdminA2pReviewPanel({
             ? auth.liveSubmitBlockedReason
             : null;
 
-  const technicalOpen = sub.status === "failed" && Boolean(sub.lastErrorCode || sub.lastErrorMessage);
+  const technicalOpen =
+    (sub.status === "failed" || sub.status === "blocked") &&
+    Boolean(sub.lastErrorCode || sub.lastErrorMessage);
   const diagnosticsOpen =
     (!canSubmitNow && !isApproved) ||
     sub.status === "failed" ||
+    sub.status === "blocked" ||
     sub.status === "rejected" ||
     !pkg.readinessAvailable;
   const historyOpen =
-    sub.status === "pending" || sub.status === "submitted" || sub.status === "failed" || sub.status === "rejected";
+    sub.status === "pending" ||
+    sub.status === "submitted" ||
+    sub.status === "failed" ||
+    sub.status === "blocked" ||
+    sub.status === "rejected";
   const surfaceSync = shouldSurfaceReadinessSync(pkg);
 
   return (

@@ -165,6 +165,33 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     const v = ps[key];
     return typeof v === "string" && v.length > 0 ? v : null;
   };
+  const platformValidationMessage = psStr("platformCustomerProfileValidationMessage");
+  if (platformValidationMessage) {
+    warnings.push(platformValidationMessage);
+  }
+  const platformFriendlyName = psStr("platformCustomerProfileFriendlyName");
+  const platformStatus = psStr("platformCustomerProfileStatus");
+  const platformKind = psStr("platformCustomerProfileKind");
+  const platformPolicyName = psStr("platformCustomerProfilePolicyName");
+  if (platformValidationMessage && (platformFriendlyName || platformStatus || platformKind || platformPolicyName)) {
+    warnings.push(
+      [
+        `Platform profile diagnostics: SID ${trustHub.primaryCustomerProfileSid}`,
+        platformFriendlyName ? `name ${platformFriendlyName}` : null,
+        platformStatus ? `status ${platformStatus}` : null,
+        platformKind ? `kind ${platformKind}` : null,
+        platformPolicyName ? `policy ${platformPolicyName}` : null,
+      ].filter(Boolean).join(" · "),
+    );
+  }
+  const recoveryAction = psStr("customerProfileRecoveryAction");
+  const recoveryReason = psStr("customerProfileRecoveryReason");
+  if (recoveryAction === "rebuild" && recoveryReason) {
+    warnings.push(`${recoveryReason} The next live submit will rebuild the secondary Customer Profile before retrying.`);
+  }
+  if (recoveryAction === "manual_review" && recoveryReason) {
+    warnings.push(recoveryReason);
+  }
   const submission = {
     trackingAvailable: submissionState.available,
     status: record?.status ?? null,

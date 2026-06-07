@@ -190,6 +190,9 @@ export type A2pProgressInput = {
   submissionStep?: string | null;
   // Merged into provider_state (jsonb ||). Must be redacted (no full EIN/secrets).
   providerStatePatch?: JsonObject;
+  // Replaces provider_state entirely. Use only for controlled recovery when
+  // stale keys must be dropped before retry.
+  replaceProviderState?: boolean;
   targetMessagingServiceSid?: string | null;
   customerProfileSid?: string | null;
   secondaryCustomerProfileSid?: string | null;
@@ -217,6 +220,9 @@ export async function upsertA2pSubmissionProgress(
   const sql = getDb();
   const patch = input.providerStatePatch ?? {};
   const sel = input.selectedPhoneNumbers ?? null;
+  const providerStateUpdate = input.replaceProviderState
+    ? sql`${sql.json(patch)}`
+    : sql`public.clinic_a2p_submissions.provider_state || ${sql.json(patch)}`;
   const rows = await sql<SubmissionRow[]>`
     insert into public.clinic_a2p_submissions
       (clinic_id, status, submission_mode, submission_step, provider_state,
@@ -242,7 +248,7 @@ export async function upsertA2pSubmissionProgress(
       status = coalesce(${input.status ?? null}, public.clinic_a2p_submissions.status),
       submission_mode = 'live',
       submission_step = coalesce(${input.submissionStep ?? null}, public.clinic_a2p_submissions.submission_step),
-      provider_state = public.clinic_a2p_submissions.provider_state || ${sql.json(patch)},
+      provider_state = ${providerStateUpdate},
       target_messaging_service_sid = coalesce(${input.targetMessagingServiceSid ?? null}, public.clinic_a2p_submissions.target_messaging_service_sid),
       selected_phone_numbers = ${sel ? sql.json(sel) : sql`public.clinic_a2p_submissions.selected_phone_numbers`},
       twilio_customer_profile_sid = coalesce(${input.customerProfileSid ?? null}, public.clinic_a2p_submissions.twilio_customer_profile_sid),
