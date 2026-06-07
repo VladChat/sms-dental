@@ -525,24 +525,29 @@ function RemoveNumberDialog({
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "grid", gap: "var(--space-3)" }}>
-          <h3 id={titleId} className="t-h4">Remove number</h3>
-          <p className="t-h4" style={{ margin: 0, color: "var(--error-text)" }}>
-            This number will stop working immediately.
-          </p>
+        <h3 id={titleId} className="t-h4">Remove number</h3>
+
+        {/* acct-consent structure mirrored with error tokens for destructive intent */}
+        <div style={{
+          display: "grid",
+          gap: "var(--space-3)",
+          padding: "var(--space-4)",
+          border: "1px solid var(--error-border)",
+          borderLeft: "3px solid var(--error)",
+          borderRadius: "var(--r-md)",
+          background: "var(--error-bg)",
+        }}>
           <div style={{ display: "grid", gap: "var(--space-1)" }}>
-            <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
-              Billing updates next cycle.
+            <p className="t-body" style={{ margin: 0, fontWeight: 700, color: "var(--error-text)" }}>
+              This number will stop working immediately.
             </p>
+            <p className="t-small" style={{ margin: 0 }}>Billing updates next cycle.</p>
             {permanentRemovalAt && (
-              <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+              <p className="t-small" style={{ margin: 0 }}>
                 Restore available until {formatShortDate(permanentRemovalAt)}.
               </p>
             )}
           </div>
-        </div>
-
-        <div style={{ display: "grid", gap: "var(--space-3)", paddingTop: "var(--space-2)" }}>
           <label className="check">
             <input
               type="checkbox"
@@ -552,6 +557,9 @@ function RemoveNumberDialog({
             />
             <span>I understand and want to remove this number.</span>
           </label>
+        </div>
+
+        <div style={{ display: "grid", gap: "var(--space-3)" }}>
           {error && (
             <div className="alert alert-error" role="alert" aria-live="polite">
               <span>{error}</span>

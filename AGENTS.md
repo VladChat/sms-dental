@@ -193,6 +193,17 @@ Never write secrets, passwords, full database URLs with passwords, API keys, tok
 - Never add fake placeholder secrets such as `local-dev-secret-change-later`.
 - `INTERNAL_ADMIN_SECRET` is intentionally removed from MVP and must not be reintroduced unless a real internal/admin auth design is explicitly requested and documented.
 
+## Destructive Confirmation Modal Rule (Project-Wide)
+
+Destructive confirmation modals with consent checkboxes must reuse the existing standardized confirmation/authorization pattern. Do not create one-off modal layouts.
+
+- Use the `acct-modal-backdrop` + `acct-modal` shell for any modal overlay.
+- Place consequence content inside a tinted panel that mirrors the `acct-consent` class structure: `display:grid`, `gap`, `padding`, `border`, `border-left` accent, `border-radius`, `background`.
+- For destructive actions use error tokens (`--error`, `--error-border`, `--error-bg`, `--error-text`) on the panel. For informational/purchase actions use info tokens (`--info`, `--info-border`, `--info-bg`, `--info-text`).
+- The primary consequence message must be visually dominant inside the standard confirmation surface — not as loose standalone red text outside a panel.
+- Integrate the consent checkbox inside the tinted panel, below the consequence text.
+- Place the primary action button (full-width, `btn-block`) below the panel. For destructive actions use `btn-danger`. Place the secondary cancel action below the primary button as a `btn-ghost`.
+
 ## Project Structure Rules
 
 - Keep the public website in `docs/`.
