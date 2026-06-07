@@ -20,7 +20,8 @@ export type A2pSubmissionStatus =
   | "failed"
   | "blocked";
 
-export type A2pSubmissionMode = "disabled" | "dry_run" | "live";
+export type A2pSubmissionMode = "disabled" | "dry_run" | "mock" | "live";
+export type A2pStoredSubmissionMode = "dry_run" | "mock" | "live";
 
 // JSON-safe value types for jsonb payloads (no `unknown`, no Date).
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -98,6 +99,15 @@ export type A2pSubmissionInfo = {
   brandFailureCode: string | null;
 };
 
+export type A2pTrackedSubmission = {
+  mode: A2pStoredSubmissionMode;
+  title: string;
+  exists: boolean;
+  submission: A2pSubmissionInfo;
+  mock: boolean;
+  nextAction: string | null;
+};
+
 // One Twilio resource the real submit will create (or reuse if already present).
 export type A2pPlannedResource = {
   key: string;
@@ -120,6 +130,15 @@ export type A2pIncludedSender = {
 
 export type A2pIncludedSendersView = {
   numbers: A2pIncludedSender[];
+};
+
+export type A2pModeOption = {
+  mode: A2pStoredSubmissionMode;
+  label: string;
+  helper: string;
+  available: boolean;
+  disabledReason: string | null;
+  recommended: boolean;
 };
 
 export type A2pReviewBusiness = {
@@ -156,6 +175,10 @@ export type A2pReviewClinicReadiness = {
 
 export type A2pAuthorizationState = {
   submissionMode: A2pSubmissionMode;
+  defaultMode: A2pSubmissionMode;
+  modeOptions: A2pModeOption[];
+  mockConfigured: boolean;
+  mockMessagingServiceSid: string | null;
   realSubmissionEnabled: boolean;
   liveSubmitArmed: boolean;
   liveSubmitBlockedReason: string | null;
@@ -214,6 +237,10 @@ export type A2pReviewPackage = {
   // Minimal provider payload — exactly what will be submitted to Twilio.
   providerPayload: A2pProviderPayloadView;
   includedSenders: A2pIncludedSendersView;
+  submissions: {
+    live: A2pTrackedSubmission;
+    mock: A2pTrackedSubmission;
+  };
   authorizationState: A2pAuthorizationState;
   internalDiagnostics: A2pInternalDiagnostics;
 };

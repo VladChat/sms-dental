@@ -306,14 +306,22 @@ export function buildTrustProductEvaluationPayload(i: {
 export function buildBrandRegistrationPayload(i: {
   customerProfileSid: string;
   trustProductSid: string;
+  mock?: boolean;
 }): {
   customerProfileBundleSid: string;
   a2PProfileBundleSid: string;
+  mock?: boolean;
 } {
-  return {
+  const payload: {
+    customerProfileBundleSid: string;
+    a2PProfileBundleSid: string;
+    mock?: boolean;
+  } = {
     customerProfileBundleSid: i.customerProfileSid,
     a2PProfileBundleSid: i.trustProductSid,
   };
+  if (i.mock === true) payload.mock = true;
+  return payload;
 }
 
 export function buildCampaignCreatePayload(i: {

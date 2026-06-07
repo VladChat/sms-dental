@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 
 import {
   jsonError,
@@ -8,13 +9,19 @@ import {
 } from "@/lib/http/responses";
 import { resolvePlatformAdmin } from "@/lib/auth/platform-admin";
 import { recordAdminAuditEvent } from "@/lib/db/admin/audit";
+import { getA2pSubmissionTrackingCapabilities } from "@/lib/db/a2p-submissions";
 import { readA2pProviderStatus } from "@/lib/twilio/a2p-submission";
+import type { A2pStoredSubmissionMode } from "@/lib/a2p/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+const StatusRequestSchema = z.object({
+  submissionMode: z.enum(["mock", "live"]),
+});
 
 // POST /api/admin/clinics/[clinicId]/a2p/status
 //
@@ -33,12 +40,26 @@ export async function POST(
 
   const { clinicId } = await ctx.params;
   if (!UUID_RE.test(clinicId)) return jsonError(404, "not_found", "Clinic not found.");
+  const body = await req.json().catch(() => ({}));
+  const parsedBody = StatusRequestSchema.safeParse(body);
+  if (!parsedBody.success) {
+    return jsonError(400, "invalid_request", "Choose whether to refresh live or mock provider status.");
+  }
+  const submissionMode = parsedBody.data.submissionMode as A2pStoredSubmissionMode;
+  const tracking = await getA2pSubmissionTrackingCapabilities();
+  if (!tracking.available || !tracking.modeSeparated) {
+    return jsonError(
+      409,
+      "tracking_unavailable",
+      "Apply migration 20260611000100_a2p_submission_modes.sql before refreshing live or mock A2P provider status.",
+    );
+  }
 
   let statuses: Record<string, string> = {};
   let brandFailureReason: string | null = null;
   let brandFailureCode: string | null = null;
   try {
-    const res = await readA2pProviderStatus(clinicId);
+    const res = await readA2pProviderStatus(clinicId, submissionMode);
     statuses = res.statuses;
     brandFailureReason = res.brandFailureReason;
     brandFailureCode = res.brandFailureCode;
@@ -61,11 +82,12 @@ export async function POST(
       customer_profile: statuses.customerProfile ?? "n/a",
       trust_product: statuses.trustProduct ?? "n/a",
       brand: statuses.brand ?? "n/a",
+      campaign: statuses.campaign ?? "n/a",
       brandFailureReason: brandFailureReason ?? null,
       brandFailureCode: brandFailureCode ?? null,
     },
-    metadata: { authSource: admin.source, mode: "read_only" },
+    metadata: { authSource: admin.source, mode: "read_only", submissionMode },
   }).catch(() => {});
 
-  return jsonOk({ ok: true, statuses, brandFailureReason, brandFailureCode });
+  return jsonOk({ ok: true, submissionMode, statuses, brandFailureReason, brandFailureCode });
 }

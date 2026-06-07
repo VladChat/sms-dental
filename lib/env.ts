@@ -296,11 +296,11 @@ export function isOwnerTestSetupLinkFallbackEnabled(): boolean {
 // Platform-admin A2P/10DLC review/submission mode from committed runtime config.
 // Never throws — defaults to "disabled" if the value is unknown. The config
 // default is "dry_run" (review-only, no Twilio mutation).
-export type A2pSubmissionMode = "disabled" | "dry_run" | "live";
+export type A2pSubmissionMode = "disabled" | "dry_run" | "mock" | "live";
 
 export function getA2pSubmissionMode(): A2pSubmissionMode {
   const mode = runtimeConfig.a2p?.submissionMode;
-  return mode === "dry_run" || mode === "live" ? mode : "disabled";
+  return mode === "dry_run" || mode === "mock" || mode === "live" ? mode : "disabled";
 }
 
 // Whether REAL Twilio A2P submission is enabled at the platform level. Config
@@ -337,6 +337,11 @@ export function getA2pTrustHubConfig(): A2pTrustHubConfig {
     primaryCustomerProfileSid: (t?.primaryCustomerProfileSid ?? "").trim(),
     notificationEmail: t?.notificationEmail ?? runtimeConfig.app.supportEmail,
   };
+}
+
+export function getA2pMockMessagingServiceSid(): string | null {
+  const sid = (runtimeConfig.a2p?.mockMessagingServiceSid ?? "").trim();
+  return sid.length > 0 ? sid : null;
 }
 
 export type A2pBrandConfig = {

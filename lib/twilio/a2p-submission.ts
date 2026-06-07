@@ -17,6 +17,7 @@ export { isBrandApprovedStatus, isBrandPendingStatus, isBrandTerminalFailureStat
 
 import {
   getA2pBrandConfig,
+  getA2pMockMessagingServiceSid,
   getA2pTrustHubConfig,
   getAppDomainsSafe,
   getTwilioMessagingEnv,
@@ -27,6 +28,7 @@ import { findClinicById } from "../db/clinics";
 import { listActiveSmsNumbersForClinic } from "../db/sms-readiness";
 import {
   getA2pSubmissionState,
+  type A2pSubmissionRecord,
   upsertA2pSubmissionProgress,
 } from "../db/a2p-submissions";
 import { buildCampaignContent } from "../a2p/campaign-content";
@@ -49,7 +51,11 @@ import {
   buildSupportingDocumentPayload,
   buildTrustProductEvaluationPayload,
 } from "../a2p/provider-payload";
-import type { A2pSubmissionStatus, JsonObject } from "../a2p/types";
+import type {
+  A2pStoredSubmissionMode,
+  A2pSubmissionStatus,
+  JsonObject,
+} from "../a2p/types";
 import { logger } from "../logging/logger";
 
 // Real Twilio A2P/10DLC submission, performed ONLY when a platform admin clicks
@@ -108,6 +114,11 @@ export type RealA2pSubmissionInput = {
   clinicId: string;
   adminUserId: string | null;
   adminEmail: string;
+};
+
+export type RunProviderA2pSubmissionInput = RealA2pSubmissionInput & {
+  submissionMode: "mock" | "live";
+  allowCampaignCreate: boolean;
 };
 
 // ---------- isolated typed Twilio surfaces (only what we call) ----------
@@ -174,6 +185,7 @@ interface BrandRegistrationsList {
     customerProfileBundleSid: string;
     a2PProfileBundleSid: string;
     brandType?: string;
+    mock?: boolean;
   }): Promise<{ sid: string; status: string }>;
 }
 type UsAppToPersonList = {
@@ -185,8 +197,8 @@ type UsAppToPersonList = {
     usAppToPersonUsecase: string;
     hasEmbeddedLinks: boolean;
     hasEmbeddedPhone: boolean;
-  }): Promise<{ sid: string; campaignStatus?: string | null }>;
-  list(p: { limit: number }): Promise<Array<{ sid?: string | null; campaignStatus?: string | null }>>;
+  }): Promise<{ sid: string; campaignStatus?: string | null; mock?: boolean | null }>;
+  list(p: { limit: number }): Promise<Array<{ sid?: string | null; campaignStatus?: string | null; mock?: boolean | null }>>;
 };
 type ServicePhoneNumberList = {
   create(p: { phoneNumberSid: string }): Promise<{ sid: string }>;
@@ -249,15 +261,41 @@ function resetCustomerProfileProgress(state: JsonObject): void {
   delete state.numbersAdded;
 }
 
+function getSubmissionRecordState(record: A2pSubmissionRecord | null): JsonObject {
+  return { ...(record?.providerState ?? {}) };
+}
+
 // Entry point. Performs every currently-allowed step, persisting progress, and
 // returns a structured result. Never sends SMS, never enables sms_recovery.
 export async function runRealA2pSubmission(
+  input: RealA2pSubmissionInput & { allowCampaignCreate: boolean },
+): Promise<A2pSubmissionResult> {
+  return runProviderA2pSubmission({
+    ...input,
+    submissionMode: "live",
+    allowCampaignCreate: input.allowCampaignCreate,
+  });
+}
+
+export async function runMockA2pSubmission(
   input: RealA2pSubmissionInput,
 ): Promise<A2pSubmissionResult> {
-  const { clinicId, adminUserId, adminEmail } = input;
+  return runProviderA2pSubmission({
+    ...input,
+    submissionMode: "mock",
+    allowCampaignCreate: true,
+  });
+}
+
+async function runProviderA2pSubmission(
+  input: RunProviderA2pSubmissionInput,
+): Promise<A2pSubmissionResult> {
+  const { clinicId, adminUserId, adminEmail, submissionMode, allowCampaignCreate } = input;
+  const isMock = submissionMode === "mock";
+  const isLive = submissionMode === "live";
 
   // Hard gate: live mode + per-clinic allowlist + configured primary profile.
-  if (!isClinicAllowedForLiveA2pSubmit(clinicId)) {
+  if (isLive && !isClinicAllowedForLiveA2pSubmit(clinicId)) {
     throw new A2pSubmissionDisabledError(
       "Real A2P submission is not armed for this clinic (live mode + allowlist required).",
     );
@@ -275,7 +313,14 @@ export async function runRealA2pSubmission(
   const brandCfg = getA2pBrandConfig();
   // Target Messaging Service from committed config (the service the campaign is
   // linked to and the clinic's numbers are added to as senders).
-  const targetMsSid = getTwilioMessagingEnv().TWILIO_MESSAGING_SERVICE_SID;
+  const targetMsSid = isMock
+    ? getA2pMockMessagingServiceSid()
+    : getTwilioMessagingEnv().TWILIO_MESSAGING_SERVICE_SID;
+  if (!targetMsSid) {
+    throw new A2pSubmissionDisabledError(
+      "Mock A2P requires runtimeConfig.a2p.mockMessagingServiceSid configured to an empty Messaging Service without senders.",
+    );
+  }
 
   // A2P 10DLC applies to LOCAL numbers only. Toll-free numbers use toll-free
   // verification and must never be added as senders on the local A2P campaign.
@@ -289,8 +334,11 @@ export async function runRealA2pSubmission(
   const businessPageUrl = appBaseUrl && clinic.slug ? `${appBaseUrl}/business/${clinic.slug}` : "";
 
   // Load prior progress (idempotent resume).
-  const { record } = await getA2pSubmissionState(clinicId);
-  const state: JsonObject = { ...(record?.providerState ?? {}) };
+  const { record } = await getA2pSubmissionState(clinicId, submissionMode);
+  const state: JsonObject = getSubmissionRecordState(record);
+  state.mode = submissionMode;
+  state.mock = isMock;
+  state.targetMessagingServiceSid = targetMsSid;
 
   const created: A2pCreatedResource[] = [];
   const errors: string[] = [];
@@ -315,6 +363,7 @@ export async function runRealA2pSubmission(
     try {
       await upsertA2pSubmissionProgress({
         clinicId,
+        submissionMode,
         status,
         submissionStep: step,
         providerStatePatch: { ...state, lastStep: step },
@@ -341,7 +390,7 @@ export async function runRealA2pSubmission(
       logger.error("a2p.submit.persist_failed", {
         clinicId,
         step,
-        submissionMode: "live",
+        submissionMode,
         requestId: clinicId,
         createdCount: created.length,
         requires_recovery: created.length > 0,
@@ -362,7 +411,7 @@ export async function runRealA2pSubmission(
     logger.error("a2p.submit.step_failed", {
       clinicId,
       step,
-      submissionMode: "live",
+      submissionMode,
       requestId: clinicId,
       safeErrorMessage: safe.message,
       twilioErrorCode: safe.code,
@@ -383,7 +432,7 @@ export async function runRealA2pSubmission(
     logger.info("a2p.submit.provider_call_started", {
       clinicId,
       step: "provider_call",
-      submissionMode: "live",
+      submissionMode,
       requestId: clinicId,
       createdCount: created.length,
     });
@@ -720,16 +769,22 @@ export async function runRealA2pSubmission(
     let brandFailureReason: string | null = null;
     let brandFailureCode: string | null = null;
     if (!brandSid) {
+      const brandPayload = buildBrandRegistrationPayload({
+        customerProfileSid,
+        trustProductSid,
+        mock: isMock,
+      });
+      if (isMock && brandPayload.mock !== true) {
+        throw new Error("Mock A2P guard failed: brand registration payload is missing mock:true.");
+      }
       const brand = await client.messaging.v1.brandRegistrations.create(
-        buildBrandRegistrationPayload({
-          customerProfileSid,
-          trustProductSid,
-        }),
+        brandPayload,
       );
       brandSid = brand.sid;
       brandStatus = brand.status;
       state.brandRegistrationSid = brandSid;
       state.brandStatus = brandStatus;
+       state.mock = isMock;
       created.push({ key: "brand_registration", sid: brandSid, reused: false });
       await persist("pending", "brand_registration_created", { customerProfileSid, trustProductSid, brandRegistrationSid: brandSid });
     } else {
@@ -783,10 +838,32 @@ export async function runRealA2pSubmission(
         ok: true,
         status: "pending",
         step: "awaiting_brand_approval",
-        message: `Brand registration status is ${brandStatus ?? "PENDING"}. Twilio vetting is asynchronous.`,
+        message: isMock
+          ? `Mock Brand status is ${brandStatus ?? "PENDING"}.`
+          : `Brand registration status is ${brandStatus ?? "PENDING"}. Twilio vetting is asynchronous.`,
         createdResources: created,
         providerErrors: errors,
-        nextAction: "Run the read-only A2P status refresh later. Once the brand is APPROVED, click Submit again to create the campaign and add numbers.",
+        nextAction: isMock
+          ? "Refresh mock provider status later to continue the mock test attempt."
+          : "Run the read-only A2P status refresh later. Once the brand is APPROVED, create the live Campaign with the separate explicit action.",
+      };
+    }
+
+    if (isLive && !allowCampaignCreate) {
+      state.liveCampaignCreationRequired = true;
+      await persist("pending", "awaiting_live_campaign_confirmation", {
+        customerProfileSid,
+        trustProductSid,
+        brandRegistrationSid: brandSid,
+      });
+      return {
+        ok: true,
+        status: "pending",
+        step: "awaiting_live_campaign_confirmation",
+        message: "Brand approved. Live Campaign creation is a separate explicit step.",
+        createdResources: created,
+        providerErrors: errors,
+        nextAction: "Use the explicit Create live A2P Campaign action when you are ready to accept recurring Campaign fees.",
       };
     }
 
@@ -811,6 +888,7 @@ export async function runRealA2pSubmission(
         );
         campaignSid = campaign.sid;
         campaignStatus = campaign.campaignStatus ?? null;
+        state.mockCampaign = isMock;
         created.push({ key: "campaign", sid: campaignSid, reused: false });
       }
       state.campaignSid = campaignSid;
@@ -818,26 +896,28 @@ export async function runRealA2pSubmission(
       await persist("pending", "campaign_created", { customerProfileSid, trustProductSid, brandRegistrationSid: brandSid, campaignSid });
     }
 
-    // ---- 15. add active numbers as Messaging Service senders ----
-    const alreadyAdded = new Set(
-      Array.isArray(state.numbersAdded) ? (state.numbersAdded as unknown[]).filter((x): x is string => typeof x === "string") : [],
-    );
-    const existingSenders = await svc.phoneNumbers.list({ limit: 1000 }).catch(() => []);
-    for (const sid of existingSenders) {
-      if (sid.phoneNumberSid) alreadyAdded.add(sid.phoneNumberSid);
-    }
-    for (const n of activeNumbers) {
-      const pn = n.twilio_phone_number_sid;
-      if (!pn || alreadyAdded.has(pn)) continue;
-      try {
-        await svc.phoneNumbers.create(buildMessagingServiceSenderPayload({ phoneNumberSid: pn }));
-        alreadyAdded.add(pn);
-        created.push({ key: "messaging_service_sender", sid: pn, reused: false });
-      } catch (err) {
-        errors.push(`add_sender ${pn}: ${err instanceof Error ? err.message.slice(0, 200) : "error"}`);
+    // ---- 15. add active numbers as Messaging Service senders (live only) ----
+    if (!isMock) {
+      const alreadyAdded = new Set(
+        Array.isArray(state.numbersAdded) ? (state.numbersAdded as unknown[]).filter((x): x is string => typeof x === "string") : [],
+      );
+      const existingSenders = await svc.phoneNumbers.list({ limit: 1000 }).catch(() => []);
+      for (const sid of existingSenders) {
+        if (sid.phoneNumberSid) alreadyAdded.add(sid.phoneNumberSid);
       }
+      for (const n of activeNumbers) {
+        const pn = n.twilio_phone_number_sid;
+        if (!pn || alreadyAdded.has(pn)) continue;
+        try {
+          await svc.phoneNumbers.create(buildMessagingServiceSenderPayload({ phoneNumberSid: pn }));
+          alreadyAdded.add(pn);
+          created.push({ key: "messaging_service_sender", sid: pn, reused: false });
+        } catch (err) {
+          errors.push(`add_sender ${pn}: ${err instanceof Error ? err.message.slice(0, 200) : "error"}`);
+        }
+      }
+      state.numbersAdded = Array.from(alreadyAdded);
     }
-    state.numbersAdded = Array.from(alreadyAdded);
 
     const campaignApproved = (campaignStatus ?? "").toUpperCase() === "VERIFIED" || (campaignStatus ?? "").toUpperCase() === "APPROVED";
     const finalStatus: A2pSubmissionStatus = campaignApproved ? "approved" : "pending";
@@ -852,20 +932,25 @@ export async function runRealA2pSubmission(
       ok: true,
       status: finalStatus,
       step: campaignApproved ? "completed" : "awaiting_campaign_approval",
-      message: campaignApproved
-        ? "Brand approved and campaign active. Run the read-only readiness sync to confirm per-number coverage."
-        : `Campaign created (status ${campaignStatus ?? "PENDING"}). Numbers will become covered once the campaign is approved.`,
+      message: isMock
+        ? "Mock Campaign created. This does not authorize real SMS traffic."
+        : campaignApproved
+          ? "Brand approved and campaign active. Run the read-only readiness sync to confirm per-number coverage."
+          : `Campaign created (status ${campaignStatus ?? "PENDING"}). Numbers will become covered once the campaign is approved.`,
       createdResources: created,
       providerErrors: errors,
-      nextAction: campaignApproved
-        ? "Run the read-only readiness sync; confirm production_safe per number before enabling SMS."
-        : "Run the read-only A2P status refresh later to track campaign approval.",
+      nextAction: isMock
+        ? "Refresh mock provider status if needed. Mock approval does not enable real SMS sending."
+        : campaignApproved
+          ? "Run the read-only readiness sync; confirm production_safe per number before enabling SMS."
+          : "Run the read-only A2P status refresh later to track campaign approval.",
     };
   } catch (err) {
     const code = (err as { code?: string | number })?.code;
     const result = fail(str(state, "lastStep") ?? "provider_call", err);
     await upsertA2pSubmissionProgress({
       clinicId,
+      submissionMode,
       status: "failed",
       submissionStep: result.step,
       providerStatePatch: { ...state },
@@ -881,13 +966,16 @@ export async function runRealA2pSubmission(
 // Read-only provider status refresh. Fetches the stored Customer Profile, Trust
 // Product, Brand, and Campaign by SID and updates local status only. Creates
 // nothing and mutates no provider state. Safe to run any time.
-export async function readA2pProviderStatus(clinicId: string): Promise<{
+export async function readA2pProviderStatus(
+  clinicId: string,
+  submissionMode: A2pStoredSubmissionMode,
+): Promise<{
   ok: boolean;
   statuses: Record<string, string>;
   brandFailureReason: string | null;
   brandFailureCode: string | null;
 }> {
-  const { record } = await getA2pSubmissionState(clinicId);
+  const { record } = await getA2pSubmissionState(clinicId, submissionMode);
   if (!record) return { ok: false, statuses: {}, brandFailureReason: null, brandFailureCode: null };
   const client = getClient();
   const statuses: Record<string, string> = {};
@@ -942,6 +1030,18 @@ export async function readA2pProviderStatus(clinicId: string): Promise<{
       }
     }
   });
+  if (record.twilioCampaignSid && record.twilioMessagingServiceSid) {
+    try {
+      const campaigns = await client.messaging.v1.services(record.twilioMessagingServiceSid).usAppToPerson.list({ limit: 1000 });
+      const campaign = campaigns.find((item) => item.sid === record.twilioCampaignSid) ?? null;
+      if (campaign?.campaignStatus) {
+        statuses.campaign = campaign.campaignStatus;
+        patch.campaignStatus = campaign.campaignStatus;
+      }
+    } catch {
+      // read-only; ignore campaign lookup failures
+    }
+  }
 
   // Apply patch
   if (Object.keys(patch).length > 0) {
@@ -949,6 +1049,7 @@ export async function readA2pProviderStatus(clinicId: string): Promise<{
     delete patch._overrideStatus;
     await upsertA2pSubmissionProgress({
       clinicId,
+      submissionMode,
       status: statusOverride || undefined,
       providerStatePatch: patch,
       lastStatusSyncedAt: new Date(),

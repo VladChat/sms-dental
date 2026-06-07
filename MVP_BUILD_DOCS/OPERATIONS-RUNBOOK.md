@@ -2731,3 +2731,82 @@ Manual verification:
    active and next-cycle billing returns to the active-number quantity.
 5. Do not manually release Twilio numbers except as an explicit operator
    reconciliation task.
+
+---
+
+## Mock A2P + separated submission modes — operate & verify (2026-06-07)
+
+The admin A2P review flow now has three explicit operator modes:
+
+- `Dry run` — records review only. No Twilio mutation.
+- `Mock A2P` — creates mock Twilio A2P resources only.
+- `Live A2P` — real billable Twilio/TCR vetting.
+
+Safety rules:
+
+- Keep live and mock attempts separate in local state. The schema target is one
+  row per `(clinic_id, submission_mode)` in `clinic_a2p_submissions`.
+- Do not overwrite or delete an existing failed live Brand just to test mock
+  mode.
+- Mock Brand creation must send `mock: true` on Twilio Brand Registration.
+- Mock Campaigns must use a separate empty Messaging Service with no senders.
+- Never attach real clinic phone numbers to the mock Messaging Service or mock
+  Campaign.
+- Mock approval never enables patient SMS or `sms_recovery_enabled`.
+- Live Brand approval does not auto-create a live Campaign anymore. Live
+  Campaign creation is a separate explicit admin action with its own recurring
+  fee confirmation.
+
+Required config:
+
+- `config/runtime.config.ts` → `runtimeConfig.a2p.submissionMode`
+- `config/runtime.config.ts` → `runtimeConfig.a2p.mockMessagingServiceSid`
+
+Required DB migration before using the new workflow:
+
+- `supabase/migrations/20260611000100_a2p_submission_modes.sql`
+
+What that migration does:
+
+- expands `submission_mode` to allow `mock`
+- replaces the old clinic-only uniqueness with
+  `clinic_a2p_submissions_clinic_mode_unique`
+- allows separate `dry_run`, `mock`, and `live` rows for the same clinic
+
+Fail-closed behavior:
+
+- If `clinic_a2p_submissions_clinic_mode_unique` is not present, the admin A2P
+  UI disables the mode actions and instructs the operator to apply migration
+  `20260611000100_a2p_submission_modes.sql`.
+- The mode-specific provider-status refresh route also refuses until that
+  migration is applied.
+
+Read-only verification before enabling Mock A2P in production:
+
+1. Query the DB and confirm the new unique constraint exists:
+
+```sql
+select conname
+from pg_constraint
+where conrelid = 'public.clinic_a2p_submissions'::regclass
+  and conname in (
+    'clinic_a2p_submissions_clinic_unique',
+    'clinic_a2p_submissions_clinic_mode_unique'
+  );
+```
+
+Expected result for the new workflow:
+
+- `clinic_a2p_submissions_clinic_mode_unique` present
+- `clinic_a2p_submissions_clinic_unique` absent
+
+2. In Twilio, confirm the mock Messaging Service is a separate service and has
+   no senders attached before setting `runtimeConfig.a2p.mockMessagingServiceSid`.
+
+As of the 2026-06-07 read-only audit:
+
+- production still has the old `clinic_a2p_submissions_clinic_unique`
+  constraint and does not yet have `clinic_a2p_submissions_clinic_mode_unique`
+- the only Messaging Service found was `MG83239dc7dfdf8aa6c9b397e8258f7d93`
+  (`Missed Call SMS - Dental MVP`) and it already has senders attached, so it
+  is not safe to reuse for mock A2P

@@ -5408,3 +5408,58 @@ Validation before commit/deploy:
 
 - `npm run typecheck` pass.
 - `npm run build` pass.
+
+---
+
+## 2026-06-07 — Mock A2P submission mode added (safe, fail-closed rollout)
+
+Added a safe separated-mode A2P workflow for admin testing so Fairstone's
+existing failed live Brand can remain visible while mock testing uses its own
+state and its own Twilio resource path.
+
+Code/design changes:
+
+- Added first-class A2P modes: `dry_run`, `mock`, `live`.
+- Added `runtimeConfig.a2p.mockMessagingServiceSid` and changed the committed
+  default A2P mode to `mock`.
+- Added `supabase/migrations/20260611000100_a2p_submission_modes.sql` to move
+  `clinic_a2p_submissions` from one row per clinic to one row per
+  `(clinic_id, submission_mode)`.
+- Refactored A2P submit/state code so mock and live attempts are separate.
+- Mock Brand creation now hard-requires `mock: true`.
+- Mock Campaign creation uses the configured mock Messaging Service and skips
+  Messaging Service sender attachment entirely.
+- Live Campaign creation is now a separate explicit action after Brand approval
+  with a dedicated recurring-fee confirmation step.
+- Added fail-closed guards so the admin UI disables the new workflow until the
+  mode-separation migration is applied.
+
+Read-only production verification performed:
+
+- DB: `clinic_a2p_submissions` already has `submission_step` and
+  `provider_state`, but production still has the old
+  `clinic_a2p_submissions_clinic_unique` constraint and does not yet have
+  `clinic_a2p_submissions_clinic_mode_unique`.
+- DB: Fairstone still has one live blocked row with Brand SID
+  `BNe8c3a43091282b3c14f3182da6e69bce` and no Campaign SID. The failed live
+  Brand was not deleted or overwritten.
+- Twilio: the only Messaging Service found was
+  `MG83239dc7dfdf8aa6c9b397e8258f7d93` (`Missed Call SMS - Dental MVP`) and it
+  already has senders attached, so it is not safe for mock A2P use.
+
+Validation after the implementation:
+
+- `git diff --check` pass.
+- `npm run typecheck` pass.
+- `npm run test:a2p` pass.
+- `npm run build` pass.
+
+Intentionally not done in this task:
+
+- no live A2P submit
+- no live Brand creation
+- no live Campaign creation
+- no mock Brand/Campaign creation
+- no Twilio delete/revoke action
+- no phone-number attachment changes
+- no SMS enablement change

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 
 import {
   jsonError,
@@ -14,9 +15,11 @@ import { getA2pSubmissionMode } from "@/lib/env";
 import {
   A2pSubmissionDisabledError,
   A2pSubmissionPersistError,
+  runMockA2pSubmission,
   runRealA2pSubmission,
 } from "@/lib/twilio/a2p-submission";
 import type { A2pReviewPackage, JsonObject } from "@/lib/a2p/types";
+import { isLiveCampaignCreationPending } from "@/lib/a2p/submission-modes";
 import {
   firstValidationMessage,
   type A2pValidationResult,
@@ -29,6 +32,14 @@ export const dynamic = "force-dynamic";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+const SubmitRequestSchema = z.object({
+  submissionMode: z.enum(["dry_run", "mock", "live"]).default("dry_run"),
+  intent: z.enum(["submit", "create_live_campaign"]).default("submit"),
+  confirmMockSubmit: z.boolean().optional(),
+  confirmLiveSubmit: z.boolean().optional(),
+  confirmLiveCampaign: z.boolean().optional(),
+});
 
 // POST /api/admin/clinics/[clinicId]/a2p/submit
 //
@@ -52,31 +63,35 @@ export async function POST(
   const { clinicId } = await ctx.params;
   if (!UUID_RE.test(clinicId)) return jsonError(404, "not_found", "Clinic not found.");
   const requestId = req.headers.get("x-vercel-id") ?? `a2p-${clinicId}`;
+  const body = await req.json().catch(() => ({}));
+  const parsedBody = SubmitRequestSchema.safeParse(body);
+  if (!parsedBody.success) {
+    return jsonError(400, "invalid_request", "Choose a valid A2P submission mode.");
+  }
+  const submitRequest = parsedBody.data;
 
   const pkg = await buildA2pReviewPackage(clinicId).catch(() => null);
   if (!pkg || !pkg.found) return jsonError(404, "not_found", "Clinic not found.");
 
-  const mode = getA2pSubmissionMode();
-  if (mode === "disabled") {
+  const environmentMode = getA2pSubmissionMode();
+  if (environmentMode === "disabled") {
     return jsonError(409, "submission_disabled", "A2P submission is disabled in this environment.");
+  }
+  const requestedMode = submitRequest.submissionMode;
+  const requestedOption = pkg.authorizationState.modeOptions.find((option) => option.mode === requestedMode);
+  if (!requestedOption) {
+    return jsonError(400, "invalid_request", "Choose a valid A2P submission mode.");
   }
 
   logger.info("a2p.submit.started", {
     clinicId,
     step: "request_received",
-    submissionMode: mode,
+    submissionMode: requestedMode,
     requestId,
     createdCount: 0,
   });
 
   // Shared server-side re-validation (never trust the client).
-  if (!pkg.readinessAvailable) {
-    return jsonError(
-      409,
-      "readiness_unavailable",
-      "SMS readiness data is unavailable. Apply the readiness migration and run a read-only readiness sync before submitting.",
-    );
-  }
   if (pkg.missingFields.length > 0) {
     return jsonError(422, "missing_info", "Required A2P information is missing.", {
       missing: pkg.missingFields.map((f) => f.key),
@@ -89,6 +104,43 @@ export async function POST(
       pkg.authorizationState.submitBlockedReason ?? "This clinic is not eligible for submission.",
     );
   }
+  if (!requestedOption.available) {
+    return jsonError(
+      409,
+      "mode_unavailable",
+      requestedOption.disabledReason ?? "That submission mode is not available for this clinic.",
+    );
+  }
+  if (requestedMode === "mock" && submitRequest.confirmMockSubmit !== true) {
+    return jsonError(
+      400,
+      "mock_confirmation_required",
+      "Confirm that Mock A2P creates mock Twilio resources only and will not enable real SMS sending.",
+    );
+  }
+  if (requestedMode === "live" && submitRequest.intent === "submit" && submitRequest.confirmLiveSubmit !== true) {
+    return jsonError(
+      400,
+      "live_confirmation_required",
+      "Confirm that you authorize a real billable Twilio A2P submission before continuing.",
+    );
+  }
+  if (requestedMode === "live" && submitRequest.intent === "create_live_campaign") {
+    if (submitRequest.confirmLiveCampaign !== true) {
+      return jsonError(
+        400,
+        "live_campaign_confirmation_required",
+        "Confirm that you understand live Campaign creation creates recurring monthly A2P Campaign fees.",
+      );
+    }
+    if (!isLiveCampaignCreationPending(pkg.submissions.live.submission)) {
+      return jsonError(
+        409,
+        "live_campaign_not_ready",
+        "The live Brand is not approved for separate Campaign creation yet.",
+      );
+    }
+  }
 
   // Audit the attempt before any provider call.
   await recordAdminAuditEvent({
@@ -99,7 +151,7 @@ export async function POST(
     targetId: clinicId,
     clinicId,
     afterState: {
-      mode,
+      mode: requestedMode,
       review_status: pkg.authorizationState.reviewStatus,
       number_count: pkg.includedSenders.numbers.length,
     },
@@ -107,7 +159,7 @@ export async function POST(
   }).catch(() => {});
 
   // ---------------- dry_run mode (no Twilio mutation) ----------------
-  if (mode === "dry_run") {
+  if (requestedMode === "dry_run") {
     const selectedPhoneNumbers = pkg.includedSenders.numbers.map((n) => ({
       phoneNumber: n.phoneNumber,
       twilioPhoneNumberSid: n.twilioPhoneNumberSid,
@@ -129,7 +181,7 @@ export async function POST(
       return jsonError(
         503,
         "tracking_unavailable",
-        "A2P submission tracking is unavailable. Apply migration 20260607000100_a2p_submission_tracking.sql and try again.",
+        "A2P submission tracking is unavailable. Apply migration 20260611000100_a2p_submission_modes.sql and try again.",
       );
     }
     await recordAdminAuditEvent({
@@ -154,7 +206,7 @@ export async function POST(
     });
   }
 
-  // ---------------- live mode (REAL Twilio submission) ----------------
+  // ---------------- provider mutation modes (mock/live) ----------------
   const validationErrors = validateA2pPreflight(pkg).filter((result) => result.severity === "error");
   if (validationErrors.length > 0) {
     const safeMessage =
@@ -163,7 +215,7 @@ export async function POST(
     logger.warn("a2p.submit.preflight_failed", {
       clinicId,
       step: "preflight_validation",
-      submissionMode: "live",
+      submissionMode: requestedMode,
       requestId,
       safeErrorMessage: safeMessage,
       validationErrorCodes: validationErrors.map((result) => result.code),
@@ -172,6 +224,7 @@ export async function POST(
     try {
       await upsertA2pSubmissionProgress({
         clinicId,
+        submissionMode: requestedMode,
         status: "blocked",
         submissionStep: "preflight_validation",
         submittedByAdminUserId: admin.userId,
@@ -183,7 +236,7 @@ export async function POST(
       logger.error("a2p.submit.persist_failed", {
         clinicId,
         step: "preflight_validation",
-        submissionMode: "live",
+        submissionMode: requestedMode,
         requestId,
         safeErrorMessage: err instanceof Error ? err.message.slice(0, 300) : "persist_failed",
         createdCount: 0,
@@ -208,20 +261,34 @@ export async function POST(
   }
 
   if (!pkg.authorizationState.liveSubmitArmed) {
-    return jsonError(
-      409,
-      "not_armed",
-      pkg.authorizationState.liveSubmitBlockedReason ?? "Real A2P submission is not armed for this clinic.",
-    );
+    if (requestedMode === "live") {
+      return jsonError(
+        409,
+        "not_armed",
+        pkg.authorizationState.liveSubmitBlockedReason ?? "Real A2P submission is not armed for this clinic.",
+      );
+    }
   }
 
   let result;
+  const providerAction = requestedMode === "mock"
+    ? "clinic.a2p.submit_mock"
+    : submitRequest.intent === "create_live_campaign"
+      ? "clinic.a2p.create_live_campaign"
+      : "clinic.a2p.submit_live";
   try {
-    result = await runRealA2pSubmission({
-      clinicId,
-      adminUserId: admin.userId,
-      adminEmail: admin.email,
-    });
+    result = requestedMode === "mock"
+      ? await runMockA2pSubmission({
+        clinicId,
+        adminUserId: admin.userId,
+        adminEmail: admin.email,
+      })
+      : await runRealA2pSubmission({
+        clinicId,
+        adminUserId: admin.userId,
+        adminEmail: admin.email,
+        allowCampaignCreate: submitRequest.intent === "create_live_campaign",
+      });
   } catch (err) {
     if (err instanceof A2pSubmissionDisabledError) {
       return jsonError(409, "submission_disabled", err.message);
@@ -240,8 +307,8 @@ export async function POST(
       targetType: "clinic",
       targetId: clinicId,
       clinicId,
-      afterState: { mode: "live" },
-      metadata: { authSource: admin.source, real_submission: true },
+      afterState: { mode: requestedMode },
+      metadata: { authSource: admin.source, real_submission: requestedMode === "live", mock_submission: requestedMode === "mock" },
     }).catch(() => {});
     return jsonError(
       502,
@@ -253,23 +320,27 @@ export async function POST(
   await recordAdminAuditEvent({
     adminUserId: admin.userId,
     adminEmail: admin.email,
-    action: result.ok ? "clinic.a2p.submit_live" : "clinic.a2p.submit_failed",
+    action: result.ok ? providerAction : "clinic.a2p.submit_failed",
     targetType: "clinic",
     targetId: clinicId,
     clinicId,
     afterState: {
-      mode: "live",
+      mode: requestedMode,
       status: result.status,
       step: result.step,
       created_count: result.createdResources.length,
     },
-    metadata: { authSource: admin.source, real_submission: true },
+    metadata: {
+      authSource: admin.source,
+      real_submission: requestedMode === "live",
+      mock_submission: requestedMode === "mock",
+    },
   }).catch(() => {});
 
   logger.info(result.ok ? "a2p.submit.completed" : "a2p.submit.step_failed", {
     clinicId,
     step: result.step,
-    submissionMode: "live",
+    submissionMode: requestedMode,
     requestId,
     safeErrorMessage: result.providerErrors[0] ?? null,
     createdCount: result.createdResources.length,
@@ -278,8 +349,9 @@ export async function POST(
   return jsonOk({
     ok: result.ok,
     status: result.status,
-    mode: "live",
-    realSubmission: true,
+    mode: requestedMode,
+    realSubmission: requestedMode === "live",
+    mockSubmission: requestedMode === "mock",
     step: result.step,
     message: result.message,
     error: result.ok

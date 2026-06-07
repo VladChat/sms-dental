@@ -8,7 +8,11 @@ import {
   listActiveSmsNumbersForClinic,
   type NumberSmsReadiness,
 } from "../db/sms-readiness";
-import { getA2pSubmissionState } from "../db/a2p-submissions";
+import {
+  getA2pSubmissionTrackingCapabilities,
+  listA2pSubmissionStates,
+  type A2pSubmissionRecord,
+} from "../db/a2p-submissions";
 import {
   mapBusinessTypeForTwilio,
   maskEin,
@@ -17,6 +21,7 @@ import {
 } from "./validation";
 import {
   getA2pBrandConfig,
+  getA2pMockMessagingServiceSid,
   getA2pSubmissionMode,
   getA2pTrustHubConfig,
   getAppDomainsSafe,
@@ -26,6 +31,11 @@ import {
 import { runtimeConfig } from "../../config/runtime.config";
 import { buildCampaignContent } from "./campaign-content";
 import { addressParams, buildProviderPayloadView } from "./provider-payload";
+import {
+  buildA2pModeOptions,
+  chooseDefaultA2pMode,
+  nextActionForSubmission,
+} from "./submission-modes";
 import type {
   A2pAuthorizationState,
   A2pInternalDiagnostics,
@@ -33,6 +43,8 @@ import type {
   A2pReviewMissingField,
   A2pReviewNumber,
   A2pReviewPackage,
+  A2pSubmissionInfo,
+  A2pTrackedSubmission,
   JsonObject,
   NumberCoverageDisplay,
 } from "./types";
@@ -54,6 +66,9 @@ const MESSAGING_SERVICE_SID = (runtimeConfig.twilio.messagingServiceSid ?? "").t
 export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReviewPackage> {
   const submissionMode = getA2pSubmissionMode();
   const realSubmissionEnabled = isRealA2pSubmissionEnabled();
+  const mockMessagingServiceSid = getA2pMockMessagingServiceSid();
+  const hasLiveMessagingService = Boolean(MESSAGING_SERVICE_SID);
+  const hasMockMessagingService = Boolean(mockMessagingServiceSid);
   const appBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? null;
   const trustHub = getA2pTrustHubConfig();
 
@@ -62,10 +77,11 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     return notFoundPackage(clinicId, submissionMode, realSubmissionEnabled);
   }
 
-  const [activeNumbers, readinessState, submissionState] = await Promise.all([
+  const [activeNumbers, readinessState, submissionState, trackingCapabilities] = await Promise.all([
     listActiveSmsNumbersForClinic(clinicId).catch(() => []),
     getSmsReadinessState(clinicId),
-    getA2pSubmissionState(clinicId),
+    listA2pSubmissionStates(clinicId),
+    getA2pSubmissionTrackingCapabilities(),
   ]);
 
   const readinessAvailable = readinessState.available;
@@ -138,7 +154,11 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   );
   req(Boolean(urls.businessPage), "website", "Public business page URL (clinic must have a slug and app base URL configured)");
   req(localActiveNumbers.length > 0, "active_number", "At least one active local SMS number (A2P 10DLC applies to local numbers only)");
-  req(Boolean(MESSAGING_SERVICE_SID), "messaging_service_sid", "Messaging Service SID");
+  req(
+    hasLiveMessagingService || hasMockMessagingService,
+    "messaging_service_sid",
+    "Messaging Service SID",
+  );
 
   // ---- warnings (non-blocking, informational) ----
   const warnings: string[] = [];
@@ -157,9 +177,25 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   if (submissionMode === "disabled") {
     warnings.push("A2P submission mode is disabled in this environment.");
   }
+  if (!trackingCapabilities.available) {
+    warnings.push("A2P submission tracking is unavailable. Check the database connection and migrations before submitting.");
+  } else if (!trackingCapabilities.modeSeparated) {
+    warnings.push(
+      "Apply migration 20260611000100_a2p_submission_modes.sql before using separated dry-run, mock, and live A2P attempts.",
+    );
+  }
+  if (!mockMessagingServiceSid) {
+    warnings.push(
+      "Mock A2P requires runtimeConfig.a2p.mockMessagingServiceSid configured to an empty Messaging Service without senders.",
+    );
+  }
 
   // ---- submission record (local state) ----
-  const record = submissionState.record;
+  const liveRecord = submissionState.records.find((item) => item.submissionMode === "live") ?? null;
+  const mockRecord = submissionState.records.find((item) => item.submissionMode === "mock") ?? null;
+  const dryRunRecord = submissionState.records.find((item) => item.submissionMode === "dry_run") ?? null;
+  const primaryRecord = liveRecord ?? dryRunRecord ?? mockRecord;
+  const record = primaryRecord;
   const ps = (record?.providerState ?? {}) as JsonObject;
   const psStr = (key: string): string | null => {
     const v = ps[key];
@@ -207,30 +243,19 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
       warnings.push(`Brand registration failed.${reasonMsg}${codeMsg}`);
     }
   }
-  const submission = {
-    trackingAvailable: submissionState.available,
-    status: record?.status ?? null,
-    mode: record?.submissionMode ?? null,
-    submissionStep: record?.submissionStep ?? null,
-    submittedAt: record?.submittedAt ?? null,
-    submittedByEmail: record?.submittedByAdminEmail ?? null,
-    lastStatusSyncedAt: record?.lastStatusSyncedAt ?? null,
-    lastErrorCode: record?.lastErrorCode ?? null,
-    lastErrorMessage: record?.lastErrorMessage ?? null,
-    rejectionReason: record?.rejectionReason ?? null,
-    customerProfileSid:
-      record?.twilioSecondaryCustomerProfileSid ?? record?.twilioCustomerProfileSid ?? null,
-    trustProductSid: record?.twilioTrustProductSid ?? null,
-    brandRegistrationSid: record?.twilioBrandRegistrationSid ?? null,
-    campaignSid: record?.twilioCampaignSid ?? null,
-    messagingServiceSid: record?.twilioMessagingServiceSid ?? null,
-    customerProfileStatus: psStr("customerProfileStatus"),
-    trustProductStatus: psStr("trustProductStatus"),
-    brandStatus: psStr("brandStatus"),
-    campaignStatus: psStr("campaignStatus"),
-    brandFailureReason: psStr("brandFailureReason"),
-    brandFailureCode: psStr("brandFailureCode"),
-  };
+  const submission = buildSubmissionInfo(record, submissionState.available);
+  const liveSubmission = buildTrackedSubmission(
+    liveRecord,
+    "live",
+    "Existing live submission",
+    submissionState.available,
+  );
+  const mockSubmission = buildTrackedSubmission(
+    mockRecord,
+    "mock",
+    "Mock test submission",
+    submissionState.available,
+  );
 
   const clinicReadiness = readinessState.summary?.clinic
     ? {
@@ -249,13 +274,10 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   // tables, missing required info, and terminal/in-flight states DO block.
   const { submitEligible, submitBlockedReason } = evaluateSubmitEligibility({
     submissionMode,
-    readinessAvailable,
     missingCount: missingFields.length,
     activeCount: localActiveNumbers.length,
-    hasMessagingService: Boolean(MESSAGING_SERVICE_SID),
-    recordStatus: record?.status ?? null,
-    brandStatus: brandStatusLocal ?? null,
-    brandFailureReason: brandFailureReason ?? null,
+    trackingModeSeparated: trackingCapabilities.available && trackingCapabilities.modeSeparated,
+    hasAnyMessagingService: hasLiveMessagingService || hasMockMessagingService,
   });
 
   const reviewStatus = deriveReviewStatus({
@@ -269,10 +291,28 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   const { liveSubmitArmed, liveSubmitBlockedReason } = evaluateLiveArming({
     clinicId,
     submissionMode,
+    hasMessagingService: hasLiveMessagingService,
     hasPrimaryProfile: Boolean(trustHub.primaryCustomerProfileSid),
+    liveRecord,
+  });
+  const defaultMode = chooseDefaultA2pMode({
+    environmentMode: submissionMode,
+    mockConfigured: Boolean(mockMessagingServiceSid),
+    liveFailed: liveSubmission.submission.status === "blocked",
+  });
+  const modeOptions = buildA2pModeOptions({
+    environmentMode: submissionMode,
+    defaultMode,
+    trackingReady: trackingCapabilities.available && trackingCapabilities.modeSeparated,
+    mockConfigured: Boolean(mockMessagingServiceSid),
+    liveSubmitArmed,
+    liveBlockedReason: liveSubmitBlockedReason,
   });
 
   const campaign = buildCampaignContent(clinic.name);
+  const displayMessagingServiceSid = defaultMode === "mock"
+    ? mockMessagingServiceSid
+    : MESSAGING_SERVICE_SID;
 
   // ---- minimal provider payload view (exactly what is submitted to Twilio) ----
   // Built from the SAME shared builders the submission helper uses, with the EIN
@@ -307,7 +347,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     }),
     notificationEmail: trustHub.notificationEmail,
     primaryCustomerProfileSid: trustHub.primaryCustomerProfileSid ?? "(missing)",
-    messagingServiceSid: MESSAGING_SERVICE_SID ?? "(missing)",
+    messagingServiceSid: displayMessagingServiceSid ?? "(missing)",
     customerProfilePolicySid: trustHub.customerProfilePolicySid,
     a2pTrustProductPolicySid: trustHub.a2pTrustProductPolicySid,
     campaign,
@@ -341,6 +381,10 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
 
   const authorizationState: A2pAuthorizationState = {
     submissionMode,
+    defaultMode,
+    modeOptions,
+    mockConfigured: Boolean(mockMessagingServiceSid),
+    mockMessagingServiceSid,
     realSubmissionEnabled,
     liveSubmitArmed,
     liveSubmitBlockedReason,
@@ -384,6 +428,10 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
         includedInSubmission: true,
       })),
     },
+    submissions: {
+      live: liveSubmission,
+      mock: mockSubmission,
+    },
     authorizationState,
     internalDiagnostics,
   };
@@ -398,10 +446,64 @@ function planned(label: string, reuseSid: string | null, alwaysCreate = false): 
   };
 }
 
+function buildSubmissionInfo(
+  record: A2pSubmissionRecord | null,
+  trackingAvailable: boolean,
+): A2pSubmissionInfo {
+  const ps = ((record?.providerState ?? {}) as JsonObject);
+  const psStr = (key: string): string | null => {
+    const v = ps[key];
+    return typeof v === "string" && v.length > 0 ? v : null;
+  };
+  return {
+    trackingAvailable,
+    status: record?.status ?? null,
+    mode: record?.submissionMode ?? null,
+    submissionStep: record?.submissionStep ?? null,
+    submittedAt: record?.submittedAt ?? null,
+    submittedByEmail: record?.submittedByAdminEmail ?? null,
+    lastStatusSyncedAt: record?.lastStatusSyncedAt ?? null,
+    lastErrorCode: record?.lastErrorCode ?? null,
+    lastErrorMessage: record?.lastErrorMessage ?? null,
+    rejectionReason: record?.rejectionReason ?? null,
+    customerProfileSid:
+      record?.twilioSecondaryCustomerProfileSid ?? record?.twilioCustomerProfileSid ?? null,
+    trustProductSid: record?.twilioTrustProductSid ?? null,
+    brandRegistrationSid: record?.twilioBrandRegistrationSid ?? null,
+    campaignSid: record?.twilioCampaignSid ?? null,
+    messagingServiceSid: record?.twilioMessagingServiceSid ?? null,
+    customerProfileStatus: psStr("customerProfileStatus"),
+    trustProductStatus: psStr("trustProductStatus"),
+    brandStatus: psStr("brandStatus"),
+    campaignStatus: psStr("campaignStatus"),
+    brandFailureReason: psStr("brandFailureReason"),
+    brandFailureCode: psStr("brandFailureCode"),
+  };
+}
+
+function buildTrackedSubmission(
+  record: A2pSubmissionRecord | null,
+  mode: "mock" | "live",
+  title: string,
+  trackingAvailable: boolean,
+): A2pTrackedSubmission {
+  const submission = buildSubmissionInfo(record, trackingAvailable);
+  return {
+    mode,
+    title,
+    exists: record !== null,
+    submission,
+    mock: mode === "mock",
+    nextAction: nextActionForSubmission(submission, mode),
+  };
+}
+
 function evaluateLiveArming(input: {
   clinicId: string;
   submissionMode: string;
+  hasMessagingService: boolean;
   hasPrimaryProfile: boolean;
+  liveRecord: A2pSubmissionRecord | null;
 }): { liveSubmitArmed: boolean; liveSubmitBlockedReason: string | null } {
   if (input.submissionMode !== "live") {
     return { liveSubmitArmed: false, liveSubmitBlockedReason: "Real submission mode is not enabled (mode is not “live”)." };
@@ -409,8 +511,30 @@ function evaluateLiveArming(input: {
   if (!isClinicAllowedForLiveA2pSubmit(input.clinicId)) {
     return { liveSubmitArmed: false, liveSubmitBlockedReason: "This clinic is not on the live A2P submission allowlist." };
   }
+  if (!input.hasMessagingService) {
+    return { liveSubmitArmed: false, liveSubmitBlockedReason: "No live Messaging Service SID is configured for real submission." };
+  }
   if (!input.hasPrimaryProfile) {
     return { liveSubmitArmed: false, liveSubmitBlockedReason: "No primary Customer Profile SID is configured for real submission." };
+  }
+  if (input.liveRecord?.status === "approved") {
+    return { liveSubmitArmed: false, liveSubmitBlockedReason: "This clinic's live A2P registration is already approved." };
+  }
+  if (input.liveRecord?.status === "blocked") {
+    const ps = (input.liveRecord.providerState ?? {}) as JsonObject;
+    const brandFailureReason = typeof ps.brandFailureReason === "string" ? ps.brandFailureReason : null;
+    return {
+      liveSubmitArmed: false,
+      liveSubmitBlockedReason: brandFailureReason
+        ? `Do not continue this live attempt for fake-company testing. ${brandFailureReason}`
+        : "Do not continue this live attempt for fake-company testing. Use Mock A2P or fix the real business identity.",
+    };
+  }
+  if (input.liveRecord?.status === "rejected") {
+    return {
+      liveSubmitArmed: false,
+      liveSubmitBlockedReason: "The previous live submission was rejected. Operator review is required before another real submit.",
+    };
   }
   return { liveSubmitArmed: true, liveSubmitBlockedReason: null };
 }
@@ -495,22 +619,13 @@ function buildNumber(
 
 function evaluateSubmitEligibility(input: {
   submissionMode: string;
-  readinessAvailable: boolean;
   missingCount: number;
   activeCount: number;
-  hasMessagingService: boolean;
-  recordStatus: string | null;
-  brandStatus: string | null;
-  brandFailureReason: string | null;
+  trackingModeSeparated: boolean;
+  hasAnyMessagingService: boolean;
 }): { submitEligible: boolean; submitBlockedReason: string | null } {
   if (input.submissionMode === "disabled") {
     return { submitEligible: false, submitBlockedReason: "A2P submission is disabled in this environment." };
-  }
-  if (!input.readinessAvailable) {
-    return {
-      submitEligible: false,
-      submitBlockedReason: "SMS readiness data is unavailable. Apply the readiness migration and run a sync first.",
-    };
   }
   if (input.missingCount > 0) {
     return { submitEligible: false, submitBlockedReason: "Required information is missing." };
@@ -518,26 +633,14 @@ function evaluateSubmitEligibility(input: {
   if (input.activeCount === 0) {
     return { submitEligible: false, submitBlockedReason: "No active SMS number to submit." };
   }
-  if (!input.hasMessagingService) {
-    return { submitEligible: false, submitBlockedReason: "No Messaging Service SID is configured." };
-  }
-  // Terminal states block submit. "submitted"/"pending"/"failed" stay eligible so
-  // the idempotent live state machine can RESUME (e.g. after async brand approval)
-  // without creating duplicate resources; dry_run simply re-records its review.
-  if (input.recordStatus === "approved") {
-    return { submitEligible: false, submitBlockedReason: "This clinic's A2P registration is already approved." };
-  }
-  if (input.recordStatus === "blocked") {
-    const reason = input.brandFailureReason
-      ? `Brand registration failed. ${input.brandFailureReason} Fix the clinic business identity/EIN before resubmitting.`
-      : "A previous submission is blocked. Fix the business identity/EIN before resubmitting.";
-    return { submitEligible: false, submitBlockedReason: reason };
-  }
-  if (input.recordStatus === "rejected") {
+  if (!input.trackingModeSeparated) {
     return {
       submitEligible: false,
-      submitBlockedReason: "A previous submission was rejected. Operator review is required before resubmitting.",
+      submitBlockedReason: "Apply migration 20260611000100_a2p_submission_modes.sql before using the A2P submission workflow.",
     };
+  }
+  if (!input.hasAnyMessagingService) {
+    return { submitEligible: false, submitBlockedReason: "No Messaging Service SID is configured." };
   }
   return { submitEligible: true, submitBlockedReason: null };
 }
@@ -560,6 +663,7 @@ function notFoundPackage(
   submissionMode: ReturnType<typeof getA2pSubmissionMode>,
   realSubmissionEnabled: boolean,
 ): A2pReviewPackage {
+  const defaultMode = submissionMode === "disabled" ? "disabled" : "dry_run";
   return {
     clinicId,
     clinicName: "",
@@ -596,8 +700,23 @@ function notFoundPackage(
     campaign: buildCampaignContent(null),
     providerPayload: { resources: [] },
     includedSenders: { numbers: [] },
+    submissions: {
+      live: buildTrackedSubmission(null, "live", "Existing live submission", false),
+      mock: buildTrackedSubmission(null, "mock", "Mock test submission", false),
+    },
     authorizationState: {
       submissionMode,
+      defaultMode,
+      modeOptions: buildA2pModeOptions({
+        environmentMode: submissionMode,
+        defaultMode,
+        trackingReady: false,
+        mockConfigured: false,
+        liveSubmitArmed: false,
+        liveBlockedReason: "Clinic not found.",
+      }),
+      mockConfigured: false,
+      mockMessagingServiceSid: null,
       realSubmissionEnabled,
       liveSubmitArmed: false,
       liveSubmitBlockedReason: "Clinic not found.",

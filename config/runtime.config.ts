@@ -73,22 +73,30 @@ export const runtimeConfig = {
   },
 
   a2p: {
-    // Review/submission mode for the platform-admin A2P/10DLC approval workflow.
-    // This is a NON-secret safety switch. COMMITTED DEFAULT IS "dry_run".
+    // Default mode for the platform-admin A2P/10DLC approval workflow.
+    // This is a NON-secret safety switch used for the safest default selection.
+    // Dry run is always local-only, Mock A2P uses Twilio mock resources only,
+    // and real live submission still requires the explicit live allowlist below.
     //  - "disabled": the submit action is fully off. The admin can still view the
     //     review package; the submit button is hidden and the endpoint refuses.
     //  - "dry_run": the platform admin can record a LOCAL "reviewed / ready for
     //     manual submission" status. NO Twilio mutation occurs and NO real A2P
     //     registration is submitted.
+    //  - "mock": Mock A2P is the safest default for test clinics. It creates
+    //     mock Twilio A2P resources only and never enables real SMS traffic.
     //  - "live": REAL Twilio A2P submission is performed by lib/twilio/a2p-submission.ts
     //     when an authenticated platform admin clicks Submit AFTER reviewing the
     //     package. This creates BILLABLE, externally-vetted, hard-to-reverse Twilio
     //     resources (Brand has a one-time fee; Campaign has recurring carrier fees).
-    //     Real execution still requires the per-clinic allowlist below AND a
-    //     configured trustHub.primaryCustomerProfileSid AND an admin Submit click.
-    //  ARMED 2026-06-08 for the controlled Fairstone rollout (only Fairstone is in
-    //  liveSubmitClinicIds). See OPERATIONS-RUNBOOK.md before changing.
-    submissionMode: "live" as "disabled" | "dry_run" | "live",
+    //     Real execution still requires this mode to be "live", the per-clinic
+    //     allowlist below, a configured primary Customer Profile SID, and an
+    //     admin Submit click.
+    submissionMode: "mock" as "disabled" | "dry_run" | "mock" | "live",
+
+    // Separate Messaging Service reserved for Mock A2P testing. This must be an
+    // empty service with NO senders so mock Campaigns are never confused with the
+    // live Messaging Service.
+    mockMessagingServiceSid: "" as string,
 
     // Per-clinic allowlist for REAL ("live") A2P submission. Mirrors the
     // twilioPurchaseTestClinicIds safety pattern: even when submissionMode="live",

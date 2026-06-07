@@ -10,12 +10,15 @@ import {
 } from "../../../../../../lib/a2p/validation";
 import type {
   A2pIncludedSender,
+  A2pStoredSubmissionMode,
+  A2pTrackedSubmission,
   A2pPayloadField,
   A2pPayloadResource,
   A2pReviewNumber,
   A2pReviewPackage,
   NumberCoverageDisplay,
 } from "../../../../../../lib/a2p/types";
+import { isLiveCampaignCreationPending } from "../../../../../../lib/a2p/submission-modes";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
 type ChecklistTone = "present" | "missing" | "warning";
@@ -83,12 +86,14 @@ const COVERAGE_LABEL: Record<NumberCoverageDisplay, string> = {
 const MODE_SHORT_LABEL: Record<string, string> = {
   disabled: "Disabled",
   dry_run: "Dry run",
+  mock: "Mock A2P",
   live: "Live mode",
 };
 
 const MODE_CARD_LABEL: Record<string, string> = {
   disabled: "Disabled",
   dry_run: "Dry run",
+  mock: "Mock A2P",
   live: "Live",
 };
 
@@ -126,6 +131,10 @@ const HUMAN_PROVIDER_LABELS = {
     "Opt-in / message flow",
   ]),
 };
+
+function authDefaultMode(mode: string): A2pStoredSubmissionMode {
+  return mode === "live" || mode === "mock" ? mode : "dry_run";
+}
 
 function fmtDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
@@ -386,11 +395,9 @@ function diagnosticsSummary(pkg: A2pReviewPackage): string {
 }
 
 function buildSubmissionHistory(pkg: A2pReviewPackage): SubmissionHistorySummary {
-  const sub = pkg.internalDiagnostics.submission;
+  const sub = pkg.submissions.live.submission;
   const status = sub.status ?? pkg.authorizationState.reviewStatus;
-  const hasLiveSubmission = ["submitted", "pending", "approved", "rejected", "failed", "blocked"].includes(
-    sub.status ?? "",
-  );
+  const hasLiveSubmission = pkg.submissions.live.exists;
   const approvalStageLabel = REVIEW_STATUS_LABEL[status] ?? humanizeToken(status);
   const providerStatuses = [
     sub.customerProfileStatus,
@@ -438,6 +445,46 @@ function buildSubmissionHistory(pkg: A2pReviewPackage): SubmissionHistorySummary
   };
 }
 
+function buildTrackedSubmissionHistory(
+  tracked: A2pTrackedSubmission,
+): SubmissionHistorySummary {
+  const sub = tracked.submission;
+  const status = sub.status ?? "ready_for_review";
+  const providerStatuses = [
+    sub.customerProfileStatus,
+    sub.trustProductStatus,
+    sub.brandStatus,
+    sub.campaignStatus,
+  ].filter(Boolean);
+  const providerStatusLabel = providerStatuses.length > 0 ? providerStatuses.map(humanizeToken).join(" · ") : "No provider result yet.";
+  const items: Array<{ label: string; value: React.ReactNode }> = [
+    { label: "Last submitted", value: fmtDateTime(sub.submittedAt) },
+    { label: "Last updated", value: fmtDateTime(sub.lastStatusSyncedAt ?? sub.submittedAt) },
+    { label: "Current step", value: sub.submissionStep ? humanizeToken(sub.submissionStep) : "—" },
+    { label: "Brand SID", value: sub.brandRegistrationSid ? <span className="t-mono a2p-cc-wrap">{sub.brandRegistrationSid}</span> : "—" },
+    { label: "Campaign SID", value: sub.campaignSid ? <span className="t-mono a2p-cc-wrap">{sub.campaignSid}</span> : "—" },
+    { label: "Provider status", value: providerStatusLabel },
+  ];
+  if (tracked.mock) {
+    items.push({ label: "Mock", value: "true" });
+  }
+  if (sub.brandFailureReason) {
+    items.push({ label: "Brand failure reason", value: sub.brandFailureReason });
+  }
+  if (sub.brandFailureCode) {
+    items.push({ label: "Twilio Error Code", value: sub.brandFailureCode });
+  }
+  if (tracked.nextAction) {
+    items.push({ label: "Next action", value: tracked.nextAction });
+  }
+  return {
+    hasSubmission: tracked.exists,
+    approvalStageLabel: REVIEW_STATUS_LABEL[status] ?? humanizeToken(status),
+    providerStatusLabel,
+    items,
+  };
+}
+
 function nextActionFromSubmissionStatus(status: string | null): string {
   switch (status) {
     case "pending":
@@ -479,13 +526,23 @@ export function AdminA2pReviewPanel({
   const [syncing, setSyncing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<A2pStoredSubmissionMode>(
+    authDefaultMode(pkg.authorizationState.defaultMode),
+  );
   const [confirmLive, setConfirmLive] = useState(false);
+  const [confirmMock, setConfirmMock] = useState(false);
+  const [confirmLiveCampaign, setConfirmLiveCampaign] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function post(path: string, fallbackError: string): Promise<{ ok: boolean; message: string }> {
+  async function post(path: string, fallbackError: string, body?: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
     try {
-      const res = await fetch(path, { method: "POST", credentials: "include" });
+      const res = await fetch(path, {
+        method: "POST",
+        credentials: "include",
+        headers: body ? { "content-type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
       const json = (await res.json().catch(() => null)) as
         | {
             ok?: boolean;
@@ -529,13 +586,18 @@ export function AdminA2pReviewPanel({
     setSyncing(false);
   }
 
-  async function refreshProviderStatus() {
+  async function refreshProviderStatus(modeOverride?: "mock" | "live") {
     setRefreshing(true);
     setMessage(null);
     setError(null);
-    const r = await post(`/api/admin/clinics/${clinicId}/a2p/status`, "Could not refresh A2P provider status.");
+    const mode = modeOverride ?? (selectedMode === "mock" ? "mock" : "live");
+    const r = await post(
+      `/api/admin/clinics/${clinicId}/a2p/status`,
+      `Could not refresh ${mode} A2P provider status.`,
+      { submissionMode: mode },
+    );
     if (r.ok) {
-      setMessage("Read-only A2P provider status refreshed.");
+      setMessage(`Read-only ${mode} A2P provider status refreshed.`);
       router.refresh();
     } else {
       setError(r.message);
@@ -547,10 +609,26 @@ export function AdminA2pReviewPanel({
     setSubmitting(true);
     setMessage(null);
     setError(null);
-    const r = await post(`/api/admin/clinics/${clinicId}/a2p/submit`, "A2P submission failed. Check server logs before retrying.");
+    const intent =
+      selectedMode === "live" && isLiveCampaignCreationPending(pkg.submissions.live.submission)
+        ? "create_live_campaign"
+        : "submit";
+    const r = await post(
+      `/api/admin/clinics/${clinicId}/a2p/submit`,
+      "A2P submission failed. Check server logs before retrying.",
+      {
+        submissionMode: selectedMode,
+        intent,
+        confirmMockSubmit: confirmMock,
+        confirmLiveSubmit: confirmLive,
+        confirmLiveCampaign,
+      },
+    );
     if (r.ok) {
       setMessage(r.message);
       setConfirmLive(false);
+      setConfirmMock(false);
+      setConfirmLiveCampaign(false);
       router.refresh();
     } else {
       setError(r.message);
@@ -561,6 +639,8 @@ export function AdminA2pReviewPanel({
   const auth = pkg.authorizationState;
   const diagnostics = pkg.internalDiagnostics;
   const sub = diagnostics.submission;
+  const liveTracked = pkg.submissions.live;
+  const mockTracked = pkg.submissions.mock;
   const preflightValidations = useMemo(
     () => validateA2pPreflight(pkg).filter((result) => result.severity === "error"),
     [pkg],
@@ -569,15 +649,23 @@ export function AdminA2pReviewPanel({
   const checklist = useMemo(() => buildChecklist(pkg, preflightValidations), [pkg, preflightValidations]);
   const launchReadiness = useMemo(() => deriveLaunchReadiness(pkg, launchStatus), [pkg, launchStatus]);
   const submissionHistory = useMemo(() => buildSubmissionHistory(pkg), [pkg]);
-  const isLive = auth.submissionMode === "live";
-  const isDryRun = auth.submissionMode === "dry_run";
-  const isApproved = sub.status === "approved";
-  const isRejected = sub.status === "rejected";
+  const mockHistory = useMemo(() => buildTrackedSubmissionHistory(mockTracked), [mockTracked]);
+  const selectedOption = auth.modeOptions.find((option) => option.mode === selectedMode) ?? auth.modeOptions[0];
+  const selectedSubmission =
+    selectedMode === "live" ? liveTracked.submission
+    : selectedMode === "mock" ? mockTracked.submission
+    : null;
+  const isLive = selectedMode === "live";
+  const isMock = selectedMode === "mock";
+  const isDryRun = selectedMode === "dry_run";
+  const isApproved = selectedSubmission?.status === "approved";
+  const isRejected = selectedSubmission?.status === "rejected";
   const isResume =
-    sub.status === "pending" ||
-    sub.status === "submitted" ||
-    sub.status === "failed" ||
-    sub.status === "blocked";
+    selectedSubmission?.status === "pending" ||
+    selectedSubmission?.status === "submitted" ||
+    selectedSubmission?.status === "failed" ||
+    selectedSubmission?.status === "blocked";
+  const isLiveCampaignStep = isLive && isLiveCampaignCreationPending(liveTracked.submission);
   const hasPreflightErrors = hasValidationErrors(preflightValidations);
   const primaryPreflightError = preflightValidations[0] ?? null;
   const canSubmitNow =
@@ -586,7 +674,8 @@ export function AdminA2pReviewPanel({
     auth.submissionMode !== "disabled" &&
     auth.submitEligible &&
     !hasPreflightErrors &&
-    (isDryRun || (isLive && auth.liveSubmitArmed));
+    Boolean(selectedOption?.available) &&
+    (isDryRun || isMock || (isLive && auth.liveSubmitArmed));
 
   const submitBlocker = isApproved
     ? "Already approved — no submission needed."
@@ -594,8 +683,10 @@ export function AdminA2pReviewPanel({
       ? "Previous submission rejected — operator review required."
       : auth.submissionMode === "disabled"
         ? "A2P submission is disabled in this environment."
-        : hasPreflightErrors
+      : hasPreflightErrors
           ? primaryPreflightError?.operatorMessage ?? primaryPreflightError?.message ?? "Pre-submit validation failed."
+        : !selectedOption?.available
+          ? selectedOption?.disabledReason ?? "That submission mode is not available."
         : !auth.submitEligible
           ? auth.submitBlockedReason
           : isLive && !auth.liveSubmitArmed
@@ -628,7 +719,7 @@ export function AdminA2pReviewPanel({
             <div className="a2p-cc-badges" aria-label="A2P review status badges">
               <Badge tone={canSubmitNow ? "success" : "warning"}>{canSubmitNow ? "Ready to submit" : "Blocked"}</Badge>
               <Badge tone={isLive ? "brand" : auth.submissionMode === "disabled" ? "neutral" : "info"}>
-                {MODE_SHORT_LABEL[auth.submissionMode] ?? humanizeToken(auth.submissionMode)}
+                {MODE_SHORT_LABEL[selectedMode] ?? humanizeToken(selectedMode)}
               </Badge>
               <Badge tone={launchReadiness.tone}>{launchReadiness.headerBadge}</Badge>
             </div>
@@ -643,7 +734,7 @@ export function AdminA2pReviewPanel({
               {syncing ? "Running…" : "Run SMS readiness sync"}
             </button>
             {(sub.brandRegistrationSid || sub.customerProfileSid) && (
-              <button type="button" className="btn btn-secondary btn-sm" disabled={refreshing} onClick={refreshProviderStatus}>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={refreshing} onClick={() => void refreshProviderStatus()}>
                 {refreshing ? "Refreshing…" : "Refresh provider status"}
               </button>
             )}
@@ -677,15 +768,17 @@ export function AdminA2pReviewPanel({
           />
           <StatusCard
             label="Submission mode"
-            value={MODE_CARD_LABEL[auth.submissionMode] ?? humanizeToken(auth.submissionMode)}
+            value={MODE_CARD_LABEL[selectedMode] ?? humanizeToken(selectedMode)}
             detail={
-              isLive
+              isMock
+                ? "Creates mock Twilio A2P resources only. No real carrier vetting or real SMS traffic."
+                : isLive
                 ? "Creates billable external Twilio resources."
                 : isDryRun
                   ? "Records review only. No Twilio resources change."
                   : "Submission is disabled in this environment."
             }
-            tone={isLive ? "warning" : auth.submissionMode === "disabled" ? "neutral" : "info"}
+            tone={isLive ? "warning" : isMock ? "info" : auth.submissionMode === "disabled" ? "neutral" : "info"}
           />
           <StatusCard
             label="Approval stage"
@@ -707,22 +800,70 @@ export function AdminA2pReviewPanel({
           </div>
         )}
 
-        <div className="a2p-cc-caution">
-          <h4 className="adm-subhead">Live submission creates billable external Twilio resources</h4>
-          <ul className="t-small a2p-cc-list">
-            {auth.feesRiskNotice.map((warning, idx) => (
-              <li key={idx}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="a2p-cc-actions">
-          {isApproved ? (
-            <div className="alert alert-success" role="status">
-              <span>A2P registration is approved. No further submission is required here.</span>
+          <div className="a2p-cc-subcard">
+            <h4 className="adm-subhead">Choose submission mode</h4>
+            <div style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-3)" }}>
+              {auth.modeOptions.map((option) => (
+                <label
+                  key={option.mode}
+                  style={{
+                    display: "grid",
+                    gap: "var(--space-1)",
+                    padding: "var(--space-3)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--r-md)",
+                    background: selectedMode === option.mode ? "var(--surface-sunken)" : "var(--surface)",
+                    opacity: option.available ? 1 : 0.7,
+                    cursor: option.available ? "pointer" : "not-allowed",
+                  }}
+                >
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                    <input
+                      type="radio"
+                      name="a2p-submission-mode"
+                      checked={selectedMode === option.mode}
+                      onChange={() => {
+                        setSelectedMode(option.mode);
+                        setConfirmLive(false);
+                        setConfirmMock(false);
+                        setConfirmLiveCampaign(false);
+                      }}
+                      disabled={!option.available}
+                    />
+                    <strong>{option.label}</strong>
+                    {option.recommended && <Badge tone="success">Recommended</Badge>}
+                  </span>
+                  <span className="t-small">{option.helper}</span>
+                  {!option.available && option.disabledReason && (
+                    <span className="t-helper">{option.disabledReason}</span>
+                  )}
+                </label>
+              ))}
             </div>
-          ) : isRejected ? (
-            <div className="adm-blocked" role="note">
+          </div>
+
+          {isLive && (
+            <div className="a2p-cc-caution">
+              <h4 className="adm-subhead">Live submission creates billable external Twilio resources</h4>
+              <ul className="t-small a2p-cc-list">
+                {auth.feesRiskNotice.map((warning, idx) => (
+                  <li key={idx}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="a2p-cc-actions">
+            {isApproved ? (
+              <div className="alert alert-success" role="status">
+                <span>
+                  {isMock
+                    ? "Mock Campaign created. This does not authorize real SMS traffic."
+                    : "A2P registration is approved. No further submission is required here."}
+                </span>
+              </div>
+            ) : isRejected ? (
+              <div className="adm-blocked" role="note">
               <Badge tone="warning">Rejected</Badge>
               <span className="t-small" style={{ color: "var(--text-muted)" }}>
                 {sub.rejectionReason ?? "A previous submission was rejected."} Operator review is required before resubmitting.
@@ -739,26 +880,71 @@ export function AdminA2pReviewPanel({
                 Dry-run mode records operator review only. No Twilio submission, no SMS, and no provider mutation occur.
               </p>
             </div>
-          ) : isLive && auth.liveSubmitArmed ? (
+          ) : isMock ? (
             <div className="a2p-cc-action-stack">
               <div className="a2p-cc-auth">
                 <label className="check">
                   <input
                     type="checkbox"
-                    checked={confirmLive}
-                    onChange={(event) => setConfirmLive(event.target.checked)}
+                    checked={confirmMock}
+                    onChange={(event) => setConfirmMock(event.target.checked)}
                   />
                   <span>
-                    I have reviewed the approval content below and authorize a <strong>real</strong> A2P submission for this clinic.
-                    This creates billable, externally reviewed Twilio resources.
+                    I understand this creates mock Twilio A2P resources only and will not enable real SMS sending.
                   </span>
                 </label>
               </div>
-              <button type="button" className="btn btn-primary" disabled={submitting || !confirmLive} onClick={submit}>
-                {submitting ? "Submitting…" : isResume ? "Resume A2P submission" : "Submit to Twilio for A2P Review"}
+              <button type="button" className="btn btn-primary" disabled={submitting || !confirmMock} onClick={submit}>
+                {submitting ? "Submitting…" : "Create Mock A2P resources"}
               </button>
               <p className="t-helper">
-                Runs every currently allowed Twilio step and stops at asynchronous approval points. It never enables patient SMS.
+                Uses a separate empty Messaging Service and never attaches real clinic numbers.
+              </p>
+            </div>
+          ) : isLive && auth.liveSubmitArmed ? (
+            <div className="a2p-cc-action-stack">
+              {isLiveCampaignStep ? (
+                <>
+                  <div className="a2p-cc-auth">
+                    <label className="check">
+                      <input
+                        type="checkbox"
+                        checked={confirmLiveCampaign}
+                        onChange={(event) => setConfirmLiveCampaign(event.target.checked)}
+                      />
+                      <span>
+                        I understand this creates recurring monthly A2P Campaign fees.
+                      </span>
+                    </label>
+                  </div>
+                  <button type="button" className="btn btn-primary" disabled={submitting || !confirmLiveCampaign} onClick={submit}>
+                    {submitting ? "Submitting…" : "Create live A2P Campaign"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="a2p-cc-auth">
+                    <label className="check">
+                      <input
+                        type="checkbox"
+                        checked={confirmLive}
+                        onChange={(event) => setConfirmLive(event.target.checked)}
+                      />
+                      <span>
+                        I have reviewed the approval content below and authorize a <strong>real</strong> A2P submission for this clinic.
+                        This creates billable, externally reviewed Twilio resources.
+                      </span>
+                    </label>
+                  </div>
+                  <button type="button" className="btn btn-primary" disabled={submitting || !confirmLive} onClick={submit}>
+                    {submitting ? "Submitting…" : isResume ? "Resume live A2P submission" : "Submit to Twilio for A2P Review"}
+                  </button>
+                </>
+              )}
+              <p className="t-helper">
+                {isLiveCampaignStep
+                  ? "Separate explicit step for live Campaign creation. This does not attach numbers or enable SMS by itself."
+                  : "Runs every currently allowed Twilio step and stops at asynchronous approval points. It never enables patient SMS."}
               </p>
             </div>
           ) : (
@@ -944,27 +1130,72 @@ export function AdminA2pReviewPanel({
         defaultOpen={historyOpen}
         tone={historyOpen ? "warning" : "diagnostic"}
       >
-        {!submissionHistory.hasSubmission ? (
-          <p className="t-body"><Muted>No live submission yet.</Muted></p>
-        ) : (
-          <>
-            <div className="a2p-cc-subcard">
-              <h4 className="adm-subhead">Provider result</h4>
+        <div className="a2p-cc-section-grid">
+          <div className="a2p-cc-subcard">
+            <h4 className="adm-subhead">Existing live submission</h4>
+            {submissionHistory.hasSubmission ? (
               <div className="a2p-cc-facts">
                 {submissionHistory.items.map((item) => (
-                  <FactRow key={item.label} label={item.label} value={item.value} />
+                  <FactRow key={`live-${item.label}`} label={item.label} value={item.value} />
                 ))}
               </div>
-            </div>
-            {(sub.customerProfileSid || sub.brandRegistrationSid) && (
+            ) : (
+              <div className="a2p-cc-facts">
+                <FactRow label="Status" value="Not started" />
+                <FactRow
+                  label="Next action"
+                  value="Do not continue this live attempt for fake-company testing. Use Mock A2P or fix real business identity."
+                />
+              </div>
+            )}
+            {(liveTracked.submission.customerProfileSid || liveTracked.submission.brandRegistrationSid) && (
               <div className="a2p-cc-inline-actions">
-                <button type="button" className="btn btn-secondary btn-sm" disabled={refreshing} onClick={refreshProviderStatus}>
-                  {refreshing ? "Refreshing…" : "Refresh provider status"}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={refreshing}
+                  onClick={() => {
+                    setSelectedMode("live");
+                    void refreshProviderStatus("live");
+                  }}
+                >
+                  {refreshing && selectedMode === "live" ? "Refreshing…" : "Refresh live provider status"}
                 </button>
               </div>
             )}
-          </>
-        )}
+          </div>
+
+          <div className="a2p-cc-subcard">
+            <h4 className="adm-subhead">Mock test submission</h4>
+            {mockHistory.hasSubmission ? (
+              <div className="a2p-cc-facts">
+                {mockHistory.items.map((item) => (
+                  <FactRow key={`mock-${item.label}`} label={item.label} value={item.value} />
+                ))}
+              </div>
+            ) : (
+              <div className="a2p-cc-facts">
+                <FactRow label="Status" value="Not started" />
+                <FactRow label="Next action" value="Use Mock A2P to create separate test-only provider resources." />
+              </div>
+            )}
+            {(mockTracked.submission.customerProfileSid || mockTracked.submission.brandRegistrationSid) && (
+              <div className="a2p-cc-inline-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={refreshing}
+                  onClick={() => {
+                    setSelectedMode("mock");
+                    void refreshProviderStatus("mock");
+                  }}
+                >
+                  {refreshing && selectedMode === "mock" ? "Refreshing…" : "Refresh mock provider status"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </A2pDisclosureCard>
     </div>
   );

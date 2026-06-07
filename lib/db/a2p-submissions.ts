@@ -1,13 +1,24 @@
 import { getDb } from "./client";
-import type { A2pSubmissionMode, A2pSubmissionStatus, JsonObject } from "../a2p/types";
+import type {
+  A2pStoredSubmissionMode,
+  A2pSubmissionMode,
+  A2pSubmissionStatus,
+  JsonObject,
+} from "../a2p/types";
 
 // Local persistence for the platform-admin A2P/10DLC review/submission workflow.
-// One row per clinic (current state + resumable step progress). This module does
-// NO Twilio mutation — it only records local state.
+// The current schema stores one row per (clinic_id, submission_mode) so dry-run,
+// mock, and live attempts remain separate. This module does NO Twilio mutation —
+// it only records local state.
 //
 // Reads are wrapped so a missing table OR a missing newer column (additive
 // migration not yet applied) degrades gracefully rather than throwing. Writes
 // throw so the caller can fail closed and tell the operator to apply migrations.
+
+export type A2pSubmissionTrackingCapabilities = {
+  available: boolean;
+  modeSeparated: boolean;
+};
 
 export type A2pSubmissionSelectedNumber = {
   phoneNumber: string;
@@ -106,18 +117,45 @@ function mapRow(row: SubmissionRow): A2pSubmissionRecord {
   };
 }
 
+export async function getA2pSubmissionTrackingCapabilities(): Promise<A2pSubmissionTrackingCapabilities> {
+  const sql = getDb();
+  try {
+    const rows = await sql<Array<{ mode_separated: boolean }>>`
+      select exists (
+        select 1
+        from pg_constraint
+        where conrelid = 'public.clinic_a2p_submissions'::regclass
+          and conname = 'clinic_a2p_submissions_clinic_mode_unique'
+      ) as mode_separated
+    `;
+    return {
+      available: true,
+      modeSeparated: Boolean(rows[0]?.mode_separated),
+    };
+  } catch {
+    return {
+      available: false,
+      modeSeparated: false,
+    };
+  }
+}
+
 // Tri-state read. Tries the full column set (post-migration), falls back to the
 // base columns if the progress columns don't exist yet, and reports
 // available=false only when the table itself is unreachable.
 export async function getA2pSubmissionState(
   clinicId: string,
+  submissionMode?: A2pStoredSubmissionMode,
 ): Promise<{ available: boolean; record: A2pSubmissionRecord | null }> {
   const sql = getDb();
+  const modeWhere = submissionMode
+    ? sql`where clinic_id = ${clinicId} and submission_mode = ${submissionMode}`
+    : sql`where clinic_id = ${clinicId}`;
   try {
     const rows = await sql<SubmissionRow[]>`
       select ${sql(FULL_COLS as unknown as string[])}
       from public.clinic_a2p_submissions
-      where clinic_id = ${clinicId}
+      ${modeWhere}
       limit 1
     `;
     return { available: true, record: rows[0] ? mapRow(rows[0]) : null };
@@ -126,7 +164,7 @@ export async function getA2pSubmissionState(
       const rows = await sql<SubmissionRow[]>`
         select ${sql(BASE_COLS as unknown as string[])}
         from public.clinic_a2p_submissions
-        where clinic_id = ${clinicId}
+        ${modeWhere}
         limit 1
       `;
       return { available: true, record: rows[0] ? mapRow(rows[0]) : null };
@@ -136,12 +174,39 @@ export async function getA2pSubmissionState(
   }
 }
 
+export async function listA2pSubmissionStates(
+  clinicId: string,
+): Promise<{ available: boolean; records: A2pSubmissionRecord[] }> {
+  const sql = getDb();
+  try {
+    const rows = await sql<SubmissionRow[]>`
+      select ${sql(FULL_COLS as unknown as string[])}
+      from public.clinic_a2p_submissions
+      where clinic_id = ${clinicId}
+      order by updated_at desc
+    `;
+    return { available: true, records: rows.map(mapRow) };
+  } catch {
+    try {
+      const rows = await sql<SubmissionRow[]>`
+        select ${sql(BASE_COLS as unknown as string[])}
+        from public.clinic_a2p_submissions
+        where clinic_id = ${clinicId}
+        order by updated_at desc
+      `;
+      return { available: true, records: rows.map(mapRow) };
+    } catch {
+      return { available: false, records: [] };
+    }
+  }
+}
+
 // ---- dry-run write (unchanged column set; works without 20260608 migration) ----
 
 export type UpsertA2pSubmissionInput = {
   clinicId: string;
   status: A2pSubmissionStatus;
-  submissionMode: A2pSubmissionMode;
+  submissionMode: A2pStoredSubmissionMode;
   targetMessagingServiceSid: string | null;
   selectedPhoneNumbers: A2pSubmissionSelectedNumber[];
   submittedAt: Date | null;
@@ -166,7 +231,7 @@ export async function upsertA2pSubmission(
        ${input.submittedAt}, ${input.submittedByAdminUserId},
        ${input.submittedByAdminEmail},
        ${input.payloadSnapshot ? sql.json(input.payloadSnapshot) : null})
-    on conflict (clinic_id) do update set
+    on conflict (clinic_id, submission_mode) do update set
       status = excluded.status,
       submission_mode = excluded.submission_mode,
       target_messaging_service_sid = excluded.target_messaging_service_sid,
@@ -186,6 +251,7 @@ export async function upsertA2pSubmission(
 
 export type A2pProgressInput = {
   clinicId: string;
+  submissionMode: A2pStoredSubmissionMode;
   status?: A2pSubmissionStatus;
   submissionStep?: string | null;
   // Merged into provider_state (jsonb ||). Must be redacted (no full EIN/secrets).
@@ -233,7 +299,7 @@ export async function upsertA2pSubmissionProgress(
        submitted_at, submitted_by_admin_user_id, submitted_by_admin_email,
        last_status_synced_at, last_error_code, last_error_message, rejection_reason)
     values
-      (${input.clinicId}, ${input.status ?? "submitted"}, 'live',
+      (${input.clinicId}, ${input.status ?? "submitted"}, ${input.submissionMode},
        ${input.submissionStep ?? null}, ${sql.json(patch)},
        ${input.targetMessagingServiceSid ?? null},
        ${sel ? sql.json(sel) : sql.json([])},
@@ -244,9 +310,9 @@ export async function upsertA2pSubmissionProgress(
        ${input.submittedByAdminEmail ?? null}, ${input.lastStatusSyncedAt ?? null},
        ${input.lastErrorCode ?? null}, ${input.lastErrorMessage ?? null},
        ${input.rejectionReason ?? null})
-    on conflict (clinic_id) do update set
+    on conflict (clinic_id, submission_mode) do update set
       status = coalesce(${input.status ?? null}, public.clinic_a2p_submissions.status),
-      submission_mode = 'live',
+      submission_mode = ${input.submissionMode},
       submission_step = coalesce(${input.submissionStep ?? null}, public.clinic_a2p_submissions.submission_step),
       provider_state = ${providerStateUpdate},
       target_messaging_service_sid = coalesce(${input.targetMessagingServiceSid ?? null}, public.clinic_a2p_submissions.target_messaging_service_sid),

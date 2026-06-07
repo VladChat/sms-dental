@@ -775,3 +775,24 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       the database for audit and reconciliation.
 - [ ] Secure cron/job routes with a bearer secret; for Vercel Cron, use
       `CRON_SECRET` so Vercel automatically supplies the Authorization header.
+
+---
+
+## Mock vs live provider test modes (reusable lessons)
+
+- [ ] If a workflow needs both mock/test and live/provider-billable attempts,
+      store them separately by an explicit mode key (for example
+      `(tenant_id, submission_mode)`), not in one shared row that can overwrite
+      a failed live attempt.
+- [ ] Make `mock` a first-class server-side mode, not a hidden checkbox under
+      live mode, and validate the requested mode on the server.
+- [ ] For Twilio Mock A2P, require `mock: true` on Brand creation and add a
+      test that fails if mock mode can call Brand Registration without it.
+- [ ] Use a separate empty Messaging Service for mock Campaigns. Never reuse
+      the live Messaging Service and never attach real senders to the mock one.
+- [ ] Split live Brand submission from live Campaign creation when Campaign
+      creation has separate recurring fees or hidden consequences. Require a
+      second explicit operator confirmation for the fee-bearing step.
+- [ ] If a new mode-aware schema migration is required, fail closed in the UI
+      and routes until that migration is applied instead of silently falling
+      back to an unsafe single-row overwrite path.
