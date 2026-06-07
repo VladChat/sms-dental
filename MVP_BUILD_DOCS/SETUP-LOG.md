@@ -5252,6 +5252,23 @@ Validation before commit/deploy:
 
 - `npm run typecheck` pass.
 - `npm run build` pass.
+
+Commit/push/deploy:
+
+- Implementation commit: `dc1b06b feat: add phone number removal lifecycle`.
+- Pushed to `origin/main`: yes.
+- Vercel Production deployment:
+  `dpl_CAKA1W4rrxXvWQjMnrGqCrcgHpC2`.
+- Deployment status: READY.
+- Aliases include `https://app.missedcallsdental.com`.
+
+Production smoke:
+
+- `https://app.missedcallsdental.com/api/health` -> 200.
+- `https://app.missedcallsdental.com/login` -> 200.
+- `https://app.missedcallsdental.com/account` -> 200.
+- `https://app.missedcallsdental.com/api/jobs/release-removed-phone-numbers`
+  without auth -> 401.
 - `git diff --check` pass.
 
 Commit/push/deploy:
