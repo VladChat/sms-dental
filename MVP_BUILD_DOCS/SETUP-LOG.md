@@ -5253,6 +5253,30 @@ Validation before commit/deploy:
 - `npm run typecheck` pass.
 - `npm run build` pass.
 
+2026-06-07 — A2P resume crash fix for Fairstone
+
+- Confirmed the production Fairstone A2P retry on commit `9ab91ea` failed in
+  `runRealA2pSubmission()` before any new Trust Product / Brand / Campaign
+  creation.
+- Root cause: the resume path read
+  `cpCtx.customerProfilesEntityAssignments.list` into a standalone variable and
+  then invoked it unbound. Twilio's SDK list helper expects its owning object as
+  `this`, so the call crashed with `Cannot read properties of undefined (reading
+  '_version')`.
+- Fix committed in `lib/twilio/a2p-submission.ts`: bind Trust Hub list methods
+  before calling them, record the current provider step before assignment and
+  evaluation calls, and treat missing/malformed evaluation responses as
+  controlled provider errors instead of runtime crashes.
+- Added focused helper/tests in `lib/twilio/trusthub-helpers.ts` and
+  `tests/a2p-trusthub-helpers.test.ts`.
+- Read-only verification after Vlad's failed retry:
+  existing secondary Customer Profile `BU205ad9d4372e304076d900db7af36c1e`
+  remained in `draft`, still assigned to stale Starter bundle
+  `BUaeab21ee3b774f0293e17522e6a1337c`; no Trust Product, Brand Registration, or
+  A2P Campaign was created during that retry.
+- Validation after the fix: `npm run typecheck`, `npm run test:a2p`, and
+  `npm run build` all passed locally.
+
 ---
 
 ## 2026-06-07 — Corrected Twilio platform Primary Customer Profile + safe A2P retry guard

@@ -2,6 +2,10 @@ import { getTwilioClient } from "./client";
 import { planCustomerProfileRecovery } from "./a2p-recovery";
 import { readConfiguredPlatformCustomerProfile } from "./platform-customer-profile";
 import {
+  bindTrustHubListMethod,
+  requireTrustHubEvaluationStatus,
+} from "./trusthub-helpers";
+import {
   getA2pBrandConfig,
   getA2pTrustHubConfig,
   getAppDomainsSafe,
@@ -492,13 +496,14 @@ export async function runRealA2pSubmission(
     let customerProfileAssignedObjectSids = new Set<string>();
     if (customerProfileSid) {
       const cpCtx = th.customerProfiles(customerProfileSid);
-      const listAssignments = cpCtx.customerProfilesEntityAssignments.list;
-      if (typeof listAssignments !== "function" && state.cpAssignmentsDone === true) {
+      state.lastStep = "customer_profile_assignment_lookup";
+      const listAssignments = bindTrustHubListMethod(cpCtx.customerProfilesEntityAssignments);
+      if (!listAssignments && state.cpAssignmentsDone === true) {
         throw new Error(
           "Could not verify existing Twilio customer profile assignments for safe retry.",
         );
       }
-      const assignmentList = typeof listAssignments === "function"
+      const assignmentList = listAssignments
         ? await listAssignments({ limit: 50 })
         : [];
       const assignedObjectSids = normalizeObjectSidList(assignmentList ?? []);
@@ -578,6 +583,7 @@ export async function runRealA2pSubmission(
     );
     if (state.cpAssignmentsDone !== true || missingCustomerProfileAssignments.length > 0) {
       const cpCtx = th.customerProfiles(customerProfileSid);
+      state.lastStep = "customer_profile_assignment";
       for (const objectSid of missingCustomerProfileAssignments) {
         await cpCtx.customerProfilesEntityAssignments.create({ objectSid });
         customerProfileAssignedObjectSids.add(objectSid);
@@ -590,13 +596,18 @@ export async function runRealA2pSubmission(
     // ---- 6 + 7. evaluate + submit the Customer Profile ----
     if (state.cpSubmitted !== true) {
       const cpCtx = th.customerProfiles(customerProfileSid);
+      state.lastStep = "customer_profile_evaluation";
       const evalResult = await cpCtx.customerProfilesEvaluations.create(
         buildCustomerProfileEvaluationPayload({
           policySid: trustHub.customerProfilePolicySid,
         }),
       );
-      state.customerProfileEvaluation = (evalResult.status ?? "unknown") as string;
-      if ((evalResult.status ?? "").toLowerCase() !== "compliant") {
+      const customerProfileEvaluationStatus = requireTrustHubEvaluationStatus(
+        evalResult,
+        "Customer Profile",
+      );
+      state.customerProfileEvaluation = customerProfileEvaluationStatus;
+      if (customerProfileEvaluationStatus.toLowerCase() !== "compliant") {
         await persist("blocked", "customer_profile_evaluation_failed", { customerProfileSid });
         return {
           ok: false,
@@ -664,13 +675,18 @@ export async function runRealA2pSubmission(
     // ---- 11 + 12. evaluate + submit the Trust Product ----
     if (state.tpSubmitted !== true) {
       const tpCtx = th.trustProducts(trustProductSid);
+      state.lastStep = "trust_product_evaluation";
       const evalResult = await tpCtx.trustProductsEvaluations.create(
         buildTrustProductEvaluationPayload({
           policySid: trustHub.a2pTrustProductPolicySid,
         }),
       );
-      state.trustProductEvaluation = (evalResult.status ?? "unknown") as string;
-      if ((evalResult.status ?? "").toLowerCase() !== "compliant") {
+      const trustProductEvaluationStatus = requireTrustHubEvaluationStatus(
+        evalResult,
+        "Trust Product",
+      );
+      state.trustProductEvaluation = trustProductEvaluationStatus;
+      if (trustProductEvaluationStatus.toLowerCase() !== "compliant") {
         await persist("blocked", "trust_product_evaluation_failed", { customerProfileSid, trustProductSid });
         return {
           ok: false,

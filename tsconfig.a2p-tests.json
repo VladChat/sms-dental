@@ -14,6 +14,7 @@
     "tests/**/*.ts",
     "lib/twilio/platform-customer-profile.ts",
     "lib/twilio/a2p-recovery.ts",
+    "lib/twilio/trusthub-helpers.ts",
     "lib/db/sms-readiness.ts",
     "lib/db/client.ts"
   ]
