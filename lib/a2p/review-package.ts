@@ -10,6 +10,12 @@ import {
 } from "../db/sms-readiness";
 import { getA2pSubmissionState } from "../db/a2p-submissions";
 import {
+  BUSINESS_TYPE_LABELS,
+  mapBusinessTypeForTwilio,
+  maskEin,
+  validateEin,
+} from "./validation";
+import {
   getA2pBrandConfig,
   getA2pSubmissionMode,
   getA2pTrustHubConfig,
@@ -18,9 +24,8 @@ import {
   isRealA2pSubmissionEnabled,
 } from "../env";
 import { runtimeConfig } from "../../config/runtime.config";
-import { BUSINESS_TYPE_LABELS, type BusinessType } from "../validation/url";
 import { buildCampaignContent } from "./campaign-content";
-import { addressParams, buildProviderPayloadView, mapBusinessType } from "./provider-payload";
+import { addressParams, buildProviderPayloadView } from "./provider-payload";
 import type {
   A2pAuthorizationState,
   A2pInternalDiagnostics,
@@ -80,6 +85,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
 
   // ---- business identity (EIN never exposed in full) ----
   const einDigits = (clinic.ein_tax_id ?? "").replace(/\D/g, "");
+  const einError = validateEin(clinic.ein_tax_id ?? "");
   const businessTypeLabel = isBusinessType(clinic.business_type)
     ? BUSINESS_TYPE_LABELS[clinic.business_type]
     : null;
@@ -90,6 +96,8 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     businessTypeLabel,
     einProvided: einDigits.length > 0,
     einLast4: einDigits.length >= 4 ? einDigits.slice(-4) : null,
+    einMasked: einDigits.length > 0 ? maskEin(clinic.ein_tax_id ?? "") : null,
+    einFormatValid: !einError,
     addressLine: composeAddress(clinic),
     website: emptyToNull(clinic.website),
     mainPhone: emptyToNull(clinic.main_phone),
@@ -229,10 +237,10 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   const providerPayload = buildProviderPayloadView({
     clinicName: clinic.name,
     legalBusinessName: business.legalBusinessName ?? clinic.name,
-    businessTypeMapped: mapBusinessType(clinic.business_type, brandCfg.businessTypeFallback),
+    businessTypeMapped: mapBusinessTypeForTwilio(clinic.business_type ?? "") ?? "(invalid)",
     industry: brandCfg.businessIndustry,
     registrationIdentifier: brandCfg.businessRegistrationIdentifier,
-    einMaskedValue: business.einProvided ? `Provided ···· ${business.einLast4 ?? "••••"}` : "(missing)",
+    einMaskedValue: business.einMasked ?? "(missing)",
     regionsOfOperation: brandCfg.regionsOfOperation,
     identity: brandCfg.businessIdentity,
     websiteUrl: urls.businessPage ?? "(missing)",
@@ -240,8 +248,8 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     repLastName: representative.lastName ?? "(missing)",
     repEmail: representative.email ?? "(missing)",
     repPhone: representative.phone ?? "(missing)",
-    repJobPosition: representative.title ?? "Owner",
-    repBusinessTitle: representative.title ?? "Owner",
+    repJobPosition: representative.title ?? "(missing)",
+    repBusinessTitle: representative.title ?? "(missing)",
     companyType: brandCfg.companyType,
     address: addressParams({
       customerName: business.legalBusinessName ?? clinic.name,
@@ -509,6 +517,8 @@ function notFoundPackage(
       businessTypeLabel: null,
       einProvided: false,
       einLast4: null,
+      einMasked: null,
+      einFormatValid: false,
       addressLine: null,
       website: null,
       mainPhone: null,
@@ -580,7 +590,7 @@ function emptyToNull(value: string | null | undefined): string | null {
   return v.length > 0 ? v : null;
 }
 
-function isBusinessType(value: string | null): value is BusinessType {
+function isBusinessType(value: string | null): value is keyof typeof BUSINESS_TYPE_LABELS {
   return value != null && value in BUSINESS_TYPE_LABELS;
 }
 

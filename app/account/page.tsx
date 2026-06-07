@@ -312,6 +312,7 @@ function buildData(args: {
       businessType: clinic.business_type ?? "",
       repFirstName: clinic.a2p_rep_first_name ?? "",
       repLastName: clinic.a2p_rep_last_name ?? "",
+      repBusinessTitle: clinic.a2p_rep_business_title ?? "",
       repEmail: clinic.a2p_rep_email ?? "",
       repPhone: clinic.a2p_rep_phone ?? "",
       authorized: clinic.a2p_authorized,

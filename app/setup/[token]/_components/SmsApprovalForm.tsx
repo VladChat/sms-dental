@@ -4,11 +4,21 @@ import { useState } from "react";
 import {
   BUSINESS_TYPES,
   BUSINESS_TYPE_LABELS,
-} from "../../../../lib/validation/url";
-import { Field, SelectField, SaveBar, StatusBadge, nowLabel, type StatusKind } from "./AccountUI";
+  formatEinForDisplay,
+  normalizeRepresentativePhone,
+  validateBusinessType,
+  validateEin,
+  validateRepresentativeEmail,
+  validateRepresentativeName,
+  validateRepresentativePhone,
+  validateRepresentativeTitle,
+  validateLegalBusinessName,
+} from "../../../../lib/a2p/validation";
+import { Field, InfoTooltip, SelectField, SaveBar, StatusBadge, nowLabel, type StatusKind } from "./AccountUI";
 import type { SmsApprovalFields, SmsStatus } from "./account-types";
 
 type FieldErrors = Partial<Record<keyof SmsApprovalFields, string>>;
+type Touched = Partial<Record<keyof SmsApprovalFields, boolean>>;
 
 const BUSINESS_TYPE_OPTIONS = BUSINESS_TYPES.map((v) => ({
   value: v,
@@ -44,19 +54,64 @@ export function SmsApprovalForm({
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [touched, setTouched] = useState<Touched>({});
 
-  function validate(): FieldErrors {
-    const e: FieldErrors = {};
-    if (value.legalBusinessName.trim().length < 2) e.legalBusinessName = "Enter your legal business name.";
-    if (value.einTaxId.trim().length < 2) e.einTaxId = "Enter your EIN.";
-    if (!(BUSINESS_TYPES as readonly string[]).includes(value.businessType)) {
-      e.businessType = "Choose a business type.";
+  function fieldError(name: keyof SmsApprovalFields, next = value): string | undefined {
+    switch (name) {
+      case "legalBusinessName":
+        return validateLegalBusinessName(next.legalBusinessName)?.message;
+      case "einTaxId":
+        return validateEin(next.einTaxId)?.message;
+      case "businessType":
+        return validateBusinessType(next.businessType)?.message;
+      case "repFirstName":
+        return validateRepresentativeName(next.repFirstName, "rep_first_name")?.message;
+      case "repLastName":
+        return validateRepresentativeName(next.repLastName, "rep_last_name")?.message;
+      case "repBusinessTitle":
+        return validateRepresentativeTitle(next.repBusinessTitle)?.message;
+      case "repEmail":
+        return validateRepresentativeEmail(next.repEmail)?.message;
+      case "repPhone":
+        return validateRepresentativePhone(next.repPhone)?.message;
+      default:
+        return undefined;
     }
-    if (value.repFirstName.trim().length < 1) e.repFirstName = "Enter a first name.";
-    if (value.repLastName.trim().length < 1) e.repLastName = "Enter a last name.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.repEmail.trim())) e.repEmail = "Enter a valid email.";
-    if (value.repPhone.replace(/\D/g, "").length < 10) e.repPhone = "Enter a valid phone number.";
+  }
+
+  function validate(next = value): FieldErrors {
+    const e: FieldErrors = {};
+    for (const key of [
+      "legalBusinessName",
+      "einTaxId",
+      "businessType",
+      "repFirstName",
+      "repLastName",
+      "repBusinessTitle",
+      "repEmail",
+      "repPhone",
+    ] as const) {
+      const message = fieldError(key, next);
+      if (message) e[key] = message;
+    }
     return e;
+  }
+
+  function touch(name: keyof SmsApprovalFields) {
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    setFieldErrors((prev) => ({ ...prev, [name]: fieldError(name) }));
+  }
+
+  function patch(nextPatch: Partial<SmsApprovalFields>) {
+    const next = { ...value, ...nextPatch };
+    onChange(nextPatch);
+    setFieldErrors((prev) => {
+      const updated = { ...prev };
+      for (const key of Object.keys(nextPatch) as Array<keyof SmsApprovalFields>) {
+        if (touched[key]) updated[key] = fieldError(key, next);
+      }
+      return updated;
+    });
   }
 
   async function onSubmit(ev: React.FormEvent<HTMLFormElement>) {
@@ -75,17 +130,20 @@ export function SmsApprovalForm({
       const endpoint = token
         ? `/api/onboarding/${encodeURIComponent(token)}/a2p`
         : "/api/account/a2p";
+      const normalizedEin = formatEinForDisplay(value.einTaxId);
+      const normalizedRepPhone = normalizeRepresentativePhone(value.repPhone);
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           legal_business_name: value.legalBusinessName,
-          ein_tax_id: value.einTaxId,
+          ein_tax_id: normalizedEin,
           business_type: value.businessType,
           rep_first_name: value.repFirstName,
           rep_last_name: value.repLastName,
+          rep_business_title: value.repBusinessTitle,
           rep_email: value.repEmail,
-          rep_phone: value.repPhone,
+          rep_phone: normalizedRepPhone,
           authorized: value.authorized,
         }),
       });
@@ -110,10 +168,11 @@ export function SmsApprovalForm({
   return (
     <form onSubmit={onSubmit} noValidate className="acct-form">
       <Field
-        label="Legal business name"
+        label={<LabelWithInfo label="Legal business name" tooltip="Use the exact legal business name registered with the EIN. This should match the IRS CP 575 or 147C letter." />}
         name="legal_business_name"
         value={value.legalBusinessName}
-        onChange={(v) => onChange({ legalBusinessName: v })}
+        onChange={(v) => patch({ legalBusinessName: v })}
+        onBlur={() => touch("legalBusinessName")}
         required
         helper="The exact registered name on your business paperwork."
         error={fieldErrors.legalBusinessName}
@@ -123,7 +182,8 @@ export function SmsApprovalForm({
         label="Business type"
         name="business_type"
         value={value.businessType}
-        onChange={(v) => onChange({ businessType: v })}
+        onChange={(v) => patch({ businessType: v })}
+        onBlur={() => touch("businessType")}
         options={BUSINESS_TYPE_OPTIONS}
         placeholder="Select business type…"
         required
@@ -132,24 +192,31 @@ export function SmsApprovalForm({
       />
 
       <Field
-        label="EIN"
+        label={<LabelWithInfo label="EIN" tooltip="Enter the EIN exactly as issued by the IRS. It must match the legal business name." />}
         name="ein_tax_id"
         value={value.einTaxId}
-        onChange={(v) => onChange({ einTaxId: v })}
+        onChange={(v) => patch({ einTaxId: v })}
+        onBlur={() => touch("einTaxId")}
         required
         inputMode="numeric"
-        helper="Your 9-digit federal tax ID."
+        helper="Enter a valid 9-digit EIN, for example 12-3456789."
         error={fieldErrors.einTaxId}
       />
 
       <fieldset className="acct-fieldset">
-        <legend className="t-label">Authorized representative</legend>
+        <legend className="t-label">
+          <LabelWithInfo
+            label="Authorized representative"
+            tooltip="This should be a person authorized to register the business for SMS messaging."
+          />
+        </legend>
         <div className="acct-grid-2">
           <Field
             label="First name"
             name="rep_first_name"
             value={value.repFirstName}
-            onChange={(v) => onChange({ repFirstName: v })}
+            onChange={(v) => patch({ repFirstName: v })}
+            onBlur={() => touch("repFirstName")}
             required
             autoComplete="given-name"
             error={fieldErrors.repFirstName}
@@ -158,27 +225,40 @@ export function SmsApprovalForm({
             label="Last name"
             name="rep_last_name"
             value={value.repLastName}
-            onChange={(v) => onChange({ repLastName: v })}
+            onChange={(v) => patch({ repLastName: v })}
+            onBlur={() => touch("repLastName")}
             required
             autoComplete="family-name"
             error={fieldErrors.repLastName}
           />
           <Field
-            label="Email"
+            label="Business title"
+            name="rep_business_title"
+            value={value.repBusinessTitle}
+            onChange={(v) => patch({ repBusinessTitle: v })}
+            onBlur={() => touch("repBusinessTitle")}
+            required
+            helper="For example: Owner, Director, or Office Manager."
+            error={fieldErrors.repBusinessTitle}
+          />
+          <Field
+            label={<LabelWithInfo label="Email" tooltip="Use a real email for the authorized representative. Disposable or temporary emails can fail review." />}
             name="rep_email"
             type="email"
             value={value.repEmail}
-            onChange={(v) => onChange({ repEmail: v })}
+            onChange={(v) => patch({ repEmail: v })}
+            onBlur={() => touch("repEmail")}
             required
             inputMode="email"
             autoComplete="email"
             error={fieldErrors.repEmail}
           />
           <Field
-            label="Phone"
+            label={<LabelWithInfo label="Phone" tooltip="Use a direct phone number for the authorized representative in U.S./Canada format." />}
             name="rep_phone"
             value={value.repPhone}
-            onChange={(v) => onChange({ repPhone: v })}
+            onChange={(v) => patch({ repPhone: v })}
+            onBlur={() => touch("repPhone")}
             required
             inputMode="tel"
             autoComplete="tel"
@@ -202,7 +282,7 @@ export function SmsApprovalForm({
         <input
           type="checkbox"
           checked={value.authorized}
-          onChange={(e) => onChange({ authorized: e.target.checked })}
+          onChange={(e) => patch({ authorized: e.target.checked })}
         />
         <span>
           I confirm these details are accurate and authorize Missed Calls Dental to use them for
@@ -226,5 +306,14 @@ export function SmsApprovalForm({
 
       <SaveBar label="Save approval information" saving={saving} savedAt={savedAt} error={error} />
     </form>
+  );
+}
+
+function LabelWithInfo({ label, tooltip }: { label: string; tooltip: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+      <span>{label}</span>
+      <InfoTooltip label={`${label} help`} text={tooltip} />
+    </span>
   );
 }

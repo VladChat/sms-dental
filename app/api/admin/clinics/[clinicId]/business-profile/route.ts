@@ -2,6 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import {
+  normalizeRepresentativePhone,
+  validateBusinessAddress,
+  validateWebsiteUrl,
+} from "../../../../../../lib/a2p/validation";
+import {
   jsonBadRequest,
   jsonError,
   jsonForbidden,
@@ -14,8 +19,6 @@ import {
   findClinicById,
   updateBusinessInformation,
 } from "../../../../../../lib/db/clinics";
-import { isValidE164, normalizePhone } from "../../../../../../lib/phone/normalize";
-import { isSafeHttpsUrl } from "../../../../../../lib/validation/url";
 import { recordAdminAuditEvent } from "../../../../../../lib/db/admin/audit";
 
 export const runtime = "nodejs";
@@ -67,21 +70,31 @@ export async function POST(
   }
   const parsed = BusinessInfoSchema.safeParse(body);
   if (!parsed.success) {
-    const zipIssue = parsed.error.issues.find((i) => i.path.includes("postal_code"));
-    if (zipIssue) return jsonBadRequest("Please enter a 5-digit ZIP code.");
     return jsonBadRequest("Please complete all required business profile fields.");
   }
 
-  const mainPhone = normalizePhone(parsed.data.main_phone);
-  if (!isValidE164(mainPhone)) {
+  const mainPhone = normalizeRepresentativePhone(parsed.data.main_phone);
+  if (!/^\+1\d{10}$/.test(mainPhone)) {
     return jsonBadRequest("Please enter a valid U.S. phone number for the main office phone.");
+  }
+
+  const addressIssues = validateBusinessAddress({
+    street: parsed.data.street_address,
+    city: parsed.data.city,
+    region: parsed.data.state_region.toUpperCase(),
+    postalCode: parsed.data.postal_code,
+    country: "US",
+  });
+  if (addressIssues.length > 0) {
+    return jsonBadRequest(addressIssues[0]?.message ?? "Please complete the business address.");
   }
 
   let website: string | null = null;
   const websiteRaw = parsed.data.website?.trim() ?? "";
   if (websiteRaw.length > 0) {
-    if (!isSafeHttpsUrl(websiteRaw)) {
-      return jsonBadRequest("Please enter a valid website URL that starts with https://");
+    const websiteIssue = validateWebsiteUrl(websiteRaw);
+    if (websiteIssue) {
+      return jsonBadRequest(websiteIssue.message);
     }
     website = websiteRaw;
   }
@@ -98,7 +111,7 @@ export async function POST(
     street_address: parsed.data.street_address,
     address_line2: addressLine2,
     city: parsed.data.city,
-    state_region: parsed.data.state_region,
+    state_region: parsed.data.state_region.toUpperCase(),
     postal_code: parsed.data.postal_code,
     website,
   };
@@ -133,7 +146,7 @@ export async function POST(
       streetAddress: next.street_address,
       addressLine2: next.address_line2,
       city: next.city,
-      stateRegion: next.state_region,
+      stateRegion: next.state_region.toUpperCase(),
       postalCode: next.postal_code,
       website,
     });

@@ -17,6 +17,7 @@ import type {
   A2pPayloadResource,
   A2pProviderPayloadView,
 } from "./types";
+import { mapBusinessTypeForTwilio } from "./validation";
 
 // Whether a stored website is a disallowed placeholder/platform/owner domain that
 // must NOT be submitted as this clinic's own A2P business website. Matches the
@@ -36,17 +37,11 @@ export function isDisallowedClinicWebsite(
   return disallowedHosts.some((bad) => host === bad || host.endsWith(`.${bad}`));
 }
 
-// Map the stored A2P business_type enum to a Trust Hub legal-structure string.
-// Account/policy-specific — verify acceptable values against your Twilio account.
-export function mapBusinessType(value: string | null, fallback: string): string {
-  switch ((value ?? "").trim()) {
-    case "PRIVATE_PROFIT": return "Private Company";
-    case "PUBLIC_PROFIT": return "Public Company";
-    case "NON_PROFIT": return "Non-profit Corporation";
-    case "SOLE_PROPRIETOR": return "Sole Proprietorship";
-    case "GOVERNMENT": return "Government";
-    default: return fallback;
-  }
+// Map the stored A2P business_type value to the exact Trust Hub legal-structure
+// string expected by Twilio. Returns null when the local value is too generic or
+// unsupported to submit safely.
+export function mapBusinessType(value: string | null): string | null {
+  return mapBusinessTypeForTwilio(value ?? "");
 }
 
 // Required attributes for the customer_profile_business_information EndUser.

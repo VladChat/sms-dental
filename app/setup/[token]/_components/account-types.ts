@@ -18,6 +18,7 @@ export type SmsApprovalFields = {
   businessType: string;
   repFirstName: string;
   repLastName: string;
+  repBusinessTitle: string;
   repEmail: string;
   repPhone: string;
   authorized: boolean;

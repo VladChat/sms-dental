@@ -366,6 +366,7 @@ function withRepDefaults(data: BusinessProfileData): SmsApprovalFields {
     businessType: a.businessType,
     repFirstName: a.repFirstName,
     repLastName: a.repLastName,
+    repBusinessTitle: a.repBusinessTitle,
     repEmail: a.repEmail || data.loginEmail,
     repPhone: a.repPhone || data.businessProfile.mainPhone,
     authorized: a.authorized,

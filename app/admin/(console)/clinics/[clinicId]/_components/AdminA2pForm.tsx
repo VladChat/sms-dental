@@ -2,8 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Field, SelectField, SaveBar, nowLabel } from "../../../../../setup/[token]/_components/AccountUI";
-import { BUSINESS_TYPES, BUSINESS_TYPE_LABELS } from "../../../../../../lib/validation/url";
+import {
+  BUSINESS_TYPES,
+  BUSINESS_TYPE_LABELS,
+  formatEinForDisplay,
+  normalizeRepresentativePhone,
+  validateBusinessType,
+  validateEin,
+  validateLegalBusinessName,
+  validateRepresentativeEmail,
+  validateRepresentativeName,
+  validateRepresentativePhone,
+  validateRepresentativeTitle,
+} from "../../../../../../lib/a2p/validation";
+import { Field, InfoTooltip, SelectField, SaveBar, nowLabel } from "../../../../../setup/[token]/_components/AccountUI";
 
 export type AdminA2pValue = {
   legalBusinessName: string;
@@ -11,12 +23,14 @@ export type AdminA2pValue = {
   businessType: string;
   repFirstName: string;
   repLastName: string;
+  repBusinessTitle: string;
   repEmail: string;
   repPhone: string;
   authorized: boolean;
 };
 
 type FieldErrors = Partial<Record<keyof AdminA2pValue, string>>;
+type Touched = Partial<Record<keyof AdminA2pValue, boolean>>;
 
 const BUSINESS_TYPE_OPTIONS = BUSINESS_TYPES.map((value) => ({
   value,
@@ -40,21 +54,68 @@ export function AdminA2pForm({
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [touched, setTouched] = useState<Touched>({});
 
   function set(patch: Partial<AdminA2pValue>) {
     setV((prev) => ({ ...prev, ...patch }));
   }
 
-  function validate(): FieldErrors {
+  function fieldError(name: keyof AdminA2pValue, next = v): string | undefined {
+    switch (name) {
+      case "legalBusinessName":
+        return validateLegalBusinessName(next.legalBusinessName)?.message;
+      case "einTaxId":
+        return validateEin(next.einTaxId)?.message;
+      case "businessType":
+        return validateBusinessType(next.businessType)?.message;
+      case "repFirstName":
+        return validateRepresentativeName(next.repFirstName, "rep_first_name")?.message;
+      case "repLastName":
+        return validateRepresentativeName(next.repLastName, "rep_last_name")?.message;
+      case "repBusinessTitle":
+        return validateRepresentativeTitle(next.repBusinessTitle)?.message;
+      case "repEmail":
+        return validateRepresentativeEmail(next.repEmail)?.message;
+      case "repPhone":
+        return validateRepresentativePhone(next.repPhone)?.message;
+      default:
+        return undefined;
+    }
+  }
+
+  function validate(next = v): FieldErrors {
     const e: FieldErrors = {};
-    if (v.legalBusinessName.trim().length < 2) e.legalBusinessName = "Enter the legal business name.";
-    if (v.einTaxId.trim().length < 2) e.einTaxId = "Enter the EIN.";
-    if (!(BUSINESS_TYPES as readonly string[]).includes(v.businessType)) e.businessType = "Choose a business type.";
-    if (v.repFirstName.trim().length < 1) e.repFirstName = "Enter a first name.";
-    if (v.repLastName.trim().length < 1) e.repLastName = "Enter a last name.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.repEmail.trim())) e.repEmail = "Enter a valid email.";
-    if (v.repPhone.replace(/\D/g, "").length < 10) e.repPhone = "Enter a valid phone number.";
+    for (const key of [
+      "legalBusinessName",
+      "einTaxId",
+      "businessType",
+      "repFirstName",
+      "repLastName",
+      "repBusinessTitle",
+      "repEmail",
+      "repPhone",
+    ] as const) {
+      const message = fieldError(key, next);
+      if (message) e[key] = message;
+    }
     return e;
+  }
+
+  function touch(name: keyof AdminA2pValue) {
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    setFieldErrors((prev) => ({ ...prev, [name]: fieldError(name) }));
+  }
+
+  function patch(nextPatch: Partial<AdminA2pValue>) {
+    const next = { ...v, ...nextPatch };
+    set(nextPatch);
+    setFieldErrors((prev) => {
+      const updated = { ...prev };
+      for (const key of Object.keys(nextPatch) as Array<keyof AdminA2pValue>) {
+        if (touched[key]) updated[key] = fieldError(key, next);
+      }
+      return updated;
+    });
   }
 
   async function onSubmit(ev: React.FormEvent<HTMLFormElement>) {
@@ -76,12 +137,13 @@ export function AdminA2pForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           legal_business_name: v.legalBusinessName,
-          ein_tax_id: v.einTaxId,
+          ein_tax_id: formatEinForDisplay(v.einTaxId),
           business_type: v.businessType,
           rep_first_name: v.repFirstName,
           rep_last_name: v.repLastName,
+          rep_business_title: v.repBusinessTitle,
           rep_email: v.repEmail,
-          rep_phone: v.repPhone,
+          rep_phone: normalizeRepresentativePhone(v.repPhone),
           authorized: v.authorized,
         }),
       });
@@ -104,23 +166,33 @@ export function AdminA2pForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="acct-form">
-      <Field label="Legal business name" name="a2p_legal" value={v.legalBusinessName} onChange={(x) => set({ legalBusinessName: x })} required helper="The exact registered name on the business paperwork." error={fieldErrors.legalBusinessName} />
-      <SelectField label="Business type" name="a2p_type" value={v.businessType} onChange={(x) => set({ businessType: x })} options={BUSINESS_TYPE_OPTIONS} placeholder="Select business type…" required error={fieldErrors.businessType} />
-      <Field label="EIN / Tax ID" name="a2p_ein" value={v.einTaxId} onChange={(x) => set({ einTaxId: x })} required inputMode="numeric" helper="9-digit federal tax ID." error={fieldErrors.einTaxId} />
+      <Field label={<LabelWithInfo label="Legal business name" tooltip="Use the exact legal business name registered with the EIN. This should match the IRS CP 575 or 147C letter." />} name="a2p_legal" value={v.legalBusinessName} onChange={(x) => patch({ legalBusinessName: x })} onBlur={() => touch("legalBusinessName")} required helper="The exact registered name on the business paperwork." error={fieldErrors.legalBusinessName} />
+      <SelectField label="Business type" name="a2p_type" value={v.businessType} onChange={(x) => patch({ businessType: x })} onBlur={() => touch("businessType")} options={BUSINESS_TYPE_OPTIONS} placeholder="Select business type…" required error={fieldErrors.businessType} />
+      <Field label={<LabelWithInfo label="EIN / Tax ID" tooltip="Enter the EIN exactly as issued by the IRS. It must match the legal business name." />} name="a2p_ein" value={v.einTaxId} onChange={(x) => patch({ einTaxId: x })} onBlur={() => touch("einTaxId")} required inputMode="numeric" helper="Enter a valid 9-digit EIN, for example 12-3456789." error={fieldErrors.einTaxId} />
       <fieldset className="acct-fieldset">
-        <legend className="t-label">Authorized representative</legend>
+        <legend className="t-label"><LabelWithInfo label="Authorized representative" tooltip="This should be a person authorized to register the business for SMS messaging." /></legend>
         <div className="acct-grid-2">
-          <Field label="First name" name="a2p_rep_first" value={v.repFirstName} onChange={(x) => set({ repFirstName: x })} required autoComplete="given-name" error={fieldErrors.repFirstName} />
-          <Field label="Last name" name="a2p_rep_last" value={v.repLastName} onChange={(x) => set({ repLastName: x })} required autoComplete="family-name" error={fieldErrors.repLastName} />
-          <Field label="Email" name="a2p_rep_email" type="email" value={v.repEmail} onChange={(x) => set({ repEmail: x })} required inputMode="email" autoComplete="email" error={fieldErrors.repEmail} />
-          <Field label="Phone" name="a2p_rep_phone" value={v.repPhone} onChange={(x) => set({ repPhone: x })} required inputMode="tel" autoComplete="tel" error={fieldErrors.repPhone} />
+          <Field label="First name" name="a2p_rep_first" value={v.repFirstName} onChange={(x) => patch({ repFirstName: x })} onBlur={() => touch("repFirstName")} required autoComplete="given-name" error={fieldErrors.repFirstName} />
+          <Field label="Last name" name="a2p_rep_last" value={v.repLastName} onChange={(x) => patch({ repLastName: x })} onBlur={() => touch("repLastName")} required autoComplete="family-name" error={fieldErrors.repLastName} />
+          <Field label="Business title" name="a2p_rep_title" value={v.repBusinessTitle} onChange={(x) => patch({ repBusinessTitle: x })} onBlur={() => touch("repBusinessTitle")} required helper="For example: Owner, Director, or Office Manager." error={fieldErrors.repBusinessTitle} />
+          <Field label={<LabelWithInfo label="Email" tooltip="Use a real email for the authorized representative. Disposable or temporary emails can fail review." />} name="a2p_rep_email" type="email" value={v.repEmail} onChange={(x) => patch({ repEmail: x })} onBlur={() => touch("repEmail")} required inputMode="email" autoComplete="email" error={fieldErrors.repEmail} />
+          <Field label={<LabelWithInfo label="Phone" tooltip="Use a direct phone number for the authorized representative in U.S./Canada format." />} name="a2p_rep_phone" value={v.repPhone} onChange={(x) => patch({ repPhone: x })} onBlur={() => touch("repPhone")} required inputMode="tel" autoComplete="tel" error={fieldErrors.repPhone} />
         </div>
       </fieldset>
       <label className="check">
-        <input type="checkbox" checked={v.authorized} onChange={(e) => set({ authorized: e.target.checked })} />
+        <input type="checkbox" checked={v.authorized} onChange={(e) => patch({ authorized: e.target.checked })} />
         <span>I confirm these details are accurate and authorize submitting them for SMS approval.</span>
       </label>
       <SaveBar label="Save approval information" saving={saving} savedAt={savedAt} error={error} />
     </form>
+  );
+}
+
+function LabelWithInfo({ label, tooltip }: { label: string; tooltip: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+      <span>{label}</span>
+      <InfoTooltip label={`${label} help`} text={tooltip} />
+    </span>
   );
 }

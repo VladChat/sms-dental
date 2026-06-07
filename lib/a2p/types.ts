@@ -126,6 +126,8 @@ export type A2pReviewBusiness = {
   // EIN is never exposed in full. Presence + last 4 only.
   einProvided: boolean;
   einLast4: string | null;
+  einMasked: string | null;
+  einFormatValid: boolean;
   addressLine: string | null;
   website: string | null;
   mainPhone: string | null;

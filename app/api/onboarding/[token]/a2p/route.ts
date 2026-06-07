@@ -2,14 +2,24 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import {
+  firstValidationMessage,
+  formatEinForDisplay,
+  normalizeRepresentativePhone,
+  validateBusinessType,
+  validateEin,
+  validateLegalBusinessName,
+  validateRepresentativeEmail,
+  validateRepresentativeName,
+  validateRepresentativePhone,
+  validateRepresentativeTitle,
+} from "../../../../../lib/a2p/validation";
+import {
   jsonBadRequest,
   jsonError,
   jsonOk,
 } from "../../../../../lib/http/responses";
 import { lookupSetupRequestByRawToken } from "../../../../../lib/onboarding/verify";
 import { updateA2pInformation } from "../../../../../lib/db/clinics";
-import { isValidE164, normalizePhone } from "../../../../../lib/phone/normalize";
-import { BUSINESS_TYPES } from "../../../../../lib/validation/url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,9 +37,10 @@ export const dynamic = "force-dynamic";
 const A2pSchema = z.object({
   legal_business_name: z.string().trim().min(2).max(200),
   ein_tax_id: z.string().trim().min(2).max(40),
-  business_type: z.enum(BUSINESS_TYPES),
+  business_type: z.string().trim().min(1).max(80),
   rep_first_name: z.string().trim().min(1).max(80),
   rep_last_name: z.string().trim().min(1).max(80),
+  rep_business_title: z.string().trim().min(1).max(80),
   rep_email: z.string().trim().email().max(254),
   rep_phone: z.string().trim().min(7).max(40),
   authorized: z.boolean(),
@@ -61,8 +72,6 @@ export async function POST(
   }
   const parsed = A2pSchema.safeParse(body);
   if (!parsed.success) {
-    const typeIssue = parsed.error.issues.find((i) => i.path.includes("business_type"));
-    if (typeIssue) return jsonBadRequest("Please choose a business type.");
     return jsonBadRequest("Please complete all required approval fields.");
   }
   if (!parsed.data.authorized) {
@@ -71,10 +80,21 @@ export async function POST(
     );
   }
 
-  const repPhone = normalizePhone(parsed.data.rep_phone);
-  if (!isValidE164(repPhone)) {
-    return jsonBadRequest("Please enter a valid U.S. phone number for the representative.");
+  const validations = [
+    validateLegalBusinessName(parsed.data.legal_business_name),
+    validateEin(parsed.data.ein_tax_id),
+    validateBusinessType(parsed.data.business_type),
+    validateRepresentativeName(parsed.data.rep_first_name, "rep_first_name"),
+    validateRepresentativeName(parsed.data.rep_last_name, "rep_last_name"),
+    validateRepresentativeTitle(parsed.data.rep_business_title),
+    validateRepresentativeEmail(parsed.data.rep_email),
+    validateRepresentativePhone(parsed.data.rep_phone),
+  ].filter((result): result is NonNullable<typeof result> => Boolean(result));
+  if (validations.length > 0) {
+    return jsonBadRequest(firstValidationMessage(validations) ?? "Please correct the approval fields and try again.");
   }
+  const repPhone = normalizeRepresentativePhone(parsed.data.rep_phone);
+  const einTaxId = formatEinForDisplay(parsed.data.ein_tax_id);
 
   // Persist. A DB failure must surface as a structured error, never a silent
   // "success" that disappears on reload.
@@ -82,10 +102,11 @@ export async function POST(
   try {
     clinic = await updateA2pInformation(setupRequest.clinic_id, {
       legalBusinessName: parsed.data.legal_business_name,
-      einTaxId: parsed.data.ein_tax_id,
+      einTaxId,
       businessType: parsed.data.business_type,
       repFirstName: parsed.data.rep_first_name,
       repLastName: parsed.data.rep_last_name,
+      repBusinessTitle: parsed.data.rep_business_title,
       repEmail: parsed.data.rep_email,
       repPhone,
       authorized: parsed.data.authorized,
@@ -109,6 +130,7 @@ export async function POST(
       businessType: clinic.business_type ?? "",
       repFirstName: clinic.a2p_rep_first_name ?? "",
       repLastName: clinic.a2p_rep_last_name ?? "",
+      repBusinessTitle: clinic.a2p_rep_business_title ?? "",
       repEmail: clinic.a2p_rep_email ?? "",
       repPhone: clinic.a2p_rep_phone ?? "",
       authorized: clinic.a2p_authorized,

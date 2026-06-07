@@ -15,6 +15,11 @@ import {
 } from "../db/a2p-submissions";
 import { buildCampaignContent } from "../a2p/campaign-content";
 import {
+  formatEinForTwilio,
+  mapBusinessTypeForTwilio,
+  mapJobPositionForTwilio,
+} from "../a2p/validation";
+import {
   addressParams,
   buildA2pMessagingProfileEndUserPayload,
   buildA2pTrustProductCreatePayload,
@@ -27,7 +32,6 @@ import {
   buildSecondaryCustomerProfileCreatePayload,
   buildSupportingDocumentPayload,
   buildTrustProductEvaluationPayload,
-  mapBusinessType,
 } from "../a2p/provider-payload";
 import type { A2pSubmissionStatus, JsonObject } from "../a2p/types";
 import { logger } from "../logging/logger";
@@ -58,6 +62,17 @@ export class A2pSubmissionDisabledError extends Error {
   constructor(reason: string) {
     super(reason);
     this.name = "A2pSubmissionDisabledError";
+  }
+}
+
+export class A2pSubmissionPersistError extends Error {
+  readonly code = "a2p_submission_persist_failed";
+  readonly requiresRecovery: boolean;
+
+  constructor(message: string, requiresRecovery: boolean) {
+    super(message);
+    this.name = "A2pSubmissionPersistError";
+    this.requiresRecovery = requiresRecovery;
   }
 }
 
@@ -177,6 +192,14 @@ function str(state: JsonObject, key: string): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
+function safeProviderError(err: unknown): { code: string | null; message: string } {
+  const code = (err as { code?: string | number; status?: string | number })?.code
+    ?? (err as { status?: string | number })?.status
+    ?? null;
+  const message = err instanceof Error ? err.message.slice(0, 500) : "unknown_provider_error";
+  return { code: code != null ? String(code) : null, message };
+}
+
 // Entry point. Performs every currently-allowed step, persisting progress, and
 // returns a structured result. Never sends SMS, never enables sms_recovery.
 export async function runRealA2pSubmission(
@@ -210,7 +233,9 @@ export async function runRealA2pSubmission(
   const activeNumbers = (await listActiveSmsNumbersForClinic(clinicId)).filter(
     (n) => n.number_type === "local",
   );
-  const ein = (clinic.ein_tax_id ?? "").trim();
+  const ein = formatEinForTwilio(clinic.ein_tax_id ?? "");
+  const businessType = mapBusinessTypeForTwilio(clinic.business_type ?? "");
+  const jobPosition = mapJobPositionForTwilio(clinic.a2p_rep_business_title ?? "");
   const appBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
   const businessPageUrl = appBaseUrl && clinic.slug ? `${appBaseUrl}/business/${clinic.slug}` : "";
 
@@ -237,35 +262,61 @@ export async function runRealA2pSubmission(
       rejectionReason: string | null;
     }> = {},
   ): Promise<void> {
-    await upsertA2pSubmissionProgress({
-      clinicId,
-      status,
-      submissionStep: step,
-      providerStatePatch: { ...state },
-      targetMessagingServiceSid: targetMsSid,
-      secondaryCustomerProfileSid: extra.customerProfileSid ?? str(state, "customerProfileSid"),
-      customerProfileSid: extra.customerProfileSid ?? str(state, "customerProfileSid"),
-      trustProductSid: extra.trustProductSid ?? str(state, "trustProductSid"),
-      brandRegistrationSid: extra.brandRegistrationSid ?? str(state, "brandRegistrationSid"),
-      campaignSid: extra.campaignSid ?? str(state, "campaignSid"),
-      messagingServiceSid: targetMsSid,
-      selectedPhoneNumbers: activeNumbers.map((n) => ({
-        phoneNumber: n.phone_number,
-        twilioPhoneNumberSid: n.twilio_phone_number_sid,
-      })),
-      submittedAt: new Date(),
-      submittedByAdminUserId: adminUserId,
-      submittedByAdminEmail: adminEmail,
-      lastErrorCode: extra.lastErrorCode ?? null,
-      lastErrorMessage: extra.lastErrorMessage ?? null,
-      rejectionReason: extra.rejectionReason ?? null,
-    });
+    try {
+      await upsertA2pSubmissionProgress({
+        clinicId,
+        status,
+        submissionStep: step,
+        providerStatePatch: { ...state, lastStep: step },
+        targetMessagingServiceSid: targetMsSid,
+        secondaryCustomerProfileSid: extra.customerProfileSid ?? str(state, "customerProfileSid"),
+        customerProfileSid: extra.customerProfileSid ?? str(state, "customerProfileSid"),
+        trustProductSid: extra.trustProductSid ?? str(state, "trustProductSid"),
+        brandRegistrationSid: extra.brandRegistrationSid ?? str(state, "brandRegistrationSid"),
+        campaignSid: extra.campaignSid ?? str(state, "campaignSid"),
+        messagingServiceSid: targetMsSid,
+        selectedPhoneNumbers: activeNumbers.map((n) => ({
+          phoneNumber: n.phone_number,
+          twilioPhoneNumberSid: n.twilio_phone_number_sid,
+        })),
+        submittedAt: new Date(),
+        submittedByAdminUserId: adminUserId,
+        submittedByAdminEmail: adminEmail,
+        lastErrorCode: extra.lastErrorCode ?? null,
+        lastErrorMessage: extra.lastErrorMessage ?? null,
+        rejectionReason: extra.rejectionReason ?? null,
+      });
+    } catch (err) {
+      logger.error("a2p.submit.persist_failed", {
+        clinicId,
+        step,
+        submissionMode: "live",
+        requestId: clinicId,
+        createdCount: created.length,
+        requires_recovery: created.length > 0,
+        safeErrorMessage: err instanceof Error ? err.message.slice(0, 300) : "persist_failed",
+      });
+      throw new A2pSubmissionPersistError(
+        created.length > 0
+          ? "A2P provider step may have created resources, but local state could not be recorded. Do not retry until provider state is checked."
+          : "A2P submission progress could not be recorded before provider state changed.",
+        created.length > 0,
+      );
+    }
   }
 
   function fail(step: string, err: unknown): A2pSubmissionResult {
-    const msg = err instanceof Error ? err.message.slice(0, 500) : "unknown_provider_error";
-    errors.push(msg);
-    logger.error("a2p.submit.step_failed", { clinicId, step });
+    const safe = safeProviderError(err);
+    errors.push(safe.message);
+    logger.error("a2p.submit.step_failed", {
+      clinicId,
+      step,
+      submissionMode: "live",
+      requestId: clinicId,
+      safeErrorMessage: safe.message,
+      twilioErrorCode: safe.code,
+      createdCount: created.length,
+    });
     return {
       ok: false,
       status: "failed",
@@ -278,13 +329,23 @@ export async function runRealA2pSubmission(
   }
 
   try {
+    logger.info("a2p.submit.provider_call_started", {
+      clinicId,
+      step: "provider_call",
+      submissionMode: "live",
+      requestId: clinicId,
+      createdCount: created.length,
+    });
+    if (!businessType || !jobPosition || !ein) {
+      throw new Error("A2P provider payload is incomplete after normalization.");
+    }
     // ---- 1. business information EndUser ----
     let businessEndUserSid = str(state, "businessEndUserSid");
     if (!businessEndUserSid) {
       const businessPayload = buildBusinessEndUserPayload({
         clinicName: clinic.name,
         businessName: clinic.legal_business_name ?? clinic.name,
-        businessType: mapBusinessType(clinic.business_type, brandCfg.businessTypeFallback),
+        businessType,
         industry: brandCfg.businessIndustry,
         registrationIdentifier: brandCfg.businessRegistrationIdentifier,
         businessRegistrationNumber: ein,
@@ -312,8 +373,8 @@ export async function runRealA2pSubmission(
         lastName: clinic.a2p_rep_last_name ?? "",
         email: clinic.a2p_rep_email ?? "",
         phone: clinic.a2p_rep_phone ?? "",
-        jobPosition: clinic.a2p_rep_business_title ?? "Owner",
-        businessTitle: clinic.a2p_rep_business_title ?? "Owner",
+        jobPosition,
+        businessTitle: clinic.a2p_rep_business_title ?? "",
       });
       const eu = await th.endUsers.create({
         friendlyName: representativePayload.friendlyName,

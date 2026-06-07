@@ -420,6 +420,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 businessType: d.businessType ?? "",
                 repFirstName: d.a2pRepFirstName ?? "",
                 repLastName: d.a2pRepLastName ?? "",
+                repBusinessTitle: d.a2pRepBusinessTitle ?? "",
                 repEmail: d.a2pRepEmail ?? "",
                 repPhone: d.a2pRepPhone ?? "",
                 authorized: d.a2pAuthorized,

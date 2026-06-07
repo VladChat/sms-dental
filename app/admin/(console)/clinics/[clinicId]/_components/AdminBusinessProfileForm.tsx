@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Field, SaveBar, nowLabel } from "../../../../../setup/[token]/_components/AccountUI";
+import {
+  normalizeRepresentativePhone,
+  validateBusinessAddress,
+  validateWebsiteUrl,
+} from "../../../../../../lib/a2p/validation";
+import { Field, InfoTooltip, SaveBar, nowLabel } from "../../../../../setup/[token]/_components/AccountUI";
 
 export type AdminBusinessProfileValue = {
   name: string;
@@ -16,6 +21,7 @@ export type AdminBusinessProfileValue = {
 };
 
 type FieldErrors = Partial<Record<keyof AdminBusinessProfileValue, string>>;
+type Touched = Partial<Record<keyof AdminBusinessProfileValue, boolean>>;
 
 // Admin-scoped Business Profile editor. Same fields + client validation as the
 // owner form (BusinessProfileForm), but posts to the platform-admin-guarded
@@ -34,23 +40,58 @@ export function AdminBusinessProfileForm({
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [touched, setTouched] = useState<Touched>({});
 
   function set(patch: Partial<AdminBusinessProfileValue>) {
     setV((prev) => ({ ...prev, ...patch }));
   }
 
-  function validate(): FieldErrors {
+  function fieldError(name: keyof AdminBusinessProfileValue, next = v): string | undefined {
+    if (name === "name") return next.name.trim().length < 2 ? "Enter the clinic name." : undefined;
+    if (name === "mainPhone") {
+      return /^\+1\d{10}$/.test(normalizeRepresentativePhone(next.mainPhone))
+        ? undefined
+        : "Enter a valid U.S. phone number for the main office phone.";
+    }
+    if (name === "website") return next.website.trim() ? validateWebsiteUrl(next.website)?.message : undefined;
+    const issues = validateBusinessAddress({
+      street: next.streetAddress,
+      city: next.city,
+      region: next.stateRegion.toUpperCase(),
+      postalCode: next.postalCode,
+      country: "US",
+    });
+    if (name === "streetAddress") return issues.find((issue) => issue.field === "street_address")?.message;
+    if (name === "city") return issues.find((issue) => issue.field === "city")?.message;
+    if (name === "stateRegion") return issues.find((issue) => issue.field === "state_region")?.message;
+    if (name === "postalCode") return issues.find((issue) => issue.field === "postal_code")?.message;
+    return undefined;
+  }
+
+  function validate(next = v): FieldErrors {
     const e: FieldErrors = {};
-    if (v.name.trim().length < 2) e.name = "Enter the clinic name.";
-    if (v.mainPhone.replace(/\D/g, "").length < 10) e.mainPhone = "Enter a valid phone number.";
-    if (v.streetAddress.trim().length < 2) e.streetAddress = "Enter the street address.";
-    if (v.city.trim().length < 1) e.city = "Enter the city.";
-    if (v.stateRegion.trim().length < 2) e.stateRegion = "Enter the state.";
-    if (!/^\d{5}(-\d{4})?$/.test(v.postalCode.trim())) e.postalCode = "Enter a 5-digit ZIP code.";
-    if (v.website.trim() && !/^https:\/\/.+\..+/.test(v.website.trim())) {
-      e.website = "Website must start with https://";
+    for (const key of ["name", "mainPhone", "streetAddress", "city", "stateRegion", "postalCode", "website"] as const) {
+      const message = fieldError(key, next);
+      if (message) e[key] = message;
     }
     return e;
+  }
+
+  function touch(name: keyof AdminBusinessProfileValue) {
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    setFieldErrors((prev) => ({ ...prev, [name]: fieldError(name) }));
+  }
+
+  function patch(nextPatch: Partial<AdminBusinessProfileValue>) {
+    const next = { ...v, ...nextPatch };
+    set(nextPatch);
+    setFieldErrors((prev) => {
+      const updated = { ...prev };
+      for (const key of Object.keys(nextPatch) as Array<keyof AdminBusinessProfileValue>) {
+        if (touched[key]) updated[key] = fieldError(key, next);
+      }
+      return updated;
+    });
   }
 
   async function onSubmit(ev: React.FormEvent<HTMLFormElement>) {
@@ -68,11 +109,11 @@ export function AdminBusinessProfileForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: v.name,
-          main_phone: v.mainPhone,
+          main_phone: normalizeRepresentativePhone(v.mainPhone),
           street_address: v.streetAddress,
           address_line2: v.addressLine2,
           city: v.city,
-          state_region: v.stateRegion,
+          state_region: v.stateRegion.toUpperCase(),
           postal_code: v.postalCode,
           website: v.website,
         }),
@@ -96,17 +137,26 @@ export function AdminBusinessProfileForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="acct-form">
-      <Field label="Public clinic name" name="bp_name" value={v.name} onChange={(x) => set({ name: x })} required error={fieldErrors.name} helper="The name patients know this office by." />
-      <Field label="Main office phone" name="bp_main_phone" value={v.mainPhone} onChange={(x) => set({ mainPhone: x })} required inputMode="tel" autoComplete="tel" error={fieldErrors.mainPhone} />
-      <Field label="Street address" name="bp_street" value={v.streetAddress} onChange={(x) => set({ streetAddress: x })} required autoComplete="address-line1" error={fieldErrors.streetAddress} />
-      <Field label="Address line 2" name="bp_line2" value={v.addressLine2} onChange={(x) => set({ addressLine2: x })} optional placeholder="Suite, unit, floor" autoComplete="address-line2" />
+      <Field label="Public clinic name" name="bp_name" value={v.name} onChange={(x) => patch({ name: x })} onBlur={() => touch("name")} required error={fieldErrors.name} helper="The name patients know this office by." />
+      <Field label="Main office phone" name="bp_main_phone" value={v.mainPhone} onChange={(x) => patch({ mainPhone: x })} onBlur={() => touch("mainPhone")} required inputMode="tel" autoComplete="tel" error={fieldErrors.mainPhone} />
+      <Field label={<LabelWithInfo label="Street address" tooltip="Use the business address associated with the clinic or business registration when possible." />} name="bp_street" value={v.streetAddress} onChange={(x) => patch({ streetAddress: x })} onBlur={() => touch("streetAddress")} required autoComplete="address-line1" error={fieldErrors.streetAddress} />
+      <Field label="Address line 2" name="bp_line2" value={v.addressLine2} onChange={(x) => patch({ addressLine2: x })} optional placeholder="Suite, unit, floor" autoComplete="address-line2" />
       <div className="acct-grid-3">
-        <Field label="City" name="bp_city" value={v.city} onChange={(x) => set({ city: x })} required autoComplete="address-level2" error={fieldErrors.city} />
-        <Field label="State" name="bp_state" value={v.stateRegion} onChange={(x) => set({ stateRegion: x })} required placeholder="IL" autoComplete="address-level1" error={fieldErrors.stateRegion} />
-        <Field label="ZIP code" name="bp_zip" value={v.postalCode} onChange={(x) => set({ postalCode: x })} required inputMode="numeric" autoComplete="postal-code" error={fieldErrors.postalCode} />
+        <Field label="City" name="bp_city" value={v.city} onChange={(x) => patch({ city: x })} onBlur={() => touch("city")} required autoComplete="address-level2" error={fieldErrors.city} />
+        <Field label="State" name="bp_state" value={v.stateRegion} onChange={(x) => patch({ stateRegion: x })} onBlur={() => touch("stateRegion")} required placeholder="IL" autoComplete="address-level1" error={fieldErrors.stateRegion} />
+        <Field label="ZIP code" name="bp_zip" value={v.postalCode} onChange={(x) => patch({ postalCode: x })} onBlur={() => touch("postalCode")} required inputMode="numeric" autoComplete="postal-code" error={fieldErrors.postalCode} />
       </div>
-      <Field label="Website" name="bp_website" value={v.website} onChange={(x) => set({ website: x })} optional placeholder="https://example.com" autoComplete="url" error={fieldErrors.website} />
+      <Field label={<LabelWithInfo label="Website" tooltip="The website must be public, functional, and related to the legal business name or clinic name. Twilio may review it during A2P verification." />} name="bp_website" value={v.website} onChange={(x) => patch({ website: x })} onBlur={() => touch("website")} optional placeholder="https://example.com" autoComplete="url" error={fieldErrors.website} />
       <SaveBar label="Save business profile" saving={saving} savedAt={savedAt} error={error} />
     </form>
+  );
+}
+
+function LabelWithInfo({ label, tooltip }: { label: string; tooltip: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+      <span>{label}</span>
+      <InfoTooltip label={`${label} help`} text={tooltip} />
+    </span>
   );
 }

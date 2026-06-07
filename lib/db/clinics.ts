@@ -263,6 +263,7 @@ export type A2pInformationInput = {
   businessType: string;
   repFirstName: string;
   repLastName: string;
+  repBusinessTitle: string;
   repEmail: string;
   repPhone: string;
   authorized: boolean;
@@ -286,8 +287,7 @@ export async function updateA2pInformation(
       business_type = ${input.businessType},
       a2p_rep_first_name = ${input.repFirstName},
       a2p_rep_last_name = ${input.repLastName},
-      -- Representative title is system-generated, not customer-entered.
-      a2p_rep_business_title = 'Owner',
+      a2p_rep_business_title = ${input.repBusinessTitle},
       a2p_rep_email = ${input.repEmail},
       a2p_rep_phone = ${input.repPhone},
       a2p_authorized = ${input.authorized},

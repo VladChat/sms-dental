@@ -4,7 +4,7 @@
    These use the global design-system classes (.card, .field, .input, .btn,
    .badge, .alert) so the dashboard matches the rest of the product. */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 export type BadgeTone = "neutral" | "brand" | "success" | "warning" | "info" | "error";
 
@@ -142,6 +142,7 @@ export function Field({
   name,
   value,
   onChange,
+  onBlur,
   type = "text",
   required = false,
   optional = false,
@@ -151,17 +152,18 @@ export function Field({
   helper,
   error,
 }: {
-  label: string;
+  label: ReactNode;
   name: string;
   value: string;
   onChange: (v: string) => void;
+  onBlur?: () => void;
   type?: string;
   required?: boolean;
   optional?: boolean;
   placeholder?: string;
   inputMode?: "text" | "tel" | "email" | "numeric";
   autoComplete?: string;
-  helper?: string;
+  helper?: ReactNode;
   error?: string;
 }) {
   const helperId = helper ? `${name}-help` : undefined;
@@ -180,6 +182,7 @@ export function Field({
         className="input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         required={required}
         placeholder={placeholder}
         inputMode={inputMode}
@@ -204,20 +207,22 @@ export function SelectField({
   name,
   value,
   onChange,
+  onBlur,
   options,
   placeholder,
   required = false,
   helper,
   error,
 }: {
-  label: string;
+  label: ReactNode;
   name: string;
   value: string;
   onChange: (v: string) => void;
+  onBlur?: () => void;
   options: { value: string; label: string }[];
   placeholder?: string;
   required?: boolean;
-  helper?: string;
+  helper?: ReactNode;
   error?: string;
 }) {
   const helperId = helper ? `${name}-help` : undefined;
@@ -234,6 +239,7 @@ export function SelectField({
         className="select"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         required={required}
         aria-describedby={[helperId, errorId].filter(Boolean).join(" ") || undefined}
         aria-invalid={error ? true : undefined}

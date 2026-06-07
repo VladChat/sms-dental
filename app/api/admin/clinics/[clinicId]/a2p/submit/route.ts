@@ -9,10 +9,20 @@ import {
 import { resolvePlatformAdmin } from "@/lib/auth/platform-admin";
 import { recordAdminAuditEvent } from "@/lib/db/admin/audit";
 import { buildA2pReviewPackage } from "@/lib/a2p/review-package";
-import { upsertA2pSubmission } from "@/lib/db/a2p-submissions";
+import { upsertA2pSubmission, upsertA2pSubmissionProgress } from "@/lib/db/a2p-submissions";
 import { getA2pSubmissionMode } from "@/lib/env";
-import { A2pSubmissionDisabledError, runRealA2pSubmission } from "@/lib/twilio/a2p-submission";
+import {
+  A2pSubmissionDisabledError,
+  A2pSubmissionPersistError,
+  runRealA2pSubmission,
+} from "@/lib/twilio/a2p-submission";
 import type { A2pReviewPackage, JsonObject } from "@/lib/a2p/types";
+import {
+  firstValidationMessage,
+  type A2pValidationResult,
+  validateA2pPreflight,
+} from "@/lib/a2p/validation";
+import { logger } from "@/lib/logging/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +51,7 @@ export async function POST(
 
   const { clinicId } = await ctx.params;
   if (!UUID_RE.test(clinicId)) return jsonError(404, "not_found", "Clinic not found.");
+  const requestId = req.headers.get("x-vercel-id") ?? `a2p-${clinicId}`;
 
   const pkg = await buildA2pReviewPackage(clinicId).catch(() => null);
   if (!pkg || !pkg.found) return jsonError(404, "not_found", "Clinic not found.");
@@ -49,6 +60,14 @@ export async function POST(
   if (mode === "disabled") {
     return jsonError(409, "submission_disabled", "A2P submission is disabled in this environment.");
   }
+
+  logger.info("a2p.submit.started", {
+    clinicId,
+    step: "request_received",
+    submissionMode: mode,
+    requestId,
+    createdCount: 0,
+  });
 
   // Shared server-side re-validation (never trust the client).
   if (!pkg.readinessAvailable) {
@@ -136,6 +155,58 @@ export async function POST(
   }
 
   // ---------------- live mode (REAL Twilio submission) ----------------
+  const validationErrors = validateA2pPreflight(pkg).filter((result) => result.severity === "error");
+  if (validationErrors.length > 0) {
+    const safeMessage =
+      firstValidationMessage(validationErrors) ??
+      "Cannot submit: required A2P fields are invalid. Correct them before A2P submission.";
+    logger.warn("a2p.submit.preflight_failed", {
+      clinicId,
+      step: "preflight_validation",
+      submissionMode: "live",
+      requestId,
+      safeErrorMessage: safeMessage,
+      validationErrorCodes: validationErrors.map((result) => result.code),
+      createdCount: 0,
+    });
+    try {
+      await upsertA2pSubmissionProgress({
+        clinicId,
+        status: "blocked",
+        submissionStep: "preflight_validation",
+        submittedByAdminUserId: admin.userId,
+        submittedByAdminEmail: admin.email,
+        lastErrorCode: "A2P_PREFLIGHT_VALIDATION_FAILED",
+        lastErrorMessage: safeMessage,
+      });
+    } catch (err) {
+      logger.error("a2p.submit.persist_failed", {
+        clinicId,
+        step: "preflight_validation",
+        submissionMode: "live",
+        requestId,
+        safeErrorMessage: err instanceof Error ? err.message.slice(0, 300) : "persist_failed",
+        createdCount: 0,
+        requires_recovery: false,
+      });
+      return jsonError(
+        503,
+        "tracking_unavailable",
+        "A2P submission tracking is unavailable. Fix tracking before retrying A2P submission.",
+      );
+    }
+    return jsonOk({
+      ok: false,
+      status: "blocked",
+      step: "preflight_validation",
+      error: {
+        code: "A2P_PREFLIGHT_VALIDATION_FAILED",
+        message: safeMessage,
+      },
+      validationErrors: validationErrors.map(toUiValidationError),
+    });
+  }
+
   if (!pkg.authorizationState.liveSubmitArmed) {
     return jsonError(
       409,
@@ -154,6 +225,13 @@ export async function POST(
   } catch (err) {
     if (err instanceof A2pSubmissionDisabledError) {
       return jsonError(409, "submission_disabled", err.message);
+    }
+    if (err instanceof A2pSubmissionPersistError) {
+      return jsonError(
+        503,
+        "tracking_failed_after_provider_mutation",
+        err.message,
+      );
     }
     await recordAdminAuditEvent({
       adminUserId: admin.userId,
@@ -188,6 +266,15 @@ export async function POST(
     metadata: { authSource: admin.source, real_submission: true },
   }).catch(() => {});
 
+  logger.info(result.ok ? "a2p.submit.completed" : "a2p.submit.step_failed", {
+    clinicId,
+    step: result.step,
+    submissionMode: "live",
+    requestId,
+    safeErrorMessage: result.providerErrors[0] ?? null,
+    createdCount: result.createdResources.length,
+  });
+
   return jsonOk({
     ok: result.ok,
     status: result.status,
@@ -195,6 +282,9 @@ export async function POST(
     realSubmission: true,
     step: result.step,
     message: result.message,
+    error: result.ok
+      ? undefined
+      : { code: "A2P_PROVIDER_ERROR", message: result.providerErrors[0] ?? result.message },
     createdResources: result.createdResources,
     providerErrors: result.providerErrors,
     nextAction: result.nextAction,
@@ -227,5 +317,13 @@ function redactedSnapshot(pkg: A2pReviewPackage): JsonObject {
       pn_sid: n.twilioPhoneNumberSid,
       coverage: n.coverageDisplay,
     })),
+  };
+}
+
+function toUiValidationError(result: A2pValidationResult) {
+  return {
+    field: result.field,
+    code: result.code,
+    message: result.message,
   };
 }

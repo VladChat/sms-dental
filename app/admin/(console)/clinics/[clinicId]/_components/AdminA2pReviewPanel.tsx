@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, humanizeToken } from "../../../_components/AdminUI";
+import {
+  hasValidationErrors,
+  type A2pValidationResult,
+  validateA2pPreflight,
+} from "../../../../../../lib/a2p/validation";
 import type {
   A2pIncludedSender,
   A2pPayloadField,
@@ -189,6 +194,13 @@ function providerSectionsFromPackage(pkg: A2pReviewPackage): ProviderReviewSecti
   };
 }
 
+function firstValidationForField(
+  validations: A2pValidationResult[],
+  fields: string[],
+): A2pValidationResult | null {
+  return validations.find((validation) => fields.includes(validation.field)) ?? null;
+}
+
 function deriveLaunchReadiness(pkg: A2pReviewPackage, launchStatus: LaunchStatus): {
   label: string;
   tone: Tone;
@@ -245,8 +257,38 @@ function deriveLaunchReadiness(pkg: A2pReviewPackage, launchStatus: LaunchStatus
   };
 }
 
-function buildChecklist(pkg: A2pReviewPackage): ChecklistItem[] {
+function buildChecklist(pkg: A2pReviewPackage, validations: A2pValidationResult[]): ChecklistItem[] {
   const hasWebsite = Boolean(pkg.business.website);
+  const businessValidation = firstValidationForField(validations, [
+    "legal_business_name",
+    "business_registration_number",
+    "business_type",
+    "business_industry",
+    "business_identity",
+    "business_regions_of_operation",
+    "website",
+  ]);
+  const repValidation = firstValidationForField(validations, [
+    "rep_first_name",
+    "rep_last_name",
+    "rep_business_title",
+    "rep_email",
+    "rep_phone",
+    "job_position",
+    "authorized",
+  ]);
+  const addressValidation = firstValidationForField(validations, [
+    "street_address",
+    "city",
+    "state_region",
+    "postal_code",
+    "country",
+  ]);
+  const campaignValidation = firstValidationForField(validations, [
+    "campaign_description",
+    "message_flow",
+    "sample_messages",
+  ]);
   const businessPresent =
     Boolean(pkg.business.legalBusinessName) &&
     pkg.business.einProvided &&
@@ -266,37 +308,43 @@ function buildChecklist(pkg: A2pReviewPackage): ChecklistItem[] {
     {
       id: "business-identity",
       label: "Business identity",
-      tone: businessPresent ? "present" : "missing",
+      tone: businessValidation ? "warning" : businessPresent ? "present" : "missing",
       summary: [
         pkg.business.legalBusinessName ?? "Missing legal name",
-        pkg.business.einProvided ? "EIN provided" : "EIN missing",
+        pkg.business.einProvided
+          ? pkg.business.einFormatValid
+            ? "EIN provided"
+            : "EIN format invalid"
+          : "EIN missing",
         hasWebsite ? "Website present" : "Website missing",
-      ].join(" · "),
+        businessValidation?.operatorMessage ?? businessValidation?.message,
+      ].filter(Boolean).join(" · "),
       href: "#a2p-approval-content",
     },
     {
       id: "authorized-representative",
       label: "Authorized representative",
-      tone: representativePresent ? "present" : "missing",
+      tone: repValidation ? "warning" : representativePresent ? "present" : "missing",
       summary: [
         [pkg.representative.firstName, pkg.representative.lastName].filter(Boolean).join(" ") || "Representative missing",
         pkg.representative.title ?? "Title missing",
         representativePresent ? "phone/email present" : "phone/email incomplete",
-      ].join(" · "),
+        repValidation?.message,
+      ].filter(Boolean).join(" · "),
       href: "#a2p-approval-content",
     },
     {
       id: "business-address",
       label: "Business address",
-      tone: addressPresent ? "present" : "missing",
-      summary: pkg.business.addressLine ?? "Business address missing",
+      tone: addressValidation ? "warning" : addressPresent ? "present" : "missing",
+      summary: [pkg.business.addressLine ?? "Business address missing", addressValidation?.message].filter(Boolean).join(" · "),
       href: "#a2p-approval-content",
     },
     {
       id: "campaign-content",
       label: "Campaign content",
-      tone: "present",
-      summary: "Clinic-first wording · appointment follow-up only · no marketing",
+      tone: campaignValidation ? "warning" : "present",
+      summary: campaignValidation?.message ?? "Clinic-first wording · appointment follow-up only · no marketing",
       href: "#a2p-campaign-content",
     },
     {
@@ -428,9 +476,27 @@ export function AdminA2pReviewPanel({
     try {
       const res = await fetch(path, { method: "POST", credentials: "include" });
       const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; message?: string; nextAction?: string; error?: { message?: string } }
+        | {
+            ok?: boolean;
+            message?: string;
+            nextAction?: string;
+            step?: string;
+            providerErrors?: string[];
+            lastErrorMessage?: string;
+            validationErrors?: Array<{ message?: string }>;
+            error?: { message?: string };
+          }
         | null;
-      if (!res.ok || !json?.ok) return { ok: false, message: json?.error?.message ?? fallbackError };
+      if (!res.ok || !json?.ok) {
+        const base =
+          json?.error?.message
+          ?? (json?.providerErrors?.[0] ? `Twilio rejected the submission: ${json.providerErrors[0]}` : null)
+          ?? json?.validationErrors?.[0]?.message
+          ?? json?.lastErrorMessage
+          ?? "A2P submission failed. Check server logs before retrying.";
+        const withStep = json?.step ? `${base} Failed at step: ${json.step}.` : base;
+        return { ok: false, message: withStep || fallbackError };
+      }
       const next = json.nextAction ? ` ${json.nextAction}` : "";
       return { ok: true, message: (json.message ?? "Done.") + next };
     } catch {
@@ -470,7 +536,7 @@ export function AdminA2pReviewPanel({
     setSubmitting(true);
     setMessage(null);
     setError(null);
-    const r = await post(`/api/admin/clinics/${clinicId}/a2p/submit`, "Could not record the A2P submission.");
+    const r = await post(`/api/admin/clinics/${clinicId}/a2p/submit`, "A2P submission failed. Check server logs before retrying.");
     if (r.ok) {
       setMessage(r.message);
       setConfirmLive(false);
@@ -484,8 +550,12 @@ export function AdminA2pReviewPanel({
   const auth = pkg.authorizationState;
   const diagnostics = pkg.internalDiagnostics;
   const sub = diagnostics.submission;
+  const preflightValidations = useMemo(
+    () => validateA2pPreflight(pkg).filter((result) => result.severity === "error"),
+    [pkg],
+  );
   const providerSections = useMemo(() => providerSectionsFromPackage(pkg), [pkg]);
-  const checklist = useMemo(() => buildChecklist(pkg), [pkg]);
+  const checklist = useMemo(() => buildChecklist(pkg, preflightValidations), [pkg, preflightValidations]);
   const launchReadiness = useMemo(() => deriveLaunchReadiness(pkg, launchStatus), [pkg, launchStatus]);
   const submissionHistory = useMemo(() => buildSubmissionHistory(pkg), [pkg]);
   const isLive = auth.submissionMode === "live";
@@ -493,11 +563,14 @@ export function AdminA2pReviewPanel({
   const isApproved = sub.status === "approved";
   const isRejected = sub.status === "rejected";
   const isResume = sub.status === "pending" || sub.status === "submitted" || sub.status === "failed";
+  const hasPreflightErrors = hasValidationErrors(preflightValidations);
+  const primaryPreflightError = preflightValidations[0] ?? null;
   const canSubmitNow =
     !isApproved &&
     !isRejected &&
     auth.submissionMode !== "disabled" &&
     auth.submitEligible &&
+    !hasPreflightErrors &&
     (isDryRun || (isLive && auth.liveSubmitArmed));
 
   const submitBlocker = isApproved
@@ -506,6 +579,8 @@ export function AdminA2pReviewPanel({
       ? "Previous submission rejected — operator review required."
       : auth.submissionMode === "disabled"
         ? "A2P submission is disabled in this environment."
+        : hasPreflightErrors
+          ? primaryPreflightError?.operatorMessage ?? primaryPreflightError?.message ?? "Pre-submit validation failed."
         : !auth.submitEligible
           ? auth.submitBlockedReason
           : isLive && !auth.liveSubmitArmed
@@ -599,6 +674,12 @@ export function AdminA2pReviewPanel({
           />
         </div>
 
+        {hasPreflightErrors && (
+          <div className="alert alert-error" role="alert">
+            <span>{primaryPreflightError?.operatorMessage ?? primaryPreflightError?.message}</span>
+          </div>
+        )}
+
         <div className="a2p-cc-caution">
           <h4 className="adm-subhead">Live submission creates billable external Twilio resources</h4>
           <ul className="t-small a2p-cc-list">
@@ -620,7 +701,7 @@ export function AdminA2pReviewPanel({
                 {sub.rejectionReason ?? "A previous submission was rejected."} Operator review is required before resubmitting.
               </span>
             </div>
-          ) : auth.submissionMode === "disabled" || !auth.submitEligible ? (
+          ) : auth.submissionMode === "disabled" || !auth.submitEligible || hasPreflightErrors ? (
             <DisabledSubmit reason={submitBlocker ?? "Not eligible for submission yet."} />
           ) : isDryRun ? (
             <div className="a2p-cc-action-stack">
@@ -693,7 +774,7 @@ export function AdminA2pReviewPanel({
         </div>
 
         <div className="a2p-cc-section-grid">
-          <ContentCard title="Business identity" fields={providerSections.businessIdentity} />
+          <ContentCard title="Business identity" fields={providerSections.businessIdentity} validations={preflightValidations} />
           <RepresentativeCard fields={providerSections.representative} />
           <AddressCard fields={providerSections.address} />
           <CampaignCard
@@ -910,14 +991,37 @@ function ChecklistBadge({ tone }: { tone: ChecklistTone }) {
   return <span className={`a2p-cc-check-badge is-${tone}`}>{label}</span>;
 }
 
-function ContentCard({ title, fields }: { title: string; fields: A2pPayloadField[] }) {
+function ContentCard({
+  title,
+  fields,
+  validations = [],
+}: {
+  title: string;
+  fields: A2pPayloadField[];
+  validations?: A2pValidationResult[];
+}) {
+  const einValidation = validations.find((validation) => validation.field === "business_registration_number");
   return (
     <div className="a2p-cc-subcard">
       <h4 className="adm-subhead">{title}</h4>
       <div className="a2p-cc-facts">
-        {fields.map((field) => (
-          <FactRow key={`${title}-${field.label}`} label={field.label} value={field.value} />
-        ))}
+        {fields.map((field) => {
+          if (field.label === "Registration number (EIN)") {
+            return (
+              <FactRow
+                key={`${title}-${field.label}`}
+                label={field.label}
+                value={
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                    <span>{field.value}</span>
+                    {einValidation && <Badge tone="warning">Format invalid</Badge>}
+                  </span>
+                }
+              />
+            );
+          }
+          return <FactRow key={`${title}-${field.label}`} label={field.label} value={field.value} />;
+        })}
       </div>
     </div>
   );
