@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Row, humanizeToken } from "../../../_components/AdminUI";
+import { Badge, humanizeToken } from "../../../_components/AdminUI";
 import type {
   A2pIncludedSender,
+  A2pPayloadField,
   A2pPayloadResource,
   A2pReviewNumber,
   A2pReviewPackage,
@@ -12,65 +13,409 @@ import type {
 } from "../../../../../../lib/a2p/types";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
+type ChecklistTone = "present" | "missing" | "warning";
+
+type LaunchStatus = {
+  smsRecoveryEnabled: boolean;
+  launchReady: boolean;
+  smsStatus: string;
+  launchBlockedReason: string | null;
+};
+
+type ProviderReviewSections = {
+  businessIdentity: A2pPayloadField[];
+  representative: A2pPayloadField[];
+  address: A2pPayloadField[];
+  campaign: A2pPayloadField[];
+  messageSamples: string[];
+  technicalResources: A2pPayloadResource[];
+};
+
+type SubmissionHistorySummary = {
+  hasSubmission: boolean;
+  approvalStageLabel: string;
+  providerStatusLabel: string;
+  items: Array<{ label: string; value: React.ReactNode }>;
+};
+
+type ChecklistItem = {
+  id: string;
+  label: string;
+  tone: ChecklistTone;
+  summary: string;
+  href?: string;
+};
+
+const REVIEW_STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  ready_for_review: "Not submitted yet",
+  missing_info: "Missing information",
+  submit_disabled: "Submission disabled",
+  readiness_unavailable: "Readiness unavailable",
+  dry_run_reviewed: "Reviewed (dry run)",
+  ready_for_manual_submission: "Ready for manual submission",
+  submitted: "Submitted",
+  pending: "Pending carrier review",
+  approved: "Approved",
+  rejected: "Rejected",
+  failed: "Failed",
+  blocked: "Blocked",
+  not_found: "Clinic not found",
+};
+
+const COVERAGE_LABEL: Record<NumberCoverageDisplay, string> = {
+  covered: "Covered",
+  not_in_messaging_service: "Not in Messaging Service",
+  not_campaign_covered: "Campaign coverage missing",
+  readiness_missing: "Readiness not synced",
+  readiness_unavailable: "Readiness unavailable",
+  stale: "Readiness stale",
+  error: "Sync error",
+  blocked: "Blocked",
+  unknown: "Unknown",
+};
+
+const MODE_SHORT_LABEL: Record<string, string> = {
+  disabled: "Disabled",
+  dry_run: "Dry run",
+  live: "Live mode",
+};
+
+const MODE_CARD_LABEL: Record<string, string> = {
+  disabled: "Disabled",
+  dry_run: "Dry run",
+  live: "Live",
+};
+
+const TECHNICAL_RESOURCE_STEPS = new Set([
+  "A2P messaging profile (EndUser)",
+  "Secondary Customer Profile",
+  "A2P Trust Product",
+  "Brand Registration",
+  "Messaging Service senders",
+]);
+
+const HUMAN_PROVIDER_LABELS = {
+  business: new Set([
+    "Business name",
+    "Business type",
+    "Industry",
+    "Registration number (EIN)",
+    "Regions of operation",
+    "Business identity",
+    "Website",
+  ]),
+  representative: new Set([
+    "First name",
+    "Last name",
+    "Email",
+    "Phone",
+    "Business title",
+  ]),
+  address: new Set(["Customer name", "Street", "Street 2", "City", "Region", "Postal code", "Country"]),
+  campaign: new Set([
+    "Use case",
+    "Embedded links",
+    "Embedded phone",
+    "Description",
+    "Opt-in / message flow",
+  ]),
+};
 
 function fmtDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
 }
 
-const COVERAGE_LABEL: Record<NumberCoverageDisplay, string> = {
-  covered: "Approved / covered",
-  not_in_messaging_service: "Not covered yet — not in Messaging Service",
-  not_campaign_covered: "Not covered yet — campaign coverage missing",
-  readiness_missing: "Not approved yet — readiness not synced",
-  readiness_unavailable: "Not approved yet — readiness unavailable",
-  stale: "Not covered yet — readiness stale",
-  error: "Not covered yet — sync error",
-  blocked: "Not covered yet — blocked",
-  unknown: "Not approved yet",
-};
-
-const REVIEW_STATUS_LABEL: Record<string, string> = {
-  draft: "Draft",
-  ready_for_review: "Ready for review",
-  missing_info: "Missing information",
-  submit_disabled: "Submission disabled",
-  readiness_unavailable: "SMS readiness data unavailable",
-  dry_run_reviewed: "Reviewed (dry run)",
-  ready_for_manual_submission: "Ready for manual submission",
-  submitted: "Submitted to Twilio",
-  pending: "Pending carrier review",
-  approved: "Approved",
-  rejected: "Rejected",
-  failed: "Failed — safe to retry",
-  blocked: "Blocked",
-  not_found: "Clinic not found",
-};
-
 function reviewStatusTone(status: string): Tone {
   switch (status) {
     case "approved":
-    case "dry_run_reviewed":
     case "ready_for_manual_submission":
+    case "dry_run_reviewed":
       return "success";
     case "submitted":
     case "pending":
     case "ready_for_review":
       return "info";
-    case "submit_disabled":
-    case "draft":
-      return "neutral";
-    default:
+    case "missing_info":
+    case "blocked":
+    case "failed":
+    case "rejected":
+    case "readiness_unavailable":
       return "warning";
+    default:
+      return "neutral";
   }
 }
 
-const MODE_LABEL: Record<string, string> = {
-  disabled: "Disabled",
-  dry_run: "Dry run (review-only)",
-  live: "Live (real Twilio submission)",
-};
+function findResource(pkg: A2pReviewPackage, step: string): A2pPayloadResource | null {
+  return pkg.providerPayload.resources.find((resource) => resource.step === step) ?? null;
+}
 
-export function AdminA2pReviewPanel({ pkg, clinicId }: { pkg: A2pReviewPackage; clinicId: string }) {
+function pickFields(resource: A2pPayloadResource | null, allowed: Set<string>): A2pPayloadField[] {
+  return (resource?.fields ?? []).filter((field) => allowed.has(field.label));
+}
+
+function fieldMap(fields: A2pPayloadField[]): Map<string, string> {
+  return new Map(fields.map((field) => [field.label, field.value]));
+}
+
+function providerSectionsFromPackage(pkg: A2pReviewPackage): ProviderReviewSections {
+  const businessResource = findResource(pkg, "Business information (EndUser)");
+  const repResource = findResource(pkg, "Authorized representative (EndUser)");
+  const addressResource = findResource(pkg, "Business address");
+  const campaignResource = findResource(pkg, "A2P Campaign");
+  const a2pProfileResource = findResource(pkg, "A2P messaging profile (EndUser)");
+
+  const businessFields = pickFields(businessResource, HUMAN_PROVIDER_LABELS.business);
+  const companyType = (a2pProfileResource?.fields ?? []).find((field) => field.label === "Company type");
+  if (companyType) businessFields.push(companyType);
+
+  const campaignFields = pickFields(campaignResource, HUMAN_PROVIDER_LABELS.campaign);
+  const messageSamples = (campaignResource?.fields ?? [])
+    .filter((field) => field.label.startsWith("Sample message "))
+    .map((field) => field.value);
+
+  const technicalResources = pkg.providerPayload.resources.filter((resource) =>
+    TECHNICAL_RESOURCE_STEPS.has(resource.step),
+  );
+
+  return {
+    businessIdentity: businessFields,
+    representative: pickFields(repResource, HUMAN_PROVIDER_LABELS.representative),
+    address: pickFields(addressResource, HUMAN_PROVIDER_LABELS.address),
+    campaign: campaignFields,
+    messageSamples,
+    technicalResources,
+  };
+}
+
+function deriveLaunchReadiness(pkg: A2pReviewPackage, launchStatus: LaunchStatus): {
+  label: string;
+  tone: Tone;
+  detail: string;
+  headerBadge: string;
+} {
+  const submissionStatus = pkg.internalDiagnostics.submission.status;
+  const clinicReadiness = pkg.internalDiagnostics.clinicReadiness;
+  const allNumbersReady =
+    pkg.internalDiagnostics.numberDiagnostics.length > 0 &&
+    pkg.internalDiagnostics.numberDiagnostics.every((number) => number.eligibleForLiveSms);
+
+  if (launchStatus.smsRecoveryEnabled) {
+    return {
+      label: "Active",
+      tone: "success",
+      detail: "Patient SMS is already enabled for this clinic.",
+      headerBadge: "Active",
+    };
+  }
+
+  if (submissionStatus === "approved" && allNumbersReady) {
+    return {
+      label: "Ready after approval",
+      tone: "success",
+      detail: "Approval and sender coverage are in place. Patient SMS still remains a separate enable step.",
+      headerBadge: "Ready after approval",
+    };
+  }
+
+  if (submissionStatus === "approved" && launchStatus.launchBlockedReason) {
+    return {
+      label: "Launch blocked",
+      tone: "warning",
+      detail: launchStatus.launchBlockedReason,
+      headerBadge: "Launch blocked",
+    };
+  }
+
+  const expectedBrandNotVerified =
+    !launchStatus.smsRecoveryEnabled &&
+    submissionStatus !== "approved" &&
+    clinicReadiness?.brandStatus &&
+    clinicReadiness.brandStatus !== "approved" &&
+    clinicReadiness.brandStatus !== "covered";
+
+  return {
+    label: "Blocked until approval",
+    tone: "warning",
+    detail: expectedBrandNotVerified
+      ? "Expected before approval: A2P brand not verified yet. This does not block A2P submission."
+      : "Patient SMS cannot go live until A2P approval and sender coverage are verified.",
+    headerBadge: "Launch blocked until approval",
+  };
+}
+
+function buildChecklist(pkg: A2pReviewPackage): ChecklistItem[] {
+  const hasWebsite = Boolean(pkg.business.website);
+  const businessPresent =
+    Boolean(pkg.business.legalBusinessName) &&
+    pkg.business.einProvided &&
+    Boolean(pkg.business.businessTypeLabel ?? pkg.business.businessType) &&
+    hasWebsite;
+  const representativePresent =
+    Boolean(pkg.representative.firstName) &&
+    Boolean(pkg.representative.lastName) &&
+    Boolean(pkg.representative.phone) &&
+    Boolean(pkg.representative.email);
+  const addressPresent = !pkg.missingFields.some((field) => field.key === "business_address");
+  const stopPresent = pkg.campaign.sampleMessages.some((message) => message.includes("STOP"));
+  const helpPresent = pkg.campaign.sampleMessages.some((message) => message.includes("HELP"));
+  const localSendersCount = pkg.includedSenders.numbers.length;
+
+  return [
+    {
+      id: "business-identity",
+      label: "Business identity",
+      tone: businessPresent ? "present" : "missing",
+      summary: [
+        pkg.business.legalBusinessName ?? "Missing legal name",
+        pkg.business.einProvided ? "EIN provided" : "EIN missing",
+        hasWebsite ? "Website present" : "Website missing",
+      ].join(" · "),
+      href: "#a2p-approval-content",
+    },
+    {
+      id: "authorized-representative",
+      label: "Authorized representative",
+      tone: representativePresent ? "present" : "missing",
+      summary: [
+        [pkg.representative.firstName, pkg.representative.lastName].filter(Boolean).join(" ") || "Representative missing",
+        pkg.representative.title ?? "Title missing",
+        representativePresent ? "phone/email present" : "phone/email incomplete",
+      ].join(" · "),
+      href: "#a2p-approval-content",
+    },
+    {
+      id: "business-address",
+      label: "Business address",
+      tone: addressPresent ? "present" : "missing",
+      summary: pkg.business.addressLine ?? "Business address missing",
+      href: "#a2p-approval-content",
+    },
+    {
+      id: "campaign-content",
+      label: "Campaign content",
+      tone: "present",
+      summary: "Clinic-first wording · appointment follow-up only · no marketing",
+      href: "#a2p-campaign-content",
+    },
+    {
+      id: "opt-out-language",
+      label: "Opt-out language",
+      tone: stopPresent && helpPresent ? "present" : "warning",
+      summary: stopPresent && helpPresent ? "STOP and HELP included" : "Review STOP / HELP wording",
+      href: "#a2p-campaign-content",
+    },
+    {
+      id: "local-senders",
+      label: "Local senders",
+      tone: localSendersCount > 0 ? "present" : "missing",
+      summary:
+        localSendersCount > 0
+          ? `${localSendersCount} local ${localSendersCount === 1 ? "number" : "numbers"} included · toll-free excluded`
+          : "No local numbers included",
+      href: "#a2p-local-senders",
+    },
+  ];
+}
+
+function diagnosticsSummary(pkg: A2pReviewPackage): string {
+  const warningCount = pkg.internalDiagnostics.numberDiagnostics.filter(
+    (number) => number.coverageDisplay !== "covered",
+  ).length;
+  const stale = pkg.internalDiagnostics.numberDiagnostics.some((number) => number.coverageDisplay === "stale");
+  const lastSync =
+    pkg.internalDiagnostics.clinicReadiness?.lastSyncedAt ??
+    pkg.internalDiagnostics.numberDiagnostics.find((number) => number.lastSyncedAt)?.lastSyncedAt ??
+    null;
+
+  if (!pkg.readinessAvailable) return "Readiness data unavailable";
+  if (stale) return `Readiness data stale${lastSync ? ` · last sync ${fmtDateTime(lastSync)}` : ""}`;
+  if (warningCount > 0) {
+    return `${warningCount} coverage ${warningCount === 1 ? "warning" : "warnings"}${lastSync ? ` · last sync ${fmtDateTime(lastSync)}` : ""}`;
+  }
+  return "No blocking diagnostics";
+}
+
+function buildSubmissionHistory(pkg: A2pReviewPackage): SubmissionHistorySummary {
+  const sub = pkg.internalDiagnostics.submission;
+  const status = sub.status ?? pkg.authorizationState.reviewStatus;
+  const hasLiveSubmission = ["submitted", "pending", "approved", "rejected", "failed", "blocked"].includes(
+    sub.status ?? "",
+  );
+  const approvalStageLabel = REVIEW_STATUS_LABEL[status] ?? humanizeToken(status);
+  const providerStatuses = [
+    sub.customerProfileStatus,
+    sub.trustProductStatus,
+    sub.brandStatus,
+    sub.campaignStatus,
+  ].filter(Boolean);
+  const providerStatusLabel = providerStatuses.length > 0 ? providerStatuses.map(humanizeToken).join(" · ") : "No provider result yet.";
+
+  const items: Array<{ label: string; value: React.ReactNode }> = [
+    { label: "Last submitted", value: fmtDateTime(sub.submittedAt) },
+    { label: "Last updated", value: fmtDateTime(sub.lastStatusSyncedAt ?? sub.submittedAt) },
+    { label: "Current step", value: sub.submissionStep ? humanizeToken(sub.submissionStep) : "—" },
+    { label: "Provider status", value: providerStatusLabel },
+  ];
+
+  if (sub.lastErrorCode || sub.lastErrorMessage) {
+    items.push({
+      label: "Provider errors",
+      value: [sub.lastErrorCode, sub.lastErrorMessage].filter(Boolean).join(" · "),
+    });
+  }
+  if (sub.rejectionReason) {
+    items.push({ label: "Rejection reason", value: sub.rejectionReason });
+  }
+  items.push({
+    label: "Next action",
+    value: nextActionFromSubmissionStatus(sub.status),
+  });
+
+  return {
+    hasSubmission: hasLiveSubmission,
+    approvalStageLabel,
+    providerStatusLabel,
+    items,
+  };
+}
+
+function nextActionFromSubmissionStatus(status: string | null): string {
+  switch (status) {
+    case "pending":
+    case "submitted":
+      return "Wait for provider review, then refresh provider status or resume submission if prompted.";
+    case "failed":
+      return "Review the provider error and technical wiring details, then retry when corrected.";
+    case "rejected":
+      return "Operator review is required before another submission attempt.";
+    case "approved":
+      return "Confirm sender coverage, then enable patient SMS separately when appropriate.";
+    default:
+      return "Review the checklist and decision summary before taking action.";
+  }
+}
+
+function shouldSurfaceReadinessSync(pkg: A2pReviewPackage): boolean {
+  return (
+    !pkg.readinessAvailable ||
+    pkg.internalDiagnostics.numberDiagnostics.some((number) =>
+      ["stale", "readiness_missing", "readiness_unavailable", "error"].includes(number.coverageDisplay),
+    ) ||
+    pkg.internalDiagnostics.warnings.length > 0
+  );
+}
+
+export function AdminA2pReviewPanel({
+  pkg,
+  clinicId,
+  launchStatus,
+}: {
+  pkg: A2pReviewPackage;
+  clinicId: string;
+  launchStatus: LaunchStatus;
+}) {
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -139,13 +484,15 @@ export function AdminA2pReviewPanel({ pkg, clinicId }: { pkg: A2pReviewPackage; 
   const auth = pkg.authorizationState;
   const diagnostics = pkg.internalDiagnostics;
   const sub = diagnostics.submission;
-  const status = sub.status;
-  const isApproved = status === "approved";
-  const isRejected = status === "rejected";
-  const isResume = status === "pending" || status === "submitted" || status === "failed";
+  const providerSections = useMemo(() => providerSectionsFromPackage(pkg), [pkg]);
+  const checklist = useMemo(() => buildChecklist(pkg), [pkg]);
+  const launchReadiness = useMemo(() => deriveLaunchReadiness(pkg, launchStatus), [pkg, launchStatus]);
+  const submissionHistory = useMemo(() => buildSubmissionHistory(pkg), [pkg]);
   const isLive = auth.submissionMode === "live";
   const isDryRun = auth.submissionMode === "dry_run";
-
+  const isApproved = sub.status === "approved";
+  const isRejected = sub.status === "rejected";
+  const isResume = sub.status === "pending" || sub.status === "submitted" || sub.status === "failed";
   const canSubmitNow =
     !isApproved &&
     !isRejected &&
@@ -153,7 +500,7 @@ export function AdminA2pReviewPanel({ pkg, clinicId }: { pkg: A2pReviewPackage; 
     auth.submitEligible &&
     (isDryRun || (isLive && auth.liveSubmitArmed));
 
-  const mainBlocker = isApproved
+  const submitBlocker = isApproved
     ? "Already approved — no submission needed."
     : isRejected
       ? "Previous submission rejected — operator review required."
@@ -165,78 +512,107 @@ export function AdminA2pReviewPanel({ pkg, clinicId }: { pkg: A2pReviewPackage; 
             ? auth.liveSubmitBlockedReason
             : null;
 
-  const nextAction = canSubmitNow
-    ? isLive
-      ? "Review the provider payload below, authorize the live action, then submit."
-      : "Record the dry-run review. No Twilio resources will change."
-    : isApproved
-      ? "Run the readiness sync to confirm per-number coverage, then enable SMS separately."
-      : mainBlocker ?? "Resolve the blocker above.";
+  const technicalOpen = sub.status === "failed" && Boolean(sub.lastErrorCode || sub.lastErrorMessage);
+  const diagnosticsOpen =
+    (!canSubmitNow && !isApproved) ||
+    sub.status === "failed" ||
+    sub.status === "rejected" ||
+    !pkg.readinessAvailable;
+  const historyOpen =
+    sub.status === "pending" || sub.status === "submitted" || sub.status === "failed" || sub.status === "rejected";
+  const surfaceSync = shouldSurfaceReadinessSync(pkg);
 
   return (
-    <div>
-      <div className="adm-section-head">
-        <h2 className="t-h3">A2P / 10DLC approval review</h2>
-        <Badge tone={reviewStatusTone(auth.reviewStatus)}>
-          {REVIEW_STATUS_LABEL[auth.reviewStatus] ?? humanizeToken(auth.reviewStatus)}
-        </Badge>
-      </div>
-      <p className="t-helper" style={{ margin: "var(--space-1) 0 var(--space-2)" }}>
-        Platform-admin only. This page separates the real Twilio submission payload from internal readiness and troubleshooting data.
-      </p>
-      <p className="t-small" style={{ margin: "0 0 var(--space-4)", color: "var(--text-secondary)" }}>
-        {pkg.localNumberCount > 0 ? (
-          <>Applies to <strong>Local (A2P 10DLC)</strong> numbers only. Toll-free numbers use toll-free verification and are not part of this package.</>
-        ) : pkg.tollFreeActiveCount > 0 ? (
-          <>This clinic has only toll-free numbers. Local A2P 10DLC registration is not required — toll-free numbers use toll-free verification instead.</>
-        ) : (
-          <>Applies to <strong>Local (A2P 10DLC)</strong> numbers only.</>
-        )}
-      </p>
-
-      <SectionCard title="Submission status & authorization" subtitle="Safety and control only. This section is not the Twilio payload.">
-        <dl className="adm-rows">
-          <Row label="Can submit now">
-            <Badge tone={canSubmitNow ? "success" : "warning"}>{canSubmitNow ? "Yes" : "No"}</Badge>
-          </Row>
-          <Row label="Mode">
-            <Badge tone={auth.submissionMode === "disabled" ? "neutral" : isLive ? "brand" : "info"}>
-              {MODE_LABEL[auth.submissionMode] ?? humanizeToken(auth.submissionMode)}
-            </Badge>
-          </Row>
-          <Row label="Main blocker">{mainBlocker ? <span style={{ color: "var(--warning)" }}>{mainBlocker}</span> : "None"}</Row>
-          <Row label="Next action">{nextAction}</Row>
-        </dl>
-
-        {auth.feesRiskNotice.length > 0 && (
-          <div className="adm-banner tone-warning" role="note" style={{ marginTop: "var(--space-3)" }}>
-            <div className="adm-banner-main">
-              <span className="adm-banner-title">Real submission creates billable external Twilio resources</span>
-              <ul className="t-small" style={{ margin: "var(--space-1) 0 0", paddingLeft: "var(--space-4)" }}>
-                {auth.feesRiskNotice.map((warning, idx) => (
-                  <li key={idx}>{warning}</li>
-                ))}
-              </ul>
+    <div className="a2p-cc">
+      <header className="a2p-cc-header">
+        <div className="a2p-cc-header-main">
+          <div className="a2p-cc-title-row">
+            <h2 className="t-h3">A2P / 10DLC review</h2>
+            <div className="a2p-cc-badges" aria-label="A2P review status badges">
+              <Badge tone={canSubmitNow ? "success" : "warning"}>{canSubmitNow ? "Ready to submit" : "Blocked"}</Badge>
+              <Badge tone={isLive ? "brand" : auth.submissionMode === "disabled" ? "neutral" : "info"}>
+                {MODE_SHORT_LABEL[auth.submissionMode] ?? humanizeToken(auth.submissionMode)}
+              </Badge>
+              <Badge tone={launchReadiness.tone}>{launchReadiness.headerBadge}</Badge>
             </div>
           </div>
-        )}
-
-        {(message || error) && (
-          <div
-            className={`alert ${error ? "alert-error" : "alert-success"}`}
-            role="status"
-            aria-live="polite"
-            style={{ marginTop: "var(--space-3)" }}
-          >
-            <span>{error ?? message}</span>
+          <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
+            Review clinic identity, campaign content, and local senders before creating external Twilio A2P resources.
+          </p>
+        </div>
+        {surfaceSync && (
+          <div className="a2p-cc-header-actions">
+            <button type="button" className="btn btn-secondary btn-sm" disabled={syncing} onClick={runReadinessSync}>
+              {syncing ? "Running…" : "Run readiness sync"}
+            </button>
           </div>
         )}
+      </header>
 
-        <div style={{ marginTop: "var(--space-4)" }}>
-          {isApproved ? (
-            <p className="t-body">
-              <Badge tone="success">Approved / covered</Badge> A2P registration is approved. No further submission is required.
+      {(message || error) && (
+        <div className={`alert ${error ? "alert-error" : "alert-success"}`} role="status" aria-live="polite">
+          <span>{error ?? message}</span>
+        </div>
+      )}
+
+      <section id="a2p-submit-decision" className={`a2p-cc-card a2p-cc-card--decision ${canSubmitNow ? "is-ready" : "is-blocked"}`}>
+        <div className="a2p-cc-card-head">
+          <div>
+            <p className="a2p-cc-kicker">Decision summary</p>
+            <h3 className="adm-subhead">Submit decision</h3>
+            <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
+              Safety and control only. This is not the Twilio payload.
             </p>
+          </div>
+        </div>
+
+        <div className="a2p-cc-status-grid">
+          <StatusCard
+            label="Submit readiness"
+            value={canSubmitNow ? "Ready to submit" : "Blocked"}
+            detail={canSubmitNow ? "Minimum required A2P information is complete." : submitBlocker ?? "Review the current blocker."}
+            tone={canSubmitNow ? "success" : "warning"}
+          />
+          <StatusCard
+            label="Submission mode"
+            value={MODE_CARD_LABEL[auth.submissionMode] ?? humanizeToken(auth.submissionMode)}
+            detail={
+              isLive
+                ? "Creates billable external Twilio resources."
+                : isDryRun
+                  ? "Records review only. No Twilio resources change."
+                  : "Submission is disabled in this environment."
+            }
+            tone={isLive ? "warning" : auth.submissionMode === "disabled" ? "neutral" : "info"}
+          />
+          <StatusCard
+            label="Approval stage"
+            value={submissionHistory.approvalStageLabel}
+            detail={submissionHistory.providerStatusLabel}
+            tone={reviewStatusTone(sub.status ?? auth.reviewStatus)}
+          />
+          <StatusCard
+            label="Launch readiness"
+            value={launchReadiness.label}
+            detail={launchReadiness.detail}
+            tone={launchReadiness.tone}
+          />
+        </div>
+
+        <div className="a2p-cc-caution">
+          <h4 className="adm-subhead">Live submission creates billable external Twilio resources</h4>
+          <ul className="t-small a2p-cc-list">
+            {auth.feesRiskNotice.map((warning, idx) => (
+              <li key={idx}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="a2p-cc-actions">
+          {isApproved ? (
+            <div className="alert alert-success" role="status">
+              <span>A2P registration is approved. No further submission is required here.</span>
+            </div>
           ) : isRejected ? (
             <div className="adm-blocked" role="note">
               <Badge tone="warning">Rejected</Badge>
@@ -245,282 +621,414 @@ export function AdminA2pReviewPanel({ pkg, clinicId }: { pkg: A2pReviewPackage; 
               </span>
             </div>
           ) : auth.submissionMode === "disabled" || !auth.submitEligible ? (
-            <DisabledSubmit reason={mainBlocker ?? "Not eligible for submission yet."} />
+            <DisabledSubmit reason={submitBlocker ?? "Not eligible for submission yet."} />
           ) : isDryRun ? (
-            <>
-              <button type="button" className="btn btn-primary btn-sm" disabled={submitting} onClick={submit}>
+            <div className="a2p-cc-action-stack">
+              <button type="button" className="btn btn-primary" disabled={submitting} onClick={submit}>
                 {submitting ? "Recording…" : "Submit for A2P review (dry run)"}
               </button>
-              <p className="t-helper" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+              <p className="t-helper">
                 Dry-run mode records operator review only. No Twilio submission, no SMS, and no provider mutation occur.
               </p>
-            </>
+            </div>
           ) : isLive && auth.liveSubmitArmed ? (
-            <>
-              <label
-                className="t-small"
-                style={{ display: "flex", gap: "var(--space-2)", alignItems: "flex-start", maxWidth: 720 }}
-              >
-                <input
-                  type="checkbox"
-                  checked={confirmLive}
-                  onChange={(e) => setConfirmLive(e.target.checked)}
-                  style={{ marginTop: 3 }}
-                />
-                <span>
-                  I have reviewed the provider payload below and authorize a <strong>real</strong> A2P submission for this clinic.
-                  This creates billable, externally reviewed Twilio resources.
-                </span>
-              </label>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                style={{ marginTop: "var(--space-3)" }}
-                disabled={submitting || !confirmLive}
-                onClick={submit}
-              >
+            <div className="a2p-cc-action-stack">
+              <div className="a2p-cc-auth">
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={confirmLive}
+                    onChange={(event) => setConfirmLive(event.target.checked)}
+                  />
+                  <span>
+                    I have reviewed the approval content below and authorize a <strong>real</strong> A2P submission for this clinic.
+                    This creates billable, externally reviewed Twilio resources.
+                  </span>
+                </label>
+              </div>
+              <button type="button" className="btn btn-primary" disabled={submitting || !confirmLive} onClick={submit}>
                 {submitting ? "Submitting…" : isResume ? "Resume A2P submission" : "Submit to Twilio for A2P Review"}
               </button>
-              <p className="t-helper" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+              <p className="t-helper">
                 Runs every currently allowed Twilio step and stops at asynchronous approval points. It never enables patient SMS.
               </p>
-            </>
+            </div>
           ) : (
             <DisabledSubmit reason={auth.liveSubmitBlockedReason ?? "Real submission is not armed for this clinic."} />
           )}
         </div>
+      </section>
 
-        {!pkg.readinessAvailable && (
-          <div className="adm-banner tone-warning" role="status" style={{ marginTop: "var(--space-3)" }}>
-            <div className="adm-banner-main">
-              <span className="adm-banner-title">SMS readiness data unavailable</span>
-              <span className="adm-banner-body">
-                Per-number coverage cannot be confirmed; submission and SMS enablement stay blocked.
-              </span>
+      <section id="a2p-human-checklist" className="a2p-cc-card">
+        <div className="a2p-cc-card-head">
+          <div>
+            <p className="a2p-cc-kicker">Fast review</p>
+            <h3 className="adm-subhead">Human review checklist</h3>
+            <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
+              Check these items before live submission.
+            </p>
+          </div>
+        </div>
+        <div className="a2p-cc-checklist">
+          {checklist.map((item) => (
+            <ChecklistRow key={item.id} item={item} />
+          ))}
+        </div>
+      </section>
+
+      <section id="a2p-approval-content" className="a2p-cc-card a2p-cc-card--provider">
+        <div className="a2p-cc-card-head">
+          <div>
+            <div className="a2p-cc-heading-row">
+              <div>
+                <p className="a2p-cc-kicker">Provider-facing</p>
+                <h3 className="adm-subhead">Approval content sent to Twilio</h3>
+              </div>
+              <Badge tone="info">Provider-facing</Badge>
             </div>
+            <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
+              Human-readable provider payload. Optional fields are omitted by default.
+            </p>
           </div>
-        )}
-      </SectionCard>
+        </div>
 
-      <SectionCard
-        title="Submitted to Twilio for A2P review"
-        subtitle="Provider-facing payload only. This section matches the real submit handler and omits optional fields by default."
-      >
-        {pkg.providerPayload.resources.length === 0 ? (
-          <p className="t-body">
-            <Muted>Nothing to submit yet.</Muted>
-          </p>
-        ) : (
-          <div style={{ display: "grid", gap: "var(--space-2)" }}>
-            {pkg.providerPayload.resources.map((resource) => (
-              <PayloadResource key={resource.step} r={resource} />
-            ))}
+        <div className="a2p-cc-section-grid">
+          <ContentCard title="Business identity" fields={providerSections.businessIdentity} />
+          <RepresentativeCard fields={providerSections.representative} />
+          <AddressCard fields={providerSections.address} />
+          <CampaignCard
+            fields={providerSections.campaign}
+            samples={providerSections.messageSamples}
+            clinicName={pkg.clinicName}
+          />
+        </div>
+      </section>
+
+      <section id="a2p-local-senders" className="a2p-cc-card a2p-cc-card--sender">
+        <div className="a2p-cc-card-head">
+          <div>
+            <p className="a2p-cc-kicker">Local senders</p>
+            <h3 className="adm-subhead">Local senders included</h3>
+            <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
+              These local numbers will be attached as A2P campaign senders. Toll-free numbers are excluded.
+            </p>
           </div>
-        )}
-
-        <h4 className="adm-subhead" style={{ margin: "var(--space-4) 0 0" }}>Required information</h4>
-        {pkg.missingFields.length === 0 ? (
-          <p className="t-body">
-            <Badge tone="success">Complete</Badge> All required A2P fields are present.
-          </p>
-        ) : (
-          <ul className="t-body" style={{ margin: "var(--space-2) 0 0", paddingLeft: "var(--space-5)" }}>
-            {pkg.missingFields.map((field) => (
-              <li key={field.key} style={{ color: "var(--warning)", fontWeight: 600 }}>
-                {field.label}
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      <SectionCard
-        title="Local senders included in this submission"
-        subtitle="These local numbers are the senders the live flow adds to the Messaging Service for this campaign."
-      >
+        </div>
         {pkg.includedSenders.numbers.length === 0 ? (
-          <p className="t-body">
-            <Muted>No active local SMS senders are included for this clinic.</Muted>
-          </p>
+          <p className="t-body"><Muted>No active local SMS senders are included for this clinic.</Muted></p>
         ) : (
-          <div style={{ display: "grid", gap: "var(--space-2)" }}>
+          <div className="a2p-cc-sender-grid">
             {pkg.includedSenders.numbers.map((sender) => (
               <IncludedSenderCard key={sender.twilioPhoneNumberSid ?? sender.phoneNumber} sender={sender} />
             ))}
           </div>
         )}
-      </SectionCard>
+      </section>
 
-      <SectionCard
-        title="Internal diagnostics — not submitted to Twilio"
-        subtitle="These values are for platform-admin review only and are not sent in the Twilio approval payload."
+      <A2pDisclosureCard
+        id="a2p-technical-wiring"
+        title="Twilio technical wiring"
+        summary="SIDs, policy references, and generated resources used by the Twilio API."
+        defaultOpen={technicalOpen}
+        tone="technical"
       >
-        <dl className="adm-rows">
-          <Row label="Real submission (platform)">
-            <Badge tone={auth.realSubmissionEnabled ? "info" : "neutral"}>
-              {auth.realSubmissionEnabled ? "Enabled" : "Disabled"}
-            </Badge>
-          </Row>
-          <Row label="Live armed for this clinic">
-            {auth.liveSubmitArmed ? <Badge tone="success">Armed</Badge> : <Badge tone="neutral">Not armed</Badge>}
-          </Row>
-          <Row label="Messaging Service SID">
-            {diagnostics.messagingServiceSid ? (
-              <span className="t-mono">{diagnostics.messagingServiceSid}</span>
-            ) : (
-              <Muted>Missing</Muted>
-            )}
-          </Row>
-          <Row label="Messaging Service status">
-            {diagnostics.clinicReadiness ? humanizeToken(diagnostics.clinicReadiness.messagingServiceStatus) : <Muted>Not synced</Muted>}
-          </Row>
-          <Row label="A2P brand status">
-            {diagnostics.clinicReadiness ? humanizeToken(diagnostics.clinicReadiness.brandStatus) : <Muted>Not synced</Muted>}
-          </Row>
-          <Row label="A2P campaign status">
-            {diagnostics.clinicReadiness ? humanizeToken(diagnostics.clinicReadiness.campaignStatus) : <Muted>Not synced</Muted>}
-          </Row>
-          <Row label="Clinic readiness blocker">
-            {diagnostics.clinicReadiness?.blockingReason ? humanizeToken(diagnostics.clinicReadiness.blockingReason) : <Muted>None</Muted>}
-          </Row>
-          <Row label="Last readiness sync">{fmtDateTime(diagnostics.clinicReadiness?.lastSyncedAt ?? null)}</Row>
-          <Row label="Local submission status">
-            <Badge tone={reviewStatusTone(status ?? auth.reviewStatus)}>
-              {REVIEW_STATUS_LABEL[status ?? auth.reviewStatus] ?? humanizeToken(status ?? auth.reviewStatus)}
-            </Badge>
-          </Row>
-          {sub.submissionStep && <Row label="Current step">{humanizeToken(sub.submissionStep)}</Row>}
-          <Row label="Last submitted / updated">{fmtDateTime(sub.submittedAt)}</Row>
-          {sub.customerProfileSid && <Row label="Customer Profile">{statusLine(sub.customerProfileSid, sub.customerProfileStatus)}</Row>}
-          {sub.trustProductSid && <Row label="A2P Trust Product">{statusLine(sub.trustProductSid, sub.trustProductStatus)}</Row>}
-          {sub.brandRegistrationSid && <Row label="Brand Registration">{statusLine(sub.brandRegistrationSid, sub.brandStatus)}</Row>}
-          {sub.campaignSid && <Row label="A2P Campaign">{statusLine(sub.campaignSid, sub.campaignStatus)}</Row>}
-          {sub.lastErrorCode && <Row label="Last error">{humanizeToken(sub.lastErrorCode)}</Row>}
-        </dl>
-
-        <h4 className="adm-subhead" style={{ margin: "var(--space-4) 0 0" }}>Per-number coverage diagnostics</h4>
-        {diagnostics.numberDiagnostics.length === 0 ? (
-          <p className="t-body">
-            <Muted>No local number diagnostics available.</Muted>
-          </p>
-        ) : (
-          <div style={{ display: "grid", gap: "var(--space-2)" }}>
-            {diagnostics.numberDiagnostics.map((number) => (
-              <NumberDiagnosticCard key={number.twilioPhoneNumberSid ?? number.phoneNumber} n={number} />
-            ))}
-          </div>
-        )}
-
-        <h4 className="adm-subhead" style={{ margin: "var(--space-4) 0 0" }}>Planned Twilio resources</h4>
-        <dl className="adm-rows">
-          {diagnostics.plannedResources.map((resource) => (
-            <Row key={resource.key} label={resource.label}>
-              {resource.reuseSid ? (
-                <span>
-                  <Badge tone="success">Reuse</Badge> <span className="t-mono">{resource.reuseSid}</span>
-                </span>
-              ) : (
-                <Badge tone="info">{resource.willCreate ? "Will create" : "—"}</Badge>
-              )}
-            </Row>
+        <div className="a2p-cc-section-grid">
+          {providerSections.technicalResources.map((resource) => (
+            <ResourceCard key={resource.step} title={resource.step} fields={resource.fields} />
           ))}
-        </dl>
+          <div className="a2p-cc-subcard">
+            <h4 className="adm-subhead">Resource creation plan</h4>
+            <div className="a2p-cc-facts">
+              {diagnostics.plannedResources.map((resource) => (
+                <FactRow
+                  key={resource.key}
+                  label={resource.label}
+                  value={
+                    resource.reuseSid ? (
+                      <span><Badge tone="success">Reuse</Badge> <span className="t-mono a2p-cc-wrap">{resource.reuseSid}</span></span>
+                    ) : (
+                      <Badge tone="info">{resource.willCreate ? "Will create" : "—"}</Badge>
+                    )
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </A2pDisclosureCard>
 
-        {diagnostics.complianceUrls.businessPage && (
-          <p className="t-small" style={{ marginTop: "var(--space-3)" }}>
-            Internal compliance pages:{" "}
-            <a className="link" href={diagnostics.complianceUrls.businessPage} target="_blank" rel="noreferrer noopener">
-              Business
-            </a>{" · "}
-            <a className="link" href={diagnostics.complianceUrls.privacyPolicy ?? "#"} target="_blank" rel="noreferrer noopener">
-              Privacy
-            </a>{" · "}
-            <a className="link" href={diagnostics.complianceUrls.smsTerms ?? "#"} target="_blank" rel="noreferrer noopener">
-              SMS terms
-            </a>
-          </p>
-        )}
+      <A2pDisclosureCard
+        id="a2p-diagnostics"
+        title="Internal diagnostics — not submitted to Twilio"
+        summary={diagnosticsSummary(pkg)}
+        helper="These values are for platform-admin troubleshooting only and are not sent in the Twilio approval payload."
+        defaultOpen={diagnosticsOpen}
+        tone={diagnosticsOpen ? "warning" : "diagnostic"}
+      >
+        <div className="a2p-cc-section-grid">
+          <div className="a2p-cc-subcard">
+            <h4 className="adm-subhead">Platform and readiness state</h4>
+            <div className="a2p-cc-facts">
+              <FactRow
+                label="Real submission platform state"
+                value={<Badge tone={auth.realSubmissionEnabled ? "info" : "neutral"}>{auth.realSubmissionEnabled ? "Enabled" : "Disabled"}</Badge>}
+              />
+              <FactRow
+                label="Live armed state"
+                value={<Badge tone={auth.liveSubmitArmed ? "success" : "neutral"}>{auth.liveSubmitArmed ? "Armed" : "Not armed"}</Badge>}
+              />
+              <FactRow
+                label="Messaging Service status"
+                value={diagnostics.clinicReadiness ? humanizeToken(diagnostics.clinicReadiness.messagingServiceStatus) : "Not synced"}
+              />
+              <FactRow
+                label="A2P brand status"
+                value={formatBrandStatusForDiagnostics(diagnostics.clinicReadiness?.brandStatus ?? null, sub.status)}
+              />
+              <FactRow
+                label="A2P campaign status"
+                value={diagnostics.clinicReadiness ? humanizeToken(diagnostics.clinicReadiness.campaignStatus) : "Not synced"}
+              />
+              <FactRow label="Last readiness sync" value={fmtDateTime(diagnostics.clinicReadiness?.lastSyncedAt ?? null)} />
+              <FactRow
+                label="Launch readiness blocker"
+                value={diagnostics.clinicReadiness?.blockingReason ? humanizeToken(diagnostics.clinicReadiness.blockingReason) : "None"}
+              />
+            </div>
+          </div>
+
+          <div className="a2p-cc-subcard">
+            <h4 className="adm-subhead">Per-number coverage diagnostics</h4>
+            {diagnostics.numberDiagnostics.length === 0 ? (
+              <p className="t-body"><Muted>No local number diagnostics available.</Muted></p>
+            ) : (
+              <div className="a2p-cc-diagnostic-grid">
+                {diagnostics.numberDiagnostics.map((number) => (
+                  <NumberDiagnosticCard key={number.twilioPhoneNumberSid ?? number.phoneNumber} n={number} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {diagnostics.warnings.length > 0 && (
-          <>
-            <h4 className="adm-subhead" style={{ margin: "var(--space-4) 0 0" }}>Warnings</h4>
-            <ul className="t-small" style={{ margin: "var(--space-1) 0 0", paddingLeft: "var(--space-5)", color: "var(--text-secondary)" }}>
+          <div className="a2p-cc-warning-panel">
+            <h4 className="adm-subhead">Warnings</h4>
+            <ul className="t-small a2p-cc-list">
               {diagnostics.warnings.map((warning, idx) => (
                 <li key={idx}>{warning}</li>
               ))}
             </ul>
-          </>
+          </div>
         )}
 
-        <div style={{ marginTop: "var(--space-3)", display: "flex", flexWrap: "wrap", gap: "var(--space-3)" }}>
+        <div className="a2p-cc-inline-actions">
           <button type="button" className="btn btn-secondary btn-sm" disabled={syncing} onClick={runReadinessSync}>
-            {syncing ? "Checking…" : "Run read-only readiness sync"}
+            {syncing ? "Running…" : "Run readiness sync"}
           </button>
-          {(sub.customerProfileSid || sub.brandRegistrationSid) && (
-            <button type="button" className="btn btn-secondary btn-sm" disabled={refreshing} onClick={refreshProviderStatus}>
-              {refreshing ? "Refreshing…" : "Refresh A2P provider status"}
-            </button>
-          )}
         </div>
-      </SectionCard>
+      </A2pDisclosureCard>
+
+      <A2pDisclosureCard
+        id="a2p-history"
+        title="Submission history"
+        summary={submissionHistory.hasSubmission ? submissionHistory.approvalStageLabel : "No live submission yet."}
+        defaultOpen={historyOpen}
+        tone={historyOpen ? "warning" : "diagnostic"}
+      >
+        {!submissionHistory.hasSubmission ? (
+          <p className="t-body"><Muted>No live submission yet.</Muted></p>
+        ) : (
+          <>
+            <div className="a2p-cc-subcard">
+              <h4 className="adm-subhead">Provider result</h4>
+              <div className="a2p-cc-facts">
+                {submissionHistory.items.map((item) => (
+                  <FactRow key={item.label} label={item.label} value={item.value} />
+                ))}
+              </div>
+            </div>
+            {(sub.customerProfileSid || sub.brandRegistrationSid) && (
+              <div className="a2p-cc-inline-actions">
+                <button type="button" className="btn btn-secondary btn-sm" disabled={refreshing} onClick={refreshProviderStatus}>
+                  {refreshing ? "Refreshing…" : "Refresh provider status"}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </A2pDisclosureCard>
     </div>
   );
 }
 
-function SectionCard({
-  title,
-  subtitle,
-  children,
+function StatusCard({
+  label,
+  value,
+  detail,
+  tone,
 }: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
+  label: string;
+  value: string;
+  detail: string;
+  tone: Tone;
 }) {
   return (
-    <section className="adm-phone-card" style={{ marginTop: "var(--space-4)" }}>
-      <div className="adm-phone-card-head">
-        <span style={{ fontWeight: 700 }}>{title}</span>
-      </div>
-      <p className="t-helper" style={{ margin: "0 0 var(--space-3)" }}>{subtitle}</p>
-      {children}
-    </section>
+    <div className={`a2p-cc-stat a2p-cc-tone-${tone}`}>
+      <span className="a2p-cc-stat-label">{label}</span>
+      <span className="a2p-cc-stat-value">{value}</span>
+      <span className="a2p-cc-stat-detail">{detail}</span>
+    </div>
   );
 }
 
-function PayloadResource({ r }: { r: A2pPayloadResource }) {
+function ChecklistRow({ item }: { item: ChecklistItem }) {
   return (
-    <div className="adm-phone-card">
-      <div className="adm-phone-card-head">
-        <span style={{ fontWeight: 700 }}>{r.step}</span>
+    <div className="a2p-cc-check-row">
+      <div className="a2p-cc-check-status">
+        <ChecklistBadge tone={item.tone} />
       </div>
-      <dl className="adm-rows">
-        {r.fields.map((field, idx) => (
-          <Row key={`${field.label}-${idx}`} label={field.label}>
-            <span className="t-small">{field.value}</span>
-          </Row>
+      <div className="a2p-cc-check-main">
+        <span className="a2p-cc-check-label">{item.label}</span>
+        <span className="a2p-cc-check-summary">{item.summary}</span>
+      </div>
+      <div className="a2p-cc-check-action">
+        {item.href ? (
+          <a className="btn btn-secondary btn-sm" href={item.href}>
+            Review
+          </a>
+        ) : (
+          <span className="t-helper">—</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChecklistBadge({ tone }: { tone: ChecklistTone }) {
+  const label = tone === "present" ? "Present" : tone === "missing" ? "Missing" : "Warning";
+  return <span className={`a2p-cc-check-badge is-${tone}`}>{label}</span>;
+}
+
+function ContentCard({ title, fields }: { title: string; fields: A2pPayloadField[] }) {
+  return (
+    <div className="a2p-cc-subcard">
+      <h4 className="adm-subhead">{title}</h4>
+      <div className="a2p-cc-facts">
+        {fields.map((field) => (
+          <FactRow key={`${title}-${field.label}`} label={field.label} value={field.value} />
         ))}
-      </dl>
+      </div>
+    </div>
+  );
+}
+
+function RepresentativeCard({ fields }: { fields: A2pPayloadField[] }) {
+  const map = fieldMap(fields);
+  const name = [map.get("First name"), map.get("Last name")].filter(Boolean).join(" ");
+  return (
+    <div className="a2p-cc-subcard">
+      <h4 className="adm-subhead">Authorized representative</h4>
+      <div className="a2p-cc-facts">
+        <FactRow label="Name" value={name || "—"} />
+        <FactRow label="Role / business title" value={map.get("Business title") ?? "—"} />
+        <FactRow label="Email" value={map.get("Email") ?? "—"} />
+        <FactRow label="Phone" value={map.get("Phone") ?? "—"} />
+      </div>
+    </div>
+  );
+}
+
+function AddressCard({ fields }: { fields: A2pPayloadField[] }) {
+  const map = fieldMap(fields);
+  const city = map.get("City");
+  const region = map.get("Region");
+  const postalCode = map.get("Postal code");
+  const cityLine = [city, [region, postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return (
+    <div className="a2p-cc-subcard">
+      <h4 className="adm-subhead">Business address</h4>
+      <div className="a2p-cc-facts">
+        <FactRow label="Customer name" value={map.get("Customer name") ?? "—"} />
+        <FactRow label="Street" value={map.get("Street") ?? "—"} />
+        {map.get("Street 2") && <FactRow label="Street 2 / Unit" value={map.get("Street 2") ?? "—"} />}
+        <FactRow label="City, State ZIP" value={cityLine || "—"} />
+        <FactRow label="Country" value={map.get("Country") ?? "—"} />
+      </div>
+    </div>
+  );
+}
+
+function CampaignCard({
+  fields,
+  samples,
+  clinicName,
+}: {
+  fields: A2pPayloadField[];
+  samples: string[];
+  clinicName: string;
+}) {
+  const map = fieldMap(fields);
+  return (
+    <div className="a2p-cc-subcard a2p-cc-subcard--campaign" id="a2p-campaign-content">
+      <h4 className="adm-subhead">Campaign content</h4>
+      <div className="a2p-cc-facts">
+        <FactRow label="Use case" value={map.get("Use case") ?? "—"} />
+        <FactRow label="Embedded links" value={map.get("Embedded links") ?? "—"} />
+        <FactRow label="Embedded phone" value={map.get("Embedded phone") ?? "—"} />
+      </div>
+      <div className="a2p-cc-copy-grid">
+        <CopyBlock label="Description" value={map.get("Description") ?? "—"} />
+        <CopyBlock label="Opt-in / message flow" value={map.get("Opt-in / message flow") ?? "—"} />
+      </div>
+      <div className="a2p-cc-sms-stack">
+        {samples.map((sample, idx) => (
+          <div className="a2p-cc-sms-card" key={`${clinicName}-sample-${idx}`}>
+            <span className="a2p-cc-sms-label">Sample message {idx + 1}</span>
+            <div className="a2p-cc-sms-bubble">{sample}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CopyBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="a2p-cc-copy-block">
+      <span className="a2p-cc-copy-label">{label}</span>
+      <p className="a2p-cc-copy-value">{value}</p>
     </div>
   );
 }
 
 function IncludedSenderCard({ sender }: { sender: A2pIncludedSender }) {
   return (
-    <div className="adm-phone-card">
-      <div className="adm-phone-card-head">
-        <span className="t-mono" style={{ fontWeight: 700 }}>{sender.phoneNumber}</span>
+    <div className="a2p-cc-sender-card">
+      <div className="a2p-cc-sender-head">
+        <span className="t-mono a2p-cc-wrap">{sender.phoneNumber}</span>
         <Badge tone="success">Included</Badge>
       </div>
-      <dl className="adm-rows">
-        <Row label="PN SID">
-          {sender.twilioPhoneNumberSid ? <span className="t-mono">{sender.twilioPhoneNumberSid}</span> : <Muted>Missing</Muted>}
-        </Row>
-        <Row label="Included in this submission">
-          <Badge tone={sender.includedInSubmission ? "success" : "neutral"}>
-            {sender.includedInSubmission ? "Yes" : "No"}
-          </Badge>
-        </Row>
-      </dl>
+      <div className="a2p-cc-facts">
+        <FactRow label="PN SID" value={sender.twilioPhoneNumberSid ? <span className="t-mono a2p-cc-wrap">{sender.twilioPhoneNumberSid}</span> : "Missing"} />
+        <FactRow
+          label="Included in this submission"
+          value={<Badge tone={sender.includedInSubmission ? "success" : "neutral"}>{sender.includedInSubmission ? "Yes" : "No"}</Badge>}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ResourceCard({ title, fields }: { title: string; fields: A2pPayloadField[] }) {
+  return (
+    <div className="a2p-cc-subcard">
+      <h4 className="adm-subhead">{title}</h4>
+      <div className="a2p-cc-facts">
+        {fields.map((field) => (
+          <FactRow key={`${title}-${field.label}`} label={field.label} value={field.value} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -528,42 +1036,97 @@ function IncludedSenderCard({ sender }: { sender: A2pIncludedSender }) {
 function NumberDiagnosticCard({ n }: { n: A2pReviewNumber }) {
   const tone: Tone = n.coverageDisplay === "covered" ? "success" : "warning";
   return (
-    <div className="adm-phone-card">
-      <div className="adm-phone-card-head">
-        <span className="t-mono" style={{ fontWeight: 700 }}>{n.phoneNumber}</span>
+    <div className="a2p-cc-diagnostic-card">
+      <div className="a2p-cc-diagnostic-head">
+        <span className="t-mono a2p-cc-wrap">{n.phoneNumber}</span>
         <Badge tone={tone}>{COVERAGE_LABEL[n.coverageDisplay]}</Badge>
       </div>
-      <dl className="adm-rows">
-        <Row label="PN SID">{n.twilioPhoneNumberSid ? <span className="t-mono">{n.twilioPhoneNumberSid}</span> : <Muted>Missing</Muted>}</Row>
-        <Row label="Messaging Service sender status">{humanizeToken(n.messagingServiceSenderStatus)}</Row>
-        <Row label="A2P campaign coverage">{humanizeToken(n.a2pCampaignCoverageStatus)}</Row>
-        <Row label="Current coverage">{COVERAGE_LABEL[n.coverageDisplay]}</Row>
-        <Row label="Eligible for live SMS">
-          <Badge tone={n.eligibleForLiveSms ? "success" : "warning"}>{n.eligibleForLiveSms ? "Yes" : "No"}</Badge>
-        </Row>
-        <Row label="Blocking reason">{n.blockingReason ? humanizeToken(n.blockingReason) : <Muted>None</Muted>}</Row>
-        <Row label="Last synced">{fmtDateTime(n.lastSyncedAt)}</Row>
-      </dl>
+      <div className="a2p-cc-facts">
+        <FactRow label="PN SID" value={n.twilioPhoneNumberSid ? <span className="t-mono a2p-cc-wrap">{n.twilioPhoneNumberSid}</span> : "Missing"} />
+        <FactRow label="Current coverage" value={COVERAGE_LABEL[n.coverageDisplay]} />
+        <FactRow label="Messaging Service sender status" value={humanizeToken(n.messagingServiceSenderStatus)} />
+        <FactRow label="A2P campaign coverage" value={humanizeToken(n.a2pCampaignCoverageStatus)} />
+        <FactRow
+          label="Eligible for live SMS"
+          value={<Badge tone={n.eligibleForLiveSms ? "success" : "warning"}>{n.eligibleForLiveSms ? "Yes" : "No"}</Badge>}
+        />
+        <FactRow label="Launch blocking reason" value={n.blockingReason ? humanizeToken(n.blockingReason) : "None"} />
+        <FactRow label="Last synced" value={fmtDateTime(n.lastSyncedAt)} />
+      </div>
     </div>
   );
 }
 
-function statusLine(sid: string, status: string | null) {
+function FactRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <span>
-      <span className="t-mono">{sid}</span>
-      {status && <Badge tone={status.toLowerCase().includes("approv") ? "success" : "info"}>{humanizeToken(status)}</Badge>}
-    </span>
+    <div className="a2p-cc-fact-row">
+      <span className="a2p-cc-fact-label">{label}</span>
+      <span className="a2p-cc-fact-value">{value}</span>
+    </div>
+  );
+}
+
+function A2pDisclosureCard({
+  id,
+  title,
+  summary,
+  helper,
+  defaultOpen,
+  tone,
+  children,
+}: {
+  id: string;
+  title: string;
+  summary: string;
+  helper?: string;
+  defaultOpen: boolean;
+  tone: "technical" | "diagnostic" | "warning";
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <details
+      id={id}
+      className={`a2p-cc-disclosure a2p-cc-disclosure--${tone}`}
+      open={open}
+      onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary className="a2p-cc-disclosure-summary">
+        <span className="a2p-cc-disclosure-head">
+          <span>
+            <span className="a2p-cc-disclosure-title">{title}</span>
+            <span className="a2p-cc-disclosure-copy">{summary}</span>
+            {helper && <span className="a2p-cc-disclosure-helper">{helper}</span>}
+          </span>
+        </span>
+      </summary>
+      <div className="a2p-cc-disclosure-body">{children}</div>
+    </details>
   );
 }
 
 function DisabledSubmit({ reason }: { reason: string }) {
   return (
     <div className="adm-blocked" role="note">
-      <button type="button" className="btn btn-secondary btn-sm" disabled aria-disabled="true">Submit for A2P review</button>
+      <button type="button" className="btn btn-secondary" disabled aria-disabled="true">
+        Submit for A2P review
+      </button>
       <span className="t-small" style={{ color: "var(--text-muted)" }}>{reason}</span>
     </div>
   );
+}
+
+function formatBrandStatusForDiagnostics(status: string | null, submissionStatus: string | null): React.ReactNode {
+  if (!status) return "Not synced";
+  if (submissionStatus !== "approved" && status !== "approved" && status !== "covered") {
+    return (
+      <span>
+        {humanizeToken(status)}{" "}
+        <span className="t-helper">Expected before approval. This does not block A2P submission.</span>
+      </span>
+    );
+  }
+  return humanizeToken(status);
 }
 
 function Muted({ children }: { children: React.ReactNode }) {

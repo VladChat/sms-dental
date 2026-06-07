@@ -47,6 +47,13 @@ export type AdminConsoleData = {
   a2pReview: A2pReviewPackage;
 };
 
+type A2pLaunchStatus = {
+  smsRecoveryEnabled: boolean;
+  launchReady: boolean;
+  smsStatus: string;
+  launchBlockedReason: string | null;
+};
+
 type SectionId = "phone" | "business" | "sms" | "a2p" | "billing" | "behavior" | "admin";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
@@ -497,7 +504,11 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
 
           {/* A2P / 10DLC approval review (platform-admin only) */}
           <Panel id="a2p" active={active}>
-            <AdminA2pReviewPanel pkg={data.a2pReview} clinicId={d.id} />
+            <AdminA2pReviewPanel
+              pkg={data.a2pReview}
+              clinicId={d.id}
+              launchStatus={buildA2pLaunchStatus(d, launchBlockedReason)}
+            />
           </Panel>
 
           {/* Billing (compact) */}
@@ -751,4 +762,16 @@ function bannerFor(
     return { tone: "warning", title: "Launch blocked: SMS readiness not verified", body: launchBlockedReason, target: "sms", actionLabel: "Go to SMS approval" };
   }
   return { tone: "info", title: "Ready to launch", body: "All prerequisites met. Launch from Admin tools.", target: "admin", actionLabel: "Go to Admin tools" };
+}
+
+function buildA2pLaunchStatus(
+  d: AdminClinicDetail,
+  launchBlockedReason: string | null,
+): A2pLaunchStatus {
+  return {
+    smsRecoveryEnabled: d.smsRecoveryEnabled,
+    launchReady: d.smsReadiness?.launchReady ?? false,
+    smsStatus: d.smsStatus,
+    launchBlockedReason,
+  };
 }
