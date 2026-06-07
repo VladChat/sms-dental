@@ -416,6 +416,15 @@ function buildSubmissionHistory(pkg: A2pReviewPackage): SubmissionHistorySummary
   if (sub.rejectionReason) {
     items.push({ label: "Rejection reason", value: sub.rejectionReason });
   }
+  // Surface Brand failure reason prominently when brand registration failed.
+  if ((sub.brandStatus ?? "").toUpperCase() === "FAILED" && sub.brandFailureReason) {
+    items.unshift(
+      { label: "Brand failure reason", value: sub.brandFailureReason },
+    );
+    if (sub.brandFailureCode) {
+      items.splice(1, 0, { label: "Twilio Error Code", value: sub.brandFailureCode });
+    }
+  }
   items.push({
     label: "Next action",
     value: nextActionFromSubmissionStatus(sub.status),
@@ -436,10 +445,10 @@ function nextActionFromSubmissionStatus(status: string | null): string {
       return "Wait for provider review, then refresh provider status or resume submission if prompted.";
     case "failed":
       return "Review the provider error and technical wiring details, then retry when corrected.";
+    case "blocked":
+      return "Fix the clinic business identity/EIN. Do not resume A2P submission until the Brand failure is resolved.";
     case "rejected":
       return "Operator review is required before another submission attempt.";
-    case "blocked":
-      return "Review the current blocker and internal diagnostics, then retry when the platform profile or Twilio state is corrected.";
     case "approved":
       return "Confirm sender coverage, then enable patient SMS separately when appropriate.";
     default:
@@ -631,8 +640,13 @@ export function AdminA2pReviewPanel({
         {surfaceSync && (
           <div className="a2p-cc-header-actions">
             <button type="button" className="btn btn-secondary btn-sm" disabled={syncing} onClick={runReadinessSync}>
-              {syncing ? "Running…" : "Run readiness sync"}
+              {syncing ? "Running…" : "Run SMS readiness sync"}
             </button>
+            {(sub.brandRegistrationSid || sub.customerProfileSid) && (
+              <button type="button" className="btn btn-secondary btn-sm" disabled={refreshing} onClick={refreshProviderStatus}>
+                {refreshing ? "Refreshing…" : "Refresh provider status"}
+              </button>
+            )}
           </div>
         )}
       </header>
@@ -1235,7 +1249,12 @@ function DisabledSubmit({ reason }: { reason: string }) {
 
 function formatBrandStatusForDiagnostics(status: string | null, submissionStatus: string | null): React.ReactNode {
   if (!status) return "Not synced";
-  if (submissionStatus !== "approved" && status !== "approved" && status !== "covered") {
+  const upper = (status ?? "").trim().toUpperCase();
+  // Terminal failure should be clearly marked as failed — NOT "expected before approval".
+  if (upper === "FAILED" || upper === "REJECTED" || upper === "DECLINED") {
+    return humanizeToken(status);
+  }
+  if (submissionStatus !== "approved" && upper !== "APPROVED" && upper !== "COVERED") {
     return (
       <span>
         {humanizeToken(status)}{" "}

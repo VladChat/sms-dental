@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
-    "test:a2p": "tsc -p tsconfig.a2p-tests.json && node --test .tmp-tests/tests/a2p-platform-profile.test.js .tmp-tests/tests/a2p-recovery.test.js .tmp-tests/tests/a2p-trusthub-helpers.test.js"
+    "test:a2p": "tsc -p tsconfig.a2p-tests.json && node --test .tmp-tests/tests/a2p-brand-status.test.js .tmp-tests/tests/a2p-platform-profile.test.js .tmp-tests/tests/a2p-recovery.test.js .tmp-tests/tests/a2p-trusthub-helpers.test.js"
   },
   "engines": {
     "node": ">=20.0.0"

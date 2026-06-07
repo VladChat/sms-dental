@@ -192,6 +192,21 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   if (recoveryAction === "manual_review" && recoveryReason) {
     warnings.push(recoveryReason);
   }
+  const brandStatusLocal = psStr("brandStatus");
+  const brandFailureReason = psStr("brandFailureReason");
+  const brandFailureCode = psStr("brandFailureCode");
+  // Surface Brand terminal failure as a warning (and eventually as blocker).
+  if (brandStatusLocal) {
+    const brandNorm = brandStatusLocal.toUpperCase();
+    if (
+      brandNorm === "FAILED" || brandNorm === "REJECTED" || brandNorm === "DECLINED" ||
+      brandNorm === "SUSPENDED" || brandNorm === "UNVERIFIED"
+    ) {
+      const reasonMsg = brandFailureReason ? ` ${brandFailureReason}.` : "";
+      const codeMsg = brandFailureCode ? ` Twilio Error Code: ${brandFailureCode}.` : "";
+      warnings.push(`Brand registration failed.${reasonMsg}${codeMsg}`);
+    }
+  }
   const submission = {
     trackingAvailable: submissionState.available,
     status: record?.status ?? null,
@@ -213,6 +228,8 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     trustProductStatus: psStr("trustProductStatus"),
     brandStatus: psStr("brandStatus"),
     campaignStatus: psStr("campaignStatus"),
+    brandFailureReason: psStr("brandFailureReason"),
+    brandFailureCode: psStr("brandFailureCode"),
   };
 
   const clinicReadiness = readinessState.summary?.clinic
@@ -237,6 +254,8 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
     activeCount: localActiveNumbers.length,
     hasMessagingService: Boolean(MESSAGING_SERVICE_SID),
     recordStatus: record?.status ?? null,
+    brandStatus: brandStatusLocal ?? null,
+    brandFailureReason: brandFailureReason ?? null,
   });
 
   const reviewStatus = deriveReviewStatus({
@@ -481,6 +500,8 @@ function evaluateSubmitEligibility(input: {
   activeCount: number;
   hasMessagingService: boolean;
   recordStatus: string | null;
+  brandStatus: string | null;
+  brandFailureReason: string | null;
 }): { submitEligible: boolean; submitBlockedReason: string | null } {
   if (input.submissionMode === "disabled") {
     return { submitEligible: false, submitBlockedReason: "A2P submission is disabled in this environment." };
@@ -505,6 +526,12 @@ function evaluateSubmitEligibility(input: {
   // without creating duplicate resources; dry_run simply re-records its review.
   if (input.recordStatus === "approved") {
     return { submitEligible: false, submitBlockedReason: "This clinic's A2P registration is already approved." };
+  }
+  if (input.recordStatus === "blocked") {
+    const reason = input.brandFailureReason
+      ? `Brand registration failed. ${input.brandFailureReason} Fix the clinic business identity/EIN before resubmitting.`
+      : "A previous submission is blocked. Fix the business identity/EIN before resubmitting.";
+    return { submitEligible: false, submitBlockedReason: reason };
   }
   if (input.recordStatus === "rejected") {
     return {
@@ -602,6 +629,8 @@ function notFoundPackage(
         trustProductStatus: null,
         brandStatus: null,
         campaignStatus: null,
+        brandFailureReason: null,
+        brandFailureCode: null,
       },
       numberDiagnostics: [],
       plannedResources: [],

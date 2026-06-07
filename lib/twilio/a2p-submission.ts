@@ -6,6 +6,16 @@ import {
   requireTrustHubEvaluationStatus,
 } from "./trusthub-helpers";
 import {
+  isBrandApprovedStatus,
+  isBrandPendingStatus,
+  isBrandTerminalFailureStatus,
+  normalizeBrandStatus,
+} from "./brand-status-classification";
+
+// Re-export the brand status helpers for callers that only need classification.
+export { isBrandApprovedStatus, isBrandPendingStatus, isBrandTerminalFailureStatus, normalizeBrandStatus };
+
+import {
   getA2pBrandConfig,
   getA2pTrustHubConfig,
   getAppDomainsSafe,
@@ -707,6 +717,8 @@ export async function runRealA2pSubmission(
     // ---- 13. Brand Registration (async vetting) ----
     let brandSid = str(state, "brandRegistrationSid");
     let brandStatus = str(state, "brandStatus");
+    let brandFailureReason: string | null = null;
+    let brandFailureCode: string | null = null;
     if (!brandSid) {
       const brand = await client.messaging.v1.brandRegistrations.create(
         buildBrandRegistrationPayload({
@@ -724,15 +736,54 @@ export async function runRealA2pSubmission(
       const brand = await client.messaging.v1.brandRegistrations(brandSid).fetch();
       brandStatus = brand.status;
       state.brandStatus = brandStatus;
+      // Capture failure reason / code from the Twilio response (the SDK type
+      // surface already includes failureReason on the fetch result).
+      brandFailureReason = (brand as { failureReason?: string | null }).failureReason ?? null;
+      if (brandFailureReason) state.brandFailureReason = brandFailureReason;
+      // Twilio error codes surface as (err as { code?: string | number }).code
+      // on SDK exceptions; they are NOT on the fetch result. For read-only
+      // refresh, the code path below captures failureReason instead.
     }
 
-    if ((brandStatus ?? "").toUpperCase() !== "APPROVED") {
+    // ---- Classify the Brand status and branch accordingly ----
+    const brandStatusNorm = normalizeBrandStatus(brandStatus);
+
+    if (brandStatusNorm === "failed") {
+      // TERMINAL FAILURE — do NOT proceed to Campaign creation.
+      // Persist as blocked/rejected and surface the reason.
+      const reason = brandFailureReason
+        ? brandFailureReason
+        : `Brand registration status is FAILED (Twilio reported status: ${brandStatus ?? "unknown"}).`;
+      const message = `Brand registration failed. ${reason}`;
+      await persist("blocked", "brand_registration_failed", {
+        customerProfileSid,
+        trustProductSid,
+        brandRegistrationSid: brandSid,
+        lastErrorCode: brandFailureCode ?? "TWILIO_A2P_BRAND_FAILED",
+        lastErrorMessage: message,
+        rejectionReason: message,
+      });
+      return {
+        ok: false,
+        status: "blocked",
+        step: "brand_registration_failed",
+        message,
+        createdResources: created,
+        providerErrors: reason ? [reason] : errors,
+        nextAction:
+          "Correct the clinic business identity/EIN. Do not resume A2P submission until the provider Brand failure is resolved or a new safe recovery path is implemented.",
+      };
+    }
+
+    if (brandStatusNorm !== "approved") {
+      // PENDING / IN_REVIEW / UNKNOWN — keep existing async behavior but
+      // make the message neutral/info, not green success.
       await persist("pending", "awaiting_brand_approval", { customerProfileSid, trustProductSid, brandRegistrationSid: brandSid });
       return {
         ok: true,
         status: "pending",
         step: "awaiting_brand_approval",
-        message: `Submitted. Brand registration status is ${brandStatus ?? "PENDING"}. Twilio vetting is asynchronous.`,
+        message: `Brand registration status is ${brandStatus ?? "PENDING"}. Twilio vetting is asynchronous.`,
         createdResources: created,
         providerErrors: errors,
         nextAction: "Run the read-only A2P status refresh later. Once the brand is APPROVED, click Submit again to create the campaign and add numbers.",
@@ -833,12 +884,16 @@ export async function runRealA2pSubmission(
 export async function readA2pProviderStatus(clinicId: string): Promise<{
   ok: boolean;
   statuses: Record<string, string>;
+  brandFailureReason: string | null;
+  brandFailureCode: string | null;
 }> {
   const { record } = await getA2pSubmissionState(clinicId);
-  if (!record) return { ok: false, statuses: {} };
+  if (!record) return { ok: false, statuses: {}, brandFailureReason: null, brandFailureCode: null };
   const client = getClient();
   const statuses: Record<string, string> = {};
   const patch: JsonObject = {};
+  let brandFailureReason: string | null = null;
+  let brandFailureCode: string | null = null;
 
   await refresh(record.twilioSecondaryCustomerProfileSid ?? record.twilioCustomerProfileSid, async (sid) => {
     const r = await client.trusthub.v1.customerProfiles(sid).fetch();
@@ -854,16 +909,52 @@ export async function readA2pProviderStatus(clinicId: string): Promise<{
     const r = await client.messaging.v1.brandRegistrations(sid).fetch();
     statuses.brand = r.status;
     patch.brandStatus = r.status;
+    // Capture failure reason/details from the Twilio response.
+    const failureReason = (r as { failureReason?: string | null; feedback?: string | null; errorDetails?: Array<{ errorCode?: string; message?: string }> }).failureReason
+      ?? (r as { feedback?: string | null }).feedback
+      ?? null;
+    if (failureReason) {
+      brandFailureReason = failureReason;
+      patch.brandFailureReason = failureReason;
+    }
+    // Twilio Error Codes can surface in errorDetails on some resource responses.
+    const errorDetails = (r as { errorDetails?: Array<{ errorCode?: string; message?: string }> }).errorDetails;
+    if (Array.isArray(errorDetails) && errorDetails.length > 0) {
+      const firstCode = errorDetails[0]?.errorCode ?? null;
+      if (firstCode) brandFailureCode = String(firstCode);
+    }
+
+    // If the Brand is terminal failed, also elevate the top-level submission status
+    // so downstream UI/review-package logic does not treat it as "pending".
+    const brandNorm = normalizeBrandStatus(r.status);
+    if (brandNorm === "failed") {
+      const message = brandFailureReason
+        ? `Brand registration failed. ${brandFailureReason}`
+        : `Brand registration status is FAILED (${r.status}).`;
+      patch.rejectionReason = message;
+      patch.lastErrorMessage = message;
+      if (brandFailureCode) patch.lastErrorCode = brandFailureCode;
+      // Only overwrite top-level status if the current local status is NOT
+      // already a terminal state — avoid downgrading "approved" or overwriting
+      // a more specific earlier result.
+      if (record.status !== "approved" && record.status !== "rejected" && record.status !== "blocked") {
+        patch._overrideStatus = "blocked";
+      }
+    }
   });
 
+  // Apply patch
   if (Object.keys(patch).length > 0) {
+    const statusOverride = patch._overrideStatus ? String(patch._overrideStatus) as "blocked" : null;
+    delete patch._overrideStatus;
     await upsertA2pSubmissionProgress({
       clinicId,
+      status: statusOverride || undefined,
       providerStatePatch: patch,
       lastStatusSyncedAt: new Date(),
     }).catch(() => {});
   }
-  return { ok: true, statuses };
+  return { ok: true, statuses, brandFailureReason, brandFailureCode };
 }
 
 async function refresh(sid: string | null, fn: (sid: string) => Promise<void>): Promise<void> {

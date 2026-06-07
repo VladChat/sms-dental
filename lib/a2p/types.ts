@@ -93,6 +93,9 @@ export type A2pSubmissionInfo = {
   trustProductStatus: string | null;
   brandStatus: string | null;
   campaignStatus: string | null;
+  // Brand registration failure details captured from Twilio provider response.
+  brandFailureReason: string | null;
+  brandFailureCode: string | null;
 };
 
 // One Twilio resource the real submit will create (or reuse if already present).

@@ -35,9 +35,13 @@ export async function POST(
   if (!UUID_RE.test(clinicId)) return jsonError(404, "not_found", "Clinic not found.");
 
   let statuses: Record<string, string> = {};
+  let brandFailureReason: string | null = null;
+  let brandFailureCode: string | null = null;
   try {
     const res = await readA2pProviderStatus(clinicId);
     statuses = res.statuses;
+    brandFailureReason = res.brandFailureReason;
+    brandFailureCode = res.brandFailureCode;
   } catch {
     return jsonError(
       500,
@@ -57,9 +61,11 @@ export async function POST(
       customer_profile: statuses.customerProfile ?? "n/a",
       trust_product: statuses.trustProduct ?? "n/a",
       brand: statuses.brand ?? "n/a",
+      brandFailureReason: brandFailureReason ?? null,
+      brandFailureCode: brandFailureCode ?? null,
     },
     metadata: { authSource: admin.source, mode: "read_only" },
   }).catch(() => {});
 
-  return jsonOk({ ok: true, statuses });
+  return jsonOk({ ok: true, statuses, brandFailureReason, brandFailureCode });
 }
