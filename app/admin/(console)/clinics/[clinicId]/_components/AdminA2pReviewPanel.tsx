@@ -103,7 +103,7 @@ const TECHNICAL_RESOURCE_STEPS = new Set([
 const HUMAN_PROVIDER_LABELS = {
   business: new Set([
     "Business name",
-    "Business type",
+    "Business Type",
     "Industry",
     "Registration number (EIN)",
     "Regions of operation",

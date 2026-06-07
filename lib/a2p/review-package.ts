@@ -10,8 +10,6 @@ import {
 } from "../db/sms-readiness";
 import { getA2pSubmissionState } from "../db/a2p-submissions";
 import {
-  isLegacyBusinessType,
-  legacyBusinessTypeLabel,
   mapBusinessTypeForTwilio,
   maskEin,
   normalizeBusinessTypeForStorage,
@@ -89,12 +87,11 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   const einDigits = (clinic.ein_tax_id ?? "").replace(/\D/g, "");
   const einError = validateEin(clinic.ein_tax_id ?? "");
   const normalizedBusinessType = normalizeBusinessTypeForStorage(clinic.business_type);
-  const businessTypeLabel = normalizedBusinessType
-    ?? (isLegacyBusinessType(clinic.business_type) ? legacyBusinessTypeLabel(clinic.business_type) : null);
+  const businessTypeLabel = normalizedBusinessType;
 
   const business = {
     legalBusinessName: emptyToNull(clinic.legal_business_name),
-    businessType: emptyToNull(normalizedBusinessType ?? clinic.business_type),
+    businessType: emptyToNull(normalizedBusinessType),
     businessTypeLabel,
     einProvided: einDigits.length > 0,
     einLast4: einDigits.length >= 4 ? einDigits.slice(-4) : null,
@@ -128,7 +125,7 @@ export async function buildA2pReviewPackage(clinicId: string): Promise<A2pReview
   };
   req(Boolean(business.legalBusinessName), "legal_business_name", "Legal business name");
   req(business.einProvided, "ein_tax_id", "EIN / Tax ID");
-  req(Boolean(business.businessType), "business_type", "Business type");
+  req(Boolean(business.businessType), "business_type", "Business Type");
   req(Boolean(representative.firstName), "rep_first_name", "Representative first name");
   req(Boolean(representative.lastName), "rep_last_name", "Representative last name");
   req(Boolean(representative.email), "rep_email", "Representative email");

@@ -179,17 +179,17 @@ export function SmsApprovalForm({
       />
 
       <SelectField
-        label="Business type"
+        label="Business Type"
         name="business_type"
         value={businessTypeValue}
         onChange={(v) => patch({ businessType: v })}
         onBlur={() => touch("businessType")}
         infoTooltip={{
-          label: "Business type help",
+          label: "Business Type help",
           text: "Choose the legal structure that matches the business registration. For an LLC, choose Limited Liability Corporation.",
         }}
         options={BUSINESS_TYPE_OPTIONS}
-        placeholder="Select business type..."
+        placeholder="--- Select Business Type ---"
         required
         helper={fieldErrors.businessType ? undefined : "Select the exact legal structure submitted for A2P review."}
         error={fieldErrors.businessType}

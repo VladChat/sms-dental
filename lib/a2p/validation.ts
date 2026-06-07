@@ -12,11 +12,11 @@ export type A2pValidationResult = {
 };
 
 export const TWILIO_BUSINESS_TYPES = [
-  "Co-operative",
+  "Partnership",
   "Corporation",
+  "Co-operative",
   "Limited Liability Corporation",
   "Non-profit Corporation",
-  "Partnership",
 ] as const;
 
 export type TwilioBusinessType = (typeof TWILIO_BUSINESS_TYPES)[number];
@@ -579,7 +579,7 @@ function unsupportedBusinessType(): A2pValidationResult {
     field: "business_type",
     code: "A2P_BUSINESS_TYPE_UNSUPPORTED",
     severity: "error",
-    message: "Choose the clinic's exact legal business structure before A2P submission.",
+    message: "Choose the exact legal structure before A2P submission.",
     operatorMessage: "Cannot submit: business type is not mapped to a Twilio-supported legal structure.",
   };
 }

@@ -131,7 +131,7 @@ export function addressParams(i: {
 
 const ATTR_LABELS: Record<string, string> = {
   business_name: "Business name",
-  business_type: "Business type",
+  business_type: "Business Type",
   business_industry: "Industry",
   business_registration_identifier: "Registration ID type",
   business_registration_number: "Registration number (EIN)",
