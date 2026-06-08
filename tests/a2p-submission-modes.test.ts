@@ -95,12 +95,13 @@ test("isTerminalBrandFailure treats blocked live brand state as terminal", () =>
   );
 });
 
-test("nextActionForSubmission warns against continuing failed live fake-company testing", () => {
+test("nextActionForSubmission surfaces blocking reason and instructs retry for blocked live submission", () => {
   const nextAction = nextActionForSubmission({
     status: "blocked",
     brandStatus: "FAILED",
     campaignSid: null,
     brandFailureReason: "The submitted US EIN is invalid.",
   }, "live");
-  assert.match(nextAction ?? "", /Do not continue this live attempt/i);
+  assert.match(nextAction ?? "", /blocked or failed/i);
+  assert.match(nextAction ?? "", /correct the business identity/i);
 });

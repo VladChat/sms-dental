@@ -107,8 +107,8 @@ export function nextActionForSubmission(
   }
   if (mode === "live" && isTerminalBrandFailure(submission)) {
     return submission.brandFailureReason
-      ? `Do not continue this live attempt for fake-company testing. ${submission.brandFailureReason}`
-      : "Do not continue this live attempt for fake-company testing. Use Mock A2P or fix the real business identity.";
+      ? `Previous live submission blocked or failed: ${submission.brandFailureReason} Correct the business identity/EIN, then retry.`
+      : "Previous live submission was blocked or failed. Correct the business identity/EIN, then retry.";
   }
   if (mode === "live" && isLiveCampaignCreationPending(submission)) {
     return "Brand approved. Create the live A2P Campaign only with the separate explicit confirmation.";

@@ -520,16 +520,9 @@ function evaluateLiveArming(input: {
   if (input.liveRecord?.status === "approved") {
     return { liveSubmitArmed: false, liveSubmitBlockedReason: "This clinic's live A2P registration is already approved." };
   }
-  if (input.liveRecord?.status === "blocked") {
-    const ps = (input.liveRecord.providerState ?? {}) as JsonObject;
-    const brandFailureReason = typeof ps.brandFailureReason === "string" ? ps.brandFailureReason : null;
-    return {
-      liveSubmitArmed: false,
-      liveSubmitBlockedReason: brandFailureReason
-        ? `Do not continue this live attempt for fake-company testing. ${brandFailureReason}`
-        : "Do not continue this live attempt for fake-company testing. Use Mock A2P or fix the real business identity.",
-    };
-  }
+  // "blocked" and "failed" are retryable: the admin corrects the issue and retries.
+  // The previous error is shown in Previous submission history, not used as a
+  // permanent hard-disable here.
   if (input.liveRecord?.status === "rejected") {
     return {
       liveSubmitArmed: false,

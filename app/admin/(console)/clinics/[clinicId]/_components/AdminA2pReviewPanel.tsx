@@ -588,7 +588,7 @@ function nextActionFromSubmissionStatus(status: string | null): string {
     case "failed":
       return "Review the provider error and technical wiring details, then retry when corrected.";
     case "blocked":
-      return "Fix the clinic business identity/EIN. Do not resume A2P submission until the Brand failure is resolved.";
+      return "Review the blocking error in Technical details. Correct the business identity/EIN, then retry.";
     case "rejected":
       return "Operator review is required before another submission attempt.";
     case "approved":
@@ -758,8 +758,8 @@ export function AdminA2pReviewPanel({
   const isResume =
     selectedSubmission?.status === "pending" ||
     selectedSubmission?.status === "submitted" ||
-    selectedSubmission?.status === "failed" ||
-    selectedSubmission?.status === "blocked";
+    selectedSubmission?.status === "failed";
+  const isRetry = selectedSubmission?.status === "blocked";
   const isLiveCampaignStep = isLive && isLiveCampaignCreationPending(liveTracked.submission);
   const hasPreflightErrors = hasValidationErrors(preflightValidations);
   const primaryPreflightError = preflightValidations[0] ?? null;
@@ -1096,7 +1096,7 @@ export function AdminA2pReviewPanel({
                     </label>
                   </div>
                   <button type="button" className="btn btn-primary" disabled={submitting || !confirmLive} onClick={submit}>
-                    {submitting ? "Submitting…" : isResume ? "Resume live A2P submission" : "Submit to Twilio for A2P Review"}
+                    {submitting ? "Submitting…" : isResume ? "Resume live A2P submission" : isRetry ? "Retry live A2P submission" : "Submit to Twilio for A2P Review"}
                   </button>
                 </>
               )}
@@ -1294,7 +1294,7 @@ export function AdminA2pReviewPanel({
                 <FactRow label="Status" value="Not started" />
                 <FactRow
                   label="Next action"
-                  value="Do not continue this live attempt for fake-company testing. Use Mock A2P or fix real business identity."
+                  value="No live submission yet. Review the approval package and submit when ready."
                 />
               </div>
             )}

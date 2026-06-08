@@ -91,7 +91,7 @@ export const runtimeConfig = {
     //     Real execution still requires this mode to be "live", the per-clinic
     //     allowlist below, a configured primary Customer Profile SID, and an
     //     admin Submit click.
-    submissionMode: "mock" as "disabled" | "dry_run" | "mock" | "live",
+    submissionMode: "live" as "disabled" | "dry_run" | "mock" | "live",
 
     // Separate Messaging Service reserved for Mock A2P testing. This must be an
     // empty service with NO senders so mock Campaigns are never confused with the
