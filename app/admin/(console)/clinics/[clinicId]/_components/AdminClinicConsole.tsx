@@ -414,6 +414,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             </p>
             <AdminA2pForm
               clinicId={d.id}
+              completed={d.a2pInfoCompleted}
               initial={{
                 legalBusinessName: d.legalBusinessName ?? "",
                 einTaxId: d.einTaxId ?? "",

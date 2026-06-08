@@ -147,6 +147,7 @@ export function Field({
   type = "text",
   required = false,
   optional = false,
+  readOnly = false,
   placeholder,
   inputMode,
   autoComplete,
@@ -162,6 +163,8 @@ export function Field({
   type?: string;
   required?: boolean;
   optional?: boolean;
+  // Locked/read-only mode: value stays visible and selectable, but not editable.
+  readOnly?: boolean;
   placeholder?: string;
   inputMode?: "text" | "tel" | "email" | "numeric";
   autoComplete?: string;
@@ -182,11 +185,13 @@ export function Field({
         id={name}
         name={name}
         type={type}
-        className="input"
+        className={readOnly ? "input acct-readonly" : "input"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         required={required}
+        readOnly={readOnly}
+        aria-readonly={readOnly || undefined}
         placeholder={placeholder}
         inputMode={inputMode}
         autoComplete={autoComplete ?? "off"}
@@ -215,6 +220,7 @@ export function SelectField({
   options,
   placeholder,
   required = false,
+  readOnly = false,
   helper,
   error,
 }: {
@@ -227,6 +233,9 @@ export function SelectField({
   options: { value: string; label: string }[];
   placeholder?: string;
   required?: boolean;
+  // Locked/read-only mode: a <select> has no readOnly, so disable it (value
+  // still renders) and gray it to match read-only text inputs.
+  readOnly?: boolean;
   helper?: ReactNode;
   error?: string;
 }) {
@@ -242,11 +251,13 @@ export function SelectField({
       <select
         id={name}
         name={name}
-        className="select"
+        className={readOnly ? "select acct-readonly" : "select"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         required={required}
+        disabled={readOnly}
+        aria-readonly={readOnly || undefined}
         aria-describedby={[helperId, errorId].filter(Boolean).join(" ") || undefined}
         aria-invalid={error ? true : undefined}
       >

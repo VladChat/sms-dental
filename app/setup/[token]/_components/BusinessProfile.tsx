@@ -264,6 +264,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 slug={data.slug}
                 smsStatus={smsStatus}
                 value={sms}
+                completed={smsDone}
                 onChange={(patch) => setSms((prev) => ({ ...prev, ...patch }))}
                 onSaved={(persisted) => {
                   setSms(persisted);

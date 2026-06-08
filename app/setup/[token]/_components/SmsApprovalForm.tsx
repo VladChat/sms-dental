@@ -26,6 +26,7 @@ export function SmsApprovalForm({
   slug,
   smsStatus,
   value,
+  completed,
   onChange,
   onSaved,
 }: {
@@ -34,6 +35,9 @@ export function SmsApprovalForm({
   slug: string | null;
   smsStatus: SmsStatus;
   value: SmsApprovalFields;
+  // Whether SMS approval info was already saved (a2p_info_completed). When true
+  // the form opens locked/read-only with an "Edit" action instead of "Save".
+  completed: boolean;
   onChange: (patch: Partial<SmsApprovalFields>) => void;
   onSaved: (persisted: SmsApprovalFields) => void;
 }) {
@@ -51,6 +55,32 @@ export function SmsApprovalForm({
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [touched, setTouched] = useState<Touched>({});
+
+  // Lock/edit state. A saved form opens locked; a new/incomplete form opens
+  // editable so initial completion is never blocked. `everCompleted` gates the
+  // Cancel action (only meaningful when re-editing already-saved data), and
+  // `snapshot` holds the last saved values to revert to on Cancel.
+  const [everCompleted, setEverCompleted] = useState(completed);
+  const [editing, setEditing] = useState(!completed);
+  const [snapshot, setSnapshot] = useState<SmsApprovalFields>(value);
+  const locked = !editing;
+
+  function startEdit() {
+    setSnapshot(value);
+    setError(null);
+    setSavedAt(null);
+    setFieldErrors({});
+    setTouched({});
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    onChange(snapshot);
+    setError(null);
+    setFieldErrors({});
+    setTouched({});
+    setEditing(false);
+  }
 
   function fieldError(name: keyof SmsApprovalFields, next = value): string | undefined {
     switch (name) {
@@ -154,6 +184,10 @@ export function SmsApprovalForm({
       }
       setSavedAt(nowLabel());
       onSaved(json.smsApproval);
+      // Successful save returns the form to locked/read-only mode, showing the
+      // persisted response from the API.
+      setEverCompleted(true);
+      setEditing(false);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -169,6 +203,7 @@ export function SmsApprovalForm({
         value={value.legalBusinessName}
         onChange={(v) => patch({ legalBusinessName: v })}
         onBlur={() => touch("legalBusinessName")}
+        readOnly={locked}
         infoTooltip={{
           label: "Legal business name help",
           text: "Use the exact legal business name registered with the EIN. For a U.S. business, this should match the IRS CP 575 EIN Confirmation Letter or IRS 147C letter.",
@@ -184,6 +219,7 @@ export function SmsApprovalForm({
         value={businessTypeValue}
         onChange={(v) => patch({ businessType: v })}
         onBlur={() => touch("businessType")}
+        readOnly={locked}
         infoTooltip={{
           label: "Business Type help",
           text: "Choose the legal structure that matches the business registration. For an LLC, choose Limited Liability Corporation.",
@@ -201,6 +237,7 @@ export function SmsApprovalForm({
         value={value.einTaxId}
         onChange={(v) => patch({ einTaxId: v })}
         onBlur={() => touch("einTaxId")}
+        readOnly={locked}
         infoTooltip={{
           label: "EIN help",
           text: "Enter the EIN exactly as issued by the IRS. It must match the legal business name.",
@@ -228,6 +265,7 @@ export function SmsApprovalForm({
             value={value.repFirstName}
             onChange={(v) => patch({ repFirstName: v })}
             onBlur={() => touch("repFirstName")}
+            readOnly={locked}
             required
             autoComplete="given-name"
             error={fieldErrors.repFirstName}
@@ -238,6 +276,7 @@ export function SmsApprovalForm({
             value={value.repLastName}
             onChange={(v) => patch({ repLastName: v })}
             onBlur={() => touch("repLastName")}
+            readOnly={locked}
             required
             autoComplete="family-name"
             error={fieldErrors.repLastName}
@@ -248,6 +287,7 @@ export function SmsApprovalForm({
             value={value.repBusinessTitle}
             onChange={(v) => patch({ repBusinessTitle: v })}
             onBlur={() => touch("repBusinessTitle")}
+            readOnly={locked}
             infoTooltip={{
               label: "Business title help",
               text: "Use the representative’s real business title, such as Owner, Director, or Office Manager.",
@@ -263,6 +303,7 @@ export function SmsApprovalForm({
             value={value.repEmail}
             onChange={(v) => patch({ repEmail: v })}
             onBlur={() => touch("repEmail")}
+            readOnly={locked}
             infoTooltip={{
               label: "Representative email help",
               text: "Use a real email for the authorized representative. Disposable or temporary emails can fail review.",
@@ -278,6 +319,7 @@ export function SmsApprovalForm({
             value={value.repPhone}
             onChange={(v) => patch({ repPhone: v })}
             onBlur={() => touch("repPhone")}
+            readOnly={locked}
             infoTooltip={{
               label: "Representative phone help",
               text: "Use a direct phone number for the authorized representative in U.S./Canada format.",
@@ -306,6 +348,7 @@ export function SmsApprovalForm({
           type="checkbox"
           checked={value.authorized}
           onChange={(e) => patch({ authorized: e.target.checked })}
+          disabled={locked}
         />
         <span>
           I confirm these details are accurate and authorize Missed Calls Dental to use them for
@@ -327,7 +370,29 @@ export function SmsApprovalForm({
         </p>
       )}
 
-      <SaveBar label="Save approval information" saving={saving} savedAt={savedAt} error={error} />
+      {locked ? (
+        <div className="acct-action-stack">
+          <button type="button" className="btn btn-secondary acct-primary-action" onClick={startEdit}>
+            Edit
+          </button>
+          <span className="t-small acct-savebar-status">Approval information saved.</span>
+        </div>
+      ) : (
+        <div className="acct-action-stack">
+          <SaveBar label="Save approval information" saving={saving} savedAt={savedAt} error={error} />
+          {everCompleted && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={cancelEdit}
+              disabled={saving}
+              style={{ justifySelf: "center" }}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
     </form>
   );
 }
