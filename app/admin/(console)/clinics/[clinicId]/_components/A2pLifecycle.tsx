@@ -14,14 +14,22 @@ export function A2pLifecycle({ pkg, clinicId, selectedMode }: { pkg: A2pReviewPa
   async function runAction(stepId: string, actionLabel?: string) {
     const step = steps.find((s) => s.id === stepId);
     if (!step) return;
+    if (step.status === "locked") return setLastMsg("This step is locked until its prerequisites are met.");
     if (step.disabledReason) return setLastMsg(step.disabledReason);
     // require confirmation for create actions
     const needsConfirm = step.actionLabel?.toLowerCase().includes("create") || false;
     if (needsConfirm && !confirmMap[stepId]) return setLastMsg("Please confirm the action before proceeding.");
+
+    // Refresh actions use the /a2p/status endpoint (read-only provider sync).
+    const isRefresh = stepId.includes("refresh");
+    const endpoint = isRefresh
+      ? `/api/admin/clinics/${clinicId}/a2p/status`
+      : `/api/admin/clinics/${clinicId}/a2p/action`;
+
     setRunning(stepId);
     setLastMsg(null);
     try {
-      const res = await fetch(`/api/admin/clinics/${clinicId}/a2p/action`, {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: stepId, confirm: false }),
@@ -49,11 +57,13 @@ export function A2pLifecycle({ pkg, clinicId, selectedMode }: { pkg: A2pReviewPa
               {s.providerSid && <div className="t-small" style={{ color: "var(--text-muted)" }}>SID: {s.providerSid}</div>}
             </div>
           </div>
-          <div style={{ marginTop: "8px", display: "flex", gap: "8px", alignItems: "center" }}>
-            <button className="btn btn-sm btn-primary" disabled={Boolean(s.disabledReason) || running === s.id} onClick={() => runAction(s.id, s.actionLabel)}>
-              {running === s.id ? "Running…" : s.actionLabel ?? "Run"}
-            </button>
-            {s.actionLabel && s.actionLabel.toLowerCase().includes("create") && (
+          <div style={{ marginTop: "8px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            {s.status !== "locked" && s.actionLabel && (
+              <button className="btn btn-sm btn-primary" disabled={running === s.id} onClick={() => runAction(s.id, s.actionLabel)}>
+                {running === s.id ? "Running…" : s.actionLabel}
+              </button>
+            )}
+            {s.status !== "locked" && s.actionLabel && s.actionLabel.toLowerCase().includes("create") && (
               <label className="check" style={{ marginLeft: "8px" }}>
                 <input type="checkbox" checked={!!confirmMap[s.id]} onChange={(e) => setConfirmMap({ ...confirmMap, [s.id]: e.target.checked })} />
                 <span className="t-small">I confirm</span>

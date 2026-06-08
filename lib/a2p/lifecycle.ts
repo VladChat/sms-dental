@@ -1,3 +1,4 @@
+import { isMockBrandCompleteStatus } from "../twilio/brand-status-classification";
 import type { A2pReviewPackage, A2pStoredSubmissionMode } from "./types";
 
 export type A2pLifecycleStep = {
@@ -31,7 +32,7 @@ export function buildA2pLifecycleSteps(
       id: "mock_create_brand",
       mode: "mock",
       title: "Create Mock Brand",
-      status: brandExists ? (brandTerminalFail ? "failed" : brandStatus === "approved" || brandStatus === "registered" ? "complete" : "pending") : "ready",
+      status: brandExists ? (brandTerminalFail ? "failed" : isMockBrandCompleteStatus(brandStatus) ? "complete" : "pending") : "ready",
       description: "Register a Mock Brand with Twilio (mock:true).",
       actionLabel: "Create Mock Brand",
       providerSid: mock.submission.brandRegistrationSid ?? null,
@@ -44,7 +45,7 @@ export function buildA2pLifecycleSteps(
       id: "mock_refresh_brand",
       mode: "mock",
       title: "Refresh Mock Brand Status",
-      status: brandExists ? (brandTerminalFail ? "failed" : brandStatus === "approved" || brandStatus === "registered" ? "complete" : "ready") : "locked",
+      status: brandExists ? (brandTerminalFail ? "failed" : isMockBrandCompleteStatus(brandStatus) ? "complete" : "ready") : "locked",
       description: "Read-only refresh of the Mock Brand status from Twilio.",
       actionLabel: "Refresh Mock Brand Status",
       disabledReason: brandExists ? null : "No mock Brand exists",
@@ -55,7 +56,7 @@ export function buildA2pLifecycleSteps(
     // Create Mock Campaign
     const campaignExists = Boolean(mock.submission.campaignSid);
     const campaignStatus = mock.submission.campaignStatus ?? null;
-    const campaignLocked = !brandExists || brandTerminalFail || !(brandStatus === "approved" || brandStatus === "registered");
+    const campaignLocked = !brandExists || brandTerminalFail || !isMockBrandCompleteStatus(brandStatus);
     steps.push({
       id: "mock_create_campaign",
       mode: "mock",
@@ -82,7 +83,7 @@ export function buildA2pLifecycleSteps(
     });
 
     // Final test-complete step
-    const testComplete = (brandExists && (brandStatus === "approved" || brandStatus === "registered") && campaignExists && (campaignStatus === "registered" || campaignStatus === "approved" || campaignStatus === "complete"));
+    const testComplete = (brandExists && isMockBrandCompleteStatus(brandStatus) && campaignExists && (campaignStatus === "registered" || campaignStatus === "approved" || campaignStatus === "complete"));
     steps.push({
       id: "mock_test_complete",
       mode: "mock",

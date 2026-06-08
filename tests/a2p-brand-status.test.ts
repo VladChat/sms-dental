@@ -5,6 +5,7 @@ import {
   isBrandApprovedStatus,
   isBrandPendingStatus,
   isBrandTerminalFailureStatus,
+  isMockBrandCompleteStatus,
   normalizeBrandStatus,
 } from "../lib/twilio/brand-status-classification";
 
@@ -99,4 +100,46 @@ test("normalizeBrandStatus maps unknown to unknown", () => {
   assert.equal(normalizeBrandStatus(null), "unknown");
   assert.equal(normalizeBrandStatus(""), "unknown");
   assert.equal(normalizeBrandStatus(undefined), "unknown");
+});
+
+// ---------- isMockBrandCompleteStatus ----------
+
+test("isMockBrandCompleteStatus returns true for APPROVED", () => {
+  assert.equal(isMockBrandCompleteStatus("APPROVED"), true);
+  assert.equal(isMockBrandCompleteStatus("approved"), true);
+  assert.equal(isMockBrandCompleteStatus("Approved"), true);
+});
+
+test("isMockBrandCompleteStatus returns true for VERIFIED", () => {
+  assert.equal(isMockBrandCompleteStatus("VERIFIED"), true);
+  assert.equal(isMockBrandCompleteStatus("verified"), true);
+});
+
+test("isMockBrandCompleteStatus returns true for REGISTERED", () => {
+  assert.equal(isMockBrandCompleteStatus("REGISTERED"), true);
+  assert.equal(isMockBrandCompleteStatus("Registered"), true);
+  assert.equal(isMockBrandCompleteStatus("registered"), true);
+});
+
+test("isMockBrandCompleteStatus returns false for FAILED", () => {
+  assert.equal(isMockBrandCompleteStatus("FAILED"), false);
+});
+
+test("isMockBrandCompleteStatus returns false for PENDING", () => {
+  assert.equal(isMockBrandCompleteStatus("PENDING"), false);
+});
+
+test("isMockBrandCompleteStatus returns false for null/undefined/empty", () => {
+  assert.equal(isMockBrandCompleteStatus(null), false);
+  assert.equal(isMockBrandCompleteStatus(undefined), false);
+  assert.equal(isMockBrandCompleteStatus(""), false);
+});
+
+test("isMockBrandCompleteStatus does NOT treat REGISTERED as approved for live A2P (isBrandApprovedStatus)", () => {
+  // isBrandApprovedStatus should NOT include REGISTERED — only mock uses it
+  assert.equal(isBrandApprovedStatus("REGISTERED"), false);
+  assert.equal(isBrandApprovedStatus("Registered"), false);
+  assert.equal(isBrandApprovedStatus("registered"), false);
+  // But isMockBrandCompleteStatus should
+  assert.equal(isMockBrandCompleteStatus("REGISTERED"), true);
 });

@@ -45,6 +45,21 @@ export function isBrandTerminalFailureStatus(status: string | null | undefined):
 }
 
 /**
+ * Determine whether a provider status string indicates the mock Brand is
+ * complete and ready for the next step (Mock Campaign creation).
+ *
+ * Mock Brands may use `Registered` (or `REGISTERED` / `registered`) rather
+ * than `Approved`. This helper intentionally includes `REGISTERED` so the
+ * mock A2P lifecycle advances past the Brand step once Twilio returns a
+ * registered status. Live Brands must NOT use this helper — live A2P
+ * should only proceed on `APPROVED` or `VERIFIED`.
+ */
+export function isMockBrandCompleteStatus(status: string | null | undefined): boolean {
+  const s = (status ?? "").trim().toUpperCase();
+  return s === "APPROVED" || s === "VERIFIED" || s === "REGISTERED";
+}
+
+/**
  * Normalize a raw Twilio Brand status into one of: "approved", "pending",
  * "failed", or "unknown". Never returns an empty string.
  */

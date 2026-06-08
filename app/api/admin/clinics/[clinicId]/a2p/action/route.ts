@@ -5,7 +5,7 @@ import { jsonError, jsonForbidden, jsonOk, jsonUnauthorized } from "@/lib/http/r
 import { resolvePlatformAdmin } from "@/lib/auth/platform-admin";
 import { buildA2pReviewPackage } from "@/lib/a2p/review-package";
 import type { A2pReviewPackage } from "@/lib/a2p/types";
-import { runMockA2pSubmission } from "@/lib/twilio/a2p-submission";
+import { runMockA2pSubmission, readA2pProviderStatus } from "@/lib/twilio/a2p-submission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,8 +40,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ clinicId: 
   switch (action) {
     case "mock_create_brand":
       return jsonOk({ ok: true, dryRun: true, message: "Would create a Mock Brand. Pass confirm=true to execute." });
-    case "mock_refresh_brand":
-      return jsonOk({ ok: true, dryRun: true, submission: pkg.submissions.mock.submission });
+    case "mock_refresh_brand": {
+      // Actually read the mock Brand status from Twilio and persist it.
+      try {
+        const result = await readA2pProviderStatus(clinicId, "mock");
+        return jsonOk({ ok: true, dryRun: false, result });
+      } catch (err: any) {
+        return jsonError(500, "provider_refresh_error", err?.message ?? "Provider refresh error");
+      }
+    }
     case "mock_create_campaign": {
       // Ensure mock Brand exists and messaging service configured
       const mockSub = pkg.submissions.mock.submission;

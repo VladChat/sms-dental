@@ -783,9 +783,9 @@ export function AdminA2pReviewPanel({
           />
           <StatusCard
             label="Approval stage"
-            value={submissionHistory.approvalStageLabel}
-            detail={submissionHistory.providerStatusLabel}
-            tone={reviewStatusTone(sub.status ?? auth.reviewStatus)}
+            value={isMock ? mockHistory.approvalStageLabel : submissionHistory.approvalStageLabel}
+            detail={isMock ? mockHistory.providerStatusLabel : submissionHistory.providerStatusLabel}
+            tone={reviewStatusTone(isMock ? (mockTracked.submission.status ?? auth.reviewStatus) : (sub.status ?? auth.reviewStatus))}
           />
           <StatusCard
             label="Launch readiness"
