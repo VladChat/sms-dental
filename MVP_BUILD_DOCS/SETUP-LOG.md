@@ -5463,3 +5463,41 @@ Intentionally not done in this task:
 - no Twilio delete/revoke action
 - no phone-number attachment changes
 - no SMS enablement change
+
+---
+
+## 2026-06-08 — A2P admin redesign rollback deployed
+
+Rolled back commit `8d0c71d` (`fix: restructure A2P admin workflow sections`)
+with `git revert`, preserving history.
+
+Confirmed result:
+
+- Revert commit: `88b5f8fde16831f3a70678dd293cb199fde8da47`.
+- Pushed to `origin/main`.
+- Vercel production deployment:
+  `dpl_E7Lox6gBf2udR3JTaY3vSFdtqNiB`
+  (`sms-dental-arr7o8vex-vladchat-1500s-projects.vercel.app`) reached
+  `READY` and was aliased to `https://app.missedcallsdental.com`.
+- GitHub/Vercel deployment status for the revert commit was `success`.
+- `https://app.missedcallsdental.com/api/health` returned `200` with
+  `{"ok":true,"service":"missed-calls-dental","version":"foundation-v1"}`.
+- Production admin clinic page for Fairstone loaded and showed the prior
+  tab-based clinic UI with `A2P review` as a clinic section, including the
+  existing A2P review blocks.
+
+Validation before push:
+
+- `npm run typecheck` pass.
+- `npm run test:a2p` pass.
+- `npm run build` pass.
+
+Safety confirmation:
+
+- No live A2P submit was run.
+- No live Brand was created.
+- No live Campaign was created.
+- No mock Brand was created.
+- No mock Campaign was created.
+- No phone numbers were attached.
+- SMS recovery / patient SMS was not enabled.
