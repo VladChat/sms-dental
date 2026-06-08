@@ -96,7 +96,7 @@ export const runtimeConfig = {
     // Separate Messaging Service reserved for Mock A2P testing. This must be an
     // empty service with NO senders so mock Campaigns are never confused with the
     // live Messaging Service.
-    mockMessagingServiceSid: "" as string,
+    mockMessagingServiceSid: "MGea09b41a93643350a8afd9f5d7e9f48d" as string,
 
     // Per-clinic allowlist for REAL ("live") A2P submission. Mirrors the
     // twilioPurchaseTestClinicIds safety pattern: even when submissionMode="live",
