@@ -63,28 +63,16 @@ describe("Mock lifecycle confirmation contract", () => {
     const createSteps = steps.filter(
       (s) => s.actionLabel && s.actionLabel.toLowerCase().includes("create"),
     );
-    const refreshSteps = steps.filter(
-      (s) => s.actionLabel && s.actionLabel.toLowerCase().includes("refresh"),
-    );
 
-    // There are 2 create steps: mock_create_brand (complete) and mock_create_campaign (ready)
-    // Only mock_create_campaign is in "ready" state and needs user confirmation to execute
-    assert.ok(createSteps.length >= 2, "should have at least 2 create steps in mock flow");
-    const readyCreateStep = createSteps.find((s) => s.status === "ready");
-    assert.ok(readyCreateStep, "should have a ready create step");
-    assert.equal(readyCreateStep!.id, "mock_create_campaign");
+    // mock_create_brand is complete (no actionLabel), only mock_create_campaign has actionLabel
+    assert.equal(createSteps.length, 1, "should have exactly 1 create step with actionLabel in mock flow");
+    assert.equal(createSteps[0].id, "mock_create_campaign");
+    assert.equal(createSteps[0].status, "ready");
 
-    // The brand create step should be complete (not needing execution)
-    const brandStep = createSteps.find((s) => s.id === "mock_create_brand")!;
+    // The brand create step should be complete (no actionLabel)
+    const brandStep = steps.find((s) => s.id === "mock_create_brand")!;
     assert.equal(brandStep.status, "complete", "brand step should be complete");
-
-    // Refresh steps should not be create actions
-    for (const s of refreshSteps) {
-      assert.ok(
-        !s.actionLabel!.toLowerCase().includes("create"),
-        `refresh step ${s.id} should not be a create action`,
-      );
-    }
+    assert.equal(brandStep.actionLabel, undefined, "complete brand step should have no actionLabel");
   });
 
   it("mock_create_campaign is ready when brand is registered and no campaign exists", () => {
@@ -110,9 +98,9 @@ describe("Mock lifecycle confirmation contract", () => {
     const steps = buildA2pLifecycleSteps(pkg as any, "mock");
     const brandStep = steps.find((s) => s.id === "mock_create_brand")!;
 
-    // Brand is already complete — actionLabel still exists but status is "complete"
-    // The UI should not render the button for complete steps that don't need re-execution
+    // Brand is already complete — no actionLabel, no confirmation needed
     assert.equal(brandStep.status, "complete");
+    assert.equal(brandStep.actionLabel, undefined, "complete step should have no actionLabel");
   });
 
   it("locked final step has no actionLabel so UI does not render a Run button", () => {
@@ -128,15 +116,13 @@ describe("Mock lifecycle confirmation contract", () => {
     assert.equal(testStep.actionLabel, undefined, "locked final step must not have actionLabel");
   });
 
-  it("locked mock_create_brand does not need confirm when brand is missing", () => {
+  it("mock_create_brand has actionLabel when brand is missing (ready)", () => {
     const pkg = makeMockPkg();
 
     const steps = buildA2pLifecycleSteps(pkg as any, "mock");
     const brandStep = steps.find((s) => s.id === "mock_create_brand")!;
 
-    // Brand is missing, step is "ready" — but in the current implementation
-    // the brand creation is handled by the submit route, not the action route.
-    // The action route returns dry-run for mock_create_brand regardless.
+    // Brand is missing, step is "ready" with actionLabel
     assert.equal(brandStep.status, "ready");
     assert.equal(brandStep.actionLabel, "Create Mock Brand");
   });

@@ -28,13 +28,15 @@ export function buildA2pLifecycleSteps(
     const brandExists = Boolean(mock.submission.brandRegistrationSid);
     const brandStatus = mock.submission.brandStatus ?? null;
     const brandTerminalFail = brandStatus ? brandStatus.toLowerCase().includes("failed") || brandStatus.toLowerCase().includes("rejected") : false;
+    const brandComplete = isMockBrandCompleteStatus(brandStatus);
+    const brandStepComplete = brandExists && brandComplete;
     steps.push({
       id: "mock_create_brand",
       mode: "mock",
       title: "Create Mock Brand",
-      status: brandExists ? (brandTerminalFail ? "failed" : isMockBrandCompleteStatus(brandStatus) ? "complete" : "pending") : "ready",
-      description: "Register a Mock Brand with Twilio (mock:true).",
-      actionLabel: "Create Mock Brand",
+      status: brandStepComplete ? "complete" : brandExists ? (brandTerminalFail ? "failed" : "pending") : "ready",
+      description: brandStepComplete ? "Mock Brand already created." : "Register a Mock Brand with Twilio (mock:true).",
+      actionLabel: brandStepComplete ? undefined : "Create Mock Brand",
       providerSid: mock.submission.brandRegistrationSid ?? null,
       providerStatus: brandStatus,
       disabledReason: brandExists ? null : undefined,
@@ -45,9 +47,9 @@ export function buildA2pLifecycleSteps(
       id: "mock_refresh_brand",
       mode: "mock",
       title: "Refresh Mock Brand Status",
-      status: brandExists ? (brandTerminalFail ? "failed" : isMockBrandCompleteStatus(brandStatus) ? "complete" : "ready") : "locked",
+      status: brandExists ? (brandTerminalFail ? "failed" : brandComplete ? "complete" : "ready") : "locked",
       description: "Read-only refresh of the Mock Brand status from Twilio.",
-      actionLabel: "Refresh Mock Brand Status",
+      actionLabel: brandComplete ? undefined : "Refresh Mock Brand Status",
       disabledReason: brandExists ? null : "No mock Brand exists",
       providerSid: mock.submission.brandRegistrationSid ?? null,
       providerStatus: brandStatus,
@@ -56,14 +58,15 @@ export function buildA2pLifecycleSteps(
     // Create Mock Campaign
     const campaignExists = Boolean(mock.submission.campaignSid);
     const campaignStatus = mock.submission.campaignStatus ?? null;
-    const campaignLocked = !brandExists || brandTerminalFail || !isMockBrandCompleteStatus(brandStatus);
+    const campaignComplete = campaignExists && (campaignStatus === "registered" || campaignStatus === "approved" || campaignStatus === "verified" || campaignStatus === "complete");
+    const campaignLocked = !brandExists || brandTerminalFail || !brandComplete;
     steps.push({
       id: "mock_create_campaign",
       mode: "mock",
       title: "Create Mock Campaign",
-      status: campaignExists ? (campaignStatus ? "complete" : "pending") : campaignLocked ? "locked" : "ready",
-      description: "Create the Mock Campaign under the Mock Brand using the configured Mock Messaging Service.",
-      actionLabel: "Create Mock Campaign",
+      status: campaignComplete ? "complete" : campaignExists ? "pending" : campaignLocked ? "locked" : "ready",
+      description: campaignComplete ? "Mock Campaign already created under the mock Brand." : "Create the Mock Campaign under the Mock Brand using the configured Mock Messaging Service.",
+      actionLabel: campaignComplete ? undefined : "Create Mock Campaign",
       disabledReason: campaignLocked ? "Mock Brand not registered/approved" : null,
       providerSid: mock.submission.campaignSid ?? null,
       providerStatus: campaignStatus,
@@ -74,22 +77,24 @@ export function buildA2pLifecycleSteps(
       id: "mock_refresh_campaign",
       mode: "mock",
       title: "Refresh Mock Campaign Status",
-      status: campaignExists ? "ready" : "locked",
+      status: campaignExists ? (campaignComplete ? "complete" : "ready") : "locked",
       description: "Read-only refresh of the Mock Campaign status from Twilio.",
-      actionLabel: "Refresh Mock Campaign Status",
+      actionLabel: campaignComplete ? undefined : "Refresh Mock Campaign Status",
       disabledReason: campaignExists ? null : "No mock Campaign exists",
       providerSid: mock.submission.campaignSid ?? null,
       providerStatus: campaignStatus,
     });
 
     // Final test-complete step
-    const testComplete = (brandExists && isMockBrandCompleteStatus(brandStatus) && campaignExists && (campaignStatus === "registered" || campaignStatus === "approved" || campaignStatus === "complete"));
+    const testComplete = brandComplete && campaignComplete;
     steps.push({
       id: "mock_test_complete",
       mode: "mock",
       title: "Mock A2P Test Complete",
       status: testComplete ? "complete" : "locked",
-      description: "Mock A2P is complete for testing only. Real patient SMS remains blocked until Live A2P approval.",
+      description: testComplete
+        ? "Mock A2P test complete. This validates the mock Brand and Campaign flow only. Real patient SMS remains blocked until Live A2P approval and sender coverage are verified."
+        : "Mock A2P is complete for testing only. Real patient SMS remains blocked until Live A2P approval.",
     });
   }
 

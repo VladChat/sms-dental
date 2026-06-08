@@ -65,12 +65,15 @@ export function A2pLifecycle({ pkg, clinicId, selectedMode }: { pkg: A2pReviewPa
             </div>
           </div>
           <div style={{ marginTop: "8px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            {s.status !== "locked" && s.actionLabel && (
+            {s.status === "complete" && (
+              <span className="t-small" style={{ color: "var(--color-success, #16a34a)", fontWeight: 600 }}>✓ Complete</span>
+            )}
+            {s.status === "ready" && s.actionLabel && (
               <button className="btn btn-sm btn-primary" disabled={running === s.id} onClick={() => runAction(s.id, s.actionLabel)}>
                 {running === s.id ? "Running…" : s.actionLabel}
               </button>
             )}
-            {s.status !== "locked" && s.actionLabel && s.actionLabel.toLowerCase().includes("create") && (
+            {s.status === "ready" && s.actionLabel && s.actionLabel.toLowerCase().includes("create") && (
               <label className="check" style={{ marginLeft: "8px" }}>
                 <input type="checkbox" checked={!!confirmMap[s.id]} onChange={(e) => setConfirmMap({ ...confirmMap, [s.id]: e.target.checked })} />
                 <span className="t-small">I confirm</span>

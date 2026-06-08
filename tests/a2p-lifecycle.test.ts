@@ -108,6 +108,22 @@ describe("A2P lifecycle builder (mock)", () => {
     assert.equal(testStep.status, "complete", "test complete should be complete when brand and campaign both exist");
   });
 
+  it("shows campaign complete with verified status", () => {
+    const pkg = makePkg({
+      mockBrandSid: "BN588a99e6ecaf81cc0d8b3baad6cd7cdc",
+      mockBrandStatus: "REGISTERED",
+      mockCampaignSid: "CM12345",
+      mockCampaignStatus: "verified",
+    });
+
+    const steps = buildA2pLifecycleSteps(pkg as any, "mock");
+    const campaignStep = steps.find((s) => s.id === "mock_create_campaign")!;
+    const testStep = steps.find((s) => s.id === "mock_test_complete")!;
+
+    assert.equal(campaignStep.status, "complete");
+    assert.equal(testStep.status, "complete", "test complete should be complete with verified campaign");
+  });
+
   it("shows brand as pending when brand exists but status is pending", () => {
     const pkg = makePkg({
       mockBrandSid: "BN588a99e6ecaf81cc0d8b3baad6cd7cdc",
@@ -162,6 +178,39 @@ describe("A2P lifecycle builder (mock)", () => {
 
     assert.equal(refreshCampaignStep.status, "locked", "refresh campaign should be locked when no campaign exists");
     assert.equal(refreshCampaignStep.disabledReason, "No mock Campaign exists");
+  });
+
+  it("complete steps have no actionLabel (no create button rendered)", () => {
+    const pkg = makePkg({
+      mockBrandSid: "BN588a99e6ecaf81cc0d8b3baad6cd7cdc",
+      mockBrandStatus: "REGISTERED",
+      mockCampaignSid: "CM12345",
+      mockCampaignStatus: "verified",
+    });
+
+    const steps = buildA2pLifecycleSteps(pkg as any, "mock");
+
+    for (const s of steps) {
+      if (s.status === "complete") {
+        assert.equal(s.actionLabel, undefined, `complete step ${s.id} should not have actionLabel`);
+      }
+    }
+  });
+
+  it("all steps complete when brand registered and campaign verified", () => {
+    const pkg = makePkg({
+      mockBrandSid: "BN588a99e6ecaf81cc0d8b3baad6cd7cdc",
+      mockBrandStatus: "REGISTERED",
+      mockCampaignSid: "CM12345",
+      mockCampaignStatus: "verified",
+    });
+
+    const steps = buildA2pLifecycleSteps(pkg as any, "mock");
+    const nonRefreshSteps = steps.filter((s) => !s.id.includes("refresh"));
+
+    for (const s of nonRefreshSteps) {
+      assert.equal(s.status, "complete", `step ${s.id} should be complete`);
+    }
   });
 });
 

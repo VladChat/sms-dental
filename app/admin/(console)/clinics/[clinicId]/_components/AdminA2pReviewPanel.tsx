@@ -211,7 +211,7 @@ function firstValidationForField(
   return validations.find((validation) => fields.includes(validation.field)) ?? null;
 }
 
-function deriveLaunchReadiness(pkg: A2pReviewPackage, launchStatus: LaunchStatus): {
+function deriveLaunchReadiness(pkg: A2pReviewPackage, launchStatus: LaunchStatus, selectedMode?: A2pStoredSubmissionMode): {
   label: string;
   tone: Tone;
   detail: string;
@@ -222,6 +222,16 @@ function deriveLaunchReadiness(pkg: A2pReviewPackage, launchStatus: LaunchStatus
   const allNumbersReady =
     pkg.internalDiagnostics.numberDiagnostics.length > 0 &&
     pkg.internalDiagnostics.numberDiagnostics.every((number) => number.eligibleForLiveSms);
+
+  // Mock mode always blocks real SMS regardless of submission status
+  if (selectedMode === "mock") {
+    return {
+      label: "Real SMS blocked",
+      tone: "warning",
+      detail: "Mock A2P does not unlock patient SMS. Live A2P approval and sender coverage are required.",
+      headerBadge: "Real SMS blocked",
+    };
+  }
 
   if (launchStatus.smsRecoveryEnabled) {
     return {
@@ -648,7 +658,7 @@ export function AdminA2pReviewPanel({
   );
   const providerSections = useMemo(() => providerSectionsFromPackage(pkg), [pkg]);
   const checklist = useMemo(() => buildChecklist(pkg, preflightValidations), [pkg, preflightValidations]);
-  const launchReadiness = useMemo(() => deriveLaunchReadiness(pkg, launchStatus), [pkg, launchStatus]);
+  const launchReadiness = useMemo(() => deriveLaunchReadiness(pkg, launchStatus, selectedMode), [pkg, launchStatus, selectedMode]);
   const submissionHistory = useMemo(() => buildSubmissionHistory(pkg), [pkg]);
   const mockHistory = useMemo(() => buildTrackedSubmissionHistory(mockTracked), [mockTracked]);
   const selectedOption = auth.modeOptions.find((option) => option.mode === selectedMode) ?? auth.modeOptions[0];
