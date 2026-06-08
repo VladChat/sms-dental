@@ -30,9 +30,14 @@ type Touched = Partial<Record<keyof AdminBusinessProfileValue, boolean>>;
 export function AdminBusinessProfileForm({
   clinicId,
   initial,
+  completed,
 }: {
   clinicId: string;
   initial: AdminBusinessProfileValue;
+  // Whether the clinic's business profile is already saved (business_info_completed).
+  // When true the form opens locked/read-only with an admin "Edit" action — the
+  // same saved clinic data, edited as a higher-permission continuation.
+  completed: boolean;
 }) {
   const router = useRouter();
   const [v, setV] = useState<AdminBusinessProfileValue>(initial);
@@ -42,8 +47,32 @@ export function AdminBusinessProfileForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [touched, setTouched] = useState<Touched>({});
 
+  // Lock/edit state mirrors the owner form: saved data opens locked; an
+  // incomplete clinic opens editable. `snapshot` reverts unsaved edits on Cancel.
+  const [everCompleted, setEverCompleted] = useState(completed);
+  const [editing, setEditing] = useState(!completed);
+  const [snapshot, setSnapshot] = useState<AdminBusinessProfileValue>(initial);
+  const locked = !editing;
+
   function set(patch: Partial<AdminBusinessProfileValue>) {
     setV((prev) => ({ ...prev, ...patch }));
+  }
+
+  function startEdit() {
+    setSnapshot(v);
+    setError(null);
+    setSavedAt(null);
+    setFieldErrors({});
+    setTouched({});
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setV(snapshot);
+    setError(null);
+    setFieldErrors({});
+    setTouched({});
+    setEditing(false);
   }
 
   function fieldError(name: keyof AdminBusinessProfileValue, next = v): string | undefined {
@@ -127,6 +156,9 @@ export function AdminBusinessProfileForm({
       }
       setV(json.businessProfile);
       setSavedAt(nowLabel());
+      // Return to locked/read-only mode showing the persisted response.
+      setEverCompleted(true);
+      setEditing(false);
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -137,17 +169,39 @@ export function AdminBusinessProfileForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="acct-form">
-      <Field label="Public clinic name" name="bp_name" value={v.name} onChange={(x) => patch({ name: x })} onBlur={() => touch("name")} required error={fieldErrors.name} helper="The name patients know this office by." />
-      <Field label="Main office phone" name="bp_main_phone" value={v.mainPhone} onChange={(x) => patch({ mainPhone: x })} onBlur={() => touch("mainPhone")} required inputMode="tel" autoComplete="tel" error={fieldErrors.mainPhone} />
-      <Field label="Street address" name="bp_street" value={v.streetAddress} onChange={(x) => patch({ streetAddress: x })} onBlur={() => touch("streetAddress")} required infoTooltip={{ label: "Street address help", text: "Use the business address associated with the clinic or business registration when possible." }} autoComplete="address-line1" error={fieldErrors.streetAddress} />
-      <Field label="Address line 2" name="bp_line2" value={v.addressLine2} onChange={(x) => patch({ addressLine2: x })} optional placeholder="Suite, unit, floor" autoComplete="address-line2" />
+      <Field label="Public clinic name" name="bp_name" value={v.name} onChange={(x) => patch({ name: x })} onBlur={() => touch("name")} readOnly={locked} required error={fieldErrors.name} helper="The name patients know this office by." />
+      <Field label="Main office phone" name="bp_main_phone" value={v.mainPhone} onChange={(x) => patch({ mainPhone: x })} onBlur={() => touch("mainPhone")} readOnly={locked} required inputMode="tel" autoComplete="tel" error={fieldErrors.mainPhone} />
+      <Field label="Street address" name="bp_street" value={v.streetAddress} onChange={(x) => patch({ streetAddress: x })} onBlur={() => touch("streetAddress")} readOnly={locked} required infoTooltip={{ label: "Street address help", text: "Use the business address associated with the clinic or business registration when possible." }} autoComplete="address-line1" error={fieldErrors.streetAddress} />
+      <Field label="Address line 2" name="bp_line2" value={v.addressLine2} onChange={(x) => patch({ addressLine2: x })} readOnly={locked} optional placeholder="Suite, unit, floor" autoComplete="address-line2" />
       <div className="acct-grid-3">
-        <Field label="City" name="bp_city" value={v.city} onChange={(x) => patch({ city: x })} onBlur={() => touch("city")} required autoComplete="address-level2" error={fieldErrors.city} />
-        <Field label="State" name="bp_state" value={v.stateRegion} onChange={(x) => patch({ stateRegion: x })} onBlur={() => touch("stateRegion")} required placeholder="IL" autoComplete="address-level1" error={fieldErrors.stateRegion} />
-        <Field label="ZIP code" name="bp_zip" value={v.postalCode} onChange={(x) => patch({ postalCode: x })} onBlur={() => touch("postalCode")} required inputMode="numeric" autoComplete="postal-code" error={fieldErrors.postalCode} />
+        <Field label="City" name="bp_city" value={v.city} onChange={(x) => patch({ city: x })} onBlur={() => touch("city")} readOnly={locked} required autoComplete="address-level2" error={fieldErrors.city} />
+        <Field label="State" name="bp_state" value={v.stateRegion} onChange={(x) => patch({ stateRegion: x })} onBlur={() => touch("stateRegion")} readOnly={locked} required placeholder="IL" autoComplete="address-level1" error={fieldErrors.stateRegion} />
+        <Field label="ZIP code" name="bp_zip" value={v.postalCode} onChange={(x) => patch({ postalCode: x })} onBlur={() => touch("postalCode")} readOnly={locked} required inputMode="numeric" autoComplete="postal-code" error={fieldErrors.postalCode} />
       </div>
-      <Field label="Website" name="bp_website" value={v.website} onChange={(x) => patch({ website: x })} onBlur={() => touch("website")} optional infoTooltip={{ label: "Website help", text: "The website must be public, functional, and related to the legal business name or clinic name. Twilio may review it during A2P verification." }} placeholder="https://example.com" autoComplete="url" error={fieldErrors.website} />
-      <SaveBar label="Save business profile" saving={saving} savedAt={savedAt} error={error} />
+      <Field label="Website" name="bp_website" value={v.website} onChange={(x) => patch({ website: x })} onBlur={() => touch("website")} readOnly={locked} optional infoTooltip={{ label: "Website help", text: "The website must be public, functional, and related to the legal business name or clinic name. Twilio may review it during A2P verification." }} placeholder="https://example.com" autoComplete="url" error={fieldErrors.website} />
+      {locked ? (
+        <div className="acct-action-stack">
+          <button type="button" className="btn btn-secondary acct-primary-action" onClick={startEdit}>
+            Edit
+          </button>
+          <span className="t-small acct-savebar-status">Business profile saved — edit to update this clinic.</span>
+        </div>
+      ) : (
+        <div className="acct-action-stack">
+          <SaveBar label="Save business profile" saving={saving} savedAt={savedAt} error={error} />
+          {everCompleted && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={cancelEdit}
+              disabled={saving}
+              style={{ justifySelf: "center" }}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
     </form>
   );
 }

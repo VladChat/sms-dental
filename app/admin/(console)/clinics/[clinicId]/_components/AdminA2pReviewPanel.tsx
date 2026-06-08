@@ -1067,6 +1067,20 @@ export function AdminA2pReviewPanel({
         )}
       </section>
 
+      <section id="a2p-messaging-behavior" className="a2p-cc-card">
+        <div className="a2p-cc-card-head">
+          <div>
+            <p className="a2p-cc-kicker">Read-only</p>
+            <h3 className="adm-subhead">Messaging behavior</h3>
+            <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
+              Recovery texts use fixed in-code templates. A repeat caller does not get another
+              recovery text within 24 hours (duplicate suppression). Live sending also requires a
+              verified A2P campaign and Messaging Service coverage for each active number.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <A2pDisclosureCard
         id="a2p-technical-wiring"
         title="Twilio technical wiring"

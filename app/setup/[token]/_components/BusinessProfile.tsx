@@ -242,6 +242,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
                 token={data.token}
                 loginEmail={data.loginEmail}
                 value={biz}
+                completed={bizDone}
                 onChange={(patch) => setBiz((prev) => ({ ...prev, ...patch }))}
                 onSaved={(persisted) => {
                   setBiz(persisted);

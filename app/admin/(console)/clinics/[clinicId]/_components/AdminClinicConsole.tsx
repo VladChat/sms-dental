@@ -26,6 +26,7 @@ import { AdminBusinessProfileForm } from "./AdminBusinessProfileForm";
 import { AdminA2pForm } from "./AdminA2pForm";
 import { AdminA2pReviewPanel } from "./AdminA2pReviewPanel";
 import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
+import { AdminPhoneNumberList } from "./AdminPhoneNumberList";
 import { AdminNumberControls } from "./AdminNumberControls";
 import { formatUsdFromCents } from "../../../../../../config/billing.config";
 
@@ -54,7 +55,7 @@ type A2pLaunchStatus = {
   launchBlockedReason: string | null;
 };
 
-type SectionId = "phone" | "business" | "sms" | "a2p" | "billing" | "behavior" | "admin";
+type SectionId = "phone" | "business" | "sms" | "a2p" | "billing" | "admin";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "phone", label: "Phone number" },
@@ -62,12 +63,10 @@ const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "sms", label: "SMS approval" },
   { id: "a2p", label: "A2P review" },
   { id: "billing", label: "Billing" },
-  { id: "behavior", label: "SMS behavior" },
   { id: "admin", label: "Admin tools" },
 ];
 
 const SMS_MODE_LABELS: Record<string, string> = { disabled: "Disabled", owner_test: "Owner test", live: "Live" };
-const PHONE_ROLE_LABELS: Record<string, string> = { office_texting: "Office texting" };
 
 function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString() : "—";
@@ -247,28 +246,8 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
               <h2 className="t-h3">Phone number</h2>
               <BoolBadge value={d.hasAssignedNumber} yes="Assigned" no="Missing" noTone="warning" />
             </div>
-            {d.phoneNumbers.length === 0 ? (
-              <p className="t-body" style={{ marginTop: "var(--space-3)" }}>No tracking number is assigned to this clinic yet.</p>
-            ) : (
-              <div className="adm-phone-list">
-                {d.phoneNumbers.map((p) => (
-                  <div className="adm-phone-card" key={p.id}>
-                    <div className="adm-phone-card-head">
-                      <span className="t-mono" style={{ fontWeight: 700 }}>{p.phoneE164 ?? "—"}</span>
-                      <span style={{ display: "inline-flex", gap: "var(--space-2)" }}>
-                        <Badge tone="neutral">{PHONE_ROLE_LABELS[p.role] ?? humanizeToken(p.role)}</Badge>
-                        <BoolBadge value={p.isActive} yes="Active" no="Inactive" noTone="neutral" />
-                      </span>
-                    </div>
-                    <dl className="adm-rows">
-                      <Row label="Provider reference">{p.sidTail ? <span className="t-mono">{p.sidTail}</span> : <Muted>Not available</Muted>}</Row>
-                      <Row label="Assigned">{fmtDateTime(p.createdAt)}</Row>
-                    </dl>
-                  </div>
-                ))}
-              </div>
-            )}
-            <dl className="adm-rows" style={{ marginTop: "var(--space-3)" }}>
+            <AdminPhoneNumberList clinicId={d.id} phoneNumbers={d.phoneNumbers} />
+            <dl className="adm-rows" style={{ marginTop: "var(--space-4)" }}>
               <Row label="Local number status">{localNumberStatusLabel(d.localNumberStatus)}</Row>
               <Row label="SMS recovery gate"><BoolBadge value={d.smsRecoveryEnabled} yes="Enabled" no="Disabled" noTone="neutral" /></Row>
               <Row label="Global SMS mode">{SMS_MODE_LABELS[data.smsMode] ?? humanizeToken(data.smsMode)}</Row>
@@ -278,8 +257,6 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 Blocker: no number assigned — add one to continue launch.
               </p>
             )}
-
-            <AdminNumberControls d={d} />
 
             {false && d.requestedNumbers.length > 0 && (
               <div style={{ marginTop: "var(--space-4)", display: "grid", gap: "var(--space-3)" }}>
@@ -390,6 +367,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             </p>
             <AdminBusinessProfileForm
               clinicId={d.id}
+              completed={d.businessInfoCompleted}
               initial={{
                 name: d.name,
                 mainPhone: d.mainPhone ?? "",
@@ -537,22 +515,14 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             <p className="t-small" style={{ color: "var(--text-muted)", marginTop: "var(--space-2)" }}>
               Billing starts only after SMS recovery is active; it does not block launch in this MVP.
             </p>
-            <DisabledAction label="Manage billing" reason="Stripe billing backend required" />
-          </Panel>
-
-          {/* SMS behavior (read-only) */}
-          <Panel id="behavior" active={active}>
-            <h2 className="t-h3">SMS behavior</h2>
-            <dl className="adm-rows" style={{ marginTop: "var(--space-3)" }}>
-              <Row label="First missed-call text"><span className="t-small">“Hi, this is {d.name || "Your clinic"}. We missed your call. Would you like us to help schedule an appointment?”</span></Row>
-              <Row label="Repeat caller">No repeat recovery text within 24 hours (duplicate suppression)</Row>
-              <Row label="STOP / START / HELP">STOP→opt out · START→opt back in · HELP→help reply</Row>
-              <Row label="SMS recovery gate"><BoolBadge value={d.smsRecoveryEnabled} yes="Enabled" no="Disabled" noTone="neutral" /></Row>
-              <Row label="Global SMS mode">{SMS_MODE_LABELS[data.smsMode] ?? humanizeToken(data.smsMode)}</Row>
-            </dl>
-            <p className="t-helper" style={{ marginTop: "var(--space-2)" }}>
-              Templates are fixed in code. Live sending also requires verified A2P campaign and Messaging Service coverage for each active number.
-            </p>
+            <div className="adm-banner tone-info" role="note" style={{ marginTop: "var(--space-3)" }}>
+              <div className="adm-banner-main">
+                <span className="adm-banner-title">Billing is read-only here</span>
+                <span className="adm-banner-body">
+                  Payment method changes must be made by the clinic owner from their account.
+                </span>
+              </div>
+            </div>
           </Panel>
 
           {/* Admin tools */}
@@ -567,6 +537,10 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 launchBlockedReason={launchBlockedReason}
               />
             </div>
+
+            {/* Number operations (purchasing permission, limits, attempts, legacy
+                requests). Assigned-number cards live in the Phone number tab. */}
+            <AdminNumberControls d={d} />
 
             <details className="adm-fold">
               <summary>Recent admin activity</summary>
@@ -623,7 +597,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
 
             <details className="adm-fold">
               <summary>Technical details</summary>
-              <dl className="adm-rows" style={{ marginTop: "var(--space-2)" }}>
+              <dl className="adm-rows adm-admin-dense" style={{ marginTop: "var(--space-2)" }}>
                 <Row label="Clinic ID"><span className="t-mono">{d.id}</span></Row>
                 <Row label="Slug"><span className="t-mono">{d.slug ?? "—"}</span></Row>
                 <Row label="Country / timezone">{d.country} · {d.timezone ?? "—"}</Row>
@@ -677,15 +651,6 @@ function Muted({ children }: { children: React.ReactNode }) {
   return <span style={{ color: "var(--text-muted)" }}>{children}</span>;
 }
 
-function DisabledAction({ label, reason }: { label: string; reason: React.ReactNode }) {
-  return (
-    <div className="adm-blocked" role="note" style={{ marginTop: "var(--space-3)" }}>
-      <button type="button" className="btn btn-secondary btn-sm" disabled aria-disabled="true">{label}</button>
-      <span className="t-small" style={{ color: "var(--text-muted)" }}>{reason}</span>
-    </div>
-  );
-}
-
 function sectionStatuses(
   d: AdminClinicDetail,
   review: A2pReviewPackage,
@@ -704,7 +669,6 @@ function sectionStatuses(
     sms,
     a2p: a2pNavStatus(review),
     billing: d.stripeCustomerPresent ? { text: "Connected", tone: "success" } : { text: "Not connected", tone: "neutral" },
-    behavior: { text: "Read-only", tone: "neutral" },
   };
 }
 

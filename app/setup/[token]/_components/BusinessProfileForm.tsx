@@ -16,12 +16,17 @@ export function BusinessProfileForm({
   token,
   loginEmail,
   value,
+  completed,
   onChange,
   onSaved,
 }: {
   token: string | null;
   loginEmail: string;
   value: BusinessProfileFields;
+  // Whether the business profile was already saved (business_info_completed).
+  // When true the form opens locked/read-only with an "Edit" action instead of
+  // "Save business profile".
+  completed: boolean;
   onChange: (patch: Partial<BusinessProfileFields>) => void;
   onSaved: (persisted: BusinessProfileFields) => void;
 }) {
@@ -30,6 +35,32 @@ export function BusinessProfileForm({
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [touched, setTouched] = useState<Touched>({});
+
+  // Lock/edit state mirrors the SMS approval form: a saved profile opens locked;
+  // an incomplete profile opens editable so first completion is never blocked.
+  // `everCompleted` gates Cancel (only meaningful when re-editing saved data);
+  // `snapshot` holds the last saved values to revert to on Cancel.
+  const [everCompleted, setEverCompleted] = useState(completed);
+  const [editing, setEditing] = useState(!completed);
+  const [snapshot, setSnapshot] = useState<BusinessProfileFields>(value);
+  const locked = !editing;
+
+  function startEdit() {
+    setSnapshot(value);
+    setError(null);
+    setSavedAt(null);
+    setFieldErrors({});
+    setTouched({});
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    onChange(snapshot);
+    setError(null);
+    setFieldErrors({});
+    setTouched({});
+    setEditing(false);
+  }
 
   function fieldError(name: keyof BusinessProfileFields, next = value): string | undefined {
     if (name === "name") {
@@ -122,6 +153,9 @@ export function BusinessProfileForm({
       // Reconcile to the persisted values returned by the server.
       setSavedAt(nowLabel());
       onSaved(json.businessProfile);
+      // Successful save returns the form to locked/read-only mode.
+      setEverCompleted(true);
+      setEditing(false);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -137,6 +171,7 @@ export function BusinessProfileForm({
         value={value.name}
         onChange={(v) => patch({ name: v })}
         onBlur={() => touch("name")}
+        readOnly={locked}
         required
         helper="The name patients know your office by."
         error={fieldErrors.name}
@@ -154,6 +189,7 @@ export function BusinessProfileForm({
         value={value.mainPhone}
         onChange={(v) => patch({ mainPhone: v })}
         onBlur={() => touch("mainPhone")}
+        readOnly={locked}
         required
         inputMode="tel"
         autoComplete="tel"
@@ -166,6 +202,7 @@ export function BusinessProfileForm({
         value={value.streetAddress}
         onChange={(v) => patch({ streetAddress: v })}
         onBlur={() => touch("streetAddress")}
+        readOnly={locked}
         required
         infoTooltip={{
           label: "Street address help",
@@ -180,6 +217,7 @@ export function BusinessProfileForm({
         name="address_line2"
         value={value.addressLine2}
         onChange={(v) => onChange({ addressLine2: v })}
+        readOnly={locked}
         optional
         placeholder="Suite, unit, floor"
         autoComplete="address-line2"
@@ -192,6 +230,7 @@ export function BusinessProfileForm({
         value={value.city}
         onChange={(v) => patch({ city: v })}
         onBlur={() => touch("city")}
+        readOnly={locked}
         required
         autoComplete="address-level2"
         error={fieldErrors.city}
@@ -202,6 +241,7 @@ export function BusinessProfileForm({
         value={value.stateRegion}
         onChange={(v) => patch({ stateRegion: v })}
         onBlur={() => touch("stateRegion")}
+        readOnly={locked}
         required
         placeholder="IL"
         autoComplete="address-level1"
@@ -213,6 +253,7 @@ export function BusinessProfileForm({
         value={value.postalCode}
         onChange={(v) => patch({ postalCode: v })}
         onBlur={() => touch("postalCode")}
+        readOnly={locked}
         required
         inputMode="numeric"
         autoComplete="postal-code"
@@ -226,6 +267,7 @@ export function BusinessProfileForm({
         value={value.website}
         onChange={(v) => patch({ website: v })}
         onBlur={() => touch("website")}
+        readOnly={locked}
         optional
         infoTooltip={{
           label: "Website help",
@@ -236,7 +278,29 @@ export function BusinessProfileForm({
         error={fieldErrors.website}
       />
 
-      <SaveBar label="Save business profile" saving={saving} savedAt={savedAt} error={error} />
+      {locked ? (
+        <div className="acct-action-stack">
+          <button type="button" className="btn btn-secondary acct-primary-action" onClick={startEdit}>
+            Edit
+          </button>
+          <span className="t-small acct-savebar-status">Business profile saved.</span>
+        </div>
+      ) : (
+        <div className="acct-action-stack">
+          <SaveBar label="Save business profile" saving={saving} savedAt={savedAt} error={error} />
+          {everCompleted && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={cancelEdit}
+              disabled={saving}
+              style={{ justifySelf: "center" }}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
     </form>
   );
 }

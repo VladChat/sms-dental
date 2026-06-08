@@ -598,6 +598,19 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .adm-phone-card { padding:var(--space-4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
 .adm-phone-card-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); flex-wrap:wrap; margin-bottom:var(--space-2); }
 
+/* Dense admin cards (phone numbers, technical details): the default right-aligned
+   62%-max value column clips SIDs, provider references, dates, emails, and phone
+   numbers. In dense cards, stack the value under its label, left-aligned, and let
+   it wrap to full width instead of clipping. */
+.adm-phone-card .adm-row,
+.adm-admin-dense .adm-row { flex-direction:column; align-items:stretch; gap:2px; }
+.adm-phone-card .adm-row-label,
+.adm-admin-dense .adm-row-label { font:var(--helper); }
+.adm-phone-card .adm-row-value,
+.adm-admin-dense .adm-row-value { text-align:left; max-width:100%; min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+/* Long mono identifiers inside admin activity rows (purchase attempt SIDs). */
+.adm-activity-item { overflow-wrap:anywhere; word-break:break-word; min-width:0; }
+
 /* Compliance / link list */
 .adm-link-list { list-style:none; padding:0; margin:var(--space-3) 0 0; display:grid; gap:var(--space-2); }
 

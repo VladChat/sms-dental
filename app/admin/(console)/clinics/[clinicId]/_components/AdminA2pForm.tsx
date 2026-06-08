@@ -34,8 +34,8 @@ type Touched = Partial<Record<keyof AdminA2pValue, boolean>>;
 
 // Admin-scoped A2P / SMS-approval editor. Same fields + client validation as the
 // owner form (SmsApprovalForm), posting to the platform-admin-guarded
-// /api/admin/clinics/{clinicId}/a2p endpoint. Saving stores data only — it never
-// submits to a carrier (that backend does not exist yet).
+// /api/admin/clinics/{clinicId}/a2p endpoint. Saving stores the data only;
+// carrier submission is handled separately in the A2P review workflow.
 export function AdminA2pForm({
   clinicId,
   initial,

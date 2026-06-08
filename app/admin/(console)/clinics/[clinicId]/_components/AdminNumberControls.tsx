@@ -39,7 +39,7 @@ export function AdminNumberControls({ d }: { d: AdminClinicDetail }) {
     }
   }
 
-  const actionUrl = `/admin/clinics/${d.id}/action`;
+  const actionUrl = `/api/admin/clinics/${d.id}/action`;
   const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
 
   return (
@@ -88,44 +88,8 @@ export function AdminNumberControls({ d }: { d: AdminClinicDetail }) {
         </button>
       </div>
 
-      {/* Assigned numbers with per-number suspend/reactivate. */}
-      {d.phoneNumbers.length > 0 && (
-        <div className="adm-phone-list">
-          {d.phoneNumbers.map((p) => (
-            <div className="adm-phone-card" key={p.id}>
-              <div className="adm-phone-card-head">
-                <span className="t-mono" style={{ fontWeight: 700 }}>{p.phoneE164 ?? "—"}</span>
-                <span style={{ display: "inline-flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-                  <Badge tone="neutral">{p.billingClass}</Badge>
-                  <Badge tone="neutral">{p.source}</Badge>
-                  <Badge tone={p.isActive ? "success" : "warning"}>{p.isActive ? "Active" : "Suspended"}</Badge>
-                </span>
-              </div>
-              <dl className="adm-rows">
-                <Row label="Monthly">{formatUsdFromCents(p.monthlyUnitAmountCents)}</Row>
-                <Row label="Provider reference">{p.sidTail ?? "—"}</Row>
-                <Row label="Activated">{fmtDate(p.activatedAt)}</Row>
-                {!p.isActive && <Row label="Suspended">{fmtDate(p.suspendedAt)}{p.suspensionReason ? ` · ${p.suspensionReason}` : ""}</Row>}
-              </dl>
-              <div style={{ marginTop: "var(--space-2)" }}>
-                {p.isActive ? (
-                  <button type="button" className="btn btn-secondary btn-sm" disabled={busy}
-                    onClick={() => post(`/admin/clinics/${d.id}/phone-numbers/${p.id}/action`, { action: "suspend" })}>
-                    Suspend number
-                  </button>
-                ) : (
-                  <button type="button" className="btn btn-secondary btn-sm" disabled={busy}
-                    onClick={() => post(`/admin/clinics/${d.id}/phone-numbers/${p.id}/action`, { action: "reactivate" })}>
-                    Reactivate number
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
       <p className="t-helper" style={{ color: "var(--text-muted)", margin: 0 }}>
-        Suspend keeps the number assigned (no Twilio release) and still counts toward the limit and additional-number billing quantity.
+        Assigned numbers and per-number suspend/reactivate live in the Phone number tab. These controls cover purchasing permission and limits only.
       </p>
 
       {/* Recent purchase attempts (reconciliation visibility). */}
