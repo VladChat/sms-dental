@@ -141,27 +141,6 @@ function fmtDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
 }
 
-function reviewStatusTone(status: string): Tone {
-  switch (status) {
-    case "approved":
-    case "ready_for_manual_submission":
-    case "dry_run_reviewed":
-      return "success";
-    case "submitted":
-    case "pending":
-    case "ready_for_review":
-      return "info";
-    case "missing_info":
-    case "blocked":
-    case "failed":
-    case "rejected":
-    case "readiness_unavailable":
-      return "warning";
-    default:
-      return "neutral";
-  }
-}
-
 function findResource(pkg: A2pReviewPackage, step: string): A2pPayloadResource | null {
   return pkg.providerPayload.resources.find((resource) => resource.step === step) ?? null;
 }
@@ -399,6 +378,115 @@ function diagnosticsSummary(pkg: A2pReviewPackage): string {
   const count = problems.length;
   const issue = COVERAGE_LABEL[problems[0]!.coverageDisplay];
   return `${count} coverage ${count === 1 ? "warning" : "warnings"} · ${issue.toLowerCase()}`;
+}
+
+type CoverageBlockerGroup = {
+  coverage: NumberCoverageDisplay;
+  label: string;
+  numbers: string[];
+  nextAction: string;
+};
+
+// Group per-number coverage problems by their coverageDisplay so the management
+// summary shows ONE blocker per issue type (e.g. "2 local numbers are not in
+// Messaging Service") instead of repeating the same meaning/action per number.
+function groupCoverageBlockers(numbers: A2pReviewNumber[]): CoverageBlockerGroup[] {
+  const byCoverage = new Map<NumberCoverageDisplay, string[]>();
+  for (const n of numbers) {
+    if (n.coverageDisplay === "covered") continue;
+    const list = byCoverage.get(n.coverageDisplay) ?? [];
+    list.push(n.phoneNumber);
+    byCoverage.set(n.coverageDisplay, list);
+  }
+  // Most actionable / most severe first.
+  const order: NumberCoverageDisplay[] = [
+    "blocked",
+    "not_in_messaging_service",
+    "not_campaign_covered",
+    "error",
+    "readiness_unavailable",
+    "readiness_missing",
+    "stale",
+    "unknown",
+  ];
+  const groups: CoverageBlockerGroup[] = [];
+  for (const coverage of order) {
+    const nums = byCoverage.get(coverage);
+    if (!nums || nums.length === 0) continue;
+    groups.push({ coverage, label: COVERAGE_LABEL[coverage], numbers: nums, nextAction: coverageNextAction(coverage) });
+  }
+  return groups;
+}
+
+type ControlSummary = {
+  statusLabel: string;
+  statusTone: Tone;
+  mainBlocker: string | null;
+  nextAction: string | null;
+  blockerGroups: CoverageBlockerGroup[];
+};
+
+// The single source of "where are we / what's blocking / what's next" for the
+// Control summary. Current saved state only — historical provider errors are NOT
+// used as the main blocker (they live in Previous submission history, possibly
+// stale). Coverage problems are grouped into one blocker per issue type.
+function buildControlSummary(args: {
+  pkg: A2pReviewPackage;
+  numberDiagnostics: A2pReviewNumber[];
+  canSubmitNow: boolean;
+  submitBlocker: string | null;
+  hasPreflightErrors: boolean;
+  primaryPreflightError: A2pValidationResult | null;
+  isApproved: boolean;
+  submissionStatus: string | null;
+}): ControlSummary {
+  const { pkg, numberDiagnostics, canSubmitNow, submitBlocker, hasPreflightErrors, primaryPreflightError, isApproved, submissionStatus } = args;
+  const blockerGroups = groupCoverageBlockers(numberDiagnostics);
+
+  let statusLabel = "Blocked";
+  let statusTone: Tone = "warning";
+  if (submissionStatus === "approved") {
+    statusLabel = "Approved";
+    statusTone = "success";
+  } else if (submissionStatus === "submitted") {
+    statusLabel = "Submitted";
+    statusTone = "info";
+  } else if (submissionStatus === "pending") {
+    statusLabel = "Waiting";
+    statusTone = "info";
+  } else if (submissionStatus === "rejected") {
+    statusLabel = "Blocked";
+    statusTone = "warning";
+  } else if (canSubmitNow) {
+    statusLabel = "Ready";
+    statusTone = "success";
+  }
+
+  let mainBlocker: string | null = null;
+  let nextAction: string | null = null;
+
+  if (!pkg.readinessAvailable) {
+    mainBlocker = "Readiness data is unavailable, so SMS launch status can't be confirmed.";
+    nextAction = "Run readiness sync and review provider status.";
+  } else if (hasPreflightErrors) {
+    mainBlocker = primaryPreflightError?.operatorMessage ?? primaryPreflightError?.message ?? "Approval information is incomplete.";
+    nextAction = "Complete the highlighted approval fields, then retry the workflow.";
+  } else if (!canSubmitNow && !isApproved && submitBlocker) {
+    mainBlocker = submitBlocker;
+    nextAction = "Resolve the blocker above, then submit or resume the workflow.";
+  } else if (blockerGroups.length > 0) {
+    const g = blockerGroups[0]!;
+    mainBlocker = `${g.numbers.length} local ${g.numbers.length === 1 ? "number is" : "numbers are"} ${g.label.toLowerCase()}.`;
+    nextAction = g.nextAction;
+  } else if (submissionStatus === "approved") {
+    nextAction = "Approval complete. Confirm sender coverage, then enable patient SMS separately.";
+  } else if (submissionStatus === "submitted" || submissionStatus === "pending") {
+    nextAction = "Wait for provider review, then refresh provider status.";
+  } else if (canSubmitNow) {
+    nextAction = "Review the approval package, choose a submission mode, and submit.";
+  }
+
+  return { statusLabel, statusTone, mainBlocker, nextAction, blockerGroups };
 }
 
 function buildSubmissionHistory(pkg: A2pReviewPackage): SubmissionHistorySummary {
@@ -700,29 +788,34 @@ export function AdminA2pReviewPanel({
             ? auth.liveSubmitBlockedReason
             : null;
 
-  const technicalOpen =
-    (sub.status === "failed" || sub.status === "blocked") &&
-    Boolean(sub.lastErrorCode || sub.lastErrorMessage);
-  // Diagnostics stay collapsed by default. They auto-open ONLY for a real
-  // provider failure/rejection that needs attention, or when readiness data is
-  // unavailable. A merely-not-ready clinic (canSubmitNow === false) does not
-  // force the raw diagnostics open — coverage warnings surface as a compact
-  // summary on the collapsed card instead.
+  // Technical details (merged SIDs + diagnostics) auto-open ONLY for a real
+  // failed/blocked/rejected provider error on the latest attempt, or when
+  // readiness data is unavailable. Coverage warnings do NOT force it open — they
+  // surface as a grouped blocker in the Control summary instead.
   const diagnosticsOpen =
     ((sub.status === "failed" || sub.status === "blocked" || sub.status === "rejected") &&
       Boolean(sub.lastErrorCode || sub.lastErrorMessage || sub.rejectionReason || sub.brandFailureReason)) ||
     !pkg.readinessAvailable;
-  const historyOpen =
-    sub.status === "pending" ||
-    sub.status === "submitted" ||
-    sub.status === "failed" ||
-    sub.status === "blocked" ||
-    sub.status === "rejected";
   const surfaceSync = shouldSurfaceReadinessSync(pkg);
   // Platform readiness state is secondary. Hide it entirely when there is nothing
   // synced and no platform flag is on (an all-"Not synced" block adds no action).
   const showPlatformState =
     Boolean(diagnostics.clinicReadiness) || auth.realSubmissionEnabled || auth.liveSubmitArmed;
+  // Previous submission history may hold a provider error that reads as current
+  // truth. We can't prove the saved approval data is unchanged since that attempt,
+  // so it is shown as history with a "may be stale" caveat — never as the Control
+  // summary main blocker.
+  const hasHistoricalProviderError = Boolean(sub.brandFailureReason || sub.lastErrorMessage || sub.rejectionReason);
+  const control = buildControlSummary({
+    pkg,
+    numberDiagnostics: diagnostics.numberDiagnostics,
+    canSubmitNow,
+    submitBlocker,
+    hasPreflightErrors,
+    primaryPreflightError,
+    isApproved,
+    submissionStatus: selectedSubmission?.status ?? null,
+  });
 
   return (
     <div className="a2p-cc">
@@ -765,47 +858,62 @@ export function AdminA2pReviewPanel({
       <section id="a2p-submit-decision" className={`a2p-cc-card a2p-cc-card--decision ${canSubmitNow ? "is-ready" : "is-blocked"}`}>
         <div className="a2p-cc-card-head">
           <div>
-            <p className="a2p-cc-kicker">Decision summary</p>
-            <h3 className="adm-subhead">Submit decision</h3>
+            <p className="a2p-cc-kicker">Control summary</p>
+            <h3 className="adm-subhead">A2P management</h3>
             <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
-              Safety and control only. This is not the Twilio payload.
+              Current status, blocker, and next action. Submission controls are below.
             </p>
           </div>
         </div>
 
-        <div className="a2p-cc-status-grid">
-          <StatusCard
-            label="Submit readiness"
-            value={canSubmitNow ? "Ready to submit" : "Blocked"}
-            detail={canSubmitNow ? "Minimum required A2P information is complete." : submitBlocker ?? "Review the current blocker."}
-            tone={canSubmitNow ? "success" : "warning"}
-          />
-          <StatusCard
-            label="Submission mode"
-            value={MODE_CARD_LABEL[selectedMode] ?? humanizeToken(selectedMode)}
-            detail={
-              isMock
-                ? "Creates mock Twilio A2P resources only. No real carrier vetting or real SMS traffic."
-                : isLive
-                ? "Creates billable external Twilio resources."
-                : isDryRun
-                  ? "Records review only. No Twilio resources change."
-                  : "Submission is disabled in this environment."
-            }
-            tone={isLive ? "warning" : isMock ? "info" : auth.submissionMode === "disabled" ? "neutral" : "info"}
-          />
-          <StatusCard
-            label="Approval stage"
-            value={isMock ? mockHistory.approvalStageLabel : submissionHistory.approvalStageLabel}
-            detail={isMock ? mockHistory.providerStatusLabel : submissionHistory.providerStatusLabel}
-            tone={reviewStatusTone(isMock ? (mockTracked.submission.status ?? auth.reviewStatus) : (sub.status ?? auth.reviewStatus))}
-          />
-          <StatusCard
-            label="Launch readiness"
-            value={launchReadiness.label}
-            detail={launchReadiness.detail}
-            tone={launchReadiness.tone}
-          />
+        <div className="a2p-cc-summary">
+          <div className="a2p-cc-summary-row">
+            <span className="a2p-cc-summary-label">Status</span>
+            <span className="a2p-cc-summary-value"><Badge tone={control.statusTone}>{control.statusLabel}</Badge></span>
+          </div>
+          <div className="a2p-cc-summary-row">
+            <span className="a2p-cc-summary-label">Main blocker</span>
+            <span className="a2p-cc-summary-value">{control.mainBlocker ?? "None"}</span>
+          </div>
+          {control.nextAction && (
+            <div className="a2p-cc-summary-row">
+              <span className="a2p-cc-summary-label">Next action</span>
+              <span className="a2p-cc-summary-value">{control.nextAction}</span>
+            </div>
+          )}
+          <div className="a2p-cc-summary-row">
+            <span className="a2p-cc-summary-label">Mode</span>
+            <span className="a2p-cc-summary-value">
+              <Badge tone={isLive ? "brand" : isMock ? "info" : auth.submissionMode === "disabled" ? "neutral" : "info"}>
+                {MODE_CARD_LABEL[selectedMode] ?? humanizeToken(selectedMode)}
+              </Badge>
+            </span>
+          </div>
+        </div>
+
+        {control.blockerGroups.length > 0 && (
+          <div className="a2p-cc-blocker-list">
+            {control.blockerGroups.map((g) => (
+              <div key={g.coverage} className="a2p-cc-blocker">
+                <p className="a2p-cc-blocker-head">
+                  {g.numbers.length} local {g.numbers.length === 1 ? "number is" : "numbers are"} {g.label.toLowerCase()}
+                </p>
+                <p className="a2p-cc-blocker-nums t-mono">{g.numbers.join("   ·   ")}</p>
+                <p className="t-helper" style={{ margin: 0 }}>{g.nextAction}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="a2p-cc-summary-actions">
+          <button type="button" className="btn btn-secondary btn-sm" disabled={syncing} onClick={runReadinessSync}>
+            {syncing ? "Running…" : "Run readiness sync"}
+          </button>
+          {(sub.brandRegistrationSid || sub.customerProfileSid) && (
+            <button type="button" className="btn btn-secondary btn-sm" disabled={refreshing} onClick={() => void refreshProviderStatus()}>
+              {refreshing ? "Refreshing…" : "Refresh provider status"}
+            </button>
+          )}
         </div>
 
         {hasPreflightErrors && (
@@ -1004,37 +1112,28 @@ export function AdminA2pReviewPanel({
         </div>
       </section>
 
-      <section id="a2p-human-checklist" className="a2p-cc-card">
-        <div className="a2p-cc-card-head">
-          <div>
-            <p className="a2p-cc-kicker">Fast review</p>
-            <h3 className="adm-subhead">Human review checklist</h3>
-            <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
-              Check these items before live submission.
-            </p>
-          </div>
-        </div>
-        <div className="a2p-cc-checklist">
-          {checklist.map((item) => (
-            <ChecklistRow key={item.id} item={item} />
-          ))}
-        </div>
-      </section>
-
       <section id="a2p-approval-content" className="a2p-cc-card a2p-cc-card--provider">
         <div className="a2p-cc-card-head">
           <div>
             <div className="a2p-cc-heading-row">
               <div>
                 <p className="a2p-cc-kicker">Provider-facing</p>
-                <h3 className="adm-subhead">Approval content sent to Twilio</h3>
+                <h3 className="adm-subhead">Approval package</h3>
               </div>
               <Badge tone="info">Provider-facing</Badge>
             </div>
             <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
-              Human-readable provider payload. Optional fields are omitted by default.
+              Review before Twilio submission. Optional fields are omitted by default.
             </p>
           </div>
+        </div>
+
+        {/* Fast-review status as compact chips (replaces the old standalone
+            "Human review checklist" card). */}
+        <div className="a2p-cc-chip-row" aria-label="Approval package review status">
+          {checklist.map((item) => (
+            <span key={item.id} className={`a2p-cc-chip is-${item.tone}`}>{item.label}</span>
+          ))}
         </div>
 
         <div className="a2p-cc-section-grid">
@@ -1062,56 +1161,29 @@ export function AdminA2pReviewPanel({
         {pkg.includedSenders.numbers.length === 0 ? (
           <p className="t-body"><Muted>No active local SMS senders are included for this clinic.</Muted></p>
         ) : (
+          <>
+          <p className="t-small a2p-cc-sender-count">
+            {pkg.includedSenders.numbers.length} local {pkg.includedSenders.numbers.length === 1 ? "number" : "numbers"} included
+          </p>
           <div className="a2p-cc-sender-grid">
             {pkg.includedSenders.numbers.map((sender) => (
               <IncludedSenderCard key={sender.twilioPhoneNumberSid ?? sender.phoneNumber} sender={sender} />
             ))}
           </div>
+          </>
         )}
       </section>
 
       <A2pDisclosureCard
-        id="a2p-technical-wiring"
-        title="Twilio technical wiring"
-        summary="SIDs, policy references, and generated resources used by the Twilio API."
-        defaultOpen={technicalOpen}
-        tone="technical"
-      >
-        <div className="a2p-cc-section-grid">
-          {providerSections.technicalResources.map((resource) => (
-            <ResourceCard key={resource.step} title={resource.step} fields={resource.fields} />
-          ))}
-          <div className="a2p-cc-subcard">
-            <h4 className="adm-subhead">Resource creation plan</h4>
-            <div className="a2p-cc-facts">
-              {diagnostics.plannedResources.map((resource) => (
-                <FactRow
-                  key={resource.key}
-                  label={resource.label}
-                  value={
-                    resource.reuseSid ? (
-                      <span><Badge tone="success">Reuse</Badge> <span className="t-mono a2p-cc-wrap">{resource.reuseSid}</span></span>
-                    ) : (
-                      <Badge tone="info">{resource.willCreate ? "Will create" : "—"}</Badge>
-                    )
-                  }
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </A2pDisclosureCard>
-
-      <A2pDisclosureCard
-        id="a2p-diagnostics"
-        title="Internal diagnostics — not submitted to Twilio"
+        id="a2p-technical-details"
+        title="Technical details"
         summary={diagnosticsSummary(pkg)}
-        helper="These values are for platform-admin troubleshooting only and are not sent in the Twilio approval payload."
+        helper="SIDs, raw provider statuses, and per-number diagnostics for platform-admin troubleshooting. Not submitted to Twilio."
         defaultOpen={diagnosticsOpen}
         tone={diagnosticsOpen ? "warning" : "diagnostic"}
       >
         <div className="a2p-cc-subcard">
-          <h4 className="adm-subhead">Number coverage</h4>
+          <h4 className="adm-subhead">Per-number coverage</h4>
           {diagnostics.numberDiagnostics.length === 0 ? (
             <p className="t-body"><Muted>No local number diagnostics available.</Muted></p>
           ) : (
@@ -1150,6 +1222,34 @@ export function AdminA2pReviewPanel({
           </details>
         )}
 
+        <details className="a2p-cc-tech-details">
+          <summary>Twilio resources &amp; creation plan</summary>
+          <div className="a2p-cc-section-grid">
+            {providerSections.technicalResources.map((resource) => (
+              <ResourceCard key={resource.step} title={resource.step} fields={resource.fields} />
+            ))}
+            <div className="a2p-cc-subcard">
+              <h4 className="adm-subhead">Resource creation plan</h4>
+              <div className="a2p-cc-facts">
+                {diagnostics.plannedResources.map((resource) => (
+                  <FactRow
+                    key={resource.key}
+                    stacked
+                    label={resource.label}
+                    value={
+                      resource.reuseSid ? (
+                        <span><Badge tone="success">Reuse</Badge> <span className="t-mono a2p-cc-wrap">{resource.reuseSid}</span></span>
+                      ) : (
+                        <Badge tone="info">{resource.willCreate ? "Will create" : "—"}</Badge>
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </details>
+
         {diagnostics.warnings.length > 0 && (
           <div className="a2p-cc-warning-panel">
             <h4 className="adm-subhead">Warnings</h4>
@@ -1170,11 +1270,16 @@ export function AdminA2pReviewPanel({
 
       <A2pDisclosureCard
         id="a2p-history"
-        title="Submission history"
+        title="Previous submission history"
         summary={submissionHistory.hasSubmission ? submissionHistory.approvalStageLabel : "No live submission yet."}
-        defaultOpen={historyOpen}
-        tone={historyOpen ? "warning" : "diagnostic"}
+        defaultOpen={false}
+        tone="diagnostic"
       >
+        {hasHistoricalProviderError && (
+          <p className="t-small a2p-cc-stale-note">
+            Previous provider error may be stale. Retry the workflow to check the current saved data.
+          </p>
+        )}
         <div className="a2p-cc-section-grid">
           <div className="a2p-cc-subcard">
             <h4 className="adm-subhead">Existing live submission</h4>
@@ -1244,54 +1349,6 @@ export function AdminA2pReviewPanel({
       </A2pDisclosureCard>
     </div>
   );
-}
-
-function StatusCard({
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  tone: Tone;
-}) {
-  return (
-    <div className={`a2p-cc-stat a2p-cc-tone-${tone}`}>
-      <span className="a2p-cc-stat-label">{label}</span>
-      <span className="a2p-cc-stat-value">{value}</span>
-      <span className="a2p-cc-stat-detail">{detail}</span>
-    </div>
-  );
-}
-
-function ChecklistRow({ item }: { item: ChecklistItem }) {
-  return (
-    <div className="a2p-cc-check-row">
-      <div className="a2p-cc-check-status">
-        <ChecklistBadge tone={item.tone} />
-      </div>
-      <div className="a2p-cc-check-main">
-        <span className="a2p-cc-check-label">{item.label}</span>
-        <span className="a2p-cc-check-summary">{item.summary}</span>
-      </div>
-      <div className="a2p-cc-check-action">
-        {item.href ? (
-          <a className="btn btn-secondary btn-sm" href={item.href}>
-            Review
-          </a>
-        ) : (
-          <span className="t-helper">—</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ChecklistBadge({ tone }: { tone: ChecklistTone }) {
-  const label = tone === "present" ? "Present" : tone === "missing" ? "Missing" : "Warning";
-  return <span className={`a2p-cc-check-badge is-${tone}`}>{label}</span>;
 }
 
 function ContentCard({

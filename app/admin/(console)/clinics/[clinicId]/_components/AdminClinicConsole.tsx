@@ -252,6 +252,19 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
               <Row label="SMS recovery gate"><BoolBadge value={d.smsRecoveryEnabled} yes="Enabled" no="Disabled" noTone="neutral" /></Row>
               <Row label="Global SMS mode">{SMS_MODE_LABELS[data.smsMode] ?? humanizeToken(data.smsMode)}</Row>
             </dl>
+            <div style={{ marginTop: "var(--space-3)", display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={syncingReadiness} onClick={runReadinessSync}>
+                {syncingReadiness ? "Running…" : "Run readiness sync"}
+              </button>
+              <span className="t-helper" style={{ color: "var(--text-muted)" }}>
+                Re-checks Messaging Service &amp; A2P coverage for assigned numbers. Read-only.
+              </span>
+              {(readinessMessage || readinessError) && (
+                <span className="t-small" style={{ color: readinessError ? "var(--error-text)" : "var(--text-secondary)" }}>
+                  {readinessError ?? readinessMessage}
+                </span>
+              )}
+            </div>
             {!d.hasAssignedNumber && (
               <p className="t-small" style={{ color: "var(--warning)", marginTop: "var(--space-2)", fontWeight: 600 }}>
                 Blocker: no number assigned — add one to continue launch.

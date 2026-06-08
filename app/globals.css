@@ -810,6 +810,47 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 /* Compact operational-guardrails line inside Campaign content. */
 .a2p-cc-guardrails { margin:var(--space-2) 0 0; color:var(--text-secondary); overflow-wrap:anywhere; }
 .a2p-cc-guardrails-label { font-weight:700; color:var(--text); }
+
+/* A2P Control summary — status / blocker / next action, label above on mobile. */
+.a2p-cc-summary { display:grid; gap:0; margin-top:var(--space-3); }
+.a2p-cc-summary-row {
+  display:grid; grid-template-columns:minmax(110px, 160px) minmax(0, 1fr); align-items:start;
+  gap:var(--space-2) var(--space-4); padding:var(--space-2) 0;
+}
+.a2p-cc-summary-row + .a2p-cc-summary-row { border-top:1px solid rgba(12,43,42,.08); }
+.a2p-cc-summary-label { font:var(--helper); color:var(--text-muted); }
+.a2p-cc-summary-value { font:var(--body-sm); color:var(--text-body); font-weight:600; min-width:0; overflow-wrap:anywhere; }
+.a2p-cc-summary-actions { display:flex; flex-wrap:wrap; gap:var(--space-2); margin-top:var(--space-3); }
+
+/* Grouped coverage blockers (one card per issue type, affected numbers listed). */
+.a2p-cc-blocker-list { display:grid; gap:var(--space-2); margin-top:var(--space-3); }
+.a2p-cc-blocker {
+  display:grid; gap:2px; min-width:0; padding:var(--space-3) var(--space-4);
+  border:1px solid var(--warning-border); border-radius:var(--r-md); background:var(--warning-bg);
+}
+.a2p-cc-blocker-head { margin:0; font:var(--body-sm); font-weight:700; color:var(--text); }
+.a2p-cc-blocker-nums { margin:0; font-weight:600; color:var(--text-body); overflow-wrap:anywhere; word-break:break-word; }
+
+/* Compact review-status chips inside the Approval package (replace the old
+   standalone Human review checklist). */
+.a2p-cc-chip-row { display:flex; flex-wrap:wrap; gap:var(--space-2); margin:var(--space-1) 0 var(--space-3); }
+.a2p-cc-chip {
+  display:inline-flex; align-items:center; gap:var(--space-1); padding:2px var(--space-3);
+  border-radius:999px; border:1px solid var(--border); font:var(--helper); font-weight:600; white-space:nowrap;
+}
+.a2p-cc-chip.is-present { color:var(--success-text); background:var(--success-bg); border-color:var(--success-border); }
+.a2p-cc-chip.is-missing { color:var(--error-text); background:var(--error-bg); border-color:var(--error-border); }
+.a2p-cc-chip.is-warning { color:var(--warning-text); background:var(--warning-bg); border-color:var(--warning-border); }
+
+/* Local senders summary count. */
+.a2p-cc-sender-count { margin:var(--space-3) 0 0; color:var(--text-secondary); font-weight:600; }
+
+/* Stale previous-error caveat inside Previous submission history. */
+.a2p-cc-stale-note {
+  margin:0 0 var(--space-3); padding:var(--space-2) var(--space-3);
+  border:1px solid var(--warning-border); border-radius:var(--r-md);
+  background:var(--warning-bg); color:var(--warning-text);
+}
 .a2p-cc-warning-panel {
   display:grid; gap:var(--space-2); padding:var(--space-4); border:1px solid var(--warning-border);
   border-radius:var(--r-md); background:var(--warning-bg);
@@ -843,6 +884,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
   .a2p-cc-check-row { grid-template-columns:1fr; }
   .a2p-cc-check-action { justify-self:start; }
   .a2p-cc-fact-row { grid-template-columns:1fr; gap:var(--space-1); }
+  .a2p-cc-summary-row { grid-template-columns:1fr; gap:2px; }
 }
 @media (max-width: 560px) {
   .a2p-cc-badges { width:100%; }
