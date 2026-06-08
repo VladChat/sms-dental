@@ -811,47 +811,101 @@ export function AdminA2pReviewPanel({
           </div>
         )}
 
-          <div className="a2p-cc-subcard">
-            <h4 className="adm-subhead">Choose submission mode</h4>
-            <div style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-3)" }}>
-              {auth.modeOptions.map((option) => (
-                <label
-                  key={option.mode}
-                  style={{
-                    display: "grid",
-                    gap: "var(--space-1)",
-                    padding: "var(--space-3)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--r-md)",
-                    background: selectedMode === option.mode ? "var(--surface-sunken)" : "var(--surface)",
-                    opacity: option.available ? 1 : 0.7,
-                    cursor: option.available ? "pointer" : "not-allowed",
-                  }}
-                >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
-                    <input
-                      type="radio"
-                      name="a2p-submission-mode"
-                      checked={selectedMode === option.mode}
-                      onChange={() => {
-                        setSelectedMode(option.mode);
-                        setConfirmLive(false);
-                        setConfirmMock(false);
-                        setConfirmLiveCampaign(false);
-                      }}
-                      disabled={!option.available}
-                    />
-                    <strong>{option.label}</strong>
-                    {option.recommended && <Badge tone="success">Recommended</Badge>}
-                  </span>
-                  <span className="t-small">{option.helper}</span>
-                  {!option.available && option.disabledReason && (
-                    <span className="t-helper">{option.disabledReason}</span>
-                  )}
-                </label>
-              ))}
+          {/* When a mock attempt already exists, show a read-only current-attempt card
+              instead of the full mode radio group which suggests the admin must choose. */}
+          {isMock && mockTracked.exists && (mockTracked.submission.brandRegistrationSid || mockTracked.submission.campaignSid) ? (
+            <div className="a2p-cc-subcard" style={{ border: "1px solid var(--color-info, #2563eb)", borderRadius: "var(--r-md)", padding: "var(--space-3)" }}>
+              <h4 className="adm-subhead" style={{ marginBottom: "var(--space-1)" }}>Current A2P test attempt</h4>
+              <div className="a2p-cc-facts">
+                <FactRow label="Mode" value={<Badge tone="info">Mock A2P</Badge>} />
+                <FactRow label="Status" value={mockTracked.submission.brandRegistrationSid && mockTracked.submission.campaignSid ? "Complete" : "In progress"} />
+              </div>
+              <p className="t-small" style={{ marginTop: "var(--space-2)", color: "var(--text-muted)" }}>
+                This clinic already has a Mock A2P attempt. Mock mode is test-only and does not enable real SMS.
+              </p>
+              {/* Secondary link to switch modes if really needed */}
+              {auth.modeOptions.length > 1 && (
+                <details style={{ marginTop: "var(--space-2)", cursor: "pointer" }}>
+                  <summary className="t-small" style={{ color: "var(--text-muted)" }}>Switch submission mode (advanced)</summary>
+                  <div style={{ display: "grid", gap: "var(--space-1)", marginTop: "var(--space-2)" }}>
+                    {auth.modeOptions.filter((o) => o.mode !== selectedMode).map((option) => (
+                      <label
+                        key={option.mode}
+                        style={{
+                          display: "grid",
+                          gap: "var(--space-1)",
+                          padding: "var(--space-2)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--r-md)",
+                          opacity: option.available ? 1 : 0.7,
+                          cursor: option.available ? "pointer" : "not-allowed",
+                        }}
+                      >
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}>
+                          <input
+                            type="radio"
+                            name="a2p-submission-mode-alt"
+                            checked={false}
+                            onChange={() => {
+                              setSelectedMode(option.mode);
+                              setConfirmLive(false);
+                              setConfirmMock(false);
+                              setConfirmLiveCampaign(false);
+                            }}
+                            disabled={!option.available}
+                          />
+                          <strong>{option.label}</strong>
+                        </span>
+                        <span className="t-small">{option.helper}</span>
+                      </label>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
-          </div>
+          ) : (
+            <div className="a2p-cc-subcard">
+              <h4 className="adm-subhead">Choose submission mode</h4>
+              <div style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-3)" }}>
+                {auth.modeOptions.map((option) => (
+                  <label
+                    key={option.mode}
+                    style={{
+                      display: "grid",
+                      gap: "var(--space-1)",
+                      padding: "var(--space-3)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--r-md)",
+                      background: selectedMode === option.mode ? "var(--surface-sunken)" : "var(--surface)",
+                      opacity: option.available ? 1 : 0.7,
+                      cursor: option.available ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                      <input
+                        type="radio"
+                        name="a2p-submission-mode"
+                        checked={selectedMode === option.mode}
+                        onChange={() => {
+                          setSelectedMode(option.mode);
+                          setConfirmLive(false);
+                          setConfirmMock(false);
+                          setConfirmLiveCampaign(false);
+                        }}
+                        disabled={!option.available}
+                      />
+                      <strong>{option.label}</strong>
+                      {option.recommended && <Badge tone="success">Recommended</Badge>}
+                    </span>
+                    <span className="t-small">{option.helper}</span>
+                    {!option.available && option.disabledReason && (
+                      <span className="t-helper">{option.disabledReason}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {isLive && (
             <div className="a2p-cc-caution">

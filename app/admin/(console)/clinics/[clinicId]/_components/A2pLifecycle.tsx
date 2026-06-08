@@ -9,18 +9,18 @@ export function A2pLifecycle({ pkg, clinicId, selectedMode }: { pkg: A2pReviewPa
   const router = useRouter();
   const [running, setRunning] = useState<string | null>(null);
   const [confirmMap, setConfirmMap] = useState<Record<string, boolean>>({});
-  const [lastMsg, setLastMsg] = useState<string | null>(null);
+  const [alert, setAlert] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const steps = buildA2pLifecycleSteps(pkg, selectedMode);
 
   async function runAction(stepId: string, actionLabel?: string) {
     const step = steps.find((s) => s.id === stepId);
     if (!step) return;
-    if (step.status === "locked") return setLastMsg("This step is locked until its prerequisites are met.");
-    if (step.disabledReason) return setLastMsg(step.disabledReason);
+    if (step.status === "locked") return setAlert({ type: "error", text: "This step is locked until its prerequisites are met." });
+    if (step.disabledReason) return setAlert({ type: "error", text: step.disabledReason });
     // require confirmation for create actions
     const needsConfirm = step.actionLabel?.toLowerCase().includes("create") || false;
-    if (needsConfirm && !confirmMap[stepId]) return setLastMsg("Please confirm the action before proceeding.");
+    if (needsConfirm && !confirmMap[stepId]) return setAlert({ type: "error", text: "Please confirm the action before proceeding." });
 
     // Refresh actions use the /a2p/status endpoint (read-only provider sync).
     const isRefresh = stepId.includes("refresh");
@@ -29,22 +29,40 @@ export function A2pLifecycle({ pkg, clinicId, selectedMode }: { pkg: A2pReviewPa
       : `/api/admin/clinics/${clinicId}/a2p/action`;
 
     setRunning(stepId);
-    setLastMsg(null);
+    setAlert(null);
     try {
+      const body = isRefresh
+        ? { submissionMode: selectedMode }
+        : { action: stepId, confirm: confirmMap[stepId] === true };
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: stepId, confirm: isRefresh ? false : confirmMap[stepId] === true }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
-      setLastMsg(json?.message ?? (json?.ok ? "OK" : "Unexpected response"));
-      // After a successful non-dry-run mutation, refresh server data so the
-      // lifecycle and review panel reflect the new provider state.
+      const errMsg = json?.error?.message ?? json?.error ?? json?.message ?? null;
+      const successMsg = json?.ok
+        ? isRefresh
+          ? "Mock provider status refreshed."
+          : json?.dryRun === false
+            ? "Resource created successfully."
+            : json?.message ?? "OK"
+        : null;
+      if (successMsg) {
+        setAlert({ type: "success", text: successMsg });
+      } else {
+        setAlert({ type: "error", text: errMsg ?? "Unexpected server response. Check logs." });
+      }
+      // After a successful non-dry-run mutation, refresh server data.
       if (!isRefresh && json?.ok && json?.dryRun === false) {
         router.refresh();
       }
+      // After a successful refresh, also reload server data to reflect updated status.
+      if (isRefresh && json?.ok) {
+        router.refresh();
+      }
     } catch (err: any) {
-      setLastMsg(String(err?.message ?? err));
+      setAlert({ type: "error", text: String(err?.message ?? err) });
     } finally {
       setRunning(null);
     }
@@ -52,6 +70,11 @@ export function A2pLifecycle({ pkg, clinicId, selectedMode }: { pkg: A2pReviewPa
 
   return (
     <div className="a2p-lifecycle">
+      {alert && (
+        <div className={`alert ${alert.type === "error" ? "alert-error" : "alert-success"}`} role="status" aria-live="polite" style={{ marginBottom: "12px" }}>
+          <span>{alert.text}</span>
+        </div>
+      )}
       {steps.map((s) => (
         <div key={s.id} className="a2p-lifecycle-step" style={{ border: "1px solid var(--divider)", padding: "12px", marginBottom: "8px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -83,7 +106,6 @@ export function A2pLifecycle({ pkg, clinicId, selectedMode }: { pkg: A2pReviewPa
           </div>
         </div>
       ))}
-      {lastMsg && <div className="t-small" style={{ marginTop: "8px" }}>{lastMsg}</div>}
     </div>
   );
 }

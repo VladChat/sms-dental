@@ -14,6 +14,14 @@ export type A2pLifecycleStep = {
   warning?: string | null;
 };
 
+const CAMPAIGN_COMPLETE_STATUSES = ["registered", "approved", "verified", "complete"];
+
+function isCampaignCompleteStatus(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const s = value.trim().toLowerCase();
+  return CAMPAIGN_COMPLETE_STATUSES.includes(s);
+}
+
 // Build lifecycle steps for the selected mode using the review package.
 export function buildA2pLifecycleSteps(
   pkg: A2pReviewPackage,
@@ -50,6 +58,7 @@ export function buildA2pLifecycleSteps(
       status: brandExists ? (brandTerminalFail ? "failed" : brandComplete ? "complete" : "ready") : "locked",
       description: "Read-only refresh of the Mock Brand status from Twilio.",
       actionLabel: brandComplete ? undefined : "Refresh Mock Brand Status",
+      warning: brandComplete ? "Refresh available if needed." : undefined,
       disabledReason: brandExists ? null : "No mock Brand exists",
       providerSid: mock.submission.brandRegistrationSid ?? null,
       providerStatus: brandStatus,
@@ -58,7 +67,7 @@ export function buildA2pLifecycleSteps(
     // Create Mock Campaign
     const campaignExists = Boolean(mock.submission.campaignSid);
     const campaignStatus = mock.submission.campaignStatus ?? null;
-    const campaignComplete = campaignExists && (campaignStatus === "registered" || campaignStatus === "approved" || campaignStatus === "verified" || campaignStatus === "complete");
+    const campaignComplete = campaignExists && isCampaignCompleteStatus(campaignStatus);
     const campaignLocked = !brandExists || brandTerminalFail || !brandComplete;
     steps.push({
       id: "mock_create_campaign",
@@ -80,6 +89,7 @@ export function buildA2pLifecycleSteps(
       status: campaignExists ? (campaignComplete ? "complete" : "ready") : "locked",
       description: "Read-only refresh of the Mock Campaign status from Twilio.",
       actionLabel: campaignComplete ? undefined : "Refresh Mock Campaign Status",
+      warning: campaignComplete ? "Refresh available if needed." : undefined,
       disabledReason: campaignExists ? null : "No mock Campaign exists",
       providerSid: mock.submission.campaignSid ?? null,
       providerStatus: campaignStatus,
