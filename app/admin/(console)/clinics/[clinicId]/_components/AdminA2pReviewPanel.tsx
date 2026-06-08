@@ -18,6 +18,7 @@ import type {
   A2pReviewPackage,
   NumberCoverageDisplay,
 } from "../../../../../../lib/a2p/types";
+import { A2pLifecycle } from "./A2pLifecycle";
 import { isLiveCampaignCreationPending } from "../../../../../../lib/a2p/submission-modes";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
@@ -882,24 +883,7 @@ export function AdminA2pReviewPanel({
             </div>
           ) : isMock ? (
             <div className="a2p-cc-action-stack">
-              <div className="a2p-cc-auth">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={confirmMock}
-                    onChange={(event) => setConfirmMock(event.target.checked)}
-                  />
-                  <span>
-                    I understand this creates mock Twilio A2P resources only and will not enable real SMS sending.
-                  </span>
-                </label>
-              </div>
-              <button type="button" className="btn btn-primary" disabled={submitting || !confirmMock} onClick={submit}>
-                {submitting ? "Submitting…" : "Create Mock A2P resources"}
-              </button>
-              <p className="t-helper">
-                Uses a separate empty Messaging Service and never attaches real clinic numbers.
-              </p>
+              <A2pLifecycle pkg={pkg} clinicId={clinicId} selectedMode={"mock"} />
             </div>
           ) : isLive && auth.liveSubmitArmed ? (
             <div className="a2p-cc-action-stack">

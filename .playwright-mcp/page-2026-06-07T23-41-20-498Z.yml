@@ -1,0 +1,442 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]: Missed Calls Dental · Admin
+      - navigation "Admin sections" [ref=e5]:
+        - link "Overview" [ref=e6] [cursor=pointer]:
+          - /url: /admin
+        - link "Clinics" [ref=e7] [cursor=pointer]:
+          - /url: /admin/clinics
+      - generic [ref=e8]:
+        - generic [ref=e9]: allyexporter@gmail.com
+        - button "Sign out" [ref=e10] [cursor=pointer]
+    - main [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]:
+            - paragraph [ref=e15]:
+              - link "← Clinics" [ref=e16] [cursor=pointer]:
+                - /url: /admin/clinics
+            - heading "Fairstone Dental Smile" [level=1] [ref=e17]
+            - generic "Clinic metadata" [ref=e18]:
+              - generic [ref=e19]:
+                - term [ref=e20]: Owner
+                - definition [ref=e21]: livedealsmart@gmail.com
+              - generic [ref=e22]:
+                - term [ref=e23]: Setup
+                - definition [ref=e24]: Details completed
+              - generic [ref=e25]:
+                - term [ref=e26]: Updated
+                - definition [ref=e27]: 6/7/2026
+          - generic [ref=e28]:
+            - link "Diagnostics" [ref=e29] [cursor=pointer]:
+              - /url: /admin/clinics/f37f24a1-070f-436b-b803-956f55466093/events
+            - link "Public page" [ref=e30] [cursor=pointer]:
+              - /url: https://app.missedcallsdental.com/business/fairstone-dental-smile
+        - status [ref=e31]:
+          - generic [ref=e32]:
+            - generic [ref=e33]: "Launch blocked: SMS approval not active"
+            - generic [ref=e34]: Wait for active SMS approval before launching SMS recovery.
+          - button "Go to SMS approval" [ref=e35] [cursor=pointer]
+        - generic [ref=e36]:
+          - navigation [ref=e37]:
+            - tablist "Clinic sections" [ref=e38]:
+              - tab "Phone number Assigned" [ref=e39] [cursor=pointer]:
+                - generic [ref=e41]: Phone number
+                - generic [ref=e42]: Assigned
+              - tab "Business profile Complete" [ref=e43] [cursor=pointer]:
+                - generic [ref=e45]: Business profile
+                - generic [ref=e46]: Complete
+              - tab "SMS approval Ready" [ref=e47] [cursor=pointer]:
+                - generic [ref=e49]: SMS approval
+                - generic [ref=e50]: Ready
+              - tab "A2P review Review" [active] [selected] [ref=e51] [cursor=pointer]:
+                - generic [ref=e53]: A2P review
+                - generic [ref=e54]: Review
+              - tab "Billing Connected" [ref=e55] [cursor=pointer]:
+                - generic [ref=e57]: Billing
+                - generic [ref=e58]: Connected
+              - tab "SMS behavior Read-only" [ref=e59] [cursor=pointer]:
+                - generic [ref=e61]: SMS behavior
+                - generic [ref=e62]: Read-only
+              - tab "Admin tools" [ref=e63] [cursor=pointer]:
+                - generic [ref=e65]: Admin tools
+          - generic [ref=e66]:
+            - text: ▸ ▸
+            - tabpanel "A2P review Review" [ref=e186]:
+              - generic [ref=e187]:
+                - generic [ref=e188]:
+                  - generic [ref=e189]:
+                    - generic [ref=e190]:
+                      - heading "A2P / 10DLC review" [level=2] [ref=e191]
+                      - generic "A2P review status badges" [ref=e192]:
+                        - generic [ref=e193]: Blocked
+                        - generic [ref=e194]: Dry run
+                        - generic [ref=e195]: Launch blocked until approval
+                    - paragraph [ref=e196]: Review clinic identity, campaign content, and local senders before creating external Twilio A2P resources.
+                  - generic [ref=e197]:
+                    - button "Run SMS readiness sync" [ref=e198] [cursor=pointer]
+                    - button "Refresh provider status" [ref=e199] [cursor=pointer]
+                - generic [ref=e200]:
+                  - generic [ref=e202]:
+                    - paragraph [ref=e203]: Decision summary
+                    - heading "Submit decision" [level=3] [ref=e204]
+                    - paragraph [ref=e205]: Safety and control only. This is not the Twilio payload.
+                  - generic [ref=e206]:
+                    - generic [ref=e207]:
+                      - generic [ref=e208]: Submit readiness
+                      - generic [ref=e209]: Blocked
+                      - generic [ref=e210]: Apply migration 20260611000100_a2p_submission_modes.sql before using the A2P submission workflow.
+                    - generic [ref=e211]:
+                      - generic [ref=e212]: Submission mode
+                      - generic [ref=e213]: Dry run
+                      - generic [ref=e214]: Records review only. No Twilio resources change.
+                    - generic [ref=e215]:
+                      - generic [ref=e216]: Approval stage
+                      - generic [ref=e217]: Blocked
+                      - generic [ref=e218]: Twilio Rejected · Twilio Rejected · FAILED
+                    - generic [ref=e219]:
+                      - generic [ref=e220]: Launch readiness
+                      - generic [ref=e221]: Blocked until approval
+                      - generic [ref=e222]: "Expected before approval: A2P brand not verified yet. This does not block A2P submission."
+                  - generic [ref=e223]:
+                    - heading "Choose submission mode" [level=4] [ref=e224]
+                    - generic [ref=e225]:
+                      - generic [ref=e226]:
+                        - generic [ref=e227]:
+                          - radio "Dry run Recommended No Twilio resources are created. Apply migration 20260611000100_a2p_submission_modes.sql before using the A2P submission workflow." [checked] [disabled] [ref=e228]
+                          - strong [ref=e229]: Dry run
+                          - generic [ref=e230]: Recommended
+                        - generic [ref=e231]: No Twilio resources are created.
+                        - generic [ref=e232]: Apply migration 20260611000100_a2p_submission_modes.sql before using the A2P submission workflow.
+                      - generic [ref=e233]:
+                        - generic [ref=e234]:
+                          - radio "Mock A2P Creates mock Brand/Campaign for testing. No real carrier vetting. No real SMS traffic. Apply migration 20260611000100_a2p_submission_modes.sql before using the A2P submission workflow." [disabled] [ref=e235]
+                          - strong [ref=e236]: Mock A2P
+                        - generic [ref=e237]: Creates mock Brand/Campaign for testing. No real carrier vetting. No real SMS traffic.
+                        - generic [ref=e238]: Apply migration 20260611000100_a2p_submission_modes.sql before using the A2P submission workflow.
+                      - generic [ref=e239]:
+                        - generic [ref=e240]:
+                          - radio "Live A2P Creates billable external Twilio/TCR resources. Apply migration 20260611000100_a2p_submission_modes.sql before using the A2P submission workflow." [disabled] [ref=e241]
+                          - strong [ref=e242]: Live A2P
+                        - generic [ref=e243]: Creates billable external Twilio/TCR resources.
+                        - generic [ref=e244]: Apply migration 20260611000100_a2p_submission_modes.sql before using the A2P submission workflow.
+                  - note [ref=e246]:
+                    - button "Submit for A2P review" [disabled] [ref=e247]
+                    - generic [ref=e248]: Apply migration 20260611000100_a2p_submission_modes.sql before using the A2P submission workflow.
+                - generic [ref=e249]:
+                  - generic [ref=e251]:
+                    - paragraph [ref=e252]: Fast review
+                    - heading "Human review checklist" [level=3] [ref=e253]
+                    - paragraph [ref=e254]: Check these items before live submission.
+                  - generic [ref=e255]:
+                    - generic [ref=e256]:
+                      - generic [ref=e258]: Present
+                      - generic [ref=e259]:
+                        - generic [ref=e260]: Business identity
+                        - generic [ref=e261]: Allyexporter LLC · EIN provided · Website present
+                      - link "Review" [ref=e263] [cursor=pointer]:
+                        - /url: "#a2p-approval-content"
+                    - generic [ref=e264]:
+                      - generic [ref=e266]: Present
+                      - generic [ref=e267]:
+                        - generic [ref=e268]: Authorized representative
+                        - generic [ref=e269]: Vladislav Doroshenko · Owner · phone/email present
+                      - link "Review" [ref=e271] [cursor=pointer]:
+                        - /url: "#a2p-approval-content"
+                    - generic [ref=e272]:
+                      - generic [ref=e274]: Present
+                      - generic [ref=e275]:
+                        - generic [ref=e276]: Business address
+                        - generic [ref=e277]: 130 Old Oak Drive, APT 247 · Buffalo Grove, IL 60089
+                      - link "Review" [ref=e279] [cursor=pointer]:
+                        - /url: "#a2p-approval-content"
+                    - generic [ref=e280]:
+                      - generic [ref=e282]: Present
+                      - generic [ref=e283]:
+                        - generic [ref=e284]: Campaign content
+                        - generic [ref=e285]: Clinic-first wording · appointment follow-up only · no marketing
+                      - link "Review" [ref=e287] [cursor=pointer]:
+                        - /url: "#a2p-campaign-content"
+                    - generic [ref=e288]:
+                      - generic [ref=e290]: Present
+                      - generic [ref=e291]:
+                        - generic [ref=e292]: Opt-out language
+                        - generic [ref=e293]: STOP and HELP included
+                      - link "Review" [ref=e295] [cursor=pointer]:
+                        - /url: "#a2p-campaign-content"
+                    - generic [ref=e296]:
+                      - generic [ref=e298]: Present
+                      - generic [ref=e299]:
+                        - generic [ref=e300]: Local senders
+                        - generic [ref=e301]: 2 local numbers included · toll-free excluded
+                      - link "Review" [ref=e303] [cursor=pointer]:
+                        - /url: "#a2p-local-senders"
+                - generic [ref=e304]:
+                  - generic [ref=e306]:
+                    - generic [ref=e307]:
+                      - generic [ref=e308]:
+                        - paragraph [ref=e309]: Provider-facing
+                        - heading "Approval content sent to Twilio" [level=3] [ref=e310]
+                      - generic [ref=e311]: Provider-facing
+                    - paragraph [ref=e312]: Human-readable provider payload. Optional fields are omitted by default.
+                  - generic [ref=e313]:
+                    - generic [ref=e314]:
+                      - heading "Business identity" [level=4] [ref=e315]
+                      - generic [ref=e316]:
+                        - generic [ref=e317]:
+                          - generic [ref=e318]: Business name
+                          - generic [ref=e319]: Allyexporter LLC
+                        - generic [ref=e320]:
+                          - generic [ref=e321]: Business Type
+                          - generic [ref=e322]: Limited Liability Corporation
+                        - generic [ref=e323]:
+                          - generic [ref=e324]: Industry
+                          - generic [ref=e325]: HEALTHCARE
+                        - generic [ref=e326]:
+                          - generic [ref=e327]: Registration number (EIN)
+                          - generic [ref=e330]: Provided ···· 6985
+                        - generic [ref=e331]:
+                          - generic [ref=e332]: Regions of operation
+                          - generic [ref=e333]: USA_AND_CANADA
+                        - generic [ref=e334]:
+                          - generic [ref=e335]: Business identity
+                          - generic [ref=e336]: direct_customer
+                        - generic [ref=e337]:
+                          - generic [ref=e338]: Website
+                          - generic [ref=e339]: https://app.missedcallsdental.com/business/fairstone-dental-smile
+                        - generic [ref=e340]:
+                          - generic [ref=e341]: Company type
+                          - generic [ref=e342]: private
+                    - generic [ref=e343]:
+                      - heading "Authorized representative" [level=4] [ref=e344]
+                      - generic [ref=e345]:
+                        - generic [ref=e346]:
+                          - generic [ref=e347]: Name
+                          - generic [ref=e348]: Vladislav Doroshenko
+                        - generic [ref=e349]:
+                          - generic [ref=e350]: Role / business title
+                          - generic [ref=e351]: Owner
+                        - generic [ref=e352]:
+                          - generic [ref=e353]: Email
+                          - generic [ref=e354]: livedealsmart@gmail.com
+                        - generic [ref=e355]:
+                          - generic [ref=e356]: Phone
+                          - generic [ref=e357]: "+12245952729"
+                    - generic [ref=e358]:
+                      - heading "Business address" [level=4] [ref=e359]
+                      - generic [ref=e360]:
+                        - generic [ref=e361]:
+                          - generic [ref=e362]: Customer name
+                          - generic [ref=e363]: Allyexporter LLC
+                        - generic [ref=e364]:
+                          - generic [ref=e365]: Street
+                          - generic [ref=e366]: 130 Old Oak Drive
+                        - generic [ref=e367]:
+                          - generic [ref=e368]: Street 2 / Unit
+                          - generic [ref=e369]: APT 247
+                        - generic [ref=e370]:
+                          - generic [ref=e371]: City, State ZIP
+                          - generic [ref=e372]: Buffalo Grove, IL 60089
+                        - generic [ref=e373]:
+                          - generic [ref=e374]: Country
+                          - generic [ref=e375]: US
+                    - generic [ref=e376]:
+                      - heading "Campaign content" [level=4] [ref=e377]
+                      - generic [ref=e378]:
+                        - generic [ref=e379]:
+                          - generic [ref=e380]: Use case
+                          - generic [ref=e381]: MIXED
+                        - generic [ref=e382]:
+                          - generic [ref=e383]: Embedded links
+                          - generic [ref=e384]: "No"
+                        - generic [ref=e385]:
+                          - generic [ref=e386]: Embedded phone
+                          - generic [ref=e387]: "No"
+                      - generic [ref=e388]:
+                        - generic [ref=e389]:
+                          - generic [ref=e390]: Description
+                          - paragraph [ref=e391]: Fairstone Dental Smile sends a single appointment follow-up text message to a patient who called the clinic and did not reach the office. The message helps the patient request an appointment or a callback. Messages are sent through the Missed Calls Dental software platform, but the communication is from Fairstone Dental Smile. Volume is low and strictly tied to the patient's own inbound phone call.
+                        - generic [ref=e392]:
+                          - generic [ref=e393]: Opt-in / message flow
+                          - paragraph [ref=e394]: Consumers provide consent by placing a phone call to the dental clinic's own published business phone number and not reaching staff. The clinic's public Privacy Policy and SMS Terms pages disclose that a one-time missed-call follow-up text may be sent to the number that called. No marketing list and no third-party data is used. Consumers can reply STOP at any time to opt out, and HELP for assistance. Messaging is one-to-one and triggered only by the consumer's own inbound call to the business.
+                      - generic [ref=e395]:
+                        - generic [ref=e396]:
+                          - generic [ref=e397]: Sample message 1
+                          - generic [ref=e398]: Hi, this is Fairstone Dental Smile. We missed your call. Would you like us to help schedule an appointment? Reply STOP to opt out.
+                        - generic [ref=e399]:
+                          - generic [ref=e400]: Sample message 2
+                          - generic [ref=e401]: Hi, this is Fairstone Dental Smile. Sorry we missed you — reply here to request an appointment or a callback. Reply HELP for help, STOP to opt out.
+                - generic [ref=e402]:
+                  - generic [ref=e404]:
+                    - paragraph [ref=e405]: Local senders
+                    - heading "Local senders included" [level=3] [ref=e406]
+                    - paragraph [ref=e407]: These local numbers will be attached as A2P campaign senders. Toll-free numbers are excluded.
+                  - generic [ref=e408]:
+                    - generic [ref=e409]:
+                      - generic [ref=e410]:
+                        - generic [ref=e411]: "+12244009986"
+                        - generic [ref=e412]: Included
+                      - generic [ref=e413]:
+                        - generic [ref=e414]:
+                          - generic [ref=e415]: PN SID
+                          - generic [ref=e416]: PNcfa04ebbb3c99d346473979781eb8785
+                        - generic [ref=e417]:
+                          - generic [ref=e418]: Included in this submission
+                          - generic [ref=e420]: "Yes"
+                    - generic [ref=e421]:
+                      - generic [ref=e422]:
+                        - generic [ref=e423]: "+12243442685"
+                        - generic [ref=e424]: Included
+                      - generic [ref=e425]:
+                        - generic [ref=e426]:
+                          - generic [ref=e427]: PN SID
+                          - generic [ref=e428]: PN04b5bd6be9a95f26412c58bafea04512
+                        - generic [ref=e429]:
+                          - generic [ref=e430]: Included in this submission
+                          - generic [ref=e432]: "Yes"
+                - group [ref=e433]:
+                  - generic "▸ Twilio technical wiring SIDs, policy references, and generated resources used by the Twilio API." [ref=e434] [cursor=pointer]:
+                    - text: ▸
+                    - generic [ref=e436]:
+                      - generic [ref=e437]: Twilio technical wiring
+                      - generic [ref=e438]: SIDs, policy references, and generated resources used by the Twilio API.
+                - group [ref=e439]:
+                  - generic "▾ Internal diagnostics — not submitted to Twilio 2 coverage warnings · last sync 6/7/2026, 5:17:57 PM These values are for platform-admin troubleshooting only and are not sent in the Twilio approval payload." [ref=e440] [cursor=pointer]:
+                    - text: ▾
+                    - generic [ref=e442]:
+                      - generic [ref=e443]: Internal diagnostics — not submitted to Twilio
+                      - generic [ref=e444]: 2 coverage warnings · last sync 6/7/2026, 5:17:57 PM
+                      - generic [ref=e445]: These values are for platform-admin troubleshooting only and are not sent in the Twilio approval payload.
+                  - generic [ref=e446]:
+                    - generic [ref=e447]:
+                      - generic [ref=e448]:
+                        - heading "Platform and readiness state" [level=4] [ref=e449]
+                        - generic [ref=e450]:
+                          - generic [ref=e451]:
+                            - generic [ref=e452]: Real submission platform state
+                            - generic [ref=e454]: Disabled
+                          - generic [ref=e455]:
+                            - generic [ref=e456]: Live armed state
+                            - generic [ref=e458]: Not armed
+                          - generic [ref=e459]:
+                            - generic [ref=e460]: Messaging Service status
+                            - generic [ref=e461]: Verified
+                          - generic [ref=e462]:
+                            - generic [ref=e463]: A2P brand status
+                            - generic [ref=e464]: Failed
+                          - generic [ref=e465]:
+                            - generic [ref=e466]: A2P campaign status
+                            - generic [ref=e467]: Unknown
+                          - generic [ref=e468]:
+                            - generic [ref=e469]: Last readiness sync
+                            - generic [ref=e470]: 6/7/2026, 5:17:57 PM
+                          - generic [ref=e471]:
+                            - generic [ref=e472]: Launch readiness blocker
+                            - generic [ref=e473]: A2p Brand Not Verified
+                      - generic [ref=e474]:
+                        - heading "Per-number coverage diagnostics" [level=4] [ref=e475]
+                        - generic [ref=e476]:
+                          - generic [ref=e477]:
+                            - generic [ref=e478]:
+                              - generic [ref=e479]: "+12244009986"
+                              - generic [ref=e480]: Not in Messaging Service
+                            - generic [ref=e481]:
+                              - generic [ref=e482]:
+                                - generic [ref=e483]: PN SID
+                                - generic: PNcfa04ebbb3c99d346473979781eb8785
+                              - generic [ref=e484]:
+                                - generic [ref=e485]: Current coverage
+                                - generic: Not in Messaging Service
+                              - generic [ref=e486]:
+                                - generic [ref=e487]: Messaging Service sender status
+                                - generic: Missing
+                              - generic [ref=e488]:
+                                - generic [ref=e489]: A2P campaign coverage
+                                - generic: Missing
+                              - generic [ref=e490]:
+                                - generic [ref=e491]: Eligible for live SMS
+                                - generic [ref=e492]: "No"
+                              - generic [ref=e493]:
+                                - generic [ref=e494]: Launch blocking reason
+                                - generic: Number Not In Messaging Service
+                              - generic [ref=e495]:
+                                - generic [ref=e496]: Last synced
+                                - generic: 6/7/2026, 5:17:57 PM
+                          - generic [ref=e497]:
+                            - generic [ref=e498]:
+                              - generic [ref=e499]: "+12243442685"
+                              - generic [ref=e500]: Not in Messaging Service
+                            - generic [ref=e501]:
+                              - generic [ref=e502]:
+                                - generic [ref=e503]: PN SID
+                                - generic: PN04b5bd6be9a95f26412c58bafea04512
+                              - generic [ref=e504]:
+                                - generic [ref=e505]: Current coverage
+                                - generic: Not in Messaging Service
+                              - generic [ref=e506]:
+                                - generic [ref=e507]: Messaging Service sender status
+                                - generic: Missing
+                              - generic [ref=e508]:
+                                - generic [ref=e509]: A2P campaign coverage
+                                - generic: Missing
+                              - generic [ref=e510]:
+                                - generic [ref=e511]: Eligible for live SMS
+                                - generic [ref=e512]: "No"
+                              - generic [ref=e513]:
+                                - generic [ref=e514]: Launch blocking reason
+                                - generic: Number Not In Messaging Service
+                              - generic [ref=e515]:
+                                - generic [ref=e516]: Last synced
+                                - generic: 6/7/2026, 5:17:57 PM
+                    - generic [ref=e517]:
+                      - heading "Warnings" [level=4] [ref=e518]
+                      - list [ref=e519]:
+                        - listitem [ref=e520]: One or more numbers are not yet covered by the Messaging Service or the A2P campaign. They will show as “Not covered yet” until provider approval and sender coverage are verified.
+                        - listitem [ref=e521]: Apply migration 20260611000100_a2p_submission_modes.sql before using separated dry-run, mock, and live A2P attempts.
+                        - listitem [ref=e522]: Mock A2P requires runtimeConfig.a2p.mockMessagingServiceSid configured to an empty Messaging Service without senders.
+                        - listitem [ref=e523]: "Brand registration failed. Brand Registration Feedback: The submitted US EIN is invalid.."
+                    - button "Run readiness sync" [ref=e525] [cursor=pointer]
+                - group [ref=e526]:
+                  - generic "▾ Submission history Blocked" [ref=e527] [cursor=pointer]:
+                    - text: ▾
+                    - generic [ref=e529]:
+                      - generic [ref=e530]: Submission history
+                      - generic [ref=e531]: Blocked
+                  - generic [ref=e533]:
+                    - generic [ref=e534]:
+                      - heading "Existing live submission" [level=4] [ref=e535]
+                      - generic [ref=e536]:
+                        - generic [ref=e537]:
+                          - generic [ref=e538]: Brand failure reason
+                          - generic [ref=e539]: "Brand Registration Feedback: The submitted US EIN is invalid."
+                        - generic [ref=e540]:
+                          - generic [ref=e541]: Last submitted
+                          - generic [ref=e542]: 6/7/2026, 2:18:22 PM
+                        - generic [ref=e543]:
+                          - generic [ref=e544]: Last updated
+                          - generic [ref=e545]: 6/7/2026, 5:18:02 PM
+                        - generic [ref=e546]:
+                          - generic [ref=e547]: Current step
+                          - generic [ref=e548]: Brand Registration Failed
+                        - generic [ref=e549]:
+                          - generic [ref=e550]: Provider status
+                          - generic [ref=e551]: Twilio Rejected · Twilio Rejected · FAILED
+                        - generic [ref=e552]:
+                          - generic [ref=e553]: Rejection reason
+                          - generic [ref=e554]: "Brand registration failed. Brand Registration Feedback: The submitted US EIN is invalid."
+                        - generic [ref=e555]:
+                          - generic [ref=e556]: Next action
+                          - generic [ref=e557]: Fix the clinic business identity/EIN. Do not resume A2P submission until the Brand failure is resolved.
+                      - button "Refresh live provider status" [ref=e559] [cursor=pointer]
+                    - generic [ref=e560]:
+                      - heading "Mock test submission" [level=4] [ref=e561]
+                      - generic [ref=e562]:
+                        - generic [ref=e563]:
+                          - generic [ref=e564]: Status
+                          - generic [ref=e565]: Not started
+                        - generic [ref=e566]:
+                          - generic [ref=e567]: Next action
+                          - generic [ref=e568]: Use Mock A2P to create separate test-only provider resources.
+            - text: ▸ ▸ ▸
+  - alert [ref=e185]

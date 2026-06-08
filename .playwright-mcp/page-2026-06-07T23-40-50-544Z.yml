@@ -1,0 +1,181 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]: Missed Calls Dental · Admin
+      - navigation "Admin sections" [ref=e5]:
+        - link "Overview" [ref=e6] [cursor=pointer]:
+          - /url: /admin
+        - link "Clinics" [ref=e7] [cursor=pointer]:
+          - /url: /admin/clinics
+      - generic [ref=e8]:
+        - generic [ref=e9]: allyexporter@gmail.com
+        - button "Sign out" [ref=e10] [cursor=pointer]
+    - main [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]:
+            - paragraph [ref=e15]:
+              - link "← Clinics" [ref=e16] [cursor=pointer]:
+                - /url: /admin/clinics
+            - heading "Fairstone Dental Smile" [level=1] [ref=e17]
+            - generic "Clinic metadata" [ref=e18]:
+              - generic [ref=e19]:
+                - term [ref=e20]: Owner
+                - definition [ref=e21]: livedealsmart@gmail.com
+              - generic [ref=e22]:
+                - term [ref=e23]: Setup
+                - definition [ref=e24]: Details completed
+              - generic [ref=e25]:
+                - term [ref=e26]: Updated
+                - definition [ref=e27]: 6/7/2026
+          - generic [ref=e28]:
+            - link "Diagnostics" [ref=e29] [cursor=pointer]:
+              - /url: /admin/clinics/f37f24a1-070f-436b-b803-956f55466093/events
+            - link "Public page" [ref=e30] [cursor=pointer]:
+              - /url: https://app.missedcallsdental.com/business/fairstone-dental-smile
+        - status [ref=e31]:
+          - generic [ref=e32]:
+            - generic [ref=e33]: "Launch blocked: SMS approval not active"
+            - generic [ref=e34]: Wait for active SMS approval before launching SMS recovery.
+          - button "Go to SMS approval" [ref=e35] [cursor=pointer]
+        - generic [ref=e36]:
+          - navigation [ref=e37]:
+            - tablist "Clinic sections" [ref=e38]:
+              - tab "Phone number Assigned" [selected] [ref=e39] [cursor=pointer]:
+                - generic [ref=e41]: Phone number
+                - generic [ref=e42]: Assigned
+              - tab "Business profile Complete" [ref=e43] [cursor=pointer]:
+                - generic [ref=e45]: Business profile
+                - generic [ref=e46]: Complete
+              - tab "SMS approval Ready" [ref=e47] [cursor=pointer]:
+                - generic [ref=e49]: SMS approval
+                - generic [ref=e50]: Ready
+              - tab "A2P review Review" [ref=e51] [cursor=pointer]:
+                - generic [ref=e53]: A2P review
+                - generic [ref=e54]: Review
+              - tab "Billing Connected" [ref=e55] [cursor=pointer]:
+                - generic [ref=e57]: Billing
+                - generic [ref=e58]: Connected
+              - tab "SMS behavior Read-only" [ref=e59] [cursor=pointer]:
+                - generic [ref=e61]: SMS behavior
+                - generic [ref=e62]: Read-only
+              - tab "Admin tools" [ref=e63] [cursor=pointer]:
+                - generic [ref=e65]: Admin tools
+          - generic [ref=e66]:
+            - tabpanel "Phone number Assigned" [ref=e67]:
+              - generic [ref=e68]:
+                - heading "Phone number" [level=2] [ref=e69]
+                - generic [ref=e70]: Assigned
+              - generic [ref=e71]:
+                - generic [ref=e72]:
+                  - generic [ref=e73]:
+                    - generic [ref=e74]: "+12244009986"
+                    - generic [ref=e75]:
+                      - generic [ref=e76]: Office texting
+                      - generic [ref=e77]: Active
+                  - generic [ref=e78]:
+                    - generic [ref=e79]:
+                      - generic [ref=e80]: Provider reference
+                      - generic [ref=e81]: …eb8785
+                    - generic [ref=e82]:
+                      - generic [ref=e83]: Assigned
+                      - generic [ref=e84]: 6/5/2026, 10:20:56 AM
+                - generic [ref=e85]:
+                  - generic [ref=e86]:
+                    - generic [ref=e87]: "+12243442685"
+                    - generic [ref=e88]:
+                      - generic [ref=e89]: Office texting
+                      - generic [ref=e90]: Active
+                  - generic [ref=e91]:
+                    - generic [ref=e92]:
+                      - generic [ref=e93]: Provider reference
+                      - generic [ref=e94]: …a04512
+                    - generic [ref=e95]:
+                      - generic [ref=e96]: Assigned
+                      - generic [ref=e97]: 6/5/2026, 6:03:55 PM
+              - generic [ref=e98]:
+                - generic [ref=e99]:
+                  - generic [ref=e100]: Local number status
+                  - generic [ref=e101]: Assigned
+                - generic [ref=e102]:
+                  - generic [ref=e103]: SMS recovery gate
+                  - generic [ref=e105]: Disabled
+                - generic [ref=e106]:
+                  - generic [ref=e107]: Global SMS mode
+                  - generic [ref=e108]: Owner test
+              - generic [ref=e109]:
+                - generic [ref=e110]:
+                  - heading "Number operations" [level=3] [ref=e111]
+                  - generic [ref=e112]: Purchasing allowed
+                - generic [ref=e113]:
+                  - generic [ref=e114]:
+                    - generic [ref=e115]: Numbers used
+                    - generic [ref=e116]: 2 of 5 held · 2 active
+                  - generic [ref=e117]:
+                    - generic [ref=e118]: Additional billed quantity
+                    - generic [ref=e119]: "1"
+                  - generic [ref=e120]:
+                    - generic [ref=e121]: Billing status
+                    - generic [ref=e122]: active
+                  - generic [ref=e123]:
+                    - generic [ref=e124]: Trial
+                    - generic [ref=e125]: 6/5/2026, 10:20:56 AM → 6/26/2026, 10:20:56 AM
+                  - generic [ref=e126]:
+                    - generic [ref=e127]: Paid plan started
+                    - generic [ref=e128]: 6/5/2026, 4:14:24 PM
+                  - generic [ref=e129]:
+                    - generic [ref=e130]: Subscription
+                    - generic [ref=e131]: Present
+                - generic [ref=e132]:
+                  - button "Revoke new purchases" [ref=e133] [cursor=pointer]
+                  - generic [ref=e134]:
+                    - generic [ref=e135]: Limit (1–100)
+                    - textbox "Limit (1–100)" [ref=e136]: "5"
+                  - button "Set limit" [ref=e137] [cursor=pointer]
+                - generic [ref=e138]:
+                  - generic [ref=e139]:
+                    - generic [ref=e140]:
+                      - generic [ref=e141]: "+12244009986"
+                      - generic [ref=e142]:
+                        - generic [ref=e143]: included
+                        - generic [ref=e144]: owner_self_service
+                        - generic [ref=e145]: Active
+                    - generic [ref=e146]:
+                      - generic [ref=e147]:
+                        - generic [ref=e148]: Monthly
+                        - generic [ref=e149]: $0
+                      - generic [ref=e150]:
+                        - generic [ref=e151]: Provider reference
+                        - generic [ref=e152]: …eb8785
+                      - generic [ref=e153]:
+                        - generic [ref=e154]: Activated
+                        - generic [ref=e155]: 6/5/2026, 10:20:56 AM
+                    - button "Suspend number" [ref=e157] [cursor=pointer]
+                  - generic [ref=e158]:
+                    - generic [ref=e159]:
+                      - generic [ref=e160]: "+12243442685"
+                      - generic [ref=e161]:
+                        - generic [ref=e162]: additional
+                        - generic [ref=e163]: owner_self_service
+                        - generic [ref=e164]: Active
+                    - generic [ref=e165]:
+                      - generic [ref=e166]:
+                        - generic [ref=e167]: Monthly
+                        - generic [ref=e168]: $20
+                      - generic [ref=e169]:
+                        - generic [ref=e170]: Provider reference
+                        - generic [ref=e171]: …a04512
+                      - generic [ref=e172]:
+                        - generic [ref=e173]: Activated
+                        - generic [ref=e174]: 6/5/2026, 6:03:55 PM
+                    - button "Suspend number" [ref=e176] [cursor=pointer]
+                - paragraph [ref=e177]: Suspend keeps the number assigned (no Twilio release) and still counts toward the limit and additional-number billing quantity.
+                - group [ref=e178]:
+                  - generic "▸ Recent purchase attempts" [ref=e179] [cursor=pointer]
+                - group [ref=e180]:
+                  - generic "▸ Legacy number requests (2)" [ref=e181] [cursor=pointer]
+              - generic [ref=e182]:
+                - paragraph [ref=e183]: Owner requested 2 numbers — review, then add through the normal flow.
+                - button "Add number" [ref=e184] [cursor=pointer]
+            - text: ▸ ▾ ▾ ▸ ▸ ▸
+  - alert [ref=e185]
