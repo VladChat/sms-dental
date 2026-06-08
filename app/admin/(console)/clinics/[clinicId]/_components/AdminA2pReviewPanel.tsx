@@ -388,21 +388,17 @@ function buildChecklist(pkg: A2pReviewPackage, validations: A2pValidationResult[
 }
 
 function diagnosticsSummary(pkg: A2pReviewPackage): string {
-  const warningCount = pkg.internalDiagnostics.numberDiagnostics.filter(
-    (number) => number.coverageDisplay !== "covered",
-  ).length;
-  const stale = pkg.internalDiagnostics.numberDiagnostics.some((number) => number.coverageDisplay === "stale");
-  const lastSync =
-    pkg.internalDiagnostics.clinicReadiness?.lastSyncedAt ??
-    pkg.internalDiagnostics.numberDiagnostics.find((number) => number.lastSyncedAt)?.lastSyncedAt ??
-    null;
-
-  if (!pkg.readinessAvailable) return "Readiness data unavailable";
-  if (stale) return `Readiness data stale${lastSync ? ` · last sync ${fmtDateTime(lastSync)}` : ""}`;
-  if (warningCount > 0) {
-    return `${warningCount} coverage ${warningCount === 1 ? "warning" : "warnings"}${lastSync ? ` · last sync ${fmtDateTime(lastSync)}` : ""}`;
+  if (!pkg.readinessAvailable) return "Readiness data unavailable — run readiness sync";
+  const diags = pkg.internalDiagnostics.numberDiagnostics;
+  const problems = diags.filter((number) => number.coverageDisplay !== "covered");
+  if (problems.length === 0) {
+    return diags.length > 0 ? "All numbers covered · no blocking diagnostics" : "No blocking diagnostics";
   }
-  return "No blocking diagnostics";
+  // Lead with the count and the dominant issue (e.g. "2 coverage warnings ·
+  // not in Messaging Service") so the collapsed card already explains itself.
+  const count = problems.length;
+  const issue = COVERAGE_LABEL[problems[0]!.coverageDisplay];
+  return `${count} coverage ${count === 1 ? "warning" : "warnings"} · ${issue.toLowerCase()}`;
 }
 
 function buildSubmissionHistory(pkg: A2pReviewPackage): SubmissionHistorySummary {
@@ -707,11 +703,14 @@ export function AdminA2pReviewPanel({
   const technicalOpen =
     (sub.status === "failed" || sub.status === "blocked") &&
     Boolean(sub.lastErrorCode || sub.lastErrorMessage);
+  // Diagnostics stay collapsed by default. They auto-open ONLY for a real
+  // provider failure/rejection that needs attention, or when readiness data is
+  // unavailable. A merely-not-ready clinic (canSubmitNow === false) does not
+  // force the raw diagnostics open — coverage warnings surface as a compact
+  // summary on the collapsed card instead.
   const diagnosticsOpen =
-    (!canSubmitNow && !isApproved) ||
-    sub.status === "failed" ||
-    sub.status === "blocked" ||
-    sub.status === "rejected" ||
+    ((sub.status === "failed" || sub.status === "blocked" || sub.status === "rejected") &&
+      Boolean(sub.lastErrorCode || sub.lastErrorMessage || sub.rejectionReason || sub.brandFailureReason)) ||
     !pkg.readinessAvailable;
   const historyOpen =
     sub.status === "pending" ||
@@ -720,6 +719,10 @@ export function AdminA2pReviewPanel({
     sub.status === "blocked" ||
     sub.status === "rejected";
   const surfaceSync = shouldSurfaceReadinessSync(pkg);
+  // Platform readiness state is secondary. Hide it entirely when there is nothing
+  // synced and no platform flag is on (an all-"Not synced" block adds no action).
+  const showPlatformState =
+    Boolean(diagnostics.clinicReadiness) || auth.realSubmissionEnabled || auth.liveSubmitArmed;
 
   return (
     <div className="a2p-cc">
@@ -1067,20 +1070,6 @@ export function AdminA2pReviewPanel({
         )}
       </section>
 
-      <section id="a2p-messaging-behavior" className="a2p-cc-card">
-        <div className="a2p-cc-card-head">
-          <div>
-            <p className="a2p-cc-kicker">Read-only</p>
-            <h3 className="adm-subhead">Messaging behavior</h3>
-            <p className="t-helper" style={{ margin: "var(--space-1) 0 0" }}>
-              Recovery texts use fixed in-code templates. A repeat caller does not get another
-              recovery text within 24 hours (duplicate suppression). Live sending also requires a
-              verified A2P campaign and Messaging Service coverage for each active number.
-            </p>
-          </div>
-        </div>
-      </section>
-
       <A2pDisclosureCard
         id="a2p-technical-wiring"
         title="Twilio technical wiring"
@@ -1121,51 +1110,45 @@ export function AdminA2pReviewPanel({
         defaultOpen={diagnosticsOpen}
         tone={diagnosticsOpen ? "warning" : "diagnostic"}
       >
-        <div className="a2p-cc-section-grid">
-          <div className="a2p-cc-subcard">
-            <h4 className="adm-subhead">Platform and readiness state</h4>
+        <div className="a2p-cc-subcard">
+          <h4 className="adm-subhead">Number coverage</h4>
+          {diagnostics.numberDiagnostics.length === 0 ? (
+            <p className="t-body"><Muted>No local number diagnostics available.</Muted></p>
+          ) : (
+            <div className="a2p-cc-diagnostic-grid">
+              {diagnostics.numberDiagnostics.map((number) => (
+                <NumberDiagnosticCard key={number.twilioPhoneNumberSid ?? number.phoneNumber} n={number} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {showPlatformState && (
+          <details className="a2p-cc-tech-details a2p-cc-platform-state">
+            <summary>Platform readiness state</summary>
             <div className="a2p-cc-facts">
               <FactRow
+                stacked
                 label="Real submission platform state"
                 value={<Badge tone={auth.realSubmissionEnabled ? "info" : "neutral"}>{auth.realSubmissionEnabled ? "Enabled" : "Disabled"}</Badge>}
               />
               <FactRow
+                stacked
                 label="Live armed state"
                 value={<Badge tone={auth.liveSubmitArmed ? "success" : "neutral"}>{auth.liveSubmitArmed ? "Armed" : "Not armed"}</Badge>}
               />
-              <FactRow
-                label="Messaging Service status"
-                value={diagnostics.clinicReadiness ? humanizeToken(diagnostics.clinicReadiness.messagingServiceStatus) : "Not synced"}
-              />
-              <FactRow
-                label="A2P brand status"
-                value={formatBrandStatusForDiagnostics(diagnostics.clinicReadiness?.brandStatus ?? null, sub.status)}
-              />
-              <FactRow
-                label="A2P campaign status"
-                value={diagnostics.clinicReadiness ? humanizeToken(diagnostics.clinicReadiness.campaignStatus) : "Not synced"}
-              />
-              <FactRow label="Last readiness sync" value={fmtDateTime(diagnostics.clinicReadiness?.lastSyncedAt ?? null)} />
-              <FactRow
-                label="Launch readiness blocker"
-                value={diagnostics.clinicReadiness?.blockingReason ? humanizeToken(diagnostics.clinicReadiness.blockingReason) : "None"}
-              />
+              {diagnostics.clinicReadiness && (
+                <>
+                  <FactRow stacked label="Messaging Service status" value={humanizeToken(diagnostics.clinicReadiness.messagingServiceStatus)} />
+                  <FactRow stacked label="A2P brand status" value={formatBrandStatusForDiagnostics(diagnostics.clinicReadiness.brandStatus, sub.status)} />
+                  <FactRow stacked label="A2P campaign status" value={humanizeToken(diagnostics.clinicReadiness.campaignStatus)} />
+                  <FactRow stacked label="Last readiness sync" value={fmtDateTime(diagnostics.clinicReadiness.lastSyncedAt)} />
+                  <FactRow stacked label="Launch readiness blocker" value={diagnostics.clinicReadiness.blockingReason ? humanizeToken(diagnostics.clinicReadiness.blockingReason) : "None"} />
+                </>
+              )}
             </div>
-          </div>
-
-          <div className="a2p-cc-subcard">
-            <h4 className="adm-subhead">Per-number coverage diagnostics</h4>
-            {diagnostics.numberDiagnostics.length === 0 ? (
-              <p className="t-body"><Muted>No local number diagnostics available.</Muted></p>
-            ) : (
-              <div className="a2p-cc-diagnostic-grid">
-                {diagnostics.numberDiagnostics.map((number) => (
-                  <NumberDiagnosticCard key={number.twilioPhoneNumberSid ?? number.phoneNumber} n={number} />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+          </details>
+        )}
 
         {diagnostics.warnings.length > 0 && (
           <div className="a2p-cc-warning-panel">
@@ -1413,6 +1396,10 @@ function CampaignCard({
           </div>
         ))}
       </div>
+      <p className="a2p-cc-guardrails t-small">
+        <span className="a2p-cc-guardrails-label">Operational guardrails:</span>{" "}
+        Fixed recovery template · no repeat recovery text within 24 hours · STOP/HELP supported
+      </p>
     </div>
   );
 }
@@ -1431,15 +1418,18 @@ function IncludedSenderCard({ sender }: { sender: A2pIncludedSender }) {
     <div className="a2p-cc-sender-card">
       <div className="a2p-cc-sender-head">
         <span className="t-mono a2p-cc-wrap">{sender.phoneNumber}</span>
-        <Badge tone="success">Included</Badge>
+        <Badge tone={sender.includedInSubmission ? "success" : "neutral"}>
+          {sender.includedInSubmission ? "Included" : "Not included"}
+        </Badge>
       </div>
-      <div className="a2p-cc-facts">
-        <FactRow label="PN SID" value={sender.twilioPhoneNumberSid ? <span className="t-mono a2p-cc-wrap">{sender.twilioPhoneNumberSid}</span> : "Missing"} />
-        <FactRow
-          label="Included in this submission"
-          value={<Badge tone={sender.includedInSubmission ? "success" : "neutral"}>{sender.includedInSubmission ? "Yes" : "No"}</Badge>}
-        />
-      </div>
+      {sender.twilioPhoneNumberSid && (
+        <details className="a2p-cc-tech-details">
+          <summary>Show technical ID</summary>
+          <div className="a2p-cc-facts">
+            <TechId label="PN SID" value={sender.twilioPhoneNumberSid} />
+          </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -1457,6 +1447,33 @@ function ResourceCard({ title, fields }: { title: string; fields: A2pPayloadFiel
   );
 }
 
+// Plain-language next action for a number, derived from its coverage state.
+function coverageNextAction(coverage: NumberCoverageDisplay): string {
+  switch (coverage) {
+    case "covered":
+      return "No action required.";
+    case "not_in_messaging_service":
+      return "Add this number to the Messaging Service, then run readiness sync.";
+    case "not_campaign_covered":
+      return "Complete/refresh A2P campaign sender coverage, then run readiness sync.";
+    case "blocked":
+      return "Resolve the launch blocker before enabling live SMS.";
+    case "readiness_missing":
+    case "readiness_unavailable":
+    case "stale":
+    case "error":
+    case "unknown":
+    default:
+      return "Run readiness sync and review provider status.";
+  }
+}
+
+// Plain-language meaning of the current state for an operator.
+function coverageMeaning(n: A2pReviewNumber): string {
+  if (n.coverageDisplay === "covered") return "Ready to send once SMS is enabled.";
+  return n.eligibleForLiveSms ? "Verified for live SMS." : "This number cannot send live SMS yet.";
+}
+
 function NumberDiagnosticCard({ n }: { n: A2pReviewNumber }) {
   const tone: Tone = n.coverageDisplay === "covered" ? "success" : "warning";
   return (
@@ -1466,26 +1483,52 @@ function NumberDiagnosticCard({ n }: { n: A2pReviewNumber }) {
         <Badge tone={tone}>{COVERAGE_LABEL[n.coverageDisplay]}</Badge>
       </div>
       <div className="a2p-cc-facts">
-        <FactRow label="PN SID" value={n.twilioPhoneNumberSid ? <span className="t-mono a2p-cc-wrap">{n.twilioPhoneNumberSid}</span> : "Missing"} />
-        <FactRow label="Current coverage" value={COVERAGE_LABEL[n.coverageDisplay]} />
-        <FactRow label="Messaging Service sender status" value={humanizeToken(n.messagingServiceSenderStatus)} />
-        <FactRow label="A2P campaign coverage" value={humanizeToken(n.a2pCampaignCoverageStatus)} />
-        <FactRow
-          label="Eligible for live SMS"
-          value={<Badge tone={n.eligibleForLiveSms ? "success" : "warning"}>{n.eligibleForLiveSms ? "Yes" : "No"}</Badge>}
-        />
-        <FactRow label="Launch blocking reason" value={n.blockingReason ? humanizeToken(n.blockingReason) : "None"} />
-        <FactRow label="Last synced" value={fmtDateTime(n.lastSyncedAt)} />
+        <FactRow stacked label="Status" value={COVERAGE_LABEL[n.coverageDisplay]} />
+        <FactRow stacked label="Meaning" value={coverageMeaning(n)} />
+        <FactRow stacked label="Next action" value={coverageNextAction(n.coverageDisplay)} />
+        <FactRow stacked label="Last synced" value={fmtDateTime(n.lastSyncedAt)} />
       </div>
+      <details className="a2p-cc-tech-details">
+        <summary>Show technical IDs</summary>
+        <div className="a2p-cc-facts">
+          <TechId label="PN SID" value={n.twilioPhoneNumberSid ?? "Missing"} />
+          <FactRow stacked label="Messaging Service sender status" value={humanizeToken(n.messagingServiceSenderStatus)} />
+          <FactRow stacked label="A2P campaign coverage (raw)" value={humanizeToken(n.a2pCampaignCoverageStatus)} />
+          <FactRow stacked label="Blocking reason" value={n.blockingReason ? humanizeToken(n.blockingReason) : "None"} />
+        </div>
+      </details>
     </div>
   );
 }
 
-function FactRow({ label, value }: { label: string; value: React.ReactNode }) {
+function FactRow({
+  label,
+  value,
+  stacked = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  // Stacked rows put the value on its own full-width line under the label. Used
+  // in diagnostic/technical areas so long values are never squeezed into a narrow
+  // right-hand column.
+  stacked?: boolean;
+}) {
   return (
-    <div className="a2p-cc-fact-row">
+    <div className={stacked ? "a2p-cc-fact-row is-stacked" : "a2p-cc-fact-row"}>
       <span className="a2p-cc-fact-label">{label}</span>
       <span className="a2p-cc-fact-value">{value}</span>
+    </div>
+  );
+}
+
+// A readable, full-width technical identifier (PN SID, Brand SID, …). The value
+// renders in a code-like block that wraps with overflow-wrap:anywhere — never a
+// narrow two-column row that wraps one character per line.
+function TechId({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="a2p-cc-tech-id">
+      <span className="a2p-cc-tech-id-label">{label}</span>
+      <code className="a2p-cc-tech-id-value">{value}</code>
     </div>
   );
 }

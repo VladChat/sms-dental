@@ -769,12 +769,47 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
   border-radius:14px 14px 14px 6px; background:#FFFFFF; color:var(--text-body); font:var(--body-sm);
   box-shadow:var(--shadow-xs);
 }
-.a2p-cc-sender-grid, .a2p-cc-diagnostic-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--space-3); }
+/* Local-sender cards are compact (phone + included badge + collapsed tech ID),
+   so an auto-fit grid with a safe min width is fine. */
+.a2p-cc-sender-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap:var(--space-3); }
+/* Diagnostic number cards carry stacked status/meaning/action plus technical IDs.
+   Keep them ONE column at every width so values never wrap one character per line
+   and two SID-bearing cards never sit cramped side by side. */
+.a2p-cc-diagnostic-grid { display:grid; grid-template-columns:1fr; gap:var(--space-3); }
 .a2p-cc-sender-card, .a2p-cc-diagnostic-card {
   display:grid; gap:var(--space-3); min-width:0; padding:var(--space-4);
   border:1px solid rgba(12,43,42,.08); border-radius:var(--r-md); background:rgba(255,255,255,.78);
 }
 .a2p-cc-sender-head, .a2p-cc-diagnostic-head { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-3); flex-wrap:wrap; }
+
+/* Stacked fact row: label above, value on its own full-width line, left-aligned.
+   Used in diagnostic/technical areas so long values are never squeezed. */
+.a2p-cc-fact-row.is-stacked { grid-template-columns:1fr; gap:var(--space-1); }
+.a2p-cc-fact-row.is-stacked .a2p-cc-fact-value { text-align:left; max-width:100%; min-width:0; }
+
+/* Collapsible technical-detail block (PN SIDs, platform readiness state). */
+.a2p-cc-tech-details { border-top:1px solid rgba(12,43,42,.08); padding-top:var(--space-2); }
+.a2p-cc-tech-details > summary { list-style:none; cursor:pointer; font:var(--helper); color:var(--text-muted); }
+.a2p-cc-tech-details > summary::-webkit-details-marker { display:none; }
+.a2p-cc-tech-details > summary::before { content:"▸"; margin-right:var(--space-2); color:var(--text-muted); }
+.a2p-cc-tech-details[open] > summary::before { content:"▾"; }
+.a2p-cc-platform-state { margin-top:var(--space-1); }
+
+/* Full-width readable technical identifier (never a narrow two-column value
+   that wraps one character per line). */
+.a2p-cc-tech-id { display:grid; gap:2px; padding:var(--space-2) 0; min-width:0; }
+.a2p-cc-tech-id-label { font:var(--helper); color:var(--text-muted); }
+.a2p-cc-tech-id-value {
+  display:block; width:100%; max-width:100%; min-width:0;
+  font:var(--body-sm); font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  color:var(--text-body); overflow-wrap:anywhere; word-break:break-word;
+  background:rgba(12,43,42,.05); border:1px solid rgba(12,43,42,.08);
+  border-radius:var(--r-sm, 6px); padding:var(--space-2) var(--space-3);
+}
+
+/* Compact operational-guardrails line inside Campaign content. */
+.a2p-cc-guardrails { margin:var(--space-2) 0 0; color:var(--text-secondary); overflow-wrap:anywhere; }
+.a2p-cc-guardrails-label { font-weight:700; color:var(--text); }
 .a2p-cc-warning-panel {
   display:grid; gap:var(--space-2); padding:var(--space-4); border:1px solid var(--warning-border);
   border-radius:var(--r-md); background:var(--warning-bg);
@@ -799,7 +834,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .a2p-cc .adm-blocked { margin-top:0; }
 
 @media (max-width: 960px) {
-  .a2p-cc-status-grid, .a2p-cc-section-grid, .a2p-cc-copy-grid, .a2p-cc-sender-grid, .a2p-cc-diagnostic-grid {
+  .a2p-cc-status-grid, .a2p-cc-section-grid, .a2p-cc-copy-grid {
     grid-template-columns:1fr;
   }
 }
