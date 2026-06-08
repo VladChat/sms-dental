@@ -13,6 +13,7 @@
   "include": [
     "tests/**/*.ts",
     "lib/a2p/lifecycle.ts",
+    "lib/a2p/admin-view.ts",
     "lib/a2p/types.ts",
     "lib/twilio/platform-customer-profile.ts",
     "lib/twilio/a2p-recovery.ts",

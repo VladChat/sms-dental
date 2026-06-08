@@ -21,6 +21,7 @@ import type {
   AdminClinicEvents,
 } from "../../../../../../lib/db/admin/types";
 import type { A2pReviewPackage } from "../../../../../../lib/a2p/types";
+import { buildLiveA2pApprovalView, buildMockA2pTestView } from "../../../../../../lib/a2p/admin-view";
 import { AdminClinicActions } from "./AdminClinicActions";
 import { AdminBusinessProfileForm } from "./AdminBusinessProfileForm";
 import { AdminA2pForm } from "./AdminA2pForm";
@@ -60,7 +61,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "phone", label: "Phone number" },
   { id: "business", label: "Business profile" },
   { id: "sms", label: "SMS approval" },
-  { id: "a2p", label: "A2P review" },
+  { id: "a2p", label: "A2P / 10DLC" },
   { id: "billing", label: "Billing" },
   { id: "behavior", label: "SMS behavior" },
   { id: "admin", label: "Admin tools" },
@@ -708,13 +709,14 @@ function sectionStatuses(
 }
 
 function a2pNavStatus(review: A2pReviewPackage): { text: string; tone: Tone } {
-  const status = review.internalDiagnostics.submission.status;
-  if (status === "approved") return { text: "Approved", tone: "success" };
-  if (status === "dry_run_reviewed" || status === "ready_for_manual_submission") {
-    return { text: "Reviewed", tone: "success" };
-  }
-  if (status === "submitted" || status === "pending") return { text: "Submitted", tone: "info" };
-  if (status === "rejected") return { text: "Rejected", tone: "warning" };
+  // Show the LIVE carrier state first (the only thing that gates real SMS).
+  // Mock completion is reported separately and never as "approved".
+  const live = buildLiveA2pApprovalView(review);
+  const mock = buildMockA2pTestView(review);
+  if (live.brandFailed) return { text: "Live failed", tone: "warning" };
+  if (live.status === "approved") return { text: "Live approved", tone: "success" };
+  if (live.status === "pending") return { text: "In review", tone: "info" };
+  if (mock.testComplete) return { text: "Mock done", tone: "neutral" };
   if (!review.readinessAvailable) return { text: "Readiness off", tone: "warning" };
   if (review.missingFields.length > 0) return { text: "Missing info", tone: "warning" };
   if (review.authorizationState.submitEligible) return { text: "Ready", tone: "info" };

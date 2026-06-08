@@ -5463,3 +5463,58 @@ Intentionally not done in this task:
 - no Twilio delete/revoke action
 - no phone-number attachment changes
 - no SMS enablement change
+
+---
+
+## 2026-06-08 — Admin A2P/10DLC area restructured into workflow sections
+
+Reworked the platform-admin A2P review from one long mixed-concern page into five
+clear sub-tab sections inside the clinic console "A2P / 10DLC" tab: Overview,
+Mock test, Live approval, Launch readiness, and Diagnostics. The single long
+"A2P review" wall (decision card + checklist + provider payload + senders +
+technical wiring + diagnostics + history all stacked, several open by default)
+was unusable. No routing change — implemented as in-panel pill sub-tabs.
+
+Code:
+
+- `lib/a2p/admin-view.ts` (new) — pure, client-safe view-model builders that
+  separate four previously-conflated meanings into independent fields:
+  `mockTestState`, `liveSubmissionState`, `realSmsLaunchState`, diagnostics.
+  Mock completeness is derived from PROVIDER statuses (Brand APPROVED/VERIFIED/
+  REGISTERED + Campaign verified), never from the record-level `status` (which is
+  "pending"/"awaiting_campaign_approval" and would wrongly read "carrier review").
+- `AdminA2pReviewPanel.tsx` — rebuilt into the five sections; all disclosures
+  (provider payload, technical wiring, internal diagnostics, submission history,
+  mock references) now default collapsed; long SIDs use the wrap class.
+- `AdminClinicConsole.tsx` — left-nav label "A2P review" → "A2P / 10DLC"; nav
+  chip now reports the LIVE state ("Live failed"/"Live approved"/"In review") and
+  reports mock separately as "Mock done", never as approval.
+- Tests: `tests/a2p-admin-view.test.ts` (new) — asserts mock-complete never marks
+  real SMS ready, live FAILED surfaces the EIN reason, QE campaign SID is labelled
+  a stored provider reference (no invented CM console SID), and contamination is
+  flagged.
+
+Durable data finding (read-only inspection of `clinic_sms_readiness` for
+Fairstone `f37f24a1-070f-436b-b803-956f55466093`):
+
+- The readiness record has `twilio_a2p_brand_sid =
+  BN588a99e6ecaf81cc0d8b3baad6cd7cdc` with `twilio_a2p_brand_status = approved` —
+  that is the MOCK Brand SID, while the LIVE Brand
+  `BNe8c3a43091282b3c14f3182da6e69bce` is FAILED. The readiness sync wrote a mock
+  test identifier into the live readiness record, so any UI that reads
+  `smsReadiness.brand*` as "live approval" is misleading.
+- Mitigation now in code: SMS launch readiness is derived ONLY from the live
+  submission record (live Brand approved + live Campaign verified) plus live
+  sender coverage. When readiness shows an approved brand but the live Brand is
+  not approved and a mock Brand is complete, the UI shows a safe note
+  ("Readiness data includes mock test identifiers …") and a TODO in Diagnostics.
+- TODO (not done here — needs a separate backend change + owner approval): scope
+  the readiness sync so mock Brand/Campaign resources never populate the live
+  `clinic_sms_readiness` record.
+
+Validation: `npm run typecheck` pass · `npm run test:a2p` pass (79 tests) ·
+`npm run build` pass.
+
+Intentionally not done: no live A2P submit, no live/mock Brand or Campaign
+creation, no Twilio mutation of any kind, no phone-number attachment, no SMS
+enablement. This was a UI/view-model refactor plus read-only DB inspection only.

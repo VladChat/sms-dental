@@ -697,6 +697,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .a2p-cc-tone-warning { border-color:var(--warning-border); }
 .a2p-cc-tone-info { border-color:var(--info-border); }
 .a2p-cc-tone-neutral { border-color:var(--border-strong); }
+.a2p-cc-tone-danger { border-color:var(--error-border); }
 .a2p-cc-stat-label { font:var(--helper); color:var(--text-muted); }
 .a2p-cc-stat-value { font:650 1rem/1.25 var(--font-display); color:var(--text); }
 .a2p-cc-stat-detail { font:var(--body-sm); color:var(--text-secondary); }
@@ -785,8 +786,28 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .a2p-cc-disclosure-body { display:grid; gap:var(--space-4); padding:0 var(--space-5) var(--space-5); }
 .a2p-cc .adm-blocked { margin-top:0; }
 
+/* A2P workflow sub-tabs (Overview / Mock / Live / Launch / Diagnostics) */
+.a2p-subtabs {
+  display:flex; gap:var(--space-2); flex-wrap:wrap; padding-bottom:var(--space-1);
+  border-bottom:1px solid var(--border);
+}
+.a2p-subtab {
+  appearance:none; cursor:pointer; padding:var(--space-2) var(--space-4);
+  border:1px solid var(--border-strong); border-radius:var(--r-pill); background:var(--surface);
+  color:var(--text-secondary); font:600 .85rem/1 var(--font-sans); white-space:nowrap;
+}
+.a2p-subtab:hover { background:var(--surface-2); color:var(--text); }
+.a2p-subtab.is-active {
+  background:var(--primary-soft); border-color:var(--primary-soft-border); color:var(--teal-700);
+}
+.a2p-subtab:focus-visible { outline:none; box-shadow:var(--shadow-focus-primary); }
+
+/* Overview: short, above-the-fold status cards + section links */
+.a2p-ov-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--space-3); }
+.a2p-ov-links { display:flex; gap:var(--space-2); flex-wrap:wrap; }
+
 @media (max-width: 960px) {
-  .a2p-cc-status-grid, .a2p-cc-section-grid, .a2p-cc-copy-grid, .a2p-cc-sender-grid, .a2p-cc-diagnostic-grid {
+  .a2p-cc-status-grid, .a2p-cc-section-grid, .a2p-cc-copy-grid, .a2p-cc-sender-grid, .a2p-cc-diagnostic-grid, .a2p-ov-grid {
     grid-template-columns:1fr;
   }
 }
