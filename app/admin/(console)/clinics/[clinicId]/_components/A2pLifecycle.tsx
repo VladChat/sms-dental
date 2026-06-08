@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import buildA2pLifecycleSteps from "../../../../../../lib/a2p/lifecycle";
 import type { A2pReviewPackage, A2pStoredSubmissionMode } from "../../../../../../lib/a2p/types";
 
 export function A2pLifecycle({ pkg, clinicId, selectedMode }: { pkg: A2pReviewPackage; clinicId: string; selectedMode: A2pStoredSubmissionMode; }) {
+  const router = useRouter();
   const [running, setRunning] = useState<string | null>(null);
   const [confirmMap, setConfirmMap] = useState<Record<string, boolean>>({});
   const [lastMsg, setLastMsg] = useState<string | null>(null);
@@ -32,10 +34,15 @@ export function A2pLifecycle({ pkg, clinicId, selectedMode }: { pkg: A2pReviewPa
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: stepId, confirm: false }),
+        body: JSON.stringify({ action: stepId, confirm: isRefresh ? false : confirmMap[stepId] === true }),
       });
       const json = await res.json();
       setLastMsg(json?.message ?? (json?.ok ? "OK" : "Unexpected response"));
+      // After a successful non-dry-run mutation, refresh server data so the
+      // lifecycle and review panel reflect the new provider state.
+      if (!isRefresh && json?.ok && json?.dryRun === false) {
+        router.refresh();
+      }
     } catch (err: any) {
       setLastMsg(String(err?.message ?? err));
     } finally {
