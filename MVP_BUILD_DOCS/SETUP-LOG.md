@@ -5608,3 +5608,38 @@ Commit: `fix: restore daily release cron for Vercel Hobby` (pushed to
 
 Note: confirms the Vercel project is on the **Hobby** plan. Sub-daily Vercel Cron
 requires Pro or above.
+
+---
+
+## 2026-06-12 — Applied phone-number Twilio purchase anchor migration (production)
+
+Applied the committed migration to the production Supabase project
+`qfjpvbvfvhbtebwivcdc` (`sms_dental`) using the documented additive SQL (no schema
+process invented; exact committed SQL only).
+
+Migration:
+
+```txt
+supabase/migrations/20260612000100_phone_number_twilio_purchased_at.sql
+```
+
+Production applied status: **applied** (was not present beforehand — pre-check
+returned 0 rows for the column).
+
+Verification (production, counts only — no raw phone numbers):
+
+- Column `clinic_phone_numbers.twilio_purchased_at`: `timestamp with time zone`,
+  `is_nullable = YES` (1 row in `information_schema.columns`). Matches expected.
+- Backfill: `total_rows = 3`, `rows_missing_twilio_purchased_at = 0`,
+  `rows_with_twilio_purchased_at = 3`. Backfill complete; no null anchors.
+- `https://app.missedcallsdental.com/api/health` → `{"ok":true,...}`.
+
+This unblocks the live remove/restore endpoints and number-purchase write paths
+that read/write `twilio_purchased_at` (deployed in `d46ed84`).
+
+Intentionally not done:
+
+- No code changed; the committed migration file matched production needs exactly.
+- No phone numbers released, rebilled, deactivated, or reclassified.
+- No `/account` Remove test on a real clinic (destructive; not approved).
+- No secrets, connection strings, or raw phone numbers printed.
