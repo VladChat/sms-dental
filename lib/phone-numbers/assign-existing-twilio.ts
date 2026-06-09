@@ -181,14 +181,22 @@ export async function assignExistingTwilioNumber(args: {
       // Serialize per clinic; re-check DB inside the lock to avoid double-assign.
       await tx`select 1 from public.clinics where id = ${args.clinicId} for update`;
 
-      const existing = await tx<{ removal_status: string }[]>`
-        select removal_status from public.clinic_phone_numbers
+      // A row already exists for this phone number. A DETACHED row (clinic
+      // assignment previously released, Twilio number kept) is reassignable — we
+      // update it in place to preserve the SID, twilio_purchased_at, and history.
+      // Any other existing state is blocked.
+      const existing = await tx<{ id: string; removal_status: string }[]>`
+        select id, removal_status from public.clinic_phone_numbers
         where phone_number = ${phoneNumber}
+        for update
         limit 1
       `;
+      let detachedRowId: string | null = null;
       if (existing[0]) {
-        if (existing[0].removal_status === "permanently_removed") return err("previously_removed");
-        return err("already_assigned");
+        const status = existing[0].removal_status;
+        if (status === "permanently_removed") return err("previously_removed");
+        if (status !== "detached") return err("already_assigned");
+        detachedRowId = existing[0].id;
       }
 
       // First version: only the clinic's INCLUDED toll-free slot. Adding a second
@@ -202,20 +210,59 @@ export async function assignExistingTwilioNumber(args: {
       `;
       if (tollFree.length > 0) return err("clinic_has_toll_free");
 
-      const rows = await tx<{ phone_number: string }[]>`
-        insert into public.clinic_phone_numbers
-          (clinic_id, phone_number, number_type, twilio_phone_number_sid, role, is_active,
-           source, billing_class, monthly_unit_amount_cents, currency,
-           purchased_by_profile_id, purchased_by_email, activated_at,
-           twilio_purchased_at, removal_status, twilio_release_status)
-        values
-          (${args.clinicId}, ${phoneNumber}, 'toll_free', ${sid}, 'office_texting', true,
-           'admin', 'included', 0, ${currency},
-           ${args.actorProfileId}, ${args.actorEmail}, now(),
-           ${purchasedAt}, 'active', 'not_required')
-        returning phone_number
-      `;
-      if (!rows[0]) throw new Error("insert returned no row");
+      let assignedRow: { phone_number: string } | undefined;
+      if (detachedRowId) {
+        // Reassign the detached row to the target clinic as its included number.
+        const rows = await tx<{ phone_number: string }[]>`
+          update public.clinic_phone_numbers set
+            clinic_id = ${args.clinicId},
+            is_active = true,
+            removal_status = 'active',
+            role = 'office_texting',
+            number_type = 'toll_free',
+            source = 'admin',
+            billing_class = 'included',
+            monthly_unit_amount_cents = 0,
+            currency = ${currency},
+            purchased_by_profile_id = ${args.actorProfileId},
+            purchased_by_email = ${args.actorEmail},
+            activated_at = now(),
+            twilio_phone_number_sid = ${sid},
+            twilio_purchased_at = coalesce(twilio_purchased_at, ${purchasedAt}),
+            twilio_release_status = 'not_required',
+            twilio_release_error = null,
+            twilio_released_at = null,
+            permanent_removal_at = null,
+            removal_requested_at = null,
+            removal_requested_by_profile_id = null,
+            removal_requested_by_email = null,
+            suspended_at = null,
+            suspended_by_profile_id = null,
+            suspension_reason = null,
+            restored_at = null,
+            restored_by_profile_id = null,
+            restored_by_email = null
+          where id = ${detachedRowId}
+          returning phone_number
+        `;
+        assignedRow = rows[0];
+      } else {
+        const rows = await tx<{ phone_number: string }[]>`
+          insert into public.clinic_phone_numbers
+            (clinic_id, phone_number, number_type, twilio_phone_number_sid, role, is_active,
+             source, billing_class, monthly_unit_amount_cents, currency,
+             purchased_by_profile_id, purchased_by_email, activated_at,
+             twilio_purchased_at, removal_status, twilio_release_status)
+          values
+            (${args.clinicId}, ${phoneNumber}, 'toll_free', ${sid}, 'office_texting', true,
+             'admin', 'included', 0, ${currency},
+             ${args.actorProfileId}, ${args.actorEmail}, now(),
+             ${purchasedAt}, 'active', 'not_required')
+          returning phone_number
+        `;
+        assignedRow = rows[0];
+      }
+      if (!assignedRow) throw new Error("assign returned no row");
 
       return {
         ok: true as const,

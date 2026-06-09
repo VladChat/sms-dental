@@ -122,7 +122,7 @@ export async function countHeldNumbers(clinicId: string): Promise<number> {
     select (
       (select count(*) from public.clinic_phone_numbers
          where clinic_id = ${clinicId}
-           and removal_status <> 'permanently_removed')
+           and removal_status not in ('permanently_removed', 'detached'))
       + (select count(*) from public.clinic_phone_number_purchase_attempts
            where clinic_id = ${clinicId}
              and status in ('twilio_purchased', 'billing_pending', 'reconciliation_required'))

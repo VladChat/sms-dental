@@ -2784,16 +2784,78 @@ How it works:
   client-supplied type/SID/price/config.
 - **First version supports toll-free only**, assigned as the clinic's **included**
   number (`source='admin'`, `billing_class='included'`, `monthly_unit_amount_cents=0`).
+- **Detached rows are reassignable:** if the selected number already has a
+  `clinic_phone_numbers` row in `removal_status='detached'` (see "Detach from
+  clinic" below), Assign **updates that row in place** to the target clinic
+  (`clinic_id`, `is_active=true`, `removal_status='active'`, `role='office_texting'`,
+  `number_type='toll_free'`, `billing_class='included'`, `monthly_unit_amount_cents=0`,
+  fresh `activated_at`, admin as purchaser), **preserving the Twilio SID and
+  `twilio_purchased_at`**. No INSERT, so history/audit on that row is kept.
 - **Blocked (clear errors):** local numbers ("not assignable here yet"); a clinic
   that already has an active/scheduled toll-free (additional paid toll-free is not
-  supported from this tool yet); a number already assigned to any clinic; a number
-  with a `permanently_removed` history row (needs manual reconciliation — never
-  auto-resurrected); a number missing Voice+SMS; a number no longer in Twilio.
+  supported from this tool yet); a number with an `active`/`scheduled` row assigned
+  to any clinic; a number with a `permanently_removed` history row (needs manual
+  reconciliation — never auto-resurrected); a number missing Voice+SMS; a number no
+  longer in Twilio.
 - Does **not** change Stripe quantities, start/alter the trial, touch Messaging
   Service membership, or release/buy any number. Routing after assignment uses the
   existing active-only `lookupClinicByPhone` DB lookup. Audit action:
   `clinic.phone_number.assign_existing` (phone, SID, billing class, area code — no
   secrets).
+
+---
+
+## Suspend vs Detach a clinic's number (platform admin) — 2026-06-13
+
+Two distinct platform-admin per-number actions in the admin clinic console
+Phone-number tab (component `AdminPhoneNumberList`). Both open an **inline
+confirmation in the same card** (no modal) with a required consent checkbox, per
+the project Destructive Confirmation Rule. Endpoint for both:
+`POST /api/admin/clinics/[clinicId]/phone-numbers/[phoneNumberId]/action`
+(guarded by `resolvePlatformAdmin`).
+
+- **Suspend number** (`action: "suspend"`) — a *pause* for the **same** clinic.
+  Sets `is_active=false` only; the number stays assigned, keeps
+  `removal_status='active'`, is **not** released from Twilio, still counts toward
+  the limit and additional-number billing quantity, and is **not** offered to
+  other clinics. Reactivate (`action: "reactivate"`) flips `is_active` back to
+  true. Behavior unchanged from before; only the UI now requires an inline
+  confirmation checkbox first. Audit: `clinic.phone_number.suspend` /
+  `clinic.phone_number.reactivate`.
+- **Detach from clinic** (`action: "detach"`) — releases **only the clinic
+  assignment**. Sets `is_active=false`, `removal_status='detached'`,
+  `permanent_removal_at=null`, `twilio_release_status='not_required'`,
+  `twilio_released_at=null`; **preserves the Twilio SID and `twilio_purchased_at`**.
+  Does **not** release the Twilio number, **not** change Stripe, and **not** touch
+  Messaging Service membership. The row is kept (not deleted) for audit. Service
+  `detachClinicPhoneNumber` runs in a clinic-locked transaction and re-checks
+  ownership + eligibility server-side. Audit: `clinic.phone_number.detach`
+  (phone, masked SID tail, `previous_removal_status` — no secrets).
+- **Detach eligibility (first version):** only an **unpaid, currently-assigned
+  toll-free** number — `number_type='toll_free'`, `billing_class in
+  ('legacy','included')`, `monthly_unit_amount_cents=0`, and a non-terminal
+  `removal_status='active'` (suspended numbers qualify — they keep
+  `removal_status='active'`). Blocked with clear copy for local numbers,
+  paid/additional numbers, and numbers already detached / scheduled /
+  permanently_removed.
+- **Where a detached number goes:** it disappears from the old clinic's owner
+  `/account` list, admin assigned-number list, held/limit counts, and billing
+  (filtered out everywhere by `removal_status='detached'`), and it **reappears in
+  "Assign existing Twilio number"** inventory for any other clinic. Assigning it
+  to a new clinic updates the same row back to `active` (see above).
+
+`removal_status` distinction (important): `detached` = clinic assignment released,
+Twilio number still owned by us (no release). `permanently_removed` = Twilio
+release completed / historical lifecycle. **Never** use `permanently_removed` for
+detach — it would conflict with the import/assign tool, which refuses
+`permanently_removed` rows but reassigns `detached` rows.
+
+Migration: apply `supabase/migrations/20260613000100_phone_number_detached_status.sql`
+(widens the `clinic_phone_numbers_removal_status_check` constraint to allow
+`'detached'`) **before** the Detach action can succeed. The migration is additive
+and idempotent; it does not detach, release, rebill, or modify any existing row.
+Pre-migration the deployed code is fail-closed: Detach returns an error and all
+other behavior (list/suspend/reactivate/assign/remove/restore) is unaffected.
 
 ---
 

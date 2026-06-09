@@ -18,7 +18,7 @@ type LifecycleRow = {
   number_type: "toll_free" | "local";
   billing_class: "legacy" | "included" | "additional";
   is_active: boolean;
-  removal_status: "active" | "scheduled" | "permanently_removed";
+  removal_status: "active" | "scheduled" | "permanently_removed" | "detached";
   permanent_removal_at: Date | null;
   twilio_phone_number_sid: string | null;
   twilio_release_status: "not_required" | "pending" | "released" | "failed";
@@ -415,7 +415,7 @@ async function readLifecycleSnapshot(
       twilio_release_status, twilio_purchased_at, created_at, updated_at
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
-      and removal_status <> 'permanently_removed'
+      and removal_status not in ('permanently_removed', 'detached')
     order by id asc
   `;
   return { billing, numbers, fingerprint: lifecycleFingerprint(numbers) };

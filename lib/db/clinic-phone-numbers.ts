@@ -29,7 +29,10 @@ export type ClinicPhoneNumberRow = {
   suspended_at: Date | null;
   suspended_by_profile_id: string | null;
   suspension_reason: string | null;
-  removal_status: "active" | "scheduled" | "permanently_removed";
+  // 'detached' (20260613000100) = clinic assignment released by a platform admin
+  // while the Twilio number stays owned in our account (no Twilio release). A
+  // detached row is excluded from the old clinic's owner/admin lists and counts.
+  removal_status: "active" | "scheduled" | "permanently_removed" | "detached";
   removal_requested_at: Date | null;
   removal_requested_by_profile_id: string | null;
   removal_requested_by_email: string | null;
@@ -55,7 +58,7 @@ export async function listClinicPhoneNumbersForClinic(
     select *
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
-      and removal_status <> 'permanently_removed'
+      and removal_status not in ('permanently_removed', 'detached')
     order by
       case when removal_status = 'scheduled' then 1 else 0 end asc,
       is_active desc,

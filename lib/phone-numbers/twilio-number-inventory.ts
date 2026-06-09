@@ -30,6 +30,45 @@ export function classifyNumberType(e164: string): AdminNumberType {
   return ac && TOLL_FREE_PREFIXES.has(ac) ? "toll_free" : "local";
 }
 
+// ── Detach-from-clinic eligibility (pure) ────────────────────────────────────
+//
+// "Detach from clinic" releases ONLY the clinic assignment (removal_status ->
+// 'detached'); it never releases the Twilio number. The server is the final
+// authority, but this pure predicate decides whether the admin action is offered
+// and is re-checked server-side. First version: only an unpaid, currently-assigned
+// toll-free number (the clinic's included/legacy slot, $0) is detachable.
+
+export type DetachEligibilityInput = {
+  numberType: AdminNumberType;
+  billingClass: string; // 'legacy' | 'included' | 'additional'
+  monthlyUnitAmountCents: number;
+  removalStatus: string; // 'active' | 'scheduled' | 'permanently_removed' | 'detached'
+};
+
+export type DetachEligibility = { eligible: boolean; reason: string | null };
+
+export function classifyDetachEligibility(input: DetachEligibilityInput): DetachEligibility {
+  if (input.removalStatus === "detached") {
+    return { eligible: false, reason: "This number is already detached." };
+  }
+  if (input.removalStatus === "permanently_removed") {
+    return { eligible: false, reason: "This number was permanently removed." };
+  }
+  if (input.removalStatus === "scheduled") {
+    return { eligible: false, reason: "This number is scheduled for removal." };
+  }
+  if (input.numberType === "local") {
+    return { eligible: false, reason: "Local numbers can't be detached from this tool yet." };
+  }
+  if (input.billingClass === "additional" || input.monthlyUnitAmountCents !== 0) {
+    return {
+      eligible: false,
+      reason: "Paid / additional numbers can't be detached from this tool yet.",
+    };
+  }
+  return { eligible: true, reason: null };
+}
+
 // Normalize a webhook URL for comparison: trim, drop a single trailing slash.
 function normalizeUrl(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/\/+$/, "");

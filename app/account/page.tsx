@@ -87,7 +87,9 @@ function toAssignedSummary(row: ClinicPhoneNumberRow): AssignedBusinessNumberSum
     isActive: row.is_active,
     billingClass: row.billing_class,
     createdAt: row.created_at ? row.created_at.toISOString() : null,
-    removalStatus: row.removal_status ?? "active",
+    // Detached rows are excluded from owner lists upstream; coerce defensively so
+    // the owner-facing type never has to model the admin-only 'detached' state.
+    removalStatus: row.removal_status === "detached" ? "active" : (row.removal_status ?? "active"),
     removalRequestedAt: row.removal_requested_at ? row.removal_requested_at.toISOString() : null,
     removalRequestedByEmail: row.removal_requested_by_email,
     permanentRemovalAt: row.permanent_removal_at ? row.permanent_removal_at.toISOString() : null,

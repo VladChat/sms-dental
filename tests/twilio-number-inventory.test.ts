@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   buildUnassignedInventory,
+  classifyDetachEligibility,
   classifyNumberType,
   webhookConfigStatus,
+  type DetachEligibilityInput,
   type OwnedNumberInput,
 } from "../lib/phone-numbers/twilio-number-inventory";
 
@@ -92,6 +94,47 @@ test("buildUnassignedInventory: toll-free missing SMS capability is blocked", ()
   assert.equal(item.numberType, "toll_free");
   assert.equal(item.assignableHere, false);
   assert.match(item.notAssignableReason ?? "", /Voice \+ SMS/i);
+});
+
+function detachInput(partial: Partial<DetachEligibilityInput> = {}): DetachEligibilityInput {
+  return {
+    numberType: "toll_free",
+    billingClass: "included",
+    monthlyUnitAmountCents: 0,
+    removalStatus: "active",
+    ...partial,
+  };
+}
+
+test("classifyDetachEligibility: unpaid active toll-free (included/legacy, $0) is eligible", () => {
+  assert.deepEqual(classifyDetachEligibility(detachInput()), { eligible: true, reason: null });
+  assert.equal(classifyDetachEligibility(detachInput({ billingClass: "legacy" })).eligible, true);
+});
+
+test("classifyDetachEligibility: local numbers are blocked", () => {
+  const r = classifyDetachEligibility(detachInput({ numberType: "local" }));
+  assert.equal(r.eligible, false);
+  assert.match(r.reason ?? "", /local/i);
+});
+
+test("classifyDetachEligibility: paid / additional toll-free is blocked", () => {
+  assert.equal(classifyDetachEligibility(detachInput({ billingClass: "additional" })).eligible, false);
+  assert.equal(classifyDetachEligibility(detachInput({ monthlyUnitAmountCents: 2000 })).eligible, false);
+});
+
+test("classifyDetachEligibility: already detached / scheduled / removed are blocked", () => {
+  assert.match(
+    classifyDetachEligibility(detachInput({ removalStatus: "detached" })).reason ?? "",
+    /already detached/i,
+  );
+  assert.match(
+    classifyDetachEligibility(detachInput({ removalStatus: "scheduled" })).reason ?? "",
+    /scheduled/i,
+  );
+  assert.match(
+    classifyDetachEligibility(detachInput({ removalStatus: "permanently_removed" })).reason ?? "",
+    /permanently removed/i,
+  );
 });
 
 test("buildUnassignedInventory sorts assignable first, then by phone number", () => {

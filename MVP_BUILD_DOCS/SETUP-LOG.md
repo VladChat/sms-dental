@@ -5684,3 +5684,57 @@ Commit: `feat: assign existing Twilio numbers from admin` (pushed to `origin/mai
 
 Intentionally not done: no Twilio purchase/release, no Messaging Service membership
 changes, no Stripe quantity changes, no trial changes, no secrets printed.
+
+---
+
+## 2026-06-13 — Detach assigned Twilio numbers from admin (Suspend vs Detach)
+
+Added a platform-admin **"Detach from clinic"** workflow and clarified **Suspend**
+with inline confirmations. Suspend remains a same-clinic pause; Detach releases
+only the clinic assignment while keeping the Twilio number owned by us.
+
+New lifecycle state: `clinic_phone_numbers.removal_status='detached'` =
+clinic assignment released, Twilio number kept (no release). Distinct from
+`permanently_removed` (Twilio release completed / historical). Expected DB state
+after detach: `is_active=false`, `removal_status='detached'`,
+`permanent_removal_at=null`, `twilio_release_status='not_required'`,
+`twilio_released_at=null`, SID + `twilio_purchased_at` preserved. Row is kept for
+audit (never deleted). No Stripe/Twilio/Messaging-Service side effects.
+
+Files changed:
+- `supabase/migrations/20260613000100_phone_number_detached_status.sql` (additive,
+  idempotent: widens `clinic_phone_numbers_removal_status_check` to allow
+  `'detached'`).
+- `lib/phone-numbers/detach-number.ts` (new `detachClinicPhoneNumber` service,
+  clinic-locked tx, server-side ownership + eligibility re-check).
+- `lib/phone-numbers/twilio-number-inventory.ts` (new pure `classifyDetachEligibility`).
+- `lib/phone-numbers/assign-existing-twilio.ts` (assign now reassigns a `detached`
+  row in place — preserves SID/`twilio_purchased_at`; still blocks active/scheduled
+  and `permanently_removed`).
+- `app/api/admin/clinics/[clinicId]/phone-numbers/[phoneNumberId]/action/route.ts`
+  (adds `detach` action; audit `clinic.phone_number.detach`).
+- `app/admin/(console)/.../AdminPhoneNumberList.tsx` (inline Suspend confirmation +
+  Detach action with inline confirmation + consent checkbox).
+- Detached rows excluded from old clinic everywhere: `lib/db/clinic-phone-numbers.ts`
+  (owner list), `lib/db/admin/clinics.ts` (admin list + held/billed counts),
+  `lib/billing/number-entitlements.ts` (held count), `lib/db/admin/actions.ts`
+  (countHeldNumbers), `lib/phone-numbers/removal-lifecycle.ts` (billing snapshot).
+  Type unions widened to include `'detached'`; owner-facing type intentionally
+  excludes it (coerced defensively in `app/account/page.tsx`).
+- Tests: `tests/twilio-number-inventory.test.ts` (+4 `classifyDetachEligibility`).
+
+Detach allowed only for unpaid active toll-free (`legacy`/`included`, $0). Local,
+paid/additional, and already detached/scheduled/permanently_removed are blocked
+with clear copy. Suspend/reactivate/remove/restore behavior unchanged.
+
+Validation: `npm run test:phone-numbers` (21/21), `npm run typecheck`,
+`npm run build` — all pass.
+
+Migration status: **NOT applied to production** (no explicit owner approval for
+this migration; the documented workflow requires it). Deployed code is fail-closed
+pre-migration — Detach returns an error until the constraint is widened; all other
+behavior is unaffected. Manual apply step (Supabase SQL editor or `psql` to
+`SUPABASE_DB_URL`, after owner approval):
+`supabase/migrations/20260613000100_phone_number_detached_status.sql`.
+
+Commit: see `feat: detach assigned Twilio numbers from admin`.

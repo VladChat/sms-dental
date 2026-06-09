@@ -53,6 +53,10 @@ export type AdminClinicPhoneNumber = {
   phoneE164: string | null;
   role: string;
   isActive: boolean;
+  // Durable product type ('toll_free' | 'local'); decides detach eligibility.
+  numberType: string;
+  // Lifecycle state ('active' | 'scheduled' | 'permanently_removed' | 'detached').
+  removalStatus: string;
   sidTail: string | null;
   // Full Twilio IncomingPhoneNumber SID (not a secret) so the operator can find
   // the number in the Twilio console.

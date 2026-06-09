@@ -192,6 +192,8 @@ export async function getAdminClinicDetail(
       phone_number: string;
       role: string;
       is_active: boolean;
+      number_type: string;
+      removal_status: string;
       twilio_phone_number_sid: string | null;
       created_at: Date;
       updated_at: Date;
@@ -203,11 +205,13 @@ export async function getAdminClinicDetail(
       suspension_reason: string | null;
     }[]
   >`
-    select id, phone_number, role, is_active, twilio_phone_number_sid, created_at, updated_at,
+    select id, phone_number, role, is_active, number_type, removal_status,
+           twilio_phone_number_sid, created_at, updated_at,
            source, billing_class, monthly_unit_amount_cents, activated_at,
            suspended_at, suspension_reason
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
+      and removal_status <> 'detached'
     order by is_active desc, created_at asc
   `.catch(() => []);
   const phoneNumbers: AdminClinicPhoneNumber[] = phoneRows.map((p) => ({
@@ -216,6 +220,8 @@ export async function getAdminClinicDetail(
     phoneE164: p.phone_number,
     role: p.role,
     isActive: p.is_active,
+    numberType: p.number_type,
+    removalStatus: p.removal_status,
     sidTail: tailSid(p.twilio_phone_number_sid),
     twilioSid: p.twilio_phone_number_sid,
     createdAt: p.created_at.toISOString(),
