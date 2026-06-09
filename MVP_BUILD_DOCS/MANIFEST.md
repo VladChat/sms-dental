@@ -25,6 +25,7 @@ Operational documentation:
 - `PLATFORM-ADMIN-CONSOLE-PLAN.md` — architecture/spec **and** the implemented v1 (§15) of the internal platform-owner console at `/admin` (cross-tenant; separate from clinic `/account` and front-desk `/workspace`). Requires `PLATFORM_ADMIN_EMAILS` env to grant access.
 - `AUTH-AND-ACCESS-CONTROL.md` — auth/login/reset/setup-link source of truth, incl. the role-specific login decision (§17: one Supabase Auth system; separate `/admin/login`, `/workspace/login`, clinic-owner entry for `/account`).
 - `FRONT-DESK-WORKSPACE.md` — `/workspace` scope, outcome saving, sample layer.
+- `KNOWLEDGE-SYSTEM/README.md` — the source-controlled Knowledge System: the structured source for customer help, internal support runbooks, platform-admin knowledge, developer/ops notes, and future AI-support grounding. Audience-scoped and visibility-tagged; links to the canonical files above rather than duplicating them. Not the public website (`docs/` stays public-only).
 - `../AGENTS.md` — repository-wide standing agent instructions, including the project-wide Form and Onboarding Scope Rule.
 
 Onboarding workflow scope (MVP):

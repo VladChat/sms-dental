@@ -169,6 +169,18 @@ Do not add noise. Do not record temporary failed commands, long logs, speculatio
 
 Never write secrets, passwords, full database URLs with passwords, API keys, tokens, service role key values, private patient data, or raw customer data into any documentation file.
 
+## Knowledge System Update Rule
+
+When a task changes durable customer-facing behavior, support workflows, admin actions, billing explanations, SMS/A2P behavior, phone-number lifecycle, workspace behavior, or account access, the agent must decide whether to update `MVP_BUILD_DOCS/KNOWLEDGE-SYSTEM/` (the source-controlled help/support/AI-grounding layer: customer help, platform-admin knowledge, support runbooks, developer/ops notes).
+
+Update the matching layer and `MVP_BUILD_DOCS/KNOWLEDGE-SYSTEM/07-CONTENT-INVENTORY.md`, following `MVP_BUILD_DOCS/KNOWLEDGE-SYSTEM/02-CONTENT-GOVERNANCE.md` (link to source-of-truth files instead of duplicating them; respect per-article `visibility`; never place internal content under `docs/`). This is separate from, and in addition to, the Operational Documentation Update Rule above.
+
+If no Knowledge System update is needed, the final report must say:
+
+```txt
+Knowledge System update needed: no
+```
+
 ## Canonical Project Values
 
 - Public brand: `Missed Calls Dental`
