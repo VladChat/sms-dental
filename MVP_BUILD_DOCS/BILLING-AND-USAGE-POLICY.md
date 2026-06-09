@@ -308,9 +308,10 @@ Customer Remove/Restore is lifecycle-based:
   paid-through/renewal field, so this is an estimate
   (`lib/phone-numbers/twilio-release-deadline.ts`). Do not promise a fixed restore
   window (e.g. "30 days") anywhere in copy.
-- Permanent removal is completed later by the secured release job (hourly Vercel
-  Cron), which releases the Twilio IncomingPhoneNumber SID and marks the row
-  `removal_status='permanently_removed'`.
+- Permanent removal is completed later by the secured release job (daily Vercel
+  Cron on the current Hobby plan), which releases the Twilio IncomingPhoneNumber
+  SID and marks the row `removal_status='permanently_removed'`. The 1-day safety
+  buffer in the release deadline is designed to tolerate a daily cron cadence.
 - Restore is allowed only while the row is still scheduled, before the permanent
   removal date, and before Twilio release has completed.
 

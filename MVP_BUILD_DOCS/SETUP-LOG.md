@@ -5539,10 +5539,10 @@ What changed:
   card shows "Restore available until {date}" while open and "Restore window has
   closed. Permanent release is pending." after; Restore button hidden once the
   window closes.
-- Release job cron changed from daily (`0 9 * * *`) to hourly (`0 * * * *`) in
-  `vercel.json`. Hourly cadence requires a Vercel plan that allows sub-daily crons
-  (Pro+); on Hobby it is throttled to ~once/day. The 1-day buffer makes either
-  cadence correct.
+- Release job cron: initially changed to hourly (`0 * * * *`), but the Vercel
+  Hobby plan **rejects** sub-daily cron schedules at build time, which failed the
+  deploy. Reverted to daily (`0 9 * * *`) — see the 2026-06-12 revert entry below.
+  The 1-day safety buffer is designed to tolerate a daily cron cadence.
 - Tests: `tests/twilio-release-deadline.test.ts` (+ `tsconfig.unit-tests.json`,
   `npm run test:phone-numbers`).
 
@@ -5579,3 +5579,32 @@ Intentionally not done:
 - No Vercel env vars, Supabase secrets, Twilio/Stripe credentials, domains, DNS,
   or `.env*` files changed.
 - Migration not auto-applied to production.
+
+---
+
+## 2026-06-12 — Restore daily release cron (Vercel Hobby cron limit)
+
+The previous change set the release-job cron to hourly (`0 * * * *`). The Vercel
+deployment for commit `a1b2ae3` **failed**: the current Vercel plan is **Hobby**,
+which rejects cron schedules more frequent than once per day at build time.
+
+Fix:
+
+- `vercel.json`: reverted the release-job cron back to daily (`0 9 * * *`).
+- Docs corrected (OPERATIONS-RUNBOOK, BILLING-AND-USAGE-POLICY, this log): the
+  release job runs **daily** on the current plan. The 1-day safety buffer in the
+  release deadline is designed to tolerate a daily cron cadence — a number is
+  released at most ~1 day after its deadline, still before the estimated Twilio
+  renewal.
+- No phone-removal lifecycle logic changed; only the cron schedule + docs.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run build` pass.
+
+Commit: `fix: restore daily release cron for Vercel Hobby` (pushed to
+`origin/main`).
+
+Note: confirms the Vercel project is on the **Hobby** plan. Sub-daily Vercel Cron
+requires Pro or above.

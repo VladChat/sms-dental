@@ -2725,12 +2725,12 @@ Type-aware billing display:
 
 Delayed Twilio release job:
 
-- Vercel Cron calls `GET /api/jobs/release-removed-phone-numbers` hourly
-  (`0 * * * *`, updated 2026-06-12 from daily). Hourly execution requires a Vercel
-  plan that allows sub-daily crons (Pro and above); on the Hobby plan the schedule
-  is accepted but throttled to roughly once per day. The 1-day safety buffer in
-  the release deadline tolerates a daily cadence, so behavior is correct either
-  way — hourly only tightens the release window.
+- Vercel Cron calls `GET /api/jobs/release-removed-phone-numbers` daily
+  (`0 9 * * *`). The current Vercel plan is Hobby, which rejects cron schedules
+  more frequent than once per day at build time, so the release job runs daily.
+  The 1-day safety buffer in the release deadline is designed to tolerate a daily
+  cadence: a number is released at most ~1 day after its deadline, which is still
+  before the estimated Twilio renewal.
 - The route requires `Authorization: Bearer <secret>`.
 - Prefer Vercel's `CRON_SECRET` env var; Vercel sends it automatically to cron
   invocations. `PHONE_NUMBER_RELEASE_CRON_SECRET` is also accepted as a
