@@ -1,18 +1,18 @@
 # Customer Help — Getting Started
 
-Status: scaffold (planned articles)
-Audience: Clinic owners and staff · Visibility: `public` / `customer_authenticated`
+Status: active (articles ready; not yet published)
+Audience: Clinic owners · Visibility: `customer_authenticated`
 Last updated: 2026-06-09
 
 Introductory help that explains what Missed Calls Dental does and what to expect.
 
-## Planned articles
+## Articles
 
-| Slug | Title | Visibility | Notes |
-|---|---|---|---|
-| `what-missed-calls-dental-does` | What Missed Calls Dental does | public | Plain explanation: recovers missed patient calls with a safe text follow-up |
-| `how-missed-call-sms-recovery-works` | How missed-call SMS recovery works | customer_authenticated | The flow at a customer level; supported call paths only |
-| `why-sms-is-not-active-immediately` | Why SMS is not active immediately | customer_authenticated | Texting starts after SMS approval and setup, not at signup |
+| Article | Title | Visibility | Status | Notes |
+|---|---|---|---|---|
+| [what-missed-calls-dental-does.md](what-missed-calls-dental-does.md) | What Missed Calls Dental does | customer_authenticated | ready | Plain explanation; what it is and is not |
+| [how-missed-call-recovery-works.md](how-missed-call-recovery-works.md) | How missed-call recovery works | customer_authenticated | ready | The flow + supported connection paths |
+| [../sms-approval/why-sms-is-not-active-immediately.md](../sms-approval/why-sms-is-not-active-immediately.md) | Why SMS is not active immediately | clinic_owner | ready | Lives in sms-approval; cross-listed here |
 
 ## Customer-safe notes
 

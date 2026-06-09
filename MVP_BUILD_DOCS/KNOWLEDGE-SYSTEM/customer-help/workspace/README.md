@@ -1,6 +1,6 @@
 # Customer Help — Front-Desk Workspace
 
-Status: scaffold (planned articles)
+Status: active (articles ready; not yet published)
 Audience: Front-desk staff · Visibility: `clinic_staff`
 Last updated: 2026-06-09
 
@@ -23,12 +23,13 @@ visible to staff):
 
 (Source: `FRONT-DESK-WORKSPACE.md`.)
 
-## Planned articles
+## Articles
 
-| Slug | Title | Visibility | Notes |
-|---|---|---|---|
-| `how-front-desk-should-handle-patient-replies` | How front desk should handle patient replies | clinic_staff | Read the reply, follow up, record an outcome |
-| `understanding-request-statuses` | Understanding patient request statuses | clinic_staff | New / Needs reply / Waiting for patient / Ready to call / Booked / Closed |
+| Article | Title | Visibility | Status | Notes |
+|---|---|---|---|---|
+| [front-desk-workspace-overview.md](front-desk-workspace-overview.md) | Front-desk workspace overview | clinic_staff | ready | What the workspace is; what staff can/can't see; request cards; statuses |
+| [../missed-calls-and-messages/how-front-desk-should-handle-patient-replies.md](../missed-calls-and-messages/how-front-desk-should-handle-patient-replies.md) | How front desk should handle patient replies | clinic_staff | ready | Lives in missed-calls-and-messages; cross-listed here |
+| `understanding-request-statuses` | Understanding patient request statuses | clinic_staff | planned | Status detail; for now covered by the overview |
 
 ## Staff-safe notes
 

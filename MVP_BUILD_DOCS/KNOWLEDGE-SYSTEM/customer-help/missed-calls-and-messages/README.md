@@ -1,18 +1,18 @@
 # Customer Help — Missed Calls and Messages
 
-Status: scaffold (planned articles)
+Status: active (articles ready; not yet published)
 Audience: Clinic owners and staff · Visibility: `customer_authenticated` / `clinic_staff`
 Last updated: 2026-06-09
 
 Help for understanding the follow-up text after a missed call, patient replies,
 and opt-out.
 
-## Planned articles
+## Articles
 
-| Slug | Title | Visibility | Notes |
-|---|---|---|---|
-| `patient-opt-out-stop-start` | Patient opt-out: STOP/START | customer_authenticated | How patients opt out and back in |
-| `how-front-desk-should-handle-patient-replies` | How front desk should handle patient replies | clinic_staff | Cross-listed in workspace; staff-safe |
+| Article | Title | Visibility | Status | Notes |
+|---|---|---|---|---|
+| [patient-opt-out-stop-start.md](patient-opt-out-stop-start.md) | Patient opt-out — STOP and START | customer_authenticated | ready | How patients opt out and back in; office must respect it |
+| [how-front-desk-should-handle-patient-replies.md](how-front-desk-should-handle-patient-replies.md) | How front desk should handle patient replies | clinic_staff | ready | Staff-safe; scheduling follow-up, not medical advice |
 
 ## Customer-safe notes
 

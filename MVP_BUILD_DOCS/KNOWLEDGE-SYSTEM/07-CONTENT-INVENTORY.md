@@ -15,8 +15,8 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 
 | ID | Title | Folder | Visibility | Status | Source of truth | Surface | Notes |
 |---|---|---|---|---|---|---|---|
-| CH-01 | What Missed Calls Dental does | getting-started | public | draft | PROJECT-CONTEXT.md | public-web, /account | Plain-language product explanation |
-| CH-02 | How missed-call SMS recovery works | getting-started | customer_authenticated | draft | PROJECT-CONTEXT.md, OPERATIONS-RUNBOOK.md | /account | Call → missed → text follow-up; supported paths only |
+| CH-01 | What Missed Calls Dental does | customer-help/getting-started | customer_authenticated | ready | PROJECT-CONTEXT.md, START-HERE.md, AGENTS.md | /account | Plain-language product explanation; what it is and is not |
+| CH-02 | How missed-call recovery works | customer-help/getting-started | customer_authenticated | ready | PROJECT-CONTEXT.md, START-HERE.md, OPERATIONS-RUNBOOK.md, AGENTS.md | /account | Call → missed → text follow-up; supported connection paths only |
 | CH-03 | Why SMS is not active immediately | customer-help/sms-approval | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, BILLING-AND-USAGE-POLICY.md, config/runtime.config.ts, AGENTS.md | /account | Texting is a separate step from number setup; cross-listed in getting-started |
 | CH-04 | What SMS approval means | customer-help/sms-approval | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, AGENTS.md | /account | "SMS approval" customer term; A2P kept internal |
 | CH-05 | What information is needed for SMS approval | customer-help/sms-approval | clinic_owner | ready | SMS-APPROVAL-FIELD-MAPPING.md, A2P-10DLC-COMPLIANCE-READINESS.md, AGENTS.md | /account | Only customer-entered fields; Business Profile vs SMS Approval Information |
@@ -25,11 +25,12 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | CH-08 | Restore a removed number | customer-help/phone-numbers | clinic_owner | ready | AGENTS.md (lifecycle), BILLING-AND-USAGE-POLICY.md | /account | Only before permanent removal; restore alone does not enable texting |
 | CH-09 | Understand your bill | customer-help/billing | clinic_owner | ready | config/billing.config.ts, BILLING-AND-USAGE-POLICY.md, AGENTS.md | /account | Base plan + included usage + add-ons; amounts from canonical files |
 | CH-10 | Current vs next billing cycle | customer-help/billing | clinic_owner | ready | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | /account | Next-cycle changes; no immediate refund/credit |
-| CH-11 | Patient opt-out: STOP/START | missed-calls-and-messages | customer_authenticated | draft | OPERATIONS-RUNBOOK.md §10 | /account, /workspace | How opt-out works for patients |
-| CH-12 | How front desk should handle patient replies | workspace | clinic_staff | draft | FRONT-DESK-WORKSPACE.md | /workspace | Staff-safe only; no billing/legal/approval |
-| CH-13 | Change password / account access | account-access | clinic_owner | draft | AUTH-AND-ACCESS-CONTROL.md §16 | /account | In-session change + reset path |
-| CH-14 | Contact support | troubleshooting | public | draft | README.md | public-web, /account, /workspace | support@missedcallsdental.com |
+| CH-11 | Patient opt-out — STOP and START | customer-help/missed-calls-and-messages | customer_authenticated | ready | OPERATIONS-RUNBOOK.md, A2P-10DLC-COMPLIANCE-READINESS.md, PROJECT-CONTEXT.md | /account, /workspace | How opt-out works; office must respect it; never bypass |
+| CH-12 | How front desk should handle patient replies | customer-help/missed-calls-and-messages | clinic_staff | ready | FRONT-DESK-WORKSPACE.md, OPERATIONS-RUNBOOK.md, PROJECT-CONTEXT.md | /workspace | Staff-safe; scheduling follow-up, not medical advice; no outbound reply tool yet |
+| CH-13 | Change password and account access | customer-help/account-access | clinic_owner | ready | AUTH-AND-ACCESS-CONTROL.md, FRONT-DESK-WORKSPACE.md | /account | Sign in, reset, in-session change; owner account vs front-desk workspace |
+| CH-14 | Contact support | customer-help/troubleshooting | customer_authenticated | ready | README.md, OWNER-SETTINGS.md, config/runtime.config.ts | /account, /workspace | What to include / what not to send; support@missedcallsdental.com |
 | CH-15 | Local vs toll-free charges | customer-help/billing | clinic_owner | ready | config/billing.config.ts, BILLING-AND-USAGE-POLICY.md, AGENTS.md | /account | Toll-free vs local billing models; first toll-free included; local fees |
+| CH-16 | Front-desk workspace overview | customer-help/workspace | clinic_staff | ready | FRONT-DESK-WORKSPACE.md, AUTH-AND-ACCESS-CONTROL.md | /workspace | What staff can/can't see; request cards; statuses; samples; "not provided yet" |
 
 ## Platform admin
 

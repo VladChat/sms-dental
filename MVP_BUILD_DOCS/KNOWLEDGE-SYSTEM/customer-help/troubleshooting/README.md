@@ -1,6 +1,6 @@
 # Customer Help — Troubleshooting
 
-Status: scaffold (planned articles)
+Status: active (contact-support ready; others planned)
 Audience: Clinic owners and staff · Visibility: `public` / `customer_authenticated`
 Last updated: 2026-06-09
 
@@ -8,13 +8,13 @@ Customer-safe troubleshooting and the path to contacting support. These articles
 help a customer self-diagnose common situations; deeper diagnosis is internal
 (see [../../support-runbooks/README.md](../../support-runbooks/README.md)).
 
-## Planned articles
+## Articles
 
-| Slug | Title | Visibility | Notes |
-|---|---|---|---|
-| `contact-support` | Contact support | public | How and when to reach support |
-| `texting-not-working-yet` | My texting isn't working yet | customer_authenticated | Usually SMS approval not complete / not enabled |
-| `i-cant-sign-in` | I can't sign in | customer_authenticated | Reset password; role-specific login |
+| Article | Title | Visibility | Status | Notes |
+|---|---|---|---|---|
+| [contact-support.md](contact-support.md) | Contact support | customer_authenticated | ready | How and when to reach support; what to include and what not to send |
+| `texting-not-working-yet` | My texting isn't working yet | customer_authenticated | planned | Usually SMS approval not complete / not enabled |
+| `i-cant-sign-in` | I can't sign in | customer_authenticated | planned | Reset password; role-specific login |
 
 ## Customer-safe notes
 

@@ -1,17 +1,17 @@
 # Customer Help — Account Access
 
-Status: scaffold (planned articles)
+Status: active (articles ready; not yet published)
 Audience: Clinic owners · Visibility: `clinic_owner`
 Last updated: 2026-06-09
 
 Help for signing in, changing a password, and managing account access.
 
-## Planned articles
+## Articles
 
-| Slug | Title | Visibility | Notes |
-|---|---|---|---|
-| `change-password` | Change password / account access | clinic_owner | In-session change + forgot-password reset |
-| `contact-support` | Contact support | public | Cross-listed in troubleshooting |
+| Article | Title | Visibility | Status | Notes |
+|---|---|---|---|---|
+| [change-password-and-account-access.md](change-password-and-account-access.md) | Change password and account access | clinic_owner | ready | Sign in, reset, in-session change; owner vs front desk |
+| [../troubleshooting/contact-support.md](../troubleshooting/contact-support.md) | Contact support | customer_authenticated | ready | Lives in troubleshooting; cross-listed here |
 
 ## Customer-safe notes
 
