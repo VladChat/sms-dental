@@ -88,7 +88,7 @@ function buildVoiceTwiml(
 // clinic and must never trigger recovery SMS. Play a short inactive-line notice
 // and hang up.
 function buildInactiveNumberTwiml(): string {
-  return `<Response><Say voice="alice">This recovery line is no longer active. Please contact the office directly.</Say><Hangup/></Response>`;
+  return `<Response><Say voice="alice">This number is no longer in service.</Say><Hangup/></Response>`;
 }
 
 // Twilio incoming voice webhook.

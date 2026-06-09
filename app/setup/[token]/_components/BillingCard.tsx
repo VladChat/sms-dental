@@ -99,25 +99,22 @@ export function BillingCard({
   const showNextCycle = summary.nextCycle.totalAmountCents !== summary.current.totalAmountCents;
 
   if (paidPlanActive) {
+    // When a scheduled removal changes the recurring total, show ONLY the new
+    // (next-cycle) amount + line items as the single plan summary — not a dual
+    // current/next block. Otherwise show the current amount as usual.
+    const planLabel = showNextCycle ? "Next monthly bill" : "Monthly bill";
+    const planTotalLabel = showNextCycle ? nextCycleTotalLabel : currentMonthlyTotalLabel;
+    const planLines = showNextCycle ? summary.nextCycle.lineItems : summary.current.lineItems;
     return (
       <div className="acct-billing-stack">
         <section className="acct-current-plan" aria-labelledby="billing-current-plan-title">
           <div className="acct-current-plan-head">
-            <p className="t-eyebrow" id="billing-current-plan-title">Current plan</p>
+            <p className="t-eyebrow" id="billing-current-plan-title">{planLabel}</p>
             <StatusBadge kind="complete" label="Active" />
           </div>
-          <p className="acct-current-plan-total">{currentMonthlyTotalLabel}</p>
+          <p className="acct-current-plan-total">{planTotalLabel}</p>
           <div className="acct-current-plan-note">
-            <BillingLineList lines={summary.current.lineItems} />
-            {showNextCycle && (
-              <div style={{ marginTop: "var(--space-3)" }}>
-                <p className="t-eyebrow" style={{ margin: 0 }}>Next cycle</p>
-                <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text)", fontWeight: 700 }}>
-                  {nextCycleTotalLabel}
-                </p>
-                <BillingLineList lines={summary.nextCycle.lineItems} />
-              </div>
-            )}
+            <BillingLineList lines={planLines} />
             {summary.notices.map((notice) => (
               <p key={notice} className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
                 {notice}
