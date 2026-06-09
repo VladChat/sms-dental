@@ -1,6 +1,6 @@
 # Customer Help — SMS Approval
 
-Status: scaffold (planned articles)
+Status: active (articles ready; not yet published)
 Audience: Clinic owners · Visibility: `clinic_owner`
 Last updated: 2026-06-09
 
@@ -16,13 +16,13 @@ can go live.
   only in internal/admin docs
   ([../../platform-admin/a2p-review-and-submission.md](../../platform-admin/a2p-review-and-submission.md)).
 
-## Planned articles
+## Articles
 
-| Slug | Title | Visibility | Notes |
-|---|---|---|---|
-| `what-sms-approval-means` | What SMS approval means | clinic_owner | Why texting needs approval before it can send to patients |
-| `what-information-is-needed-for-sms-approval` | What information is needed for SMS approval | clinic_owner | Only the customer-entered fields |
-| `why-sms-is-not-active-immediately` | Why SMS is not active immediately | customer_authenticated | Cross-listed with getting-started |
+| Article | Title | Visibility | Status | Notes |
+|---|---|---|---|---|
+| [what-sms-approval-means.md](what-sms-approval-means.md) | What SMS approval means | clinic_owner | ready | Why texting needs approval before it can send to patients |
+| [what-information-is-needed-for-sms-approval.md](what-information-is-needed-for-sms-approval.md) | What information is needed for SMS approval | clinic_owner | ready | Only the customer-entered fields |
+| [why-sms-is-not-active-immediately.md](why-sms-is-not-active-immediately.md) | Why SMS is not active immediately | clinic_owner | ready | Texting is a separate step from number setup; cross-listed in getting-started |
 
 ## Customer-safe notes
 

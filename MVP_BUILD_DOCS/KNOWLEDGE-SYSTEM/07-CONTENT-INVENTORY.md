@@ -17,18 +17,19 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 |---|---|---|---|---|---|---|---|
 | CH-01 | What Missed Calls Dental does | getting-started | public | draft | PROJECT-CONTEXT.md | public-web, /account | Plain-language product explanation |
 | CH-02 | How missed-call SMS recovery works | getting-started | customer_authenticated | draft | PROJECT-CONTEXT.md, OPERATIONS-RUNBOOK.md | /account | Call → missed → text follow-up; supported paths only |
-| CH-03 | Why SMS is not active immediately | getting-started, sms-approval | customer_authenticated | draft | A2P-10DLC-COMPLIANCE-READINESS.md | /account | Texting starts after approval/configuration |
-| CH-04 | What SMS approval means | sms-approval | clinic_owner | draft | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md | /account | "SMS approval" customer term; A2P is internal |
-| CH-05 | What information is needed for SMS approval | sms-approval | clinic_owner | draft | SMS-APPROVAL-FIELD-MAPPING.md | /account | Only the customer-entered fields |
-| CH-06 | Phone number types: toll-free vs local | phone-numbers | clinic_owner | draft | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts | /account | Pricing cited from canonical files, never hard-coded |
-| CH-07 | Remove a number | phone-numbers | clinic_owner | draft | AGENTS.md (lifecycle), BILLING-AND-USAGE-POLICY.md | /account | "Remove", never "Release"; stops routing immediately |
-| CH-08 | Restore a removed number | phone-numbers | clinic_owner | draft | AGENTS.md (lifecycle), BILLING-AND-USAGE-POLICY.md | /account | Only before permanent removal; no fixed-window promise |
-| CH-09 | Understand your bill | billing | clinic_owner | draft | config/billing.config.ts, BILLING-AND-USAGE-POLICY.md | /account | Amounts sourced from canonical billing files |
-| CH-10 | Why billing can show current vs next cycle | billing | clinic_owner | draft | BILLING-AND-USAGE-POLICY.md | /account | Next-cycle changes; no immediate refund/credit |
+| CH-03 | Why SMS is not active immediately | customer-help/sms-approval | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, BILLING-AND-USAGE-POLICY.md, config/runtime.config.ts, AGENTS.md | /account | Texting is a separate step from number setup; cross-listed in getting-started |
+| CH-04 | What SMS approval means | customer-help/sms-approval | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, AGENTS.md | /account | "SMS approval" customer term; A2P kept internal |
+| CH-05 | What information is needed for SMS approval | customer-help/sms-approval | clinic_owner | ready | SMS-APPROVAL-FIELD-MAPPING.md, A2P-10DLC-COMPLIANCE-READINESS.md, AGENTS.md | /account | Only customer-entered fields; Business Profile vs SMS Approval Information |
+| CH-06 | Toll-free vs local numbers | customer-help/phone-numbers | clinic_owner | ready | AGENTS.md, BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, A2P-10DLC-COMPLIANCE-READINESS.md | /account | Customer-relevant differences; prices cited from canonical files |
+| CH-07 | Remove a number | customer-help/phone-numbers | clinic_owner | ready | AGENTS.md (lifecycle), BILLING-AND-USAGE-POLICY.md | /account | "Remove", never "Release"; stops service immediately; next-cycle billing |
+| CH-08 | Restore a removed number | customer-help/phone-numbers | clinic_owner | ready | AGENTS.md (lifecycle), BILLING-AND-USAGE-POLICY.md | /account | Only before permanent removal; restore alone does not enable texting |
+| CH-09 | Understand your bill | customer-help/billing | clinic_owner | ready | config/billing.config.ts, BILLING-AND-USAGE-POLICY.md, AGENTS.md | /account | Base plan + included usage + add-ons; amounts from canonical files |
+| CH-10 | Current vs next billing cycle | customer-help/billing | clinic_owner | ready | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | /account | Next-cycle changes; no immediate refund/credit |
 | CH-11 | Patient opt-out: STOP/START | missed-calls-and-messages | customer_authenticated | draft | OPERATIONS-RUNBOOK.md §10 | /account, /workspace | How opt-out works for patients |
 | CH-12 | How front desk should handle patient replies | workspace | clinic_staff | draft | FRONT-DESK-WORKSPACE.md | /workspace | Staff-safe only; no billing/legal/approval |
 | CH-13 | Change password / account access | account-access | clinic_owner | draft | AUTH-AND-ACCESS-CONTROL.md §16 | /account | In-session change + reset path |
 | CH-14 | Contact support | troubleshooting | public | draft | README.md | public-web, /account, /workspace | support@missedcallsdental.com |
+| CH-15 | Local vs toll-free charges | customer-help/billing | clinic_owner | ready | config/billing.config.ts, BILLING-AND-USAGE-POLICY.md, AGENTS.md | /account | Toll-free vs local billing models; first toll-free included; local fees |
 
 ## Platform admin
 

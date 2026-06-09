@@ -1,18 +1,18 @@
 # Customer Help — Phone Numbers
 
-Status: scaffold (planned articles)
+Status: active (articles ready; not yet published)
 Audience: Clinic owners · Visibility: `clinic_owner`
 Last updated: 2026-06-09
 
 Help for choosing and managing the clinic's business number(s).
 
-## Planned articles
+## Articles
 
-| Slug | Title | Visibility | Notes |
-|---|---|---|---|
-| `toll-free-vs-local` | Phone number types: toll-free vs local | clinic_owner | What each is and the customer-relevant differences |
-| `remove-a-number` | Remove a number | clinic_owner | Stops routing immediately; can be restored before permanent removal |
-| `restore-a-number` | Restore a removed number | clinic_owner | Only before permanent removal; no fixed restore window promised |
+| Article | Title | Visibility | Status | Notes |
+|---|---|---|---|---|
+| [toll-free-vs-local-numbers.md](toll-free-vs-local-numbers.md) | Toll-free vs local numbers | clinic_owner | ready | What each is and the customer-relevant differences |
+| [remove-a-number.md](remove-a-number.md) | Remove a number | clinic_owner | ready | Stops service immediately; restorable before permanent removal |
+| [restore-a-removed-number.md](restore-a-removed-number.md) | Restore a removed number | clinic_owner | ready | Only before permanent removal; no fixed restore window promised |
 
 ## Customer-safe notes
 

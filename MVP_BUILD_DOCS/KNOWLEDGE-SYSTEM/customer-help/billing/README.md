@@ -1,6 +1,6 @@
 # Customer Help — Billing
 
-Status: scaffold (planned articles)
+Status: active (articles ready; not yet published)
 Audience: Clinic owners · Visibility: `clinic_owner`
 Last updated: 2026-06-09
 
@@ -22,12 +22,13 @@ rates apply above the included limits. **Always re-verify against
 `config/billing.config.ts` before publishing** — treat the file as truth, not
 this paragraph.
 
-## Planned articles
+## Articles
 
-| Slug | Title | Visibility | Notes |
-|---|---|---|---|
-| `understand-your-bill` | Understand your bill | clinic_owner | Base plan + included usage + add-ons, all sourced from canonical files |
-| `why-billing-shows-current-vs-next-cycle` | Why billing can show current vs next cycle | clinic_owner | Changes apply next cycle; no immediate refund/credit |
+| Article | Title | Visibility | Status | Notes |
+|---|---|---|---|---|
+| [understand-your-bill.md](understand-your-bill.md) | Understand your bill | clinic_owner | ready | Base plan + included usage + add-ons, all sourced from canonical files |
+| [current-vs-next-cycle.md](current-vs-next-cycle.md) | Current vs next billing cycle | clinic_owner | ready | Changes apply next cycle; no immediate refund/credit |
+| [local-vs-toll-free-charges.md](local-vs-toll-free-charges.md) | Local vs toll-free charges | clinic_owner | ready | Toll-free vs local billing models; first toll-free included; local fees |
 
 ## Customer-safe notes
 
