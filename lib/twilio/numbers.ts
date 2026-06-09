@@ -263,7 +263,7 @@ export type PurchaseResult = {
 
 // Normalize Twilio's `dateCreated` (typed `Date` in the current SDK, but defend
 // against string/number/invalid shapes from older SDKs or serialized payloads).
-function normalizeTwilioDate(value: unknown): Date | null {
+export function normalizeTwilioDate(value: unknown): Date | null {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value;
   }
@@ -410,6 +410,127 @@ export async function purchaseNumberAndConfigure(
 export async function releaseIncomingPhoneNumber(twilioPhoneNumberSid: string): Promise<void> {
   const client = getTwilioClient();
   await client.incomingPhoneNumbers(twilioPhoneNumberSid).remove();
+}
+
+// ── Owned-number inventory + safe (re)configuration ──────────────────────────
+// Used by the platform-admin "assign an existing Twilio number" workflow. These
+// never purchase or release a number.
+
+export type StandardTwilioWebhookUrls = {
+  voiceUrl: string;
+  voiceMethod: "POST";
+  statusCallback: string;
+  statusCallbackMethod: "POST";
+  smsUrl: string;
+  smsMethod: "POST";
+};
+
+// Standard app webhook endpoints a configured number must point at. Mirrors the
+// values purchaseNumberAndConfigure() sets at purchase time.
+export function standardTwilioWebhookUrls(appBaseUrl: string): StandardTwilioWebhookUrls {
+  const base = appBaseUrl.replace(/\/+$/, "");
+  return {
+    voiceUrl: `${base}/api/webhooks/twilio/voice/incoming`,
+    voiceMethod: "POST",
+    statusCallback: `${base}/api/webhooks/twilio/voice/status`,
+    statusCallbackMethod: "POST",
+    smsUrl: `${base}/api/webhooks/twilio/messaging/incoming`,
+    smsMethod: "POST",
+  };
+}
+
+export type OwnedTwilioNumber = {
+  sid: string;
+  phoneNumber: string;
+  friendlyName: string | null;
+  twilioPurchasedAt: Date | null;
+  capabilities: { voice: boolean; sms: boolean; mms: boolean };
+  voiceUrl: string | null;
+  smsUrl: string | null;
+  statusCallback: string | null;
+};
+
+// Minimal structural shape of a Twilio IncomingPhoneNumber instance. Capabilities
+// casing differs across Twilio resources, so accept both lower/upper variants.
+type TwilioIncomingNumberLike = {
+  sid: string;
+  phoneNumber: string;
+  friendlyName?: string | null;
+  dateCreated?: unknown;
+  capabilities?:
+    | { voice?: boolean; sms?: boolean; mms?: boolean; SMS?: boolean; MMS?: boolean }
+    | null;
+  voiceUrl?: string | null;
+  smsUrl?: string | null;
+  statusCallback?: string | null;
+};
+
+function mapOwnedNumber(n: TwilioIncomingNumberLike): OwnedTwilioNumber {
+  const cap = n.capabilities ?? {};
+  return {
+    sid: n.sid,
+    phoneNumber: n.phoneNumber,
+    friendlyName: (n.friendlyName ?? "").toString().trim() || null,
+    twilioPurchasedAt: normalizeTwilioDate(n.dateCreated),
+    capabilities: {
+      voice: Boolean(cap.voice),
+      sms: Boolean(cap.sms ?? cap.SMS),
+      mms: Boolean(cap.mms ?? cap.MMS),
+    },
+    voiceUrl: n.voiceUrl ?? null,
+    smsUrl: n.smsUrl ?? null,
+    statusCallback: n.statusCallback ?? null,
+  };
+}
+
+function isTwilioNotFound(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { status?: number; code?: number };
+  return e.status === 404 || e.code === 20404;
+}
+
+/** Read-only: list active IncomingPhoneNumbers owned by our Twilio account. */
+export async function listOwnedIncomingPhoneNumbers(limit = 200): Promise<OwnedTwilioNumber[]> {
+  const client = getTwilioClient();
+  const capped = Math.max(1, Math.min(1000, Math.floor(limit)));
+  const list = await client.incomingPhoneNumbers.list({ limit: capped });
+  return list.map(mapOwnedNumber);
+}
+
+/** Read-only: fetch one owned number by SID. Returns null if it does not exist. */
+export async function fetchOwnedIncomingPhoneNumberBySid(
+  sid: string,
+): Promise<OwnedTwilioNumber | null> {
+  const client = getTwilioClient();
+  try {
+    const n = await client.incomingPhoneNumbers(sid).fetch();
+    return mapOwnedNumber(n);
+  } catch (err) {
+    if (isTwilioNotFound(err)) return null;
+    throw err;
+  }
+}
+
+/**
+ * Point an existing owned number's Voice + SMS webhooks at the standard app
+ * endpoints. Used only when an imported number's config is missing/wrong. Does
+ * NOT buy, release, or change Messaging Service membership.
+ */
+export async function configureIncomingPhoneNumberWebhooks(args: {
+  sid: string;
+  appBaseUrl: string;
+}): Promise<OwnedTwilioNumber> {
+  const client = getTwilioClient();
+  const urls = standardTwilioWebhookUrls(args.appBaseUrl);
+  const updated = await client.incomingPhoneNumbers(args.sid).update({
+    voiceUrl: urls.voiceUrl,
+    voiceMethod: urls.voiceMethod,
+    statusCallback: urls.statusCallback,
+    statusCallbackMethod: urls.statusCallbackMethod,
+    smsUrl: urls.smsUrl,
+    smsMethod: urls.smsMethod,
+  });
+  return mapOwnedNumber(updated);
 }
 
 async function createOrReuseEmergencyAddress(

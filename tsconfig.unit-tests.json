@@ -12,6 +12,8 @@
   },
   "include": [
     "tests/twilio-release-deadline.test.ts",
-    "lib/phone-numbers/twilio-release-deadline.ts"
+    "tests/twilio-number-inventory.test.ts",
+    "lib/phone-numbers/twilio-release-deadline.ts",
+    "lib/phone-numbers/twilio-number-inventory.ts"
   ]
 }

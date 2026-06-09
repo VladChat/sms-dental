@@ -2760,6 +2760,43 @@ Manual verification:
 
 ---
 
+## Assign an existing Twilio number (platform admin) — 2026-06-12
+
+A platform-admin-only workflow to assign an **already-owned** Twilio number to a
+clinic, without buying or releasing anything. Lives in the admin clinic console
+Phone-number tab: **"Assign existing Twilio number"** (component
+`AdminAssignExistingNumber`). Endpoint: `GET`/`POST
+/api/admin/clinics/[clinicId]/phone-numbers/existing` (guarded by
+`resolvePlatformAdmin`, same as other admin routes).
+
+How it works:
+
+- **Inventory (GET, read-only):** lists Twilio `IncomingPhoneNumbers` owned by our
+  account that are NOT mapped to any `clinic_phone_numbers` row with
+  `removal_status in ('active','scheduled')` (matched by phone number AND SID).
+  Returns safe fields only (phone, SID, type, `dateCreated`, Voice/SMS webhook
+  status, capabilities). Number type (toll-free vs local) is decided server-side
+  from the E.164 string (toll-free prefixes 800/833/844/855/866/877/888).
+- **Assign (POST):** server re-fetches the number by SID, re-checks the DB inside
+  a clinic-row lock, classifies billing, and (only if the Voice/SMS/status
+  webhooks are missing or wrong) points them at the standard app endpoints via
+  `configureIncomingPhoneNumberWebhooks` before inserting the row. Never trusts
+  client-supplied type/SID/price/config.
+- **First version supports toll-free only**, assigned as the clinic's **included**
+  number (`source='admin'`, `billing_class='included'`, `monthly_unit_amount_cents=0`).
+- **Blocked (clear errors):** local numbers ("not assignable here yet"); a clinic
+  that already has an active/scheduled toll-free (additional paid toll-free is not
+  supported from this tool yet); a number already assigned to any clinic; a number
+  with a `permanently_removed` history row (needs manual reconciliation — never
+  auto-resurrected); a number missing Voice+SMS; a number no longer in Twilio.
+- Does **not** change Stripe quantities, start/alter the trial, touch Messaging
+  Service membership, or release/buy any number. Routing after assignment uses the
+  existing active-only `lookupClinicByPhone` DB lookup. Audit action:
+  `clinic.phone_number.assign_existing` (phone, SID, billing class, area code — no
+  secrets).
+
+---
+
 ## Mock A2P + separated submission modes — operate & verify (2026-06-07)
 
 The admin A2P review flow now has three explicit operator modes:

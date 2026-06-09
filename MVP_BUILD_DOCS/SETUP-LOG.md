@@ -5643,3 +5643,44 @@ Intentionally not done:
 - No phone numbers released, rebilled, deactivated, or reclassified.
 - No `/account` Remove test on a real clinic (destructive; not approved).
 - No secrets, connection strings, or raw phone numbers printed.
+
+---
+
+## 2026-06-12 — Admin: assign an existing (already-owned) Twilio number
+
+New platform-admin-only workflow to assign an existing owned Twilio number to a
+clinic. Additive; no existing behavior changed; no Twilio purchase/release.
+
+What changed:
+
+- New endpoint `GET`/`POST /api/admin/clinics/[clinicId]/phone-numbers/existing`
+  (guarded by `resolvePlatformAdmin`).
+- New pure helper `lib/phone-numbers/twilio-number-inventory.ts` (toll-free/local
+  classification + unassigned-inventory builder) + tests
+  `tests/twilio-number-inventory.test.ts` (run via `npm run test:phone-numbers`).
+- New service `lib/phone-numbers/assign-existing-twilio.ts` (Twilio re-fetch,
+  DB re-check inside clinic lock, billing classification, safe webhook configure,
+  insert).
+- `lib/twilio/numbers.ts`: read-only `listOwnedIncomingPhoneNumbers`,
+  `fetchOwnedIncomingPhoneNumberBySid`, `configureIncomingPhoneNumberWebhooks`,
+  `standardTwilioWebhookUrls`; exported `normalizeTwilioDate`.
+- Admin UI `AdminAssignExistingNumber` wired into the clinic console Phone tab.
+
+Scope/limits (first version):
+
+- Toll-free only, assigned as the clinic's **included** number (`source='admin'`,
+  `billing_class='included'`, `$0`). Local numbers and additional toll-free are
+  blocked with clear errors. Already-assigned / `permanently_removed` / no-Voice+SMS
+  / not-in-Twilio are blocked.
+- Used the existing `clinic_phone_numbers.source` value `'admin'` (the
+  `clinic_phone_numbers_source_check` constraint allows only
+  `legacy/owner_self_service/admin`), so **no DB migration is required**.
+
+Validation: `npm run test:phone-numbers` (17/17), `npm run typecheck`, `npm run build` — all pass.
+
+Migration: none required (no schema change).
+
+Commit: `feat: assign existing Twilio numbers from admin` (pushed to `origin/main`).
+
+Intentionally not done: no Twilio purchase/release, no Messaging Service membership
+changes, no Stripe quantity changes, no trial changes, no secrets printed.

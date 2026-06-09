@@ -27,6 +27,7 @@ import { AdminA2pForm } from "./AdminA2pForm";
 import { AdminA2pReviewPanel } from "./AdminA2pReviewPanel";
 import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
 import { AdminPhoneNumberList } from "./AdminPhoneNumberList";
+import { AdminAssignExistingNumber } from "./AdminAssignExistingNumber";
 import { AdminNumberControls } from "./AdminNumberControls";
 import { formatUsdFromCents } from "../../../../../../config/billing.config";
 
@@ -367,6 +368,14 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 />
               </div>
             )}
+
+            {/* Platform-admin: assign an existing, already-owned Twilio number
+                (no new purchase). Toll-free only in this first version. */}
+            <AdminAssignExistingNumber
+              clinicId={d.id}
+              clinicName={d.name}
+              onAssigned={() => router.refresh()}
+            />
           </Panel>
 
           {/* Business profile (editable — preserved) */}
