@@ -136,6 +136,8 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .btn-secondary:hover:not(:disabled) { background:var(--surface-2); border-color:var(--n-400); }
 .btn-ghost { background:transparent; color:var(--text-secondary); }
 .btn-ghost:hover:not(:disabled) { background:var(--surface-2); color:var(--text); }
+.btn-danger { background:var(--error); color:var(--text-on-brand); box-shadow:var(--shadow-xs); }
+.btn-danger:hover:not(:disabled) { background:var(--error-text); }
 .btn-sm { height:36px; padding:0 var(--space-4); font-size:.875rem; border-radius:var(--r-sm); }
 .btn-block { width:100%; }
 .link { color:var(--link); font-weight:600; text-decoration:none; cursor:pointer; }
@@ -254,6 +256,18 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .acct-primary-action { width:100%; }
 .acct-savebar-status { color:var(--success-text); }
 .acct-number { padding:var(--space-4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); }
+/* Compact, scannable status list inside the assigned phone-number card:
+   hairline-divided rows, label left / status right, no bulky panel. */
+.acct-num-status { display:grid; margin-top:var(--space-3); }
+.acct-num-status-row { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); min-height:40px; padding:var(--space-2) 0; }
+.acct-num-status-row + .acct-num-status-row { border-top:1px solid var(--border); }
+.acct-num-status-row dt { color:var(--text-secondary); }
+.acct-num-status-row dd { margin:0; text-align:right; }
+/* Remove/Restore action, separated from the status rows by a subtle hairline. */
+.acct-num-sep { margin-top:var(--space-3); padding-top:var(--space-4); border-top:1px solid var(--border); }
+/* Destructive variant of the inline consent panel (remove confirmation): re-themes
+   the existing panel with error tokens — no separate panel, no whole-card red. */
+.acct-consent.is-danger { border-color:var(--error-border); border-left-color:var(--error); background:var(--error-bg); }
 .acct-search-form { display:grid; gap:var(--space-4); padding:var(--space-4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
 .acct-search-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); }
 /* Gentle hint, not an error block: soft info tint + left accent. */

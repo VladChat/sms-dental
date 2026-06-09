@@ -156,7 +156,7 @@ function AssignedRow({
         {scheduled && <span className="badge badge-warning">Removal scheduled</span>}
       </div>
 
-      <dl className="acct-rows" style={{ marginTop: "var(--space-2)" }}>
+      <dl className="acct-num-status">
         <Row label="Calls">
           {n.isActive && !scheduled ? <StatusBadge kind="active" /> : <StatusBadge kind="not_active" />}
         </Row>
@@ -206,7 +206,7 @@ function AssignedRow({
       )}
 
       {!scheduled && !confirmRemove && (
-        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginTop: "var(--space-3)" }}>
+        <div className="acct-num-sep">
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -229,8 +229,8 @@ function AssignedRow({
       )}
 
       {!scheduled && confirmRemove && (
-        <div className="acct-cand-actions" style={{ marginTop: "var(--space-3)" }}>
-          <div className="acct-consent">
+        <div className="acct-cand-actions acct-num-sep">
+          <div className="acct-consent is-danger">
             <div>
               <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>
                 Remove number
@@ -255,7 +255,7 @@ function AssignedRow({
 
           <button
             type="button"
-            className="btn btn-primary acct-primary-action"
+            className="btn btn-danger acct-primary-action"
             onClick={() => void runAction("remove")}
             disabled={!removeAcknowledged || loadingAction !== null}
             aria-busy={loadingAction === "remove"}
@@ -290,9 +290,9 @@ function AssignedRow({
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--space-3)" }}>
-      <dt className="t-small" style={{ color: "var(--text-secondary)" }}>{label}</dt>
-      <dd style={{ margin: 0 }}>{children}</dd>
+    <div className="acct-num-status-row">
+      <dt className="t-small">{label}</dt>
+      <dd>{children}</dd>
     </div>
   );
 }
