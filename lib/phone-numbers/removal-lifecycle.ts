@@ -7,8 +7,7 @@ import {
   syncNumberSubscriptionQuantities,
   type NumberSubscriptionQuantities,
 } from "../billing/stripe-number-subscription-sync";
-
-const REMOVAL_GRACE_DAYS = 30;
+import { computeTwilioReleaseDeadline } from "./twilio-release-deadline";
 
 type DbExecutor = Sql | TransactionSql;
 
@@ -23,6 +22,9 @@ type LifecycleRow = {
   permanent_removal_at: Date | null;
   twilio_phone_number_sid: string | null;
   twilio_release_status: "not_required" | "pending" | "released" | "failed";
+  // Estimated Twilio billing anchor + creation fallback for the release deadline.
+  twilio_purchased_at: Date | null;
+  created_at: Date;
   updated_at: Date;
 };
 
@@ -279,6 +281,19 @@ async function finalizeScheduledRemoval(args: {
       return { kind: "drifted", current };
     }
 
+    // Estimated Twilio billing-window release deadline. Anchor on the stored
+    // Twilio purchase timestamp (falling back to created_at), find the next
+    // estimated monthly renewal, and subtract a 1-day safety buffer. If we are
+    // already inside that final pre-renewal day the helper clamps to now, making
+    // the number eligible for release as soon as the release job runs. This is an
+    // ESTIMATE — Twilio exposes no per-number paid-through/renewal field. No fixed
+    // grace period is used anywhere.
+    const purchaseAnchor = target.twilio_purchased_at ?? target.created_at;
+    const permanentRemovalAt = computeTwilioReleaseDeadline({
+      purchaseAnchor,
+      now: new Date(),
+    });
+
     const rows = await tx<{ phone_number: string; permanent_removal_at: Date }[]>`
       update public.clinic_phone_numbers set
         is_active = false,
@@ -286,7 +301,7 @@ async function finalizeScheduledRemoval(args: {
         removal_requested_at = now(),
         removal_requested_by_profile_id = ${args.actorProfileId},
         removal_requested_by_email = ${args.actorEmail},
-        permanent_removal_at = now() + (${REMOVAL_GRACE_DAYS}::int * interval '1 day'),
+        permanent_removal_at = ${permanentRemovalAt},
         restored_at = null,
         restored_by_profile_id = null,
         restored_by_email = null,
@@ -397,7 +412,7 @@ async function readLifecycleSnapshot(
     select
       id, clinic_id, phone_number, number_type, billing_class, is_active,
       removal_status, permanent_removal_at, twilio_phone_number_sid,
-      twilio_release_status, updated_at
+      twilio_release_status, twilio_purchased_at, created_at, updated_at
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
       and removal_status <> 'permanently_removed'

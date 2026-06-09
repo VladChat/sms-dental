@@ -106,6 +106,14 @@ function AssignedRow({
   const router = useRouter();
   const isLocal = n.numberType === "local";
   const scheduled = n.removalStatus === "scheduled";
+  // Restore is allowed only while still scheduled, before Twilio release, and
+  // before the estimated release deadline (permanentRemovalAt) passes. Mirrors the
+  // server-side rule in restoreScheduledPhoneNumber().
+  const restoreOpen =
+    scheduled &&
+    n.twilioReleaseStatus !== "released" &&
+    n.permanentRemovalAt !== null &&
+    new Date(n.permanentRemovalAt).getTime() > Date.now();
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removeAcknowledged, setRemoveAcknowledged] = useState(false);
   const [loadingAction, setLoadingAction] = useState<"remove" | "restore" | null>(null);
@@ -160,26 +168,30 @@ function AssignedRow({
             {scheduled ? "Updates next cycle" : assignedNumberBillingLabel(n.numberType, n.billingClass)}
           </span>
         </Row>
-        {scheduled && n.permanentRemovalAt && (
-          <Row label="Permanent removal">
-            <span className="t-small" style={{ color: "var(--text-muted)" }}>
-              {formatShortDate(n.permanentRemovalAt)}
-            </span>
-          </Row>
-        )}
       </dl>
 
       {scheduled ? (
-        <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
-          Calls and texts are stopped. The number can be restored until the permanent removal date.
-        </p>
+        <>
+          <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
+            Calls and texts are no longer routed to your clinic.
+          </p>
+          {restoreOpen && n.permanentRemovalAt ? (
+            <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
+              Restore available until {formatShortDate(n.permanentRemovalAt)}.
+            </p>
+          ) : (
+            <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)" }}>
+              Restore window has closed. Permanent release is pending.
+            </p>
+          )}
+        </>
       ) : !n.isActive && (
         <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
           This number is still assigned to your clinic and counts toward your account limit.
         </p>
       )}
 
-      {scheduled && (
+      {scheduled && restoreOpen && (
         <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginTop: "var(--space-3)" }}>
           <button
             type="button"
@@ -224,16 +236,11 @@ function AssignedRow({
                 Remove number
               </p>
               <p className="t-body" style={{ margin: "var(--space-2) 0 0", fontWeight: 700 }}>
-                This number will stop working immediately.
+                Calls and texts will stop routing to your clinic immediately.
               </p>
               <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-secondary)" }}>
                 Billing updates next cycle.
               </p>
-              {n.permanentRemovalAt && (
-                <p className="t-small" style={{ margin: "var(--space-1) 0 0", color: "var(--text-secondary)" }}>
-                  Restore available until {formatShortDate(n.permanentRemovalAt)}.
-                </p>
-              )}
             </div>
             <label className="check">
               <input

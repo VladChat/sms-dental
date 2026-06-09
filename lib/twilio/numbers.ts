@@ -254,7 +254,25 @@ export type PurchaseResult = {
   emergencyAddressSid: string | null;
   emergencyAddressStatus: string | null;
   messagingServiceSid: string | null;
+  // Twilio IncomingPhoneNumber `dateCreated` (the purchase timestamp), normalized
+  // to a Date. Used as the estimated monthly-renewal billing anchor for the
+  // removal lifecycle. Null only if Twilio returns no usable date; callers fall
+  // back to `new Date()`.
+  twilioPurchasedAt: Date | null;
 };
+
+// Normalize Twilio's `dateCreated` (typed `Date` in the current SDK, but defend
+// against string/number/invalid shapes from older SDKs or serialized payloads).
+function normalizeTwilioDate(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
 
 export type TwilioBusinessAddress = {
   clinicId: string;
@@ -371,6 +389,13 @@ export async function purchaseNumberAndConfigure(
     }
   }
 
+  // Prefer the configured/fetched instance's dateCreated; fall back to the
+  // originally created instance. Twilio sets dateCreated at purchase time and it
+  // is stable across the later configure/fetch calls.
+  const twilioPurchasedAt =
+    normalizeTwilioDate((configured as { dateCreated?: unknown }).dateCreated) ??
+    normalizeTwilioDate((created as { dateCreated?: unknown }).dateCreated);
+
   return {
     sid: configured.sid,
     phoneNumber: configured.phoneNumber,
@@ -378,6 +403,7 @@ export async function purchaseNumberAndConfigure(
     emergencyAddressSid,
     emergencyAddressStatus,
     messagingServiceSid,
+    twilioPurchasedAt,
   };
 }
 

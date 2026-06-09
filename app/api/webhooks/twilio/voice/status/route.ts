@@ -8,7 +8,7 @@ import { verifyTwilioSignature } from "@/lib/twilio/signature";
 import { recordWebhookEvent } from "@/lib/db/webhook-events";
 import { isDatabaseConfigured } from "@/lib/db/client";
 import { normalizePhone } from "@/lib/phone/normalize";
-import { lookupClinicByPhone } from "@/lib/db/clinics";
+import { lookupClinicByPhoneIncludingScheduled } from "@/lib/db/clinics";
 import { getOrCreateConversation } from "@/lib/db/conversations";
 import { sendRecoverySms } from "@/lib/twilio/outbound-sms";
 import { logger } from "@/lib/logging/logger";
@@ -79,8 +79,17 @@ export async function POST(request: NextRequest) {
 
   // Look up clinic and attempt recovery SMS with all guards enforced.
   try {
-    const clinic = await lookupClinicByPhone(to);
+    const routing = await lookupClinicByPhoneIncludingScheduled(to);
 
+    // A number scheduled for removal must never trigger recovery SMS. The
+    // active-only routing rule below would already skip it, but skip explicitly
+    // with a clear reason so the suppression is observable.
+    if (routing && routing.removalStatus === "scheduled") {
+      logger.info("twilio.voice.status.scheduled_skip", { to });
+      return twimlResponse();
+    }
+
+    const clinic = routing && routing.removalStatus === "active" ? routing.clinic : null;
     if (!clinic) {
       logger.info("twilio.voice.status.no_clinic_mapping", { to });
       return twimlResponse();

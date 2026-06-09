@@ -12,6 +12,10 @@ export type ClinicPhoneNumberRow = {
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
+  // Added by 20260612000100_phone_number_twilio_purchased_at. Estimated Twilio
+  // billing anchor (IncomingPhoneNumber dateCreated, or a safe fallback). Nullable
+  // for legacy rows; removal-lifecycle code falls back to created_at when null.
+  twilio_purchased_at: Date | null;
   // Added by the self-service-numbers migration (present after it is applied;
   // `select *` returns them). Legacy rows default to source/billing_class
   // 'legacy', amount 0.
@@ -160,16 +164,18 @@ export async function upsertOfficeTextingNumber(params: {
   const sql = getDb();
   const rows = await sql<ClinicPhoneNumberRow[]>`
     insert into public.clinic_phone_numbers
-      (clinic_id, phone_number, twilio_phone_number_sid, role, is_active)
+      (clinic_id, phone_number, twilio_phone_number_sid, role, is_active, twilio_purchased_at)
     values
       (${params.clinicId}, ${params.phoneNumber}, ${params.twilioPhoneNumberSid},
-       'office_texting', true)
+       'office_texting', true, now())
     on conflict (phone_number)
     do update set
       clinic_id = excluded.clinic_id,
       twilio_phone_number_sid = excluded.twilio_phone_number_sid,
       role = excluded.role,
       is_active = true,
+      -- Safe fallback billing anchor: keep an existing value, else stamp now().
+      twilio_purchased_at = coalesce(public.clinic_phone_numbers.twilio_purchased_at, now()),
       removal_status = 'active',
       removal_requested_at = null,
       removal_requested_by_profile_id = null,

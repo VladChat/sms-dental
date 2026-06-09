@@ -2685,6 +2685,25 @@ States on `clinic_phone_numbers.removal_status`:
 - `permanently_removed`: delayed release completed; normal owner/account lists
   hide the row, but audit history remains in the DB.
 
+`permanent_removal_at` (updated 2026-06-12): this is an **estimated Twilio
+billing-window deadline**, not a fixed grace period. On removal it is set to the
+next estimated monthly Twilio renewal after `now`, anchored on
+`clinic_phone_numbers.twilio_purchased_at` (falling back to `created_at`), minus a
+**1-day** safety buffer. If removal happens inside that final pre-renewal day it
+is set to `now()`, so the number is released on the next job run. Twilio exposes
+no reliable per-number paid-through/renewal field, so this is an estimate computed
+by the pure helper `lib/phone-numbers/twilio-release-deadline.ts`. UI never
+promises a fixed restore window; the previous fixed 30-day grace is removed.
+
+Scheduled-number webhook behavior: a number that is `scheduled` is still held by
+our Twilio account, so Twilio keeps calling our webhooks. Routing uses
+`lookupClinicByPhoneIncludingScheduled()` to detect this. Voice calls to a
+scheduled number play a short inactive-line greeting ("This recovery line is no
+longer active. Please contact the office directly.") and hang up — no recovery
+SMS. Inbound SMS to a scheduled number does not create a conversation or record
+ordinary replies as clinic messages; STOP/START still update local opt-out state.
+`lookupClinicByPhone()` (active-only) remains the routing source of truth.
+
 Customer actions:
 
 - Remove: `POST /api/account/phone-numbers/{id}/remove`.
@@ -2706,7 +2725,12 @@ Type-aware billing display:
 
 Delayed Twilio release job:
 
-- Vercel Cron calls `GET /api/jobs/release-removed-phone-numbers` daily.
+- Vercel Cron calls `GET /api/jobs/release-removed-phone-numbers` hourly
+  (`0 * * * *`, updated 2026-06-12 from daily). Hourly execution requires a Vercel
+  plan that allows sub-daily crons (Pro and above); on the Hobby plan the schedule
+  is accepted but throttled to roughly once per day. The 1-day safety buffer in
+  the release deadline tolerates a daily cadence, so behavior is correct either
+  way — hourly only tightens the release window.
 - The route requires `Authorization: Bearer <secret>`.
 - Prefer Vercel's `CRON_SECRET` env var; Vercel sends it automatically to cron
   invocations. `PHONE_NUMBER_RELEASE_CRON_SECRET` is also accepted as a
@@ -2721,8 +2745,10 @@ Delayed Twilio release job:
 
 Manual verification:
 
-1. Apply migration `20260610000100_phone_number_removal_lifecycle.sql` before
-   deploying code that selects the new columns.
+1. Apply migration `20260610000100_phone_number_removal_lifecycle.sql`, then
+   `20260612000100_phone_number_twilio_purchased_at.sql` (adds the
+   `twilio_purchased_at` billing anchor), before deploying code that selects the
+   new columns.
 2. Confirm production has `CRON_SECRET` or `PHONE_NUMBER_RELEASE_CRON_SECRET`.
 3. On a test/owner clinic, remove a number and confirm account UI shows
    "Removal scheduled", routing status is not active, and Billing shows current

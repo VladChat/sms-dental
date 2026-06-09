@@ -5501,3 +5501,81 @@ Safety confirmation:
 - No mock Campaign was created.
 - No phone numbers were attached.
 - SMS recovery / patient SMS was not enabled.
+
+---
+
+## 2026-06-12 — Phone removal aligned to estimated Twilio billing window
+
+Replaced the fixed 30-day phone-number removal grace period with an estimated
+Twilio billing-window release deadline, preserving one-click restore while the
+number is still held by our Twilio account.
+
+What changed:
+
+- New pure helper `lib/phone-numbers/twilio-release-deadline.ts`: computes the
+  next estimated monthly Twilio renewal after `now` (UTC, month-end safe, time-of-
+  day preserved) minus a 1-day safety buffer; clamps to `now` if already inside
+  the final pre-renewal day. This is an ESTIMATE — Twilio's IncomingPhoneNumber
+  resource exposes no per-number paid-through/renewal field (verified against the
+  installed Twilio SDK v5.4.3 types; only `dateCreated` is available).
+- `lib/phone-numbers/removal-lifecycle.ts`: removed `REMOVAL_GRACE_DAYS = 30`;
+  `permanent_removal_at` is now computed from the billing anchor
+  (`clinic_phone_numbers.twilio_purchased_at`, falling back to `created_at`).
+- New billing anchor column `clinic_phone_numbers.twilio_purchased_at` populated
+  on purchase: `lib/twilio/numbers.ts` `PurchaseResult.twilioPurchasedAt`
+  (normalized from Twilio `dateCreated`); `lib/phone-numbers/provisioning.ts`
+  persists it for included/local/additional numbers; mock mode uses `new Date()`;
+  `upsertOfficeTextingNumber()` stamps a safe fallback.
+- Scheduled-number webhooks: added
+  `lookupClinicByPhoneIncludingScheduled()` in `lib/db/clinics.ts`
+  (`lookupClinicByPhone()` active-only routing unchanged). Voice incoming plays an
+  inactive-line greeting + hangup for scheduled numbers (no recovery SMS); voice
+  status explicitly skips scheduled numbers; inbound SMS to a scheduled number no
+  longer creates conversations/records ordinary replies but still honors
+  STOP/START opt-out.
+- UI `app/setup/[token]/_components/AssignedNumberCard.tsx`: removed all
+  fixed-window copy; remove confirmation now says "Calls and texts will stop
+  routing to your clinic immediately." + "Billing updates next cycle."; scheduled
+  card shows "Restore available until {date}" while open and "Restore window has
+  closed. Permanent release is pending." after; Restore button hidden once the
+  window closes.
+- Release job cron changed from daily (`0 9 * * *`) to hourly (`0 * * * *`) in
+  `vercel.json`. Hourly cadence requires a Vercel plan that allows sub-daily crons
+  (Pro+); on Hobby it is throttled to ~once/day. The 1-day buffer makes either
+  cadence correct.
+- Tests: `tests/twilio-release-deadline.test.ts` (+ `tsconfig.unit-tests.json`,
+  `npm run test:phone-numbers`).
+
+Migration (additive + idempotent, NOT yet applied to production):
+
+```txt
+supabase/migrations/20260612000100_phone_number_twilio_purchased_at.sql
+```
+
+Backfill: `twilio_purchased_at = coalesce(activated_at, created_at)` for existing
+rows. Column is nullable; lifecycle code falls back to `created_at`.
+
+Validation:
+
+- `npm run test:phone-numbers` pass (9/9).
+- `npm run typecheck` pass.
+- `npm run build` pass.
+- `npm run test:a2p` pass (64/64, no regression).
+
+Commit: `fix: align phone removal with Twilio billing window` (pushed to
+`origin/main`).
+
+Manual production DB migration required: apply
+`20260612000100_phone_number_twilio_purchased_at.sql` via the Supabase SQL editor
+as the service role (same workflow as prior migrations). Until applied,
+`/account` and the release job continue to work (code falls back to `created_at`),
+but the more accurate `twilio_purchased_at` anchor is unavailable.
+
+Intentionally not done:
+
+- No Twilio numbers released, purchased, or reconfigured.
+- No Stripe proration/credit/charge added (remove/restore keep
+  `proration_behavior:"none"`).
+- No Vercel env vars, Supabase secrets, Twilio/Stripe credentials, domains, DNS,
+  or `.env*` files changed.
+- Migration not auto-applied to production.

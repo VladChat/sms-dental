@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".tmp-tests",
+    "rootDir": ".",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "verbatimModuleSyntax": false,
+    "incremental": false
+  },
+  "include": [
+    "tests/twilio-release-deadline.test.ts",
+    "lib/phone-numbers/twilio-release-deadline.ts"
+  ]
+}

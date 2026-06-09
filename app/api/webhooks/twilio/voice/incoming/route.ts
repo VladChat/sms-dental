@@ -8,7 +8,7 @@ import { verifyTwilioSignature } from "@/lib/twilio/signature";
 import { recordWebhookEvent } from "@/lib/db/webhook-events";
 import { isDatabaseConfigured, getDb } from "@/lib/db/client";
 import { normalizePhone } from "@/lib/phone/normalize";
-import { lookupClinicByPhone, type ClinicRow } from "@/lib/db/clinics";
+import { lookupClinicByPhoneIncludingScheduled, type ClinicRow } from "@/lib/db/clinics";
 import { upsertCallEvent } from "@/lib/db/call-events";
 import { hasSentRecoverySmsSince } from "@/lib/db/messages";
 import { evaluateSmsReadinessForLiveSend } from "@/lib/db/sms-readiness";
@@ -83,6 +83,14 @@ function buildVoiceTwiml(
   return `<Response><Say voice="alice">${message}</Say><Hangup/></Response>`;
 }
 
+// Greeting for a number scheduled for removal. The number is still held by our
+// Twilio account (so Twilio still calls this webhook) but no longer routes to the
+// clinic and must never trigger recovery SMS. Play a short inactive-line notice
+// and hang up.
+function buildInactiveNumberTwiml(): string {
+  return `<Response><Say voice="alice">This recovery line is no longer active. Please contact the office directly.</Say><Hangup/></Response>`;
+}
+
 // Twilio incoming voice webhook.
 //   1. Validate Twilio signature.
 //   2. Record webhook_event idempotently.
@@ -142,10 +150,12 @@ export async function POST(request: NextRequest) {
 
   if (!isDuplicate && isDatabaseConfigured() && callSid) {
     try {
-      const clinic = await lookupClinicByPhone(to);
+      // Removal-aware lookup: resolves the clinic for active AND scheduled numbers
+      // so a scheduled (removal-pending) number can be detected before routing.
+      const routing = await lookupClinicByPhoneIncludingScheduled(to);
 
       await upsertCallEvent({
-        clinicId: clinic?.id ?? null,
+        clinicId: routing?.clinic.id ?? null,
         callSid,
         fromNumber: from,
         toNumber: to,
@@ -155,6 +165,14 @@ export async function POST(request: NextRequest) {
         rawPayload: params,
       });
 
+      // Scheduled number: do not route to the clinic and do not predict/send
+      // recovery SMS. Return the inactive-line greeting and hang up.
+      if (routing && routing.removalStatus === "scheduled") {
+        logger.info("twilio.voice.scheduled_number", { to });
+        return twimlResponse(buildInactiveNumberTwiml());
+      }
+
+      const clinic = routing && routing.removalStatus === "active" ? routing.clinic : null;
       if (clinic && from) {
         clinicNameForTwiml = clinic.name;
         // Predict greeting based on read-only state. Non-fatal — fall back to
@@ -167,7 +185,7 @@ export async function POST(request: NextRequest) {
             message: err instanceof Error ? err.message : "unknown",
           });
         }
-      } else if (!clinic) {
+      } else if (!routing) {
         logger.info("twilio.voice.no_clinic_mapping", { to });
       }
     } catch (err) {

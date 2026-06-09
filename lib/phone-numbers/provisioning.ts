@@ -303,9 +303,12 @@ export async function provisionClinicPhoneNumber(
   let twilioAddressSid: string | null = null;
   let twilioEmergencyAddressSid: string | null = null;
   let twilioEmergencyAddressStatus: string | null = null;
+  // Estimated Twilio monthly-renewal billing anchor stored on the assigned row.
+  let twilioPurchasedAt: Date;
   if (purchaseMode === "mock") {
     sid = `PN_mock_${attemptId.replace(/-/g, "")}`;
     purchasedNumber = phoneNumber;
+    twilioPurchasedAt = new Date();
     await markAttempt(attemptId, { status: "twilio_purchased", twilio_phone_number_sid: sid });
     logger.info("provisioning.mock_twilio_purchased", {
       clinicId,
@@ -387,6 +390,9 @@ export async function provisionClinicPhoneNumber(
       twilioAddressSid = purchased.addressSid;
       twilioEmergencyAddressSid = purchased.emergencyAddressSid;
       twilioEmergencyAddressStatus = purchased.emergencyAddressStatus;
+      // Use Twilio's dateCreated as the billing anchor; fall back to now() only
+      // when Twilio returns no usable date.
+      twilioPurchasedAt = purchased.twilioPurchasedAt ?? new Date();
       // Persist the SID immediately so a later failure can never hide it.
       await markAttempt(attemptId, { status: "twilio_purchased", twilio_phone_number_sid: sid });
     } catch (err) {
@@ -506,6 +512,7 @@ export async function provisionClinicPhoneNumber(
         twilioAddressSid,
         twilioEmergencyAddressSid,
         twilioEmergencyAddressStatus,
+        twilioPurchasedAt,
         actorProfileId,
         actorEmail,
         source,
@@ -521,6 +528,7 @@ export async function provisionClinicPhoneNumber(
       twilioAddressSid,
       twilioEmergencyAddressSid,
       twilioEmergencyAddressStatus,
+      twilioPurchasedAt,
       actorProfileId,
       actorEmail,
       source,
@@ -553,14 +561,16 @@ export async function provisionClinicPhoneNumber(
            source, billing_class, monthly_unit_amount_cents, currency,
            purchased_by_profile_id, purchased_by_email, activated_at,
            twilio_address_sid, twilio_emergency_address_sid,
-           twilio_emergency_address_status, twilio_address_configured_at)
+           twilio_emergency_address_status, twilio_address_configured_at,
+           twilio_purchased_at)
         values
           (${clinicId}, ${purchasedNumber}, ${numberType}, ${sid}, 'office_texting', true,
            ${source}, 'included', 0, ${billingConfig.currency},
            ${actorProfileId}, ${actorEmail}, now(),
            ${twilioAddressSid}, ${twilioEmergencyAddressSid},
            ${twilioEmergencyAddressStatus},
-           ${twilioAddressConfiguredAt})
+           ${twilioAddressConfiguredAt},
+           ${twilioPurchasedAt})
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
           number_type = excluded.number_type,
@@ -577,6 +587,7 @@ export async function provisionClinicPhoneNumber(
           twilio_emergency_address_sid = excluded.twilio_emergency_address_sid,
           twilio_emergency_address_status = excluded.twilio_emergency_address_status,
           twilio_address_configured_at = excluded.twilio_address_configured_at,
+          twilio_purchased_at = excluded.twilio_purchased_at,
           activated_at = now(),
           suspended_at = null,
           suspended_by_profile_id = null,
@@ -672,6 +683,7 @@ async function assignLocalNumber(args: {
   twilioAddressSid: string | null;
   twilioEmergencyAddressSid: string | null;
   twilioEmergencyAddressStatus: string | null;
+  twilioPurchasedAt: Date;
   actorProfileId: string | null;
   actorEmail: string | null;
   source: ProvisionSource;
@@ -686,6 +698,7 @@ async function assignLocalNumber(args: {
     twilioAddressSid,
     twilioEmergencyAddressSid,
     twilioEmergencyAddressStatus,
+    twilioPurchasedAt,
     actorProfileId,
     actorEmail,
     source,
@@ -722,14 +735,16 @@ async function assignLocalNumber(args: {
            source, billing_class, monthly_unit_amount_cents, currency,
            purchased_by_profile_id, purchased_by_email, activated_at,
            twilio_address_sid, twilio_emergency_address_sid,
-           twilio_emergency_address_status, twilio_address_configured_at)
+           twilio_emergency_address_status, twilio_address_configured_at,
+           twilio_purchased_at)
         values
           (${clinicId}, ${purchasedNumber}, 'local', ${sid}, 'office_texting', true,
            ${source}, 'additional', ${amount}, ${billingConfig.currency},
            ${actorProfileId}, ${actorEmail}, now(),
            ${twilioAddressSid}, ${twilioEmergencyAddressSid},
            ${twilioEmergencyAddressStatus},
-           ${twilioAddressConfiguredAt})
+           ${twilioAddressConfiguredAt},
+           ${twilioPurchasedAt})
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
           number_type = excluded.number_type,
@@ -746,6 +761,7 @@ async function assignLocalNumber(args: {
           twilio_emergency_address_sid = excluded.twilio_emergency_address_sid,
           twilio_emergency_address_status = excluded.twilio_emergency_address_status,
           twilio_address_configured_at = excluded.twilio_address_configured_at,
+          twilio_purchased_at = excluded.twilio_purchased_at,
           activated_at = now(),
           suspended_at = null,
           suspended_by_profile_id = null,
@@ -838,6 +854,7 @@ async function assignAdditionalNumber(args: {
   twilioAddressSid: string | null;
   twilioEmergencyAddressSid: string | null;
   twilioEmergencyAddressStatus: string | null;
+  twilioPurchasedAt: Date;
   actorProfileId: string | null;
   actorEmail: string | null;
   source: ProvisionSource;
@@ -852,6 +869,7 @@ async function assignAdditionalNumber(args: {
     twilioAddressSid,
     twilioEmergencyAddressSid,
     twilioEmergencyAddressStatus,
+    twilioPurchasedAt,
     actorProfileId,
     actorEmail,
     source,
@@ -930,14 +948,16 @@ async function assignAdditionalNumber(args: {
            source, billing_class, monthly_unit_amount_cents, currency,
            purchased_by_profile_id, purchased_by_email, activated_at,
            twilio_address_sid, twilio_emergency_address_sid,
-           twilio_emergency_address_status, twilio_address_configured_at)
+           twilio_emergency_address_status, twilio_address_configured_at,
+           twilio_purchased_at)
         values
           (${clinicId}, ${purchasedNumber}, ${numberType}, ${sid}, 'office_texting', true,
            ${source}, 'additional', ${amount}, ${billingConfig.currency},
            ${actorProfileId}, ${actorEmail}, now(),
            ${twilioAddressSid}, ${twilioEmergencyAddressSid},
            ${twilioEmergencyAddressStatus},
-           ${twilioAddressConfiguredAt})
+           ${twilioAddressConfiguredAt},
+           ${twilioPurchasedAt})
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
           number_type = excluded.number_type,
@@ -954,6 +974,7 @@ async function assignAdditionalNumber(args: {
           twilio_emergency_address_sid = excluded.twilio_emergency_address_sid,
           twilio_emergency_address_status = excluded.twilio_emergency_address_status,
           twilio_address_configured_at = excluded.twilio_address_configured_at,
+          twilio_purchased_at = excluded.twilio_purchased_at,
           activated_at = now(),
           suspended_at = null,
           suspended_by_profile_id = null,

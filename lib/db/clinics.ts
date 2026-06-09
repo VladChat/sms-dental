@@ -132,6 +132,7 @@ const CLINIC_COLS = [
 
 // Look up the active clinic that owns a given E.164 phone number.
 // Returns null if the number has no mapping or the clinic/mapping is inactive.
+// This is the routing source of truth: only ACTIVE numbers route calls/SMS.
 export async function lookupClinicByPhone(
   phoneNumber: string,
 ): Promise<ClinicRow | null> {
@@ -148,6 +149,53 @@ export async function lookupClinicByPhone(
     limit 1
   `;
   return rows[0] ?? null;
+}
+
+// Removal-aware routing lookup. A number scheduled for removal is still held by
+// our Twilio account (so Twilio keeps sending us its webhooks) but must NOT route
+// calls/texts to the clinic. This helper resolves the clinic for BOTH active and
+// scheduled numbers so webhooks can branch on `removalStatus`. Permanently removed
+// (released) numbers are intentionally excluded — they no longer belong to us.
+//
+// `lookupClinicByPhone()` remains the active-only routing source of truth; this is
+// purely additive for the scheduled-number webhook handling.
+export type RemovalAwareClinicLookup = {
+  clinic: ClinicRow;
+  removalStatus: "active" | "scheduled";
+  numberIsActive: boolean;
+};
+
+export async function lookupClinicByPhoneIncludingScheduled(
+  phoneNumber: string,
+): Promise<RemovalAwareClinicLookup | null> {
+  if (!phoneNumber) return null;
+  const sql = getDb();
+  const rows = await sql<
+    (ClinicRow & { removal_status: "active" | "scheduled"; number_is_active: boolean })[]
+  >`
+    select c.id, c.name, c.is_active, c.sms_recovery_enabled, c.sms_status,
+           cpn.removal_status, cpn.is_active as number_is_active
+    from public.clinics c
+    join public.clinic_phone_numbers cpn on cpn.clinic_id = c.id
+    where cpn.phone_number = ${phoneNumber}
+      and cpn.removal_status in ('active', 'scheduled')
+      and c.is_active = true
+    order by case when cpn.removal_status = 'active' then 0 else 1 end asc
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    clinic: {
+      id: row.id,
+      name: row.name,
+      is_active: row.is_active,
+      sms_recovery_enabled: row.sms_recovery_enabled,
+      sms_status: row.sms_status,
+    },
+    removalStatus: row.removal_status,
+    numberIsActive: row.number_is_active,
+  };
 }
 
 export async function findClinicById(

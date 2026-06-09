@@ -299,8 +299,17 @@ Customer Remove/Restore is lifecycle-based:
   the row inactive and `removal_status='scheduled'`.
 - The number remains assigned, visible, and restorable until
   `permanent_removal_at`.
-- Permanent removal is completed later by the secured release job, which releases
-  the Twilio IncomingPhoneNumber SID and marks the row
+- `permanent_removal_at` is an **estimated Twilio billing-window deadline**, not a
+  fixed grace period and not the clinic's Stripe billing cycle. It is the next
+  estimated monthly Twilio renewal after removal — anchored on the number's Twilio
+  purchase timestamp (`clinic_phone_numbers.twilio_purchased_at`, falling back to
+  `created_at`) — minus a 1-day safety buffer. If removal lands inside that final
+  pre-renewal day it is set to `now()`. Twilio exposes no per-number
+  paid-through/renewal field, so this is an estimate
+  (`lib/phone-numbers/twilio-release-deadline.ts`). Do not promise a fixed restore
+  window (e.g. "30 days") anywhere in copy.
+- Permanent removal is completed later by the secured release job (hourly Vercel
+  Cron), which releases the Twilio IncomingPhoneNumber SID and marks the row
   `removal_status='permanently_removed'`.
 - Restore is allowed only while the row is still scheduled, before the permanent
   removal date, and before Twilio release has completed.

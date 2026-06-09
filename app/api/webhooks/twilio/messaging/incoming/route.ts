@@ -9,7 +9,7 @@ import { detectSmsKeyword } from "@/lib/twilio/keywords";
 import { recordWebhookEvent } from "@/lib/db/webhook-events";
 import { isDatabaseConfigured } from "@/lib/db/client";
 import { normalizePhone } from "@/lib/phone/normalize";
-import { lookupClinicByPhone } from "@/lib/db/clinics";
+import { lookupClinicByPhoneIncludingScheduled } from "@/lib/db/clinics";
 import { getOrCreateConversation, touchConversation } from "@/lib/db/conversations";
 import { recordInboundMessage } from "@/lib/db/messages";
 import { upsertOptOut, clearOptOut } from "@/lib/db/opt-outs";
@@ -80,11 +80,26 @@ export async function POST(request: NextRequest) {
   // Skipped on duplicate (already processed) or when DB / params are missing.
   if (!isDuplicate && isDatabaseConfigured() && messageSid && from && to) {
     try {
-      const clinic = await lookupClinicByPhone(to);
+      // Removal-aware lookup: resolves the clinic for active AND scheduled numbers.
+      const routing = await lookupClinicByPhoneIncludingScheduled(to);
 
-      if (!clinic) {
+      if (!routing) {
         logger.info("twilio.sms.no_clinic_mapping", { to });
+      } else if (routing.removalStatus === "scheduled") {
+        // Scheduled (removal-pending) number: do NOT create a conversation or
+        // record ordinary replies as routed clinic messages. Still honor STOP/
+        // START compliance for the resolved clinic so opt-out state stays correct.
+        if (keyword === "stop") {
+          await upsertOptOut(routing.clinic.id, from);
+          logger.info("twilio.sms.scheduled_opted_out", { clinicId: routing.clinic.id });
+        } else if (keyword === "start") {
+          await clearOptOut(routing.clinic.id, from);
+          logger.info("twilio.sms.scheduled_opted_in", { clinicId: routing.clinic.id });
+        } else {
+          logger.info("twilio.sms.scheduled_number_skip", { to });
+        }
       } else {
+        const clinic = routing.clinic;
         // Get or create conversation thread for this (clinic, patient) pair.
         const { id: conversationId } = await getOrCreateConversation(
           clinic.id,
