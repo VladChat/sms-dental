@@ -5730,11 +5730,25 @@ with clear copy. Suspend/reactivate/remove/restore behavior unchanged.
 Validation: `npm run test:phone-numbers` (21/21), `npm run typecheck`,
 `npm run build` — all pass.
 
-Migration status: **NOT applied to production** (no explicit owner approval for
-this migration; the documented workflow requires it). Deployed code is fail-closed
-pre-migration — Detach returns an error until the constraint is widened; all other
-behavior is unaffected. Manual apply step (Supabase SQL editor or `psql` to
-`SUPABASE_DB_URL`, after owner approval):
-`supabase/migrations/20260613000100_phone_number_detached_status.sql`.
+Migration status: **APPLIED to production 2026-06-09** (with owner approval).
+Applied `supabase/migrations/20260613000100_phone_number_detached_status.sql` over
+the documented direct DB connection (`SUPABASE_DB_DIRECT_URL`, same credential the
+app uses; psql not installed so the same postgres.js driver was used; credential
+never printed). The migration is additive/idempotent — drops + re-adds only the
+`clinic_phone_numbers_removal_status_check` constraint; no data rows changed.
+Verification (read-only `pg_get_constraintdef`): constraint now =
+`CHECK ((removal_status = ANY (ARRAY['active','scheduled','permanently_removed','detached'])))`.
+Note: a first apply over the transaction pooler (`SUPABASE_DB_URL`, port 6543)
+committed the DDL but mis-reported the post-change catalog on read-back; re-running
+over the direct connection confirmed the committed state (safe because the
+migration is idempotent). Test row `+18447234944` (clinic
+`e9f21de4-3a35-4216-bb16-66ea3aeb2e47`) left unchanged: toll_free / legacy / $0 /
+`removal_status='active'` — eligible for Detach.
+
+Production deploy: `dpl_8GhAACx6Yb3vdXavxJHZrWexGPhj` READY (commit `5090fb1`).
+Pre-migration prod logs confirmed the cause: two `POST …/phone-numbers/.../action`
+calls at 21:31–21:32 returned 409 with an error message referencing
+`removal_status` (the check-constraint violation). No Twilio release, Stripe, or
+Messaging Service calls occurred (detach has no such side effects).
 
 Commit: see `feat: detach assigned Twilio numbers from admin`.
