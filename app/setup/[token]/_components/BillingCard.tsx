@@ -115,11 +115,6 @@ export function BillingCard({
           <p className="acct-current-plan-total">{planTotalLabel}</p>
           <div className="acct-current-plan-note">
             <BillingLineList lines={planLines} />
-            {summary.notices.map((notice) => (
-              <p key={notice} className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-muted)" }}>
-                {notice}
-              </p>
-            ))}
           </div>
         </section>
 

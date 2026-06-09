@@ -116,6 +116,8 @@ function AssignedRow({
     new Date(n.permanentRemovalAt).getTime() > Date.now();
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removeAcknowledged, setRemoveAcknowledged] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const [restoreAcknowledged, setRestoreAcknowledged] = useState(false);
   const [loadingAction, setLoadingAction] = useState<"remove" | "restore" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -137,6 +139,7 @@ function AssignedRow({
         return;
       }
       setConfirmRemove(false);
+      setConfirmRestore(false);
       setLoadingAction(null);
       router.refresh();
     } catch {
@@ -147,7 +150,7 @@ function AssignedRow({
 
   return (
     <div className="acct-number" key={n.id}>
-      <span className="t-eyebrow">Business number</span>
+      <span className="t-eyebrow">Phone number</span>
       <p className="t-h3 t-mono" style={{ margin: "var(--space-1) 0 0" }}>{formatUsPhone(n.phoneNumber)}</p>
       <div style={TAG_ROW}>
         <span className={`badge ${isLocal ? "badge-neutral" : "badge-info"}`}>
@@ -191,17 +194,77 @@ function AssignedRow({
         </p>
       )}
 
-      {scheduled && restoreOpen && (
-        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginTop: "var(--space-3)" }}>
+      {scheduled && restoreOpen && !confirmRestore && (
+        <div className="acct-num-sep">
           <button
             type="button"
             className="btn btn-secondary btn-sm"
-            onClick={() => void runAction("restore")}
+            onClick={() => {
+              setActionError(null);
+              setRestoreAcknowledged(false);
+              setConfirmRestore(true);
+            }}
             disabled={loadingAction !== null}
+          >
+            Restore number
+          </button>
+        </div>
+      )}
+
+      {scheduled && restoreOpen && confirmRestore && (
+        <div className="acct-cand-actions acct-num-sep">
+          <div className="acct-consent">
+            <div>
+              <p className="t-small" style={{ margin: 0, fontWeight: 700 }}>
+                Restore number
+              </p>
+              <p className="t-body" style={{ margin: "var(--space-2) 0 0", fontWeight: 700 }}>
+                Calls and texts will route to your clinic again.
+              </p>
+              <p className="t-small" style={{ margin: "var(--space-2) 0 0", color: "var(--text-secondary)" }}>
+                Billing will include this number again next cycle.
+              </p>
+            </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={restoreAcknowledged}
+                onChange={(e) => setRestoreAcknowledged(e.target.checked)}
+                disabled={loadingAction === "restore"}
+              />
+              <span>I understand and want to restore this number.</span>
+            </label>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary acct-primary-action"
+            onClick={() => void runAction("restore")}
+            disabled={!restoreAcknowledged || loadingAction !== null}
             aria-busy={loadingAction === "restore"}
           >
             {loadingAction === "restore" ? "Restoring..." : "Restore number"}
           </button>
+
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ justifySelf: "center" }}
+            onClick={() => {
+              setConfirmRestore(false);
+              setRestoreAcknowledged(false);
+              setActionError(null);
+            }}
+            disabled={loadingAction !== null}
+          >
+            Cancel
+          </button>
+
+          {actionError && (
+            <div className="alert alert-error" role="alert" aria-live="polite">
+              <span>{actionError}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -222,7 +285,7 @@ function AssignedRow({
         </div>
       )}
 
-      {actionError && !confirmRemove && (
+      {actionError && !confirmRemove && !confirmRestore && (
         <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-2)" }}>
           <span>{actionError}</span>
         </div>
