@@ -272,7 +272,7 @@ function AssignedRow({
         <div className="acct-num-sep">
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-secondary btn-sm"
             onClick={() => {
               setActionError(null);
               setRemoveAcknowledged(false);

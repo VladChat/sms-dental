@@ -150,7 +150,7 @@ export function AdminPhoneNumberList({
                   {detachEligible(p) && (
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm"
+                      className="btn btn-secondary btn-sm"
                       disabled={busy}
                       onClick={() => openConfirm(p.id, "detach")}
                     >
