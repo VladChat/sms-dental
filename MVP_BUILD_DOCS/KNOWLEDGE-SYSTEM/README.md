@@ -1,6 +1,6 @@
 # Knowledge System
 
-Status: scaffold (structure + governance + starter content; no UI in this pass)
+Status: active (governance complete; customer-help ready; platform-admin + support-runbooks verified internal; no UI built)
 Last updated: 2026-06-09
 
 This folder is the **source-controlled Knowledge System** for Missed Calls Dental.

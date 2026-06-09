@@ -3,7 +3,7 @@ title: Platform admin console and clinic management
 slug: clinic-console
 status: internal
 visibility: platform_admin
-audience: Platform operator
+audience: Platform admin / operator
 surface: /admin
 category: admin-console
 owner: ops
@@ -19,12 +19,14 @@ related:
   - support-boundaries
 ---
 
+# Platform admin console and clinic management
+
 ## Summary
 
 `/admin` is the cross-tenant platform owner/operator console. Its clinic detail
 page (`/admin/clinics/[clinicId]`) is an **editable super-admin clinic management
 console** — not a read-only report. This doc orients an operator to the console
-and points to the per-area runbooks.
+and points to the per-area docs.
 
 ## Applies to
 
@@ -46,51 +48,74 @@ The platform operator signed in at `/admin/login`. Authorization is
 - `/admin/clinics/[clinicId]/events` — redacted call/message/webhook diagnostics.
 - `/admin/audit` — platform admin audit log (`admin_audit_events`).
 
-## Clinic management console — sections
+## Clinic management console — sections (conceptual)
 
 The clinic detail page is an owner-`/account`-style dashboard (left section nav,
-one focused panel). Sections (default opens on the current blocker, typically
-Phone number):
+one focused panel). It opens by default on the current blocker (typically Phone
+number). Sections:
 
 - **Phone number** — assigned numbers (masked), search/select, gated
   purchase/assign, detach. See
   [phone-number-lifecycle.md](phone-number-lifecycle.md).
 - **Business profile** — editable owner-level business fields (audited save).
-- **SMS approval** — editable A2P/representative data (audited save; saving stores
-  data only, never submits to a carrier). See
+- **SMS approval / A2P review** — editable A2P/representative data (audited save;
+  saving stores data only, **never** submits to a carrier). See
   [a2p-review-and-submission.md](a2p-review-and-submission.md).
-- **Billing** — billing state (presence only). See
+- **Billing** — billing state/presence only. See
   [billing-operations.md](billing-operations.md).
-- **SMS behavior** — read-only for now (no settings backend).
-- **Admin tools** — Pause/Reactivate clinic, Launch service / Pause SMS sending,
-  Internal note; plus collapsible Recent admin activity, Diagnostics (masked), and
-  Technical details (collapsed).
+- **SMS behavior** — read-only. Status: not implemented yet (no settings backend).
+- **Admin tools / diagnostics** — Pause/Reactivate clinic, Launch service / Pause
+  SMS sending, Internal note; plus collapsible Recent admin activity, Diagnostics
+  (masked), and Technical details (collapsed). See
+  [diagnostics-and-audit.md](diagnostics-and-audit.md).
 
-## What is editable vs blocked
+## What is implemented vs blocked/future
 
-- **Editable now (audited):** Business profile fields, A2P/representative data,
-  internal note, clinic active/paused, SMS recovery enable/disable (gated),
-  Twilio number purchase/assign (behind `TWILIO_NUMBER_PURCHASE_ENABLED`), detach.
-- **Blocked-with-reason (never simulated):** Stripe billing management, A2P carrier
-  submission from this panel, and any action whose real backend does not exist.
-  Each shows the exact blocking reason.
+**Editable now (audited):** Business profile fields, A2P/representative data,
+internal note, clinic active/paused, SMS recovery enable/disable (gated), Twilio
+number purchase/assign (behind `TWILIO_NUMBER_PURCHASE_ENABLED`), detach.
 
-## Expected result
+**Blocked-with-reason (never simulated):**
 
-Every write action mirrors the owner-side validation, is scoped to the one
-`clinicId`, and writes an `admin_audit_events` row. Audit metadata stores changed
-field names + flags only — never raw EIN/phone/email values.
+- Stripe billing management (collect/start/pause) — **Status: not implemented
+  yet** (no real billing backend).
+- A2P carrier submission from the panel — gated/allowlisted; **this remains a
+  future milestone** for general clinics (see
+  [a2p-review-and-submission.md](a2p-review-and-submission.md)).
+- Per-clinic SMS behavior settings — **Status: not implemented yet**.
+
+Each blocked action is shown disabled with its exact reason; it is never faked.
+
+## Access boundaries
+
+- `/admin` and every `/api/admin/*` route are guarded server-side by
+  `resolvePlatformAdmin`. Clinic owners and front desk are denied; a platform
+  admin with no clinic membership is allowed.
+- Cross-tenant data is read via the service-role connection (which bypasses RLS),
+  so the admin guard is the **only** protection — it is mandatory on the layout and
+  every admin API route.
+
+## Safe operator behavior
+
+- Make the smallest change needed; rely on the in-console confirmations for
+  state-changing actions.
+- Never bypass `resolvePlatformAdmin`, the SMS/opt-out gates, or a blocked action.
+- Every write mirrors the owner-side validation, is scoped to the one `clinicId`,
+  and writes an `admin_audit_events` row (changed field names + flags only — never
+  raw EIN/phone/email).
+
+## Before changing admin behavior (source files to check)
+
+- `MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md` (§4 routes/pages, §6 action
+  matrix, §15–22 implemented scope)
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md` (§17–20 admin auth + role entry
+  points)
+- The relevant per-area doc in this folder.
 
 ## Escalation
 
 If an action that should work is blocked, or a gate appears wrong, escalate to
-engineering rather than forcing it. Never bypass `resolvePlatformAdmin` or the
-opt-out/SMS gates.
-
-## Safety notes
-
-No secrets in the console or in these docs. Redaction is mandatory: phones masked
-to last 4, SID tails only, no raw payloads, EIN/representative as presence only.
+engineering rather than forcing it.
 
 ## Source of truth
 

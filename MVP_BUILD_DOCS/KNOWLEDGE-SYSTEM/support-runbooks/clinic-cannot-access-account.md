@@ -3,85 +3,95 @@ title: Clinic cannot access account
 slug: clinic-cannot-access-account
 status: internal
 visibility: internal_ops
-audience: Support / platform operator
+audience: Internal support / operator
 surface: support
 category: runbook
 owner: support
 source_of_truth:
   - MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md
+  - MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md
 last_verified: 2026-06-09
 related:
-  - ../customer-help/account-access/README
   - ../platform-admin/support-boundaries
+  - ../customer-help/account-access/change-password-and-account-access
 ---
+
+# Clinic cannot access account
+
+## Purpose
+
+Help an owner or front-desk user regain access via the correct sign-in area and the
+password reset, without exposing auth internals or revealing whether an email has an
+account.
+
+## Audience / visibility
+
+Internal support / operator. `visibility: internal_ops`. Internal-only.
 
 ## Symptom
 
-A clinic owner (or staff member) can't sign in, didn't get a reset email, or lands
-on the wrong page after login.
+A clinic owner or staff member can't sign in, didn't get a reset email, or lands on
+the wrong page after signing in.
 
 ## Customer-safe explanation
 
-Sign-in uses one account system with separate entry points by role. Most access
-issues are resolved by using the correct login and the forgot-password reset.
+Sign-in uses separate areas by role. Most access issues are resolved by using the
+correct area and the "Forgot password?" reset.
 
-## Likely causes / scenarios
+## Internal triage checklist
 
-1. Forgot password / needs a reset.
-2. Reset link expired or was from an old email.
-3. Using the wrong login entry for their role (owner vs front desk vs platform
-   admin).
-4. Owner trying to reach a page their role doesn't cover.
-5. Front-desk staff expecting access before staff invites exist (still owner-
-   accessible preview today).
+- Confirm role and correct entry point: owner → account sign-in (`/account`), front
+  desk → workspace sign-in (`/workspace`), platform admin → `/admin`.
+- Confirm whether they requested a reset and whether the email arrived (ask them to
+  check spam). Reset links expire and are single-use; old emails keep the old link.
+- A platform-admin account using the owner sign-in gets a clear "use admin sign in"
+  message — that is expected, not a bug.
+- Front-desk staff: staff access is managed by the clinic owner; broad staff
+  invites are a future capability — confirm the owner expects them to have access.
+- Note: a localhost reset link is an auth Site-URL / allow-list configuration issue,
+  not an app code bug (see source).
 
-## Triage questions (customer-safe)
+### What info to request
+- Clinic name and the account email being used; their role (owner vs front desk).
 
-- Which email are you using to sign in?
-- Are you the clinic owner, or front-desk staff?
-- Did you request a password reset? Did the email arrive (check spam)?
+### What NOT to request
+- **Never** request a password. Never ask for full payment card details.
 
-## Safe checks (internal)
+## What not to expose to the customer
 
-- Confirm the correct entry point: owner → `/login` (`/account`), front desk →
-  `/workspace/login` (`/workspace`), platform admin → `/admin/login` (`/admin`).
-- Reset flow: forgot-password → emailed link → `/auth/callback` →
-  `/reset-password`. Links point to the app domain and expire; old emails keep the
-  old link.
-- Role-mismatch: a platform-admin account using `/login` gets a clear "use admin
-  sign in" message — that's expected.
-- A localhost reset link is a Supabase Auth Site URL / allow-list issue, **not** an
-  app code bug.
+- Whether a specific email has an account (the product returns a generic message by
+  design).
+- Reset/setup tokens, recovery links, or any auth implementation detail
+  (cookies/token-hash/PKCE/tables/guards).
 
-## Key rules to communicate
+## Safe resolution paths
 
-- Use the correct login for your role and the forgot-password link to reset.
-- Reset links expire and are single-use; request a fresh one if needed.
-- For security, the product shows a generic "if an account exists…" message — do
-  not reveal whether a given email has an account.
+- Point the user to the correct sign-in area for their role and the "Forgot
+  password?" reset; have them request a fresh link if the old one fails.
+- Front-desk access not yet granted: direct them to their clinic owner.
+- **Never** manually reset a password outside the supported flow, and never share or
+  log tokens.
 
-## Do not
+## Escalation criteria
 
-- Do not reveal whether a specific email has an account.
-- Do not share, display, or log reset/setup tokens or recovery links.
-- Do not manually reset a password outside the supported flow, or expose internal
-  auth mechanics to the customer.
+Escalate (engineering / platform admin) if reset emails consistently fail to send,
+links resolve to localhost despite correct settings, or membership/role looks wrong.
+Never paste tokens into a ticket.
 
-## Escalation
+## Related platform-admin docs
 
-Escalate if reset emails consistently fail to send, links resolve to localhost
-despite correct settings, or membership/role looks wrong. Engineering/platform
-admin. Never paste tokens into a ticket.
+- [../platform-admin/support-boundaries.md](../platform-admin/support-boundaries.md)
 
 ## Customer-safe response summary
 
-> Please sign in using the login for your role and, if needed, use "Forgot
-> password?" to get a fresh reset link by email (it expires, so request a new one
-> if the old one doesn't work, and check your spam folder). If you're front-desk
-> staff, your clinic owner manages access today. Let me know if the reset email
-> doesn't arrive and I'll dig in further.
+> Please sign in using the area for your role and, if needed, use "Forgot password?"
+> to get a fresh reset link by email (it expires, so request a new one if the old
+> one doesn't work, and check your spam folder). If you're front-desk staff, your
+> clinic owner manages access. Let me know if the reset email doesn't arrive and
+> I'll dig in further.
 
 ## Source of truth
 
-- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md` (§3 flows, §17 role entry points,
-  §10 Supabase Auth URL config)
+- `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md` (§3 flows, §17 role entry points, §10
+  Auth URL config)
+- `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md` (front desk uses the separate workspace)

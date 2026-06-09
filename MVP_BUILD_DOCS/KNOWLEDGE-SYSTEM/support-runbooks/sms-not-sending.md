@@ -3,85 +3,101 @@ title: SMS not sending
 slug: sms-not-sending
 status: internal
 visibility: internal_ops
-audience: Support / platform operator
+audience: Internal support / operator
 surface: support
 category: runbook
 owner: support
 source_of_truth:
   - MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md
   - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
+  - AGENTS.md
 last_verified: 2026-06-09
 related:
   - a2p-approval-question
   - ../platform-admin/a2p-review-and-submission
+  - ../platform-admin/clinic-console
 ---
+
+# SMS not sending
+
+## Purpose
+
+Triage a report that patients are not receiving the missed-call follow-up text, and
+resolve or escalate it without bypassing any gate.
+
+## Audience / visibility
+
+Internal support / operator. `visibility: internal_ops`. Internal-only; use the
+customer-safe wording when replying to the clinic.
 
 ## Symptom
 
-A clinic reports that patients are not receiving the missed-call follow-up text,
-or "texting isn't working."
+A clinic reports patients are not receiving the missed-call follow-up text, or
+"texting isn't working."
 
 ## Customer-safe explanation
 
-Texting goes live only after SMS approval is complete and texting is enabled for
-the clinic. Until then, calls are still recorded but no patient text is sent. This
-is by design and protects message delivery.
+Texting goes live only after SMS approval is complete and texting is enabled for the
+clinic. Until then, calls are still recorded but no patient text is sent. This is by
+design and protects message delivery.
 
-## Likely causes (most → least common)
+## Internal triage checklist
 
-1. **SMS approval not complete / still waiting** — the clinic hasn't finished the
-   SMS approval step, or approval is pending.
-2. **Texting not enabled for the clinic** — `clinics.sms_recovery_enabled` is
-   false (the safe default).
-3. **Ops mode not live** — `SMS_RECOVERY_MODE` is not `live` (or the clinic isn't
-   in the allowlist for the current test mode).
-4. **No assigned/active business number** for the clinic.
-5. **Patient opted out** — the patient replied STOP.
-6. **Duplicate suppression** — one recovery SMS per (clinic, patient) per 24h.
-7. **Carrier filtering** for an unverified/unregistered number.
-8. **Readiness contaminated by a mock A2P brand** — looks approved but the live
-   brand failed.
+Work the gates in order in `/admin` (use the console, not raw SQL):
 
-## Triage questions (customer-safe)
+1. **SMS approval state** — is the clinic's SMS approval complete, and is readiness
+   from the **live** submission (not a mock brand)? See
+   [../platform-admin/a2p-review-and-submission.md](../platform-admin/a2p-review-and-submission.md).
+2. **Assigned active number** — is a business number assigned and active?
+3. **Per-clinic enablement** — is SMS recovery enabled for the clinic
+   (`sms_recovery_enabled`)? Safe default is off.
+4. **Ops mode** — is `SMS_RECOVERY_MODE=live` (or the clinic in the current
+   test-mode allowlist)?
+5. **Opt-out** — did the specific patient reply STOP?
+6. **Duplicate suppression** — was a recovery SMS already sent to that patient in the
+   last 24 hours?
+7. **Carrier filtering** — possible for an unverified/unregistered number even when
+   gates look correct.
 
-- Have you completed the SMS approval step? What does the **Texting** status show
-  (Not active / Waiting for approval / Active)?
-- Is a business number assigned and active on the account?
-- Did the specific patient possibly reply STOP earlier?
-- Is this the first text to that patient in the last 24 hours?
+## What not to expose to the customer
 
-## Safe checks (internal)
+- Internal flags, modes, allowlists, provider names, SIDs, raw delivery error codes,
+  raw webhooks, or DB internals.
+- Whether readiness was "mock-contaminated" — describe it as under review.
 
-- Open the clinic in `/admin` and check launch readiness: business profile, phone
-  number, A2P/SMS approval, SMS launch state. Use the console, not raw SQL.
-- Confirm gates in order: A2P/approval state → assigned active number →
-  `sms_recovery_enabled` → ops `SMS_RECOVERY_MODE=live`.
-- Check redacted diagnostics for opt-out state and recent message status/keyword.
-- Verify readiness comes from the **live** A2P submission, not a mock brand SID
-  (see [../platform-admin/a2p-review-and-submission.md](../platform-admin/a2p-review-and-submission.md)).
+## Safe resolution paths
 
-## Do not
+- If SMS approval is incomplete or pending: tell the clinic texting turns on after
+  approval; point them to completing SMS Approval Information; do not promise a date.
+- If a patient opted out: that is correct behavior; do not re-enable texting to that
+  patient. See [../platform-admin/support-boundaries.md](../platform-admin/support-boundaries.md).
+- If it was a duplicate within 24h: explain one follow-up per missed call; not an
+  error.
+- If all gates pass but delivery still fails: treat as possible carrier filtering →
+  escalate.
+- **Never** enable live SMS, bypass opt-out, or bypass duplicate suppression to
+  "test" past a failed/pending state.
 
-- Do not enable live SMS to "test" it past a failed/pending A2P state.
-- Do not bypass opt-out or duplicate suppression.
-- Do not expose SIDs, raw delivery error codes, modes, or allowlists to the
-  customer.
+## Escalation criteria
 
-## Escalation
+Escalate to platform admin / engineering (redacted detail only) if: A2P is stuck
+pending, readiness looks mock-contaminated, a number is in
+`reconciliation_required`, or all gates appear correct but delivery still fails.
 
-Escalate to platform admin/engineering if: A2P is stuck pending, readiness looks
-mock-contaminated, a number is in `reconciliation_required`, or all gates appear
-correct but delivery still fails (possible carrier filtering). Provide redacted
-detail only.
+## Related platform-admin docs
+
+- [../platform-admin/a2p-review-and-submission.md](../platform-admin/a2p-review-and-submission.md)
+- [../platform-admin/clinic-console.md](../platform-admin/clinic-console.md)
 
 ## Customer-safe response summary
 
 > Calls are being recorded, but patient texting turns on only after your SMS
-> approval is complete and texting is enabled for your clinic. Your current
-> texting status is "[Waiting for approval / Not active]". Once approval is
-> finished we'll enable texting; we'll follow up with you on the timeline.
+> approval is complete and texting is enabled for your clinic. Your current texting
+> status is "[Waiting for approval / Not active]." Once approval is finished we'll
+> enable texting and follow up with you.
 
 ## Source of truth
 
 - `MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md` (gates, go/no-go)
-- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` §9 (SMS send model, modes), §10 (opt-out)
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` §9 (SMS send model/modes), §10 (opt-out)
+- `AGENTS.md` (SMS never auto-enabled)

@@ -1,6 +1,6 @@
 # Customer Help
 
-Status: scaffold (category indexes; articles are stubs/planned)
+Status: active (all category articles promoted to ready; not yet published)
 Last updated: 2026-06-09
 
 Customer-safe help for clinic **owners** and **front-desk staff**. Everything in

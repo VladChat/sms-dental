@@ -1,26 +1,41 @@
 # Support Runbooks
 
-Status: scaffold (starter triage content)
-Audience: Support / platform operator · Visibility: `internal_ops`
+Status: active (runbooks verified; internal-only)
+Audience: Internal support / operator · Visibility: `internal_ops`
 Last updated: 2026-06-09
 
-Internal triage scripts for recurring support scenarios. Each runbook walks an
-operator from symptom → likely causes → safe checks → escalation, and ends with a
-**customer-safe response summary** that does not leak internal detail.
+Internal triage scripts for recurring support scenarios. They translate the
+[platform-admin docs](../platform-admin/README.md) into ticket-handling steps. They
+are **internal-only** (`visibility: internal_ops`) — never paste raw internal
+content to a customer; use each runbook's customer-safe wording instead.
 
-These are **internal-only** (`visibility: internal_ops`). Never paste raw internal
-content to a customer; use the customer-safe summary instead.
+## Standard runbook structure
+
+Each runbook follows this structure:
+
+1. Frontmatter
+2. H1 title
+3. Purpose
+4. Audience / visibility
+5. Symptom
+6. Customer-safe explanation
+7. Internal triage checklist
+8. What not to expose to the customer
+9. Safe resolution paths
+10. Escalation criteria
+11. Related platform-admin docs
+12. Source of truth
 
 ## Rules for runbooks
 
 - Prefer **"check the relevant admin diagnostics"** over raw SQL. Only include a
-  query if it is clearly internal-only, safe, and exposes no private data. Use
-  read-only safe patterns from `OPERATIONS-RUNBOOK.md` if one already exists.
-- Never expose secrets, raw payloads, full SIDs/EIN, tokens, or other clinics'
-  data to the customer.
+  query if it is clearly internal-only, safe, and exposes no private data.
+- Never expose secrets, raw payloads, full SIDs/EIN, tokens, internal flags,
+  allowlists, or other clinics' data — to the customer or in a ticket.
 - Respect product rules: never promise a refund/credit from a lifecycle action,
-  never bypass SMS/opt-out gates, never force a blocked provider action.
-- When a scenario recurs, update the matching runbook (see
+  never bypass SMS/opt-out/billing gates, never force a blocked provider action,
+  never reveal whether a specific email has an account.
+- When a scenario recurs or behavior changes, update the matching runbook (see
   [../02-CONTENT-GOVERNANCE.md](../02-CONTENT-GOVERNANCE.md)).
 
 ## Runbooks
@@ -37,4 +52,4 @@ content to a customer; use the customer-safe summary instead.
 
 Per runbook. Cross-cutting: `OPERATIONS-RUNBOOK.md`,
 `A2P-10DLC-COMPLIANCE-READINESS.md`, `BILLING-AND-USAGE-POLICY.md`,
-`AUTH-AND-ACCESS-CONTROL.md`.
+`AUTH-AND-ACCESS-CONTROL.md`, and the platform-admin docs.

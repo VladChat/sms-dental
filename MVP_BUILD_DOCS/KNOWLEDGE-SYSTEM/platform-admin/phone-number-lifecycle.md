@@ -3,13 +3,14 @@ title: Phone number lifecycle and admin operations
 slug: phone-number-lifecycle
 status: internal
 visibility: platform_admin
-audience: Platform operator
+audience: Platform admin / operator
 surface: /admin
 category: lifecycle
 owner: ops
 source_of_truth:
   - AGENTS.md
   - MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md
+  - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
   - MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md
 last_verified: 2026-06-09
 related:
@@ -18,17 +19,20 @@ related:
   - support-boundaries
 ---
 
+# Phone number lifecycle and admin operations
+
 ## Summary
 
-The full lifecycle of a clinic business number and the four distinct admin/owner
-operations that act on it. **Suspend, remove, restore, and detach are different
-operations — do not conflate them.**
+The full lifecycle of a clinic business number and the distinct operations that
+act on it. **Remove, Restore, Suspend, and Detach are different operations — do
+not conflate them.** Customer "Remove number" is a lifecycle removal; provider
+release happens later. Suspend and Detach are platform-admin operations.
 
 ## Applies to
 
 Platform operators managing numbers from `/admin/clinics/[clinicId]` → Phone
-number, and operators answering number-related support
-([../support-runbooks/number-removal-restore-detach.md](../../support-runbooks/number-removal-restore-detach.md)).
+number, and operators backing the
+[number-removal-restore-detach runbook](../support-runbooks/number-removal-restore-detach.md).
 
 ## Number types (durable)
 
@@ -40,105 +44,119 @@ Every number has a durable `number_type`: `toll_free` or `local`.
 - Toll-free uses toll-free verification; local uses A2P 10DLC Brand/Campaign. The
   A2P submission package contains **local numbers only**; toll-free numbers are
   never added to a local A2P campaign.
-- Type, slot class (included vs additional), price, Stripe quantity, and fees are
-  decided **server-side only**. The client never decides them. Local/toll-free
-  billing differences are sourced from `config/billing.config.ts` and
-  `BILLING-AND-USAGE-POLICY.md` — never hard-coded.
+- Type, slot class (included vs additional), price, billing quantity, and
+  lifecycle state are decided **server-side only**. The client never decides them.
+  Billing amounts come from `config/billing.config.ts` — never hard-coded.
 
 ## Lifecycle states
 
 - **Active** — assigned and routing calls/texts for the clinic.
-- **Suspended** — paused by admin within the same clinic; routing inactive, but
-  the Twilio number, the Stripe additional-number quantity, and the limit count
-  are kept. A suspended number still counts toward the clinic limit and is still
-  billed.
-- **Scheduled removal** — customer removed the number; routing stopped
-  immediately; `removal_status='scheduled'`; the row remains assigned, visible,
-  and restorable until `permanent_removal_at`.
-- **Permanently removed** — the secured release job released the Twilio
-  IncomingPhoneNumber SID and marked the row `permanently_removed`. Not
-  restorable.
-- **Detached** — admin removed the clinic assignment without releasing the Twilio
-  number (see below).
+- **Suspended** — paused by admin within the same clinic; routing inactive; the
+  number, billing quantity, and limit count are kept (still billed, still counts
+  toward the limit).
+- **Scheduled removal** — customer removed the number; routing stopped immediately;
+  the row remains assigned, visible, and restorable until permanent removal.
+- **Permanently removed** — terminal state after the provider release completed
+  (handled by the secured release job). Not restorable.
+- **Detached** — admin removed the clinic assignment without releasing the provider
+  number; the number returns to assignable inventory.
 
-Rows in `clinic_phone_numbers` are **never physically deleted** — lifecycle
-history is preserved for audit/reconciliation. If a delayed Twilio release fails,
-preserve the existing SID and the release error for reconciliation; do not clear
-or overwrite them.
+Number rows/history are **never physically deleted** — lifecycle history is
+preserved internally for audit/reconciliation. If a delayed provider release
+fails, the existing SID and release error are preserved for reconciliation; do not
+clear or overwrite them.
 
-## The four operations
+## Operations at a glance
 
-### Suspend number (admin)
-- Same-clinic pause. Sets the number inactive.
-- **Keeps** the Twilio number, the Stripe additional-number quantity, and the
-  limit count. Still billed, still counts toward the limit.
-- No Twilio release. Reversible via reactivate.
+| Action | Actor | Immediate effect | Provider release? | Billing effect | Restorable? | Customer-facing? |
+|---|---|---|---|---|---|---|
+| Remove number | Clinic owner | Stops calls/text routing immediately; schedules removal | No — delayed until permanent removal | Next cycle only; no immediate refund/credit/charge | Yes, until permanent removal completes | Yes — action is "Remove number" |
+| Restore number | Clinic owner | Resumes prior state/role | N/A — not yet released | Re-included next cycle | N/A | Yes |
+| Suspend number | Platform admin | Pauses routing within the same clinic | No | Still billed; still counts toward limit | Yes — via reactivate | No (admin-only) |
+| Detach from clinic | Platform admin | Removes clinic assignment; returns number to assignable inventory | No — provider number kept | No change by itself (billing quantity / Messaging Service unchanged) | Re-assignable to a clinic (not the customer "restore" flow) | No (admin-only) |
+| Permanently removed | System (release job) | Provider number released; terminal state | Yes — release completed | Excluded going forward | No | Reflects the prior customer Remove |
+| Assign existing number | Platform admin | Maps a number to the clinic and configures webhooks | N/A — assign, not release | Per number type/slot, server-side | N/A | No (admin-only); result visible to owner |
 
-### Remove number (customer-facing lifecycle removal)
-- Customer-facing action text is **"Remove number"**, never "Release number".
-- **Immediately** stops calls/texting routing (row inactive,
-  `removal_status='scheduled'`).
-- Twilio release is **delayed** until permanent removal; removal does not
-  immediately release the Twilio number.
-- `permanent_removal_at` is an **estimated Twilio billing-window deadline** (next
-  estimated monthly Twilio renewal minus a 1-day safety buffer), not a fixed grace
-  period and not the Stripe cycle. **Do not promise a fixed restore window** (e.g.
-  "30 days").
-- Billing changes apply **next cycle only**; no immediate refund/credit/charge
-  (`proration_behavior:"none"`).
+## Operation details
+
+### Remove number (customer lifecycle removal)
+Customer-facing action text is **"Remove number"**, never "Release number". It
+**immediately** stops calls/texting routing for that number and schedules removal.
+Provider release is **delayed** until permanent removal — customer removal does not
+release the provider number right away. The restore window is an **estimated
+pre-renewal deadline**, not a fixed grace period; **do not promise a fixed window**
+(e.g. "30 days"). Billing changes apply **next cycle only**; no immediate
+refund/credit/charge.
 
 ### Restore number
-- Allowed **only** while the row is still scheduled, before `permanent_removal_at`,
-  and before Twilio release has completed. After permanent removal, not restorable.
+Allowed **only** while the row is still scheduled, before the estimated permanent
+removal time, and before provider release has completed. After permanent removal,
+not restorable — a new number must be added.
 
-### Detach from clinic (platform-admin operation)
-- Removes the **clinic assignment** without releasing the Twilio number and
-  without changing Stripe / the Messaging Service.
-- Keeps the row and history for audit.
-- Returns the eligible number to **assignable inventory** so it can be assigned to
-  a clinic later.
-- Distinct from remove (which schedules Twilio release) and from suspend (which
-  keeps the same-clinic assignment).
+### Suspend number (admin)
+Same-clinic pause. Keeps the number, the billing quantity, and the limit count. No
+provider release. Reversible via reactivate. A suspended number is still billed and
+still counts toward the clinic's number limit.
 
-## Assign existing Twilio number (admin)
+### Detach from clinic (admin)
+Removes the **clinic assignment** without releasing the provider number and without
+changing billing quantity / the Messaging Service by itself. Keeps the row and
+history for audit, and returns the eligible number to **assignable inventory** so
+it can be assigned to a clinic later. Distinct from Remove (which schedules
+provider release) and from Suspend (which keeps the same-clinic assignment).
 
-From the Phone number panel: search available numbers → select → confirm → assign
-(or assign an already-owned/detached number). Same Twilio architecture as
-onboarding (`purchaseNumberAndConfigure` + `upsertOfficeTextingNumber` +
-Messaging Service). Gated by `TWILIO_NUMBER_PURCHASE_ENABLED`; when off, the
-action returns a disabled/`purchase_disabled` response with no Twilio call and no
-DB write. On success it configures Voice/SMS webhooks, attaches the Messaging
-Service best-effort, stores the mapping, and writes an audit row. **SMS recovery
-is not enabled by assignment.**
+### Assign existing number (admin)
+From the Phone number panel: search → select → confirm → assign (including an
+already-owned/detached number). Same provisioning architecture as onboarding.
+Gated by `TWILIO_NUMBER_PURCHASE_ENABLED`; when off, the action is blocked with a
+reason — no provider call, no DB write. On success it configures Voice/SMS
+webhooks, attaches the Messaging Service best-effort, stores the mapping, and
+writes an audit row. **SMS recovery is not enabled by assignment.**
 
 ## Limits
 
 Default cap is **5 total held** business numbers per clinic
-(`defaultSelfServiceBusinessNumberLimit`; stored on `clinics.phone_number_limit`).
-Held = assigned (active or suspended) + Twilio-purchased awaiting reconciliation.
-A platform admin can raise the limit (1–100, never below the held count).
+(`defaultSelfServiceBusinessNumberLimit`). Held = assigned (active or suspended) +
+purchased-but-awaiting-reconciliation. A platform admin can raise the limit (1–100,
+never below the held count).
 
-## Expected result / audit
+## Customer-safe explanation vs internal explanation
 
-Every admin number operation writes `admin_audit_events` with redacted metadata
-(masked phone, SID tail, area code) — no secrets.
+- **Customer-safe:** "Removing a number stops its calls and texting right away, and
+  it stays restorable until it's permanently removed. Billing changes show on your
+  next cycle." No mention of providers, SIDs, release jobs, or reconciliation.
+- **Internal:** the scheduled-removal state, the estimated provider-release
+  deadline, the release job, and reconciliation handling — for operators only.
+
+### What NOT to say to customers
+- Do not say "Release number" — the customer action is "Remove number".
+- Do not promise a fixed restore window (e.g. "30 days").
+- Do not promise a refund or credit from remove/restore.
+- Do not mention provider SIDs, the release job, Messaging Service, or
+  reconciliation mechanics.
+- Do not describe Suspend/Detach as customer actions — they are admin-only.
+
+### What NOT to do operationally
+- Do not manually clear or overwrite a preserved SID / release error or a
+  `reconciliation_required` state.
+- Do not force a provider release outside the secured release job.
+- Do not use Detach when the customer asked to keep the number (Suspend or leave
+  active instead), and do not use Remove when only a pause is intended.
+- Do not bypass `TWILIO_NUMBER_PURCHASE_ENABLED` or assign/purchase outside the
+  gated flow.
 
 ## Escalation
 
-If a Twilio release failed or a number is stuck in `reconciliation_required`,
-preserve the SID and error and escalate to engineering. Do not manually clear
-reconciliation state.
-
-## Safety notes
-
-No secrets. Mask phones, SID tails only. Real Twilio purchases are gated
-(`owner_test_live` is allowlisted to specific clinic ids; broad `live` is off).
+If a provider release failed, a number is stuck in `reconciliation_required`, or a
+customer needs a number back after permanent removal, escalate to engineering with
+redacted detail (masked phone, SID tail). Do not attempt manual recovery.
 
 ## Source of truth
 
 - `AGENTS.md` — "Toll-free vs Local Number Model" and "Phone Number Removal
   Lifecycle"
-- `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` — removal/next-cycle billing,
-  suspend behavior
+- `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` — removal/next-cycle billing, suspend
+  behavior, local vs toll-free
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` — routing/release behavior
 - `MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md` §21–22 — admin
   purchase/assign/search; detach is the admin assignment-removal operation

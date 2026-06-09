@@ -1,6 +1,6 @@
 # 07 — Content Inventory
 
-Status: ready (starter inventory; most articles are stubs/planned)
+Status: active (customer-help complete and ready; platform-admin + support-runbooks verified internal)
 Last updated: 2026-06-09
 
 The working list of current and future Knowledge System articles. Update this
@@ -39,27 +39,27 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 
 | ID | Title | Folder | Visibility | Status | Source of truth | Surface | Notes |
 |---|---|---|---|---|---|---|---|
-| PA-01 | Platform admin console overview | platform-admin | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md, AUTH-AND-ACCESS-CONTROL.md | /admin | Cross-tenant; separate from /account & /workspace |
-| PA-02 | Clinic console tabs and responsibilities | platform-admin/clinic-console.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §19–22 | /admin | Editable super-admin clinic console |
-| PA-03 | Phone number lifecycle: active, suspended, scheduled removal, permanently removed, detached | platform-admin/phone-number-lifecycle.md | platform_admin | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, PLATFORM-ADMIN-CONSOLE-PLAN.md | /admin | All lifecycle states |
-| PA-04 | Suspend vs detach vs remove | platform-admin/phone-number-lifecycle.md | platform_admin | internal | BILLING-AND-USAGE-POLICY.md, PLATFORM-ADMIN-CONSOLE-PLAN.md | /admin | Distinct operations; do not conflate |
-| PA-05 | A2P review and submission safety gates | platform-admin/a2p-review-and-submission.md | platform_admin | internal | A2P-10DLC-COMPLIANCE-READINESS.md, config/runtime.config.ts (a2p) | /admin | Live submit is billable/allowlisted/gated |
-| PA-06 | Billing operations and Stripe quantity sync | platform-admin/billing-operations.md | platform_admin | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts | /admin | No secrets/price IDs in articles |
-| PA-07 | Diagnostics and audit boundaries | platform-admin/diagnostics-and-audit.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §10 | /admin | Redaction; admin_audit_events |
-| PA-08 | Assign existing Twilio number | platform-admin/phone-number-lifecycle.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §21–22 | /admin | Search → select → confirm → assign; gated |
+| PA-01 | Platform admin console overview | platform-admin/README.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md, AUTH-AND-ACCESS-CONTROL.md | /admin | Index; roles (admin vs owner vs front desk); redaction; SoT map |
+| PA-02 | Clinic console tabs and responsibilities | platform-admin/clinic-console.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §4/§15–22, AUTH-AND-ACCESS-CONTROL.md | /admin | Editable super-admin console; implemented vs blocked/future |
+| PA-03 | Phone number lifecycle: active, suspended, scheduled removal, permanently removed, detached | platform-admin/phone-number-lifecycle.md | platform_admin | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, OPERATIONS-RUNBOOK.md, PLATFORM-ADMIN-CONSOLE-PLAN.md | /admin | All states + operations table; customer-safe vs internal |
+| PA-04 | Suspend vs detach vs remove | platform-admin/phone-number-lifecycle.md | platform_admin | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, PLATFORM-ADMIN-CONSOLE-PLAN.md | /admin | Distinct operations; do not conflate (see lifecycle table) |
+| PA-05 | A2P review and submission safety gates | platform-admin/a2p-review-and-submission.md | platform_admin | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, config/runtime.config.ts, AGENTS.md | /admin | Field split; review package; live submit billable/allowlisted/gated |
+| PA-06 | Billing operations and quantity sync | platform-admin/billing-operations.md | platform_admin | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | /admin | No secrets/price IDs; support-explainable vs operator review |
+| PA-07 | Diagnostics and audit boundaries | platform-admin/diagnostics-and-audit.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §10/§15, OPERATIONS-RUNBOOK.md, AUTH-AND-ACCESS-CONTROL.md | /admin | Redaction; can-see vs must-hide; admin_audit_events |
+| PA-08 | Assign existing Twilio number | platform-admin/phone-number-lifecycle.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §21–22 | /admin | Search → select → confirm → assign; gated; SMS not auto-enabled |
 | PA-09 | Troubleshoot SMS not sending (admin view) | platform-admin/a2p-review-and-submission.md | platform_admin | internal | OPERATIONS-RUNBOOK.md §9, A2P-10DLC-COMPLIANCE-READINESS.md | /admin | Links to runbook RB-01 |
-| PA-10 | Troubleshoot billing mismatch (admin view) | platform-admin/billing-operations.md | platform_admin | internal | BILLING-AND-USAGE-POLICY.md | /admin | Links to runbook RB-03 |
-| PA-11 | Support boundaries (what admin may/may not do) | platform-admin/support-boundaries.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §9–10, AUTH-AND-ACCESS-CONTROL.md | /admin | Blocked-by-design actions; secrets never |
+| PA-10 | Troubleshoot billing mismatch (admin view) | platform-admin/billing-operations.md | platform_admin | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts | /admin | Links to runbook RB-03 |
+| PA-11 | Support boundaries (what admin may/may not do) | platform-admin/support-boundaries.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §6/§9–10, AUTH-AND-ACCESS-CONTROL.md §17, FRONT-DESK-WORKSPACE.md | /admin | Role boundaries; blocked-by-design; customer-safe vs internal wording |
 
 ## Support runbooks
 
 | ID | Title | Folder | Visibility | Status | Source of truth | Surface | Notes |
 |---|---|---|---|---|---|---|---|
-| RB-01 | SMS not sending | support-runbooks/sms-not-sending.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, OPERATIONS-RUNBOOK.md | support | Gate-by-gate triage |
-| RB-02 | Number removal / restore / detach question | support-runbooks/number-removal-restore-detach.md | internal_ops | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md | support | Customer vs admin operations |
-| RB-03 | Billing question | support-runbooks/billing-question.md | internal_ops | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts | support | Current vs next cycle, proration none |
-| RB-04 | A2P approval question | support-runbooks/a2p-approval-question.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md | support | "SMS approval" wording to customer |
-| RB-05 | Clinic cannot access account | support-runbooks/clinic-cannot-access-account.md | internal_ops | internal | AUTH-AND-ACCESS-CONTROL.md | support | Login/reset/role-mismatch |
+| RB-01 | SMS not sending | support-runbooks/sms-not-sending.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, OPERATIONS-RUNBOOK.md, AGENTS.md | support | 12-section; gate-by-gate triage; customer-safe summary |
+| RB-02 | Number removal / restore / detach question | support-runbooks/number-removal-restore-detach.md | internal_ops | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, OPERATIONS-RUNBOOK.md | support | 12-section; customer vs admin operations; next-cycle billing |
+| RB-03 | Billing question | support-runbooks/billing-question.md | internal_ops | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | support | 12-section; current vs next cycle; no proration; no refund promise |
+| RB-04 | A2P approval question | support-runbooks/a2p-approval-question.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, config/runtime.config.ts | support | 12-section; "SMS approval" wording; no exact-date promise |
+| RB-05 | Clinic cannot access account | support-runbooks/clinic-cannot-access-account.md | internal_ops | internal | AUTH-AND-ACCESS-CONTROL.md, FRONT-DESK-WORKSPACE.md | support | 12-section; login/reset/role; never request password |
 
 ## Developer / ops
 

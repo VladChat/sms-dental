@@ -3,87 +3,95 @@ title: Number removal / restore / detach question
 slug: number-removal-restore-detach
 status: internal
 visibility: internal_ops
-audience: Support / platform operator
+audience: Internal support / operator
 surface: support
 category: runbook
 owner: support
 source_of_truth:
   - AGENTS.md
   - MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md
+  - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
 last_verified: 2026-06-09
 related:
-  - ../platform-admin/phone-number-lifecycle
   - billing-question
+  - ../platform-admin/phone-number-lifecycle
 ---
+
+# Number removal / restore / detach question
+
+## Purpose
+
+Handle questions about removing a number, restoring a removed number, or why a
+number changed — using the correct lifecycle terms and next-cycle billing rules.
+
+## Audience / visibility
+
+Internal support / operator. `visibility: internal_ops`. Internal-only.
 
 ## Symptom
 
-A clinic asks to remove a number, restore a number they removed, or asks why a
-number disappeared / is still being billed.
+A clinic asks to remove a number, restore a removed number, or asks why a number
+disappeared or is still being billed.
 
 ## Customer-safe explanation
 
 Removing a number stops its calls and texting right away. The number stays
-restorable for a short period before it is permanently removed. Billing changes
-take effect on the next cycle.
+restorable for a limited time before it is permanently removed. Billing changes take
+effect on the next cycle.
 
-## Likely causes / scenarios
+## Internal triage checklist
 
-1. Wants to **remove** a number (stop using it).
-2. Removed a number and wants to **restore** it.
-3. Removed a number and asks about a **refund** for the current cycle.
-4. A number was **detached** by an operator (assignment removed, returned to
-   inventory) — usually an internal action, not a customer one.
-5. Confusion between suspend (admin pause) and remove (customer lifecycle).
-
-## Triage questions (customer-safe)
-
-- Which number, and what do you want — stop using it, or bring a removed one back?
-- For restore: when did you remove it? (Restore is only possible before permanent
-  removal.)
-
-## Safe checks (internal)
-
+- Confirm what the clinic wants: stop using a number (Remove), bring a removed one
+  back (Restore), or a billing question about a change.
 - In `/admin`, check the number's lifecycle state: active, suspended, scheduled
-  removal (and `permanent_removal_at`), permanently removed, or detached. See
+  removal, permanently removed, or detached. See
   [../platform-admin/phone-number-lifecycle.md](../platform-admin/phone-number-lifecycle.md).
-- Restore is allowed **only** while scheduled, before `permanent_removal_at`, and
-  before Twilio release completed.
-- Billing: current cycle still counts scheduled removals as held; next cycle
-  excludes them.
+- For restore: confirm the number is still scheduled (not yet permanently removed /
+  released). Restore is only possible before permanent removal completes.
+- For billing: current cycle still counts a scheduled-removal number as held; next
+  cycle excludes it.
+- Distinguish the operations: **Remove** (customer, schedules provider release),
+  **Suspend** (admin pause, keeps billing/limit), **Detach** (admin, removes clinic
+  assignment, returns number to inventory, no release).
 
-## Key rules to communicate
+## What not to expose to the customer
 
-- Action is **"Remove number"**, never "Release". Removal stops routing
-  immediately.
-- **No fixed restore window** — do not promise "30 days." It is an estimated
-  pre-renewal deadline.
-- **No immediate refund/credit/charge** from remove/restore; billing changes apply
-  next cycle (`proration_behavior:"none"`).
-- After permanent removal, the number cannot be restored — a new number must be
-  added.
+- Provider SIDs, the release job, reconciliation mechanics, Messaging Service, or
+  billing-provider internals.
+- The admin-only Suspend/Detach operations as if they were customer actions.
 
-## Do not
+## Safe resolution paths
 
-- Do not promise a specific restore window or a refund.
-- Do not manually clear reconciliation/release state.
-- Do not expose SIDs, Stripe internals, or the release-job mechanics.
+- Remove: confirm it stops service immediately and is restorable until permanent
+  removal; bill changes next cycle.
+- Restore (still scheduled): can be restored; it returns in its prior state and does
+  not by itself enable texting.
+- Restore after permanent removal: not possible — a new number must be added.
+- Billing concern from a change: explain current vs next cycle; **no immediate
+  refund/credit**.
+- **Never** promise a fixed restore window or a refund, and **never** manually clear
+  a preserved SID / release error / `reconciliation_required` state.
 
-## Escalation
+## Escalation criteria
 
-Escalate if a number is stuck in `reconciliation_required`, a Twilio release
-failed, or a customer needs a restore after permanent removal. Engineering only;
-redacted detail.
+Escalate (engineering, redacted detail) if a number is stuck in
+`reconciliation_required`, a provider release failed, or the clinic needs a number
+back after permanent removal.
+
+## Related platform-admin docs
+
+- [../platform-admin/phone-number-lifecycle.md](../platform-admin/phone-number-lifecycle.md)
+- [../platform-admin/billing-operations.md](../platform-admin/billing-operations.md)
 
 ## Customer-safe response summary
 
-> Removing a number stops its calls and texting right away, and it stays
-> restorable until it's permanently removed (this is an estimated window, not a
-> fixed number of days). Billing changes show on your next cycle — removing a
-> number doesn't create an immediate refund or credit. If you'd like, I can check
-> the current status of your number.
+> Removing a number stops its calls and texting right away, and it stays restorable
+> until it's permanently removed (this is an estimated window, not a fixed number of
+> days). Billing changes show on your next cycle — removing a number doesn't create
+> an immediate refund or credit. I can check the current status of your number.
 
 ## Source of truth
 
 - `AGENTS.md` — "Phone Number Removal Lifecycle"
 - `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` — removal + next-cycle billing
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` — routing/release behavior
