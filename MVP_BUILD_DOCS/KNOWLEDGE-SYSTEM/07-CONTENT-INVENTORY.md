@@ -31,6 +31,9 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | CH-14 | Contact support | customer-help/troubleshooting | customer_authenticated | ready | README.md, OWNER-SETTINGS.md, config/runtime.config.ts | /account, /workspace | What to include / what not to send; support@missedcallsdental.com |
 | CH-15 | Local vs toll-free charges | customer-help/billing | clinic_owner | ready | config/billing.config.ts, BILLING-AND-USAGE-POLICY.md, AGENTS.md | /account | Toll-free vs local billing models; first toll-free included; local fees |
 | CH-16 | Front-desk workspace overview | customer-help/workspace | clinic_staff | ready | FRONT-DESK-WORKSPACE.md, AUTH-AND-ACCESS-CONTROL.md | /workspace | What staff can/can't see; request cards; statuses; samples; "not provided yet" |
+| CH-17 | My texting isn't working yet | customer-help/troubleshooting | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, BILLING-AND-USAGE-POLICY.md, PROJECT-CONTEXT.md, config/runtime.config.ts | /account | Texting activation is separate from number/billing; what to check; no instant activation |
+| CH-18 | I can't sign in | customer-help/troubleshooting | customer_authenticated | ready | AUTH-AND-ACCESS-CONTROL.md, FRONT-DESK-WORKSPACE.md, config/runtime.config.ts | /account, /workspace | Right email/area, password reset, staff access via owner; never send password |
+| CH-19 | Understanding patient request statuses | customer-help/workspace | clinic_staff | ready | FRONT-DESK-WORKSPACE.md, PROJECT-CONTEXT.md, OPERATIONS-RUNBOOK.md | /workspace | Status meanings; "not provided yet"; what not to assume; no medical advice |
 
 ## Platform admin
 

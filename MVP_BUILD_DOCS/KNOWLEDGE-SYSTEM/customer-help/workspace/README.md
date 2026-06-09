@@ -29,7 +29,7 @@ visible to staff):
 |---|---|---|---|---|
 | [front-desk-workspace-overview.md](front-desk-workspace-overview.md) | Front-desk workspace overview | clinic_staff | ready | What the workspace is; what staff can/can't see; request cards; statuses |
 | [../missed-calls-and-messages/how-front-desk-should-handle-patient-replies.md](../missed-calls-and-messages/how-front-desk-should-handle-patient-replies.md) | How front desk should handle patient replies | clinic_staff | ready | Lives in missed-calls-and-messages; cross-listed here |
-| `understanding-request-statuses` | Understanding patient request statuses | clinic_staff | planned | Status detail; for now covered by the overview |
+| [understanding-request-statuses.md](understanding-request-statuses.md) | Understanding patient request statuses | clinic_staff | ready | What each status means; "not provided yet"; what not to assume |
 
 ## Staff-safe notes
 

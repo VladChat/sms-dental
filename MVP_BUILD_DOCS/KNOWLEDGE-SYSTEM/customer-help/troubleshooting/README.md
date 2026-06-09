@@ -1,6 +1,6 @@
 # Customer Help — Troubleshooting
 
-Status: active (contact-support ready; others planned)
+Status: active (articles ready; not yet published)
 Audience: Clinic owners and staff · Visibility: `public` / `customer_authenticated`
 Last updated: 2026-06-09
 
@@ -13,8 +13,8 @@ help a customer self-diagnose common situations; deeper diagnosis is internal
 | Article | Title | Visibility | Status | Notes |
 |---|---|---|---|---|
 | [contact-support.md](contact-support.md) | Contact support | customer_authenticated | ready | How and when to reach support; what to include and what not to send |
-| `texting-not-working-yet` | My texting isn't working yet | customer_authenticated | planned | Usually SMS approval not complete / not enabled |
-| `i-cant-sign-in` | I can't sign in | customer_authenticated | planned | Reset password; role-specific login |
+| [texting-not-working-yet.md](texting-not-working-yet.md) | My texting isn't working yet | clinic_owner | ready | SMS approval/activation is separate from number setup; what to check |
+| [i-cant-sign-in.md](i-cant-sign-in.md) | I can't sign in | customer_authenticated | ready | Right email/area, password reset, staff access via owner |
 
 ## Customer-safe notes
 
