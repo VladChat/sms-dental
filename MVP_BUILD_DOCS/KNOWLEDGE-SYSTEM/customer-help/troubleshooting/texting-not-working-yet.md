@@ -92,6 +92,9 @@ Check these in your account, in order:
   (pending) status. Approval can take time, and we cannot promise an exact
   timeframe.
 - Texting becomes active only after approval and configuration are complete.
+- The system rechecks provider approval and configuration status automatically,
+  so you do not need to refresh the page or re-enter information just to update a
+  Texting status.
 - Support can help review your account, number, and SMS approval status, but
   cannot instantly activate texting — approval still has to be in place.
 - Always-on rules still apply: the service sends a professional follow-up after a
@@ -107,7 +110,8 @@ Contact support if:
 - everything looks complete in your account but texting is still not active.
 
 Include your clinic name, account email, and the business number involved. Support
-may need to review your account, number, and SMS approval status.
+may need to review your account, number, and SMS approval status. Support can also
+request an immediate status refresh if the provider already shows approval.
 
 Email: **support@missedcallsdental.com**
 

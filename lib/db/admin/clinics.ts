@@ -203,12 +203,22 @@ export async function getAdminClinicDetail(
       activated_at: Date | null;
       suspended_at: Date | null;
       suspension_reason: string | null;
+      texting_status: string;
+      texting_status_source: string;
+      texting_status_updated_at: Date | null;
+      texting_provider_status: string | null;
+      texting_provider_error_code: string | null;
+      texting_provider_error_message: string | null;
+      texting_provider_synced_at: Date | null;
     }[]
   >`
     select id, phone_number, role, is_active, number_type, removal_status,
            twilio_phone_number_sid, created_at, updated_at,
            source, billing_class, monthly_unit_amount_cents, activated_at,
-           suspended_at, suspension_reason
+           suspended_at, suspension_reason, texting_status,
+           texting_status_source, texting_status_updated_at,
+           texting_provider_status, texting_provider_error_code,
+           texting_provider_error_message, texting_provider_synced_at
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
       and removal_status <> 'detached'
@@ -232,6 +242,13 @@ export async function getAdminClinicDetail(
     activatedAt: p.activated_at ? p.activated_at.toISOString() : null,
     suspendedAt: p.suspended_at ? p.suspended_at.toISOString() : null,
     suspensionReason: p.suspension_reason,
+    textingStatus: p.texting_status,
+    textingStatusSource: p.texting_status_source,
+    textingStatusUpdatedAt: p.texting_status_updated_at ? p.texting_status_updated_at.toISOString() : null,
+    textingProviderStatus: p.texting_provider_status,
+    textingProviderErrorCode: p.texting_provider_error_code,
+    textingProviderErrorMessage: p.texting_provider_error_message,
+    textingProviderSyncedAt: p.texting_provider_synced_at ? p.texting_provider_synced_at.toISOString() : null,
   }));
 
   // Recent purchase attempts (durable audit) + held-attempt count for the limit.

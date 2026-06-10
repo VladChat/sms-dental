@@ -3,6 +3,10 @@
     {
       "path": "/api/jobs/release-removed-phone-numbers",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/jobs/sync-phone-number-texting-status",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

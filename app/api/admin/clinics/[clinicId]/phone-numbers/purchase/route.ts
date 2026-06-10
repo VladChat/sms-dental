@@ -16,6 +16,8 @@ import {
   provisionClinicPhoneNumber,
   type ProvisionErrorCode,
 } from "../../../../../../../lib/phone-numbers/provisioning";
+import { textingStatusSyncConfig } from "../../../../../../../config/texting-status-sync.config";
+import { syncPhoneNumberTextingStatusesBestEffort } from "../../../../../../../lib/texting-status/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +111,13 @@ export async function POST(
       result.missingFields ? { missing_fields: result.missingFields } : undefined,
     );
   }
+
+  await syncPhoneNumberTextingStatusesBestEffort({
+    phoneNumberId: result.assigned.id,
+    force: true,
+    limit: textingStatusSyncConfig.eventBatchSize,
+    event: "admin_number_purchase",
+  });
 
   // Audit: phone number + SID + area code only. Never any Twilio secret.
   try {

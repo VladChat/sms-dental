@@ -72,6 +72,10 @@ clear or overwrite them.
 Each `clinic_phone_numbers` row has its own texting approval/capability fields:
 `texting_status`, `texting_status_source`, and `texting_status_updated_at`.
 Allowed statuses are `preparing`, `waiting_for_approval`, `active`, and `failed`.
+Provider diagnostics are stored separately in `texting_provider_status`,
+`texting_provider_error_code`, `texting_provider_error_message`, and
+`texting_provider_synced_at`; these help operators diagnose pending/failed states
+without changing routing, billing, or lifecycle.
 
 Do not use `clinics.sms_status` as the customer-facing status for every number.
 `clinics.sms_status` remains the clinic-wide SMS approval / local A2P workflow
@@ -85,6 +89,18 @@ existing numbers, and reassigned detached rows start as
 rows become `active` only after a reliable number-specific toll-free verification
 source confirms approval. Local rows may become `active` only from a reliable
 local/A2P success transition for the covered active local numbers.
+
+The automatic sync service is the normal source of updates:
+
+- toll-free numbers read Twilio Toll-Free Verification status for that PN SID;
+- local numbers read the existing A2P/Messaging Service readiness model;
+- the protected cron performs bounded stale-row reconciliation;
+- number purchase/assignment/restore and live A2P refresh/submit success trigger
+  best-effort immediate sync;
+- the admin **Run readiness sync** button calls the same service as a fallback.
+
+Do not manually mark a number active unless provider approval for that exact
+number has been independently verified and the automatic sync path is unavailable.
 
 ## Operations at a glance
 

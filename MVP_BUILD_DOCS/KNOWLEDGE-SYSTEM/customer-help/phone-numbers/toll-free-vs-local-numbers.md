@@ -85,6 +85,8 @@ See
   complete.
 - A toll-free number may show **Toll-free verification pending** until toll-free
   verification is confirmed for that number.
+- Your account rechecks approval status automatically, so a confirmed approval can
+  update the number's Texting status without you needing to re-enter details.
 - You can hold more than one business number on your account, up to your account's
   limit. If you need more, contact support.
 

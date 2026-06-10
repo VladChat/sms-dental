@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-10 (per-number texting status model)
+Last updated: 2026-06-10 (automatic phone-number texting-status sync)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -2321,11 +2321,15 @@ Safety model:
   sender, Brand, and Campaign data, then writes only local readiness tables.
 - It does not send SMS, buy/release phone numbers, submit A2P, attach/detach
   senders, or change Twilio webhooks.
-- Admin `enable_sms` requires fresh production-safe readiness for every active
-  clinic number before it can set `sms_recovery_enabled=true`.
+- Admin `enable_sms` requires every active clinic number to have per-number
+  `texting_status='active'`; active local numbers also require fresh
+  production-safe A2P/Messaging Service readiness before it can set
+  `sms_recovery_enabled=true`.
 - Live `sendRecoverySms()` requires `SMS_RECOVERY_MODE=live`,
-  `clinics.sms_recovery_enabled=true`, `clinics.sms_status='active'`, and
-  production-safe readiness for the specific called number.
+  `clinics.sms_recovery_enabled=true`, an active/routable called number row, and
+  per-number `texting_status='active'`. Local numbers also require the existing
+  production-safe A2P/Messaging Service readiness checks. Toll-free numbers use
+  toll-free verification status instead of local A2P.
 - Owner-test SMS remains restricted by `SMS_TEST_ALLOWED_TO`; this sprint did
   not broaden owner-test behavior.
 
@@ -2681,10 +2685,16 @@ numbers.
 Schema source:
 
 - Migration: `supabase/migrations/20260613000200_per_number_texting_status.sql`.
+- Diagnostics migration:
+  `supabase/migrations/20260613000300_texting_status_sync_diagnostics.sql`.
 - Columns on `clinic_phone_numbers`:
   - `texting_status text not null default 'waiting_for_approval'`
   - `texting_status_source text not null default 'system'`
   - `texting_status_updated_at timestamptz not null default now()`
+  - `texting_provider_status text`
+  - `texting_provider_error_code text`
+  - `texting_provider_error_message text`
+  - `texting_provider_synced_at timestamptz`
 - Allowed `texting_status`: `preparing`, `waiting_for_approval`, `active`,
   `failed`.
 
@@ -2713,25 +2723,78 @@ Backfill and assignment safety:
 - Reassignment resets the status to waiting so stale `active` approval cannot
   follow a number into a new clinic assignment.
 
-Manual toll-free verification update after confirming Twilio approval for a
-specific number:
+Automatic sync model:
+
+- Config lives in `config/texting-status-sync.config.ts`:
+  - cron path/schedule and batch size
+  - single-clinic and event batch sizes
+  - pending vs active stale windows
+  - Twilio Toll-Free Verification list limit/page size
+  - source labels/provider status labels
+  - active toll-free reconciliation toggle
+- Protected cron route:
+  `GET|POST /api/jobs/sync-phone-number-texting-status`.
+- Vercel cron schedule is `0 */6 * * *` in `vercel.json`. This is safe because
+  the job processes only rows due by stale-window selection and caps each run to
+  the configured batch size. The schedule is necessarily repeated in
+  `vercel.json` because Vercel reads a static config file; tune business values in
+  `config/texting-status-sync.config.ts`.
+- Auth uses the protected job bearer pattern:
+  `Authorization: Bearer <CRON_SECRET>`. `PHONE_NUMBER_RELEASE_CRON_SECRET` is
+  accepted as a fallback for manual/external scheduling compatibility.
+- Manual admin route:
+  `POST /api/admin/clinics/:clinicId/sms-readiness/sync`. The button now runs the
+  same per-number texting-status sync service, scoped to that clinic.
+- Event-triggered best-effort sync runs after:
+  - owner number purchase/provisioning
+  - admin number purchase/provisioning
+  - admin assignment of an existing Twilio number
+  - owner restore of a scheduled-removal number
+  - live A2P provider-status refresh
+  - successful live A2P submission flow
+  - manual admin readiness sync
+- Sync output/log summary uses safe counts only: `checked`, `updatedToActive`,
+  `remainedPending`, `failed`, `skipped`.
+
+Provider mapping:
+
+- Toll-free numbers call Twilio Messaging Toll-Free Verification read API by
+  Phone Number SID. `TWILIO_APPROVED` / approved / verified -> `active`; pending
+  or in-review -> `waiting_for_approval`; rejected/failed -> `failed`; no
+  verification found -> `waiting_for_approval`.
+- Local numbers keep using the existing read-only A2P/Messaging Service readiness
+  sync. A local number becomes `active` only when A2P is verified, the number is
+  covered by the Messaging Service and Campaign, production-safe is true, and no
+  sync error is present. Rejected/failed/blocked local provider states map to
+  `failed`.
+- Twilio/API read errors do **not** mark a number active. The sync stores
+  diagnostics in the provider-status/error columns and preserves the prior
+  customer-facing status unless a clear provider failure was returned.
+- Toll-free numbers are never included in local A2P campaign coverage blockers;
+  `listActiveSmsNumbersForClinic()` is local-only for A2P readiness.
+
+Diagnose a toll-free number still pending:
 
 ```sql
-update public.clinic_phone_numbers
-set
-  texting_status = 'active',
-  texting_status_source = 'manual_twilio_verified',
-  texting_status_updated_at = now()
-where phone_number = '+18447234944'
-  and number_type = 'toll_free'
-  and removal_status = 'active';
+select phone_number,
+       number_type,
+       texting_status,
+       texting_status_source,
+       texting_status_updated_at,
+       texting_provider_status,
+       texting_provider_error_code,
+       texting_provider_synced_at
+from public.clinic_phone_numbers
+where number_type = 'toll_free'
+  and removal_status = 'active'
+order by texting_status_updated_at desc;
 ```
 
-Do not update `clinics.sms_status` just to make one toll-free number display as
-active. Use a number-specific update after provider verification. If a future
-local A2P approval workflow gains a reliable success transition, it should update
-active local `clinic_phone_numbers` rows with `texting_status='active'`; do not
-invent that transition from incomplete readiness data.
+If Twilio Console shows approved but the row is still pending, first run the
+admin **Run readiness sync** button for that clinic or wait for the next cron. If
+`texting_provider_error_code` is present, use the provider message and Vercel logs
+to diagnose configuration/Twilio read issues. Do not update `clinics.sms_status`
+just to make one toll-free number display as active.
 
 Safety invariants: this model does not send SMS, enable `sms_recovery_enabled`,
 change `SMS_RECOVERY_MODE`, change routing, release/buy numbers, attach Messaging

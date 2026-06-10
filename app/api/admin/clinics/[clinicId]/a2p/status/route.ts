@@ -12,6 +12,8 @@ import { recordAdminAuditEvent } from "@/lib/db/admin/audit";
 import { getA2pSubmissionTrackingCapabilities } from "@/lib/db/a2p-submissions";
 import { readA2pProviderStatus } from "@/lib/twilio/a2p-submission";
 import type { A2pStoredSubmissionMode } from "@/lib/a2p/types";
+import { textingStatusSyncConfig } from "@/config/texting-status-sync.config";
+import { syncPhoneNumberTextingStatusesBestEffort } from "@/lib/texting-status/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,6 +90,15 @@ export async function POST(
     },
     metadata: { authSource: admin.source, mode: "read_only", submissionMode },
   }).catch(() => {});
+
+  if (submissionMode === "live") {
+    await syncPhoneNumberTextingStatusesBestEffort({
+      clinicId,
+      force: true,
+      limit: textingStatusSyncConfig.singleClinicBatchSize,
+      event: "admin_live_a2p_status_refresh",
+    });
+  }
 
   return jsonOk({ ok: true, submissionMode, statuses, brandFailureReason, brandFailureCode });
 }

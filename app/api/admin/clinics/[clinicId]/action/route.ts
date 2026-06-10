@@ -21,7 +21,7 @@ import {
   type ActionResult,
 } from "../../../../../../lib/db/admin/actions";
 import { recordAdminAuditEvent } from "../../../../../../lib/db/admin/audit";
-import { evaluateSmsReadinessForLaunch } from "../../../../../../lib/db/sms-readiness";
+import { evaluateTextingStatusForLaunch } from "../../../../../../lib/db/sms-readiness";
 
 type AdminCtx = { userId: string | null; email: string; source: string };
 
@@ -130,16 +130,13 @@ export async function POST(
       if (!detail.a2pInfoCompleted) {
         return jsonError(409, "precondition_failed", "SMS approval information is not complete yet.");
       }
-      if (detail.smsStatus !== "active") {
-        return jsonError(409, "precondition_failed", "SMS approval is not active yet.");
-      }
-      const readiness = await evaluateSmsReadinessForLaunch(clinicId);
-      if (!readiness.ok) {
+      const textingStatus = await evaluateTextingStatusForLaunch(clinicId);
+      if (!textingStatus.ok) {
         return jsonError(
           409,
           "sms_readiness_not_verified",
-          "SMS cannot be enabled yet. Messaging Service and A2P campaign coverage are not verified for all active numbers.",
-          { reason: readiness.reason },
+          "SMS cannot be enabled yet. Texting status is not verified for all active numbers.",
+          { reason: textingStatus.reason },
         );
       }
       result = await setSmsRecoveryEnabled(clinicId, true);

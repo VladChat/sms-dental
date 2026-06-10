@@ -17,6 +17,8 @@ import {
   listUnassignedTwilioInventory,
   type AssignExistingErrorCode,
 } from "../../../../../../../lib/phone-numbers/assign-existing-twilio";
+import { textingStatusSyncConfig } from "../../../../../../../config/texting-status-sync.config";
+import { syncPhoneNumberTextingStatusesBestEffort } from "../../../../../../../lib/texting-status/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -112,6 +114,13 @@ export async function POST(
   if (!result.ok) {
     return jsonError(ERROR_STATUS[result.error], result.error, result.message);
   }
+
+  await syncPhoneNumberTextingStatusesBestEffort({
+    clinicId,
+    force: true,
+    limit: textingStatusSyncConfig.singleClinicBatchSize,
+    event: "admin_assign_existing_number",
+  });
 
   // Audit: phone number + SID + billing class + area code only. No secrets.
   try {

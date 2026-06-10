@@ -5813,3 +5813,67 @@ calls at 21:31–21:32 returned 409 with an error message referencing
 Messaging Service calls occurred (detach has no such side effects).
 
 Commit: see `feat: detach assigned Twilio numbers from admin`.
+
+---
+
+## 2026-06-10 — Automatic phone-number texting-status sync from Twilio
+
+Implemented production-safe automatic synchronization for
+`clinic_phone_numbers.texting_status` so the owner Phone number screen reads the
+database and the database is kept current from provider read-back.
+
+What changed:
+
+- Added shared sync service `lib/texting-status/sync.ts` and pure mapping helpers
+  in `lib/texting-status/status-mapping.ts`.
+- Added read-only Twilio Toll-Free Verification lookup in
+  `lib/twilio/tollfree-verification.ts` using the installed Twilio SDK
+  `client.messaging.v1.tollfreeVerifications.list({ tollfreePhoneNumberSid, ... })`.
+- Added config `config/texting-status-sync.config.ts` for cron path/schedule,
+  batch sizes, stale windows, Twilio list limits, source labels, and active
+  reconciliation behavior.
+- Added protected job `GET|POST /api/jobs/sync-phone-number-texting-status` and
+  `vercel.json` cron `0 */6 * * *`. The job processes only active, non-removed,
+  stale/due rows in a bounded batch.
+- Added additive diagnostics migration
+  `supabase/migrations/20260613000300_texting_status_sync_diagnostics.sql`
+  (`texting_provider_status`, error code/message, provider synced timestamp, and
+  due-row indexes). No backfill marks toll-free numbers active.
+- Manual admin **Run readiness sync** now runs the same per-number sync path.
+- Event-triggered best-effort sync now runs after owner/admin number purchase,
+  existing-number assignment, restore, live A2P status refresh, and successful
+  live A2P submit.
+- Local A2P readiness now lists local numbers only, so toll-free numbers are not
+  treated as local A2P campaign senders/blockers.
+- Live send gating now requires the called number row to be active, not scheduled
+  for removal, and `texting_status='active'`; local numbers also keep the
+  production-safe A2P/Messaging Service readiness checks.
+- Admin phone-number diagnostics now show number type, texting status/source,
+  provider status/synced time/error, and next action.
+
+Status mapping:
+
+- Toll-free: approved/verified provider status -> `active`; pending/in-review/no
+  verification -> `waiting_for_approval`; rejected/failed -> `failed`; API error
+  stores diagnostics and does not mark active.
+- Local: verified A2P + Messaging Service sender coverage + Campaign coverage +
+  production-safe + no sync error -> `active`; rejected/failed/blocked ->
+  `failed`; otherwise `waiting_for_approval`.
+
+Validation:
+
+- `npm run typecheck` — passed.
+- `npm run test:phone-numbers` — passed (32 tests).
+- `npm run test:a2p` — passed (64 tests).
+- `npm run build` — passed.
+- No lint script exists in `package.json`.
+
+Not done:
+
+- Migration was **not** applied to production in this task.
+- No production deploy was performed.
+- No patient SMS sent.
+- No Twilio resources mutated; Twilio access added here is read-only.
+- No SMS recovery auto-enabled.
+- No hardcoded phone-number-specific fix for `+18447234944`; that number remains
+  only the real-world validation case after migration/deploy.

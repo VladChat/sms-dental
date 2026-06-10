@@ -795,6 +795,24 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 - [ ] Customer display should combine lifecycle and capability: inactive or
       scheduled-removal resources render as not active even if a stored capability
       status says active.
+- [ ] Keep provider capability sync read-only unless the task explicitly requires
+      mutation. A status sync should read provider state and write only local
+      capability/diagnostic fields.
+- [ ] Use one shared sync service for manual refresh, event-triggered refresh, and
+      scheduled reconciliation. Manual clicking should be a fallback, not the
+      normal path to correct customer status.
+- [ ] Put schedule, batch sizes, stale windows, provider read limits, source
+      labels, and reconciliation toggles in config. Do not scatter those literals
+      through routes/services.
+- [ ] Reconcile in bounded batches using stale-row selection. Pending/failed
+      resources can be checked more often; active resources should be checked less
+      often for drift.
+- [ ] Store provider diagnostics separately from the customer-facing capability
+      status. Provider/API errors should never mark a resource active by
+      inference.
+- [ ] Live use of a provider capability must gate on the same per-resource status
+      the customer/admin UI shows, plus any provider-specific readiness checks for
+      that resource type.
 
 ---
 

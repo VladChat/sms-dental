@@ -25,6 +25,8 @@ import {
   type A2pValidationResult,
   validateA2pPreflight,
 } from "@/lib/a2p/validation";
+import { textingStatusSyncConfig } from "@/config/texting-status-sync.config";
+import { syncPhoneNumberTextingStatusesBestEffort } from "@/lib/texting-status/sync";
 import { logger } from "@/lib/logging/logger";
 
 export const runtime = "nodejs";
@@ -345,6 +347,15 @@ export async function POST(
     safeErrorMessage: result.providerErrors[0] ?? null,
     createdCount: result.createdResources.length,
   });
+
+  if (result.ok && requestedMode === "live") {
+    await syncPhoneNumberTextingStatusesBestEffort({
+      clinicId,
+      force: true,
+      limit: textingStatusSyncConfig.singleClinicBatchSize,
+      event: "admin_live_a2p_submit_success",
+    });
+  }
 
   return jsonOk({
     ok: result.ok,

@@ -13,7 +13,10 @@
   "include": [
     "tests/twilio-release-deadline.test.ts",
     "tests/twilio-number-inventory.test.ts",
+    "tests/texting-status-sync.test.ts",
     "lib/phone-numbers/twilio-release-deadline.ts",
-    "lib/phone-numbers/twilio-number-inventory.ts"
+    "lib/phone-numbers/twilio-number-inventory.ts",
+    "lib/texting-status/status-mapping.ts",
+    "config/texting-status-sync.config.ts"
   ]
 }

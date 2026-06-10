@@ -1,4 +1,5 @@
 import { getDb } from "./client";
+import { isPhoneNumberRoutableForTexting } from "../texting-status/status-mapping";
 
 // Readiness is intentionally strict. Missing rows, stale rows, unknown/pending
 // statuses, provider errors, or inconsistent number coverage all block live SMS.
@@ -18,6 +19,12 @@ export type ActiveSmsNumberRow = {
   // 'toll_free' | 'local'. A2P 10DLC applies to LOCAL numbers only; toll-free
   // numbers use toll-free verification and must be excluded from A2P packages.
   number_type: "toll_free" | "local";
+};
+
+type LiveSendPhoneNumberRow = ActiveSmsNumberRow & {
+  is_active: boolean;
+  removal_status: string;
+  texting_status: string;
 };
 
 export type ClinicSmsReadiness = {
@@ -136,6 +143,8 @@ export async function listActiveSmsNumbersForClinic(
     from public.clinic_phone_numbers
     where clinic_id = ${clinicId}
       and is_active = true
+      and removal_status = 'active'
+      and number_type = 'local'
     order by created_at asc
   `;
 }
@@ -284,20 +293,62 @@ export async function evaluateSmsReadinessForLaunch(
 export async function evaluateSmsReadinessForLiveSend(
   clinicId: string,
   twilioPhone: string,
-): Promise<{ ok: boolean; reason: string }> {
+): Promise<{ ok: boolean; reason: string; numberType?: "toll_free" | "local" }> {
   try {
+    const number = await findLiveSendPhoneNumber(clinicId, twilioPhone);
+    if (!number) return { ok: false, reason: "phone_number_mapping_missing" };
+    if (!number.is_active || number.removal_status !== "active") {
+      return { ok: false, reason: "phone_number_not_active", numberType: number.number_type };
+    }
+    if (!isPhoneNumberRoutableForTexting(number)) {
+      return {
+        ok: false,
+        reason: "phone_number_texting_not_active",
+        numberType: number.number_type,
+      };
+    }
+    if (number.number_type === "toll_free") {
+      return { ok: true, reason: "verified", numberType: "toll_free" };
+    }
+
     const summary = await getSmsReadinessSummary(clinicId);
     if (!summary.launchReady) {
-      return { ok: false, reason: summary.blockingReason ?? "sms_readiness_blocked" };
+      return {
+        ok: false,
+        reason: summary.blockingReason ?? "sms_readiness_blocked",
+        numberType: "local",
+      };
     }
-    const number = summary.numbers.find((n) => n.phoneNumber === twilioPhone);
-    if (!number) return { ok: false, reason: "number_readiness_missing" };
-    const numberReason = blockingReasonForNumber(number);
-    if (numberReason) return { ok: false, reason: numberReason };
-    return { ok: true, reason: "verified" };
+    const readiness = summary.numbers.find((n) => n.phoneNumber === twilioPhone);
+    if (!readiness) return { ok: false, reason: "number_readiness_missing", numberType: "local" };
+    const numberReason = blockingReasonForNumber(readiness);
+    if (numberReason) return { ok: false, reason: numberReason, numberType: "local" };
+    return { ok: true, reason: "verified", numberType: "local" };
   } catch {
     return { ok: false, reason: "sms_readiness_check_failed" };
   }
+}
+
+export async function evaluateTextingStatusForLaunch(
+  clinicId: string,
+): Promise<{ ok: boolean; reason: string }> {
+  const sql = getDb();
+  const activeNumbers = await sql<LiveSendPhoneNumberRow[]>`
+    select id, clinic_id, phone_number, twilio_phone_number_sid, number_type,
+           is_active, removal_status, texting_status
+    from public.clinic_phone_numbers
+    where clinic_id = ${clinicId}
+      and is_active = true
+      and removal_status = 'active'
+    order by created_at asc
+  `;
+  if (activeNumbers.length === 0) return { ok: false, reason: "no_active_sms_numbers" };
+  const notActive = activeNumbers.find((n) => n.texting_status !== "active");
+  if (notActive) return { ok: false, reason: `phone_number_texting_not_active:${notActive.phone_number}` };
+  if (!activeNumbers.some((n) => n.number_type === "local")) {
+    return { ok: true, reason: "verified" };
+  }
+  return evaluateSmsReadinessForLaunch(clinicId);
 }
 
 function evaluateSummary(
@@ -318,6 +369,22 @@ function evaluateSummary(
   }
 
   return { ok: true, reason: "verified" };
+}
+
+async function findLiveSendPhoneNumber(
+  clinicId: string,
+  twilioPhone: string,
+): Promise<LiveSendPhoneNumberRow | null> {
+  const sql = getDb();
+  const rows = await sql<LiveSendPhoneNumberRow[]>`
+    select id, clinic_id, phone_number, twilio_phone_number_sid, number_type,
+           is_active, removal_status, texting_status
+    from public.clinic_phone_numbers
+    where clinic_id = ${clinicId}
+      and phone_number = ${twilioPhone}
+    limit 1
+  `;
+  return rows[0] ?? null;
 }
 
 function blockingReasonForClinic(clinic: ClinicSmsReadiness): string | null {

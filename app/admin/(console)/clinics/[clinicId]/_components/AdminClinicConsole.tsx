@@ -115,16 +115,14 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
   const [readinessError, setReadinessError] = useState<string | null>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const readinessBlockedReason = smsReadinessBlockedReason(d);
+  const readinessBlockedReason = textingLaunchBlockedReason(d);
   const launchBlockedReason = !d.isActive
     ? "Clinic is paused. Reactivate it before launching service."
     : !d.hasAssignedNumber
       ? "No phone number assigned. Assign a number before launching."
     : !d.a2pInfoCompleted
       ? "SMS approval information is not complete yet."
-      : d.smsStatus !== "active"
-        ? "SMS approval is not active yet."
-        : readinessBlockedReason;
+      : readinessBlockedReason;
 
   const ownerEmail = d.ownerContactEmail ?? d.members.find((m) => m.role === "owner")?.email ?? null;
   const publicBase = d.slug && data.appBaseUrl ? `${data.appBaseUrl}/business/${d.slug}` : null;
@@ -160,16 +158,27 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
         credentials: "include",
       });
       const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; summary?: { launchReady?: boolean }; error?: { message?: string } }
+        | {
+            ok?: boolean;
+            summary?: {
+              checked?: number;
+              updatedToActive?: number;
+              remainedPending?: number;
+              failed?: number;
+              skipped?: number;
+            };
+            error?: { message?: string };
+          }
         | null;
       if (!res.ok || !json?.ok) {
         setReadinessError(json?.error?.message ?? "Could not run readiness sync.");
         return;
       }
+      const s = json.summary;
       setReadinessMessage(
-        json.summary?.launchReady
-          ? "Read-only readiness sync complete. SMS coverage is verified."
-          : "Read-only readiness sync complete. SMS launch remains blocked.",
+        s
+          ? `Read-only texting sync complete: checked ${s.checked ?? 0}, activated ${s.updatedToActive ?? 0}, pending ${s.remainedPending ?? 0}, failed ${s.failed ?? 0}, skipped ${s.skipped ?? 0}.`
+          : "Read-only texting sync complete.",
       );
       router.refresh();
     } catch {
@@ -258,7 +267,7 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
                 {syncingReadiness ? "Running…" : "Run readiness sync"}
               </button>
               <span className="t-helper" style={{ color: "var(--text-muted)" }}>
-                Re-checks Messaging Service &amp; A2P coverage for assigned numbers. Read-only.
+                Re-checks toll-free verification plus local Messaging Service &amp; A2P coverage. Read-only.
               </span>
               {(readinessMessage || readinessError) && (
                 <span className="t-small" style={{ color: readinessError ? "var(--error-text)" : "var(--text-secondary)" }}>
@@ -727,6 +736,19 @@ function smsReadinessBlockedReason(d: AdminClinicDetail): string | null {
     : "SMS readiness is not verified.";
 }
 
+function textingLaunchBlockedReason(d: AdminClinicDetail): string | null {
+  const activeNumbers = d.phoneNumbers.filter((p) => p.isActive && p.removalStatus === "active");
+  if (activeNumbers.length === 0) return "No active phone number is assigned.";
+  const pending = activeNumbers.find((p) => p.textingStatus !== "active");
+  if (pending) {
+    return `Texting status is not active for ${pending.phoneE164 ?? "an assigned number"}. Run texting status sync and review provider status.`;
+  }
+  if (activeNumbers.some((p) => p.numberType === "local")) {
+    return smsReadinessBlockedReason(d);
+  }
+  return null;
+}
+
 function bannerFor(
   d: AdminClinicDetail,
   launchBlockedReason: string | null,
@@ -742,9 +764,6 @@ function bannerFor(
   }
   if (!d.a2pInfoCompleted) {
     return { tone: "warning", title: "Launch blocked: SMS approval incomplete", body: "Complete SMS approval before launching SMS recovery.", target: "sms", actionLabel: "Go to SMS approval" };
-  }
-  if (d.smsStatus !== "active") {
-    return { tone: "warning", title: "Launch blocked: SMS approval not active", body: "Wait for active SMS approval before launching SMS recovery.", target: "sms", actionLabel: "Go to SMS approval" };
   }
   if (launchBlockedReason) {
     return { tone: "warning", title: "Launch blocked: SMS readiness not verified", body: launchBlockedReason, target: "sms", actionLabel: "Go to SMS approval" };

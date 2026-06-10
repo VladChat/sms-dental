@@ -44,9 +44,9 @@ async function predictGreeting(
     if (!config.allowedNumbers.includes(from)) return "none";
   } else if (config.mode === "live") {
     if (!clinic.sms_recovery_enabled) return "none";
-    if (clinic.sms_status !== "active") return "none";
     const readiness = await evaluateSmsReadinessForLiveSend(clinic.id, to);
     if (!readiness.ok) return "none";
+    if (readiness.numberType === "local" && clinic.sms_status !== "active") return "none";
   } else {
     return "none"; // disabled
   }

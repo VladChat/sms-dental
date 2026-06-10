@@ -8,6 +8,8 @@ import {
 } from "@/lib/http/responses";
 import { resolveAuthClinicAccess } from "@/lib/auth/access";
 import { restoreScheduledPhoneNumber } from "@/lib/phone-numbers/removal-lifecycle";
+import { textingStatusSyncConfig } from "@/config/texting-status-sync.config";
+import { syncPhoneNumberTextingStatusesBestEffort } from "@/lib/texting-status/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,5 +44,12 @@ export async function POST(
   if (!result.ok) {
     return jsonError(STATUS[result.error], result.error, result.message);
   }
+  await syncPhoneNumberTextingStatusesBestEffort({
+    clinicId: access.clinic.id,
+    phoneNumberId,
+    force: true,
+    limit: textingStatusSyncConfig.eventBatchSize,
+    event: "owner_number_restore",
+  });
   return jsonOk({ ok: true, phoneNumber: result.phoneNumber });
 }

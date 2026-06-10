@@ -64,6 +64,10 @@ export type ClinicPhoneNumberRow = {
   texting_status: PhoneNumberTextingStatus;
   texting_status_source: string;
   texting_status_updated_at: Date;
+  texting_provider_status: string | null;
+  texting_provider_error_code: string | null;
+  texting_provider_error_message: string | null;
+  texting_provider_synced_at: Date | null;
 };
 
 /**
@@ -133,6 +137,66 @@ export async function markPhoneNumberReleased(phoneNumberId: string): Promise<vo
   `;
 }
 
+export type TextingStatusSyncPhoneNumberRow = {
+  id: string;
+  clinic_id: string;
+  phone_number: string;
+  twilio_phone_number_sid: string | null;
+  number_type: "toll_free" | "local";
+  is_active: boolean;
+  removal_status: "active" | "scheduled" | "permanently_removed" | "detached";
+  texting_status: PhoneNumberTextingStatus;
+  texting_status_source: string;
+  texting_status_updated_at: Date;
+  texting_provider_status: string | null;
+  texting_provider_error_code: string | null;
+  texting_provider_error_message: string | null;
+  texting_provider_synced_at: Date | null;
+};
+
+export async function listPhoneNumbersDueForTextingStatusSync(params: {
+  limit: number;
+  pendingStaleBefore: Date;
+  activeStaleBefore: Date;
+  includeActiveReconciliation: boolean;
+  clinicId?: string | null;
+  phoneNumberId?: string | null;
+  force?: boolean;
+}): Promise<TextingStatusSyncPhoneNumberRow[]> {
+  const limit = Math.max(1, Math.min(100, Math.floor(params.limit)));
+  const sql = getDb();
+  return sql<TextingStatusSyncPhoneNumberRow[]>`
+    select
+      id, clinic_id, phone_number, twilio_phone_number_sid, number_type,
+      is_active, removal_status, texting_status, texting_status_source,
+      texting_status_updated_at, texting_provider_status,
+      texting_provider_error_code, texting_provider_error_message,
+      texting_provider_synced_at
+    from public.clinic_phone_numbers
+    where is_active = true
+      and removal_status = 'active'
+      and (${params.clinicId ?? null}::uuid is null or clinic_id = ${params.clinicId ?? null}::uuid)
+      and (${params.phoneNumberId ?? null}::uuid is null or id = ${params.phoneNumberId ?? null}::uuid)
+      and (
+        ${params.force === true}::boolean
+        or (
+          texting_status in ('preparing', 'waiting_for_approval', 'failed')
+          and texting_status_updated_at <= ${params.pendingStaleBefore}
+        )
+        or (
+          ${params.includeActiveReconciliation}::boolean
+          and texting_status = 'active'
+          and texting_status_updated_at <= ${params.activeStaleBefore}
+        )
+      )
+    order by
+      case when texting_status = 'active' then 1 else 0 end asc,
+      texting_status_updated_at asc,
+      created_at asc
+    limit ${limit}
+  `;
+}
+
 /**
  * Update only the per-number texting approval/capability fields. This helper is
  * intentionally scoped away from routing, lifecycle, billing, and Twilio release
@@ -143,6 +207,9 @@ export async function updatePhoneNumberTextingStatus(params: {
   clinicId?: string | null;
   status: PhoneNumberTextingStatus;
   source: string;
+  providerStatus?: string | null;
+  providerErrorCode?: string | null;
+  providerErrorMessage?: string | null;
 }): Promise<ClinicPhoneNumberRow | null> {
   if (!isPhoneNumberTextingStatus(params.status)) {
     throw new Error(`Invalid phone-number texting status: ${String(params.status)}`);
@@ -151,18 +218,57 @@ export async function updatePhoneNumberTextingStatus(params: {
   if (!source) {
     throw new Error("Phone-number texting status source is required");
   }
+  const hasProviderDetails =
+    params.providerStatus !== undefined ||
+    params.providerErrorCode !== undefined ||
+    params.providerErrorMessage !== undefined;
 
   const sql = getDb();
   const rows = await sql<ClinicPhoneNumberRow[]>`
     update public.clinic_phone_numbers set
       texting_status = ${params.status},
       texting_status_source = ${source},
-      texting_status_updated_at = now()
+      texting_status_updated_at = now(),
+      texting_provider_status = case
+        when ${hasProviderDetails}::boolean then ${params.providerStatus ?? null}
+        else texting_provider_status
+      end,
+      texting_provider_error_code = case
+        when ${hasProviderDetails}::boolean then ${params.providerErrorCode ?? null}
+        else texting_provider_error_code
+      end,
+      texting_provider_error_message = case
+        when ${hasProviderDetails}::boolean then ${params.providerErrorMessage?.slice(0, 500) ?? null}
+        else texting_provider_error_message
+      end,
+      texting_provider_synced_at = case
+        when ${hasProviderDetails}::boolean then now()
+        else texting_provider_synced_at
+      end
     where id = ${params.phoneNumberId}
       and (${params.clinicId ?? null}::uuid is null or clinic_id = ${params.clinicId ?? null}::uuid)
     returning *
   `;
   return rows[0] ?? null;
+}
+
+export async function recordPhoneNumberTextingSyncDiagnostic(params: {
+  phoneNumberId: string;
+  clinicId?: string | null;
+  providerStatus: string | null;
+  providerErrorCode: string | null;
+  providerErrorMessage: string | null;
+}): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.clinic_phone_numbers set
+      texting_provider_status = ${params.providerStatus},
+      texting_provider_error_code = ${params.providerErrorCode},
+      texting_provider_error_message = ${params.providerErrorMessage?.slice(0, 500) ?? null},
+      texting_provider_synced_at = now()
+    where id = ${params.phoneNumberId}
+      and (${params.clinicId ?? null}::uuid is null or clinic_id = ${params.clinicId ?? null}::uuid)
+  `;
 }
 
 /**
@@ -236,6 +342,10 @@ export async function upsertOfficeTextingNumber(params: {
       texting_status = 'waiting_for_approval',
       texting_status_source = 'assignment_default',
       texting_status_updated_at = now(),
+      texting_provider_status = null,
+      texting_provider_error_code = null,
+      texting_provider_error_message = null,
+      texting_provider_synced_at = null,
       -- Safe fallback billing anchor: keep an existing value, else stamp now().
       twilio_purchased_at = coalesce(public.clinic_phone_numbers.twilio_purchased_at, now()),
       removal_status = 'active',

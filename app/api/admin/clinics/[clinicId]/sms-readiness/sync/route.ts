@@ -8,7 +8,8 @@ import {
 } from "@/lib/http/responses";
 import { resolvePlatformAdmin } from "@/lib/auth/platform-admin";
 import { recordAdminAuditEvent } from "@/lib/db/admin/audit";
-import { syncClinicSmsReadinessFromTwilio } from "@/lib/twilio/sms-readiness-sync";
+import { textingStatusSyncConfig } from "@/config/texting-status-sync.config";
+import { syncPhoneNumberTextingStatuses } from "@/lib/texting-status/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +19,11 @@ const UUID_RE =
 
 // POST /api/admin/clinics/[clinicId]/sms-readiness/sync
 //
-// Platform-admin-only read-only Twilio verification. Reads Messaging Service,
-// A2P Brand/Campaign, and service sender state, then updates only local
-// readiness tables. Never mutates Twilio, never submits A2P, and never sends SMS.
+// Platform-admin-only read-only Twilio verification. Runs the same per-number
+// texting-status sync as the cron job, scoped to this clinic. It reads Twilio
+// Toll-Free Verification for toll-free numbers and Messaging Service/A2P
+// readiness for local numbers. Never mutates Twilio, never submits A2P, and
+// never sends SMS.
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ clinicId: string }> },
@@ -38,7 +41,11 @@ export async function POST(
 
   let summary;
   try {
-    summary = await syncClinicSmsReadinessFromTwilio(clinicId);
+    summary = await syncPhoneNumberTextingStatuses({
+      clinicId,
+      force: true,
+      limit: textingStatusSyncConfig.singleClinicBatchSize,
+    });
   } catch {
     return jsonError(
       500,
@@ -56,9 +63,11 @@ export async function POST(
       targetId: clinicId,
       clinicId,
       afterState: {
-        launch_ready: summary.launchReady,
-        blocking_reason: summary.blockingReason,
-        number_count: summary.numbers.length,
+        checked: summary.checked,
+        updated_to_active: summary.updatedToActive,
+        remained_pending: summary.remainedPending,
+        failed: summary.failed,
+        skipped: summary.skipped,
       },
       metadata: { authSource: admin.source, mode: "read_only" },
     });

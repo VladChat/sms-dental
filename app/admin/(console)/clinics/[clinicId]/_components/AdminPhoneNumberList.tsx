@@ -12,6 +12,27 @@ function fmtDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
 }
 
+function textingTone(p: AdminClinicPhoneNumber): "success" | "warning" | "neutral" {
+  if (!p.isActive || p.removalStatus !== "active") return "neutral";
+  return p.textingStatus === "active" ? "success" : "warning";
+}
+
+function textingLabel(p: AdminClinicPhoneNumber): string {
+  if (!p.isActive || p.removalStatus !== "active") return "Not active";
+  if (p.textingStatus === "active") return "Active";
+  if (p.textingStatus === "failed") return "Needs review";
+  if (p.textingStatus === "preparing") return "Preparing";
+  return p.numberType === "local" ? "Waiting for A2P approval" : "Toll-free verification pending";
+}
+
+function textingNextAction(p: AdminClinicPhoneNumber): string {
+  if (!p.isActive || p.removalStatus !== "active") return "Reactivate or restore before texting can be live.";
+  if (p.textingStatus === "active") return "No action required.";
+  if (p.textingProviderErrorCode) return "Review provider error and run texting status sync again.";
+  if (p.numberType === "toll_free") return "Confirm toll-free verification in Twilio or wait for the next sync.";
+  return "Run readiness sync after A2P and Messaging Service coverage are ready.";
+}
+
 // Client-side convenience gate for offering "Detach from clinic". The server
 // (detachClinicPhoneNumber) is the authority and re-checks every rule. First
 // version: only an unpaid, currently-assigned toll-free number (the clinic's
@@ -110,10 +131,30 @@ export function AdminPhoneNumberList({
                   <Badge tone="neutral">{humanizeToken(p.billingClass)}</Badge>
                   <Badge tone="neutral">{humanizeToken(p.source)}</Badge>
                   <Badge tone={p.isActive ? "success" : "warning"}>{p.isActive ? "Active" : "Suspended"}</Badge>
+                  <Badge tone={textingTone(p)}>{textingLabel(p)}</Badge>
                 </span>
               </div>
               <dl className="adm-rows">
                 <Row label="Monthly cost">{formatUsdFromCents(p.monthlyUnitAmountCents)}</Row>
+                <Row label="Number type">{humanizeToken(p.numberType)}</Row>
+                <Row label="Texting status">
+                  <Badge tone={textingTone(p)}>{textingLabel(p)}</Badge>
+                </Row>
+                <Row label="Texting source"><span className="t-mono">{p.textingStatusSource}</span></Row>
+                <Row label="Texting updated">{fmtDateTime(p.textingStatusUpdatedAt)}</Row>
+                <Row label="Provider status">
+                  {p.textingProviderStatus ? <span className="t-mono">{p.textingProviderStatus}</span> : <span style={{ color: "var(--text-muted)" }}>Not synced</span>}
+                </Row>
+                <Row label="Provider synced">{fmtDateTime(p.textingProviderSyncedAt)}</Row>
+                {p.textingProviderErrorCode && (
+                  <Row label="Provider error">
+                    <span className="t-mono">{p.textingProviderErrorCode}</span>
+                  </Row>
+                )}
+                {p.textingProviderErrorMessage && (
+                  <Row label="Provider message">{p.textingProviderErrorMessage}</Row>
+                )}
+                <Row label="Next action">{textingNextAction(p)}</Row>
                 <Row label="Provider reference">
                   {p.sidTail ? <span className="t-mono">{p.sidTail}</span> : <span style={{ color: "var(--text-muted)" }}>Not available</span>}
                 </Row>

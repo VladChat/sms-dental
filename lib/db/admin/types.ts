@@ -70,6 +70,13 @@ export type AdminClinicPhoneNumber = {
   activatedAt: string | null;
   suspendedAt: string | null;
   suspensionReason: string | null;
+  textingStatus: string;
+  textingStatusSource: string;
+  textingStatusUpdatedAt: string | null;
+  textingProviderStatus: string | null;
+  textingProviderErrorCode: string | null;
+  textingProviderErrorMessage: string | null;
+  textingProviderSyncedAt: string | null;
 };
 
 export type AdminSmsReadinessNumber = {

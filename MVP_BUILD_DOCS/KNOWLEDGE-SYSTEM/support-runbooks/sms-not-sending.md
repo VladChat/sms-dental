@@ -52,14 +52,18 @@ Work the gates in order in `/admin` (use the console, not raw SQL):
 3. **Per-number texting status** — for the called / assigned business number, is
    `clinic_phone_numbers.texting_status='active'`, and is the number still
    `is_active=true` with `removal_status='active'`?
-4. **Per-clinic enablement** — is SMS recovery enabled for the clinic
+4. **Fresh status sync** — if provider approval looks complete but the local row
+   is pending, run the admin **Run readiness sync** action once. It uses the same
+   read-only sync as the cron. Check provider status / error / last synced fields
+   on the phone-number card before escalating.
+5. **Per-clinic enablement** — is SMS recovery enabled for the clinic
    (`sms_recovery_enabled`)? Safe default is off.
-5. **Ops mode** — is `SMS_RECOVERY_MODE=live` (or the clinic in the current
+6. **Ops mode** — is `SMS_RECOVERY_MODE=live` (or the clinic in the current
    test-mode allowlist)?
-6. **Opt-out** — did the specific patient reply STOP?
-7. **Duplicate suppression** — was a recovery SMS already sent to that patient in the
+7. **Opt-out** — did the specific patient reply STOP?
+8. **Duplicate suppression** — was a recovery SMS already sent to that patient in the
    last 24 hours?
-8. **Carrier filtering** — possible for an unverified/unregistered number even when
+9. **Carrier filtering** — possible for an unverified/unregistered number even when
    gates look correct.
 
 ## What not to expose to the customer
@@ -75,6 +79,9 @@ Work the gates in order in `/admin` (use the console, not raw SQL):
 - If one assigned number is active and another is pending, triage the specific
   business number involved. Do not infer every number's texting status from the
   clinic-level SMS approval state.
+- If the provider shows approval but the number card is still pending, run the
+  read-only status sync and review the provider diagnostic fields. Do not set a
+  status by hand until the provider state is verified for that exact number.
 - If a patient opted out: that is correct behavior; do not re-enable texting to that
   patient. See [../platform-admin/support-boundaries.md](../platform-admin/support-boundaries.md).
 - If it was a duplicate within 24h: explain one follow-up per missed call; not an
@@ -87,8 +94,9 @@ Work the gates in order in `/admin` (use the console, not raw SQL):
 ## Escalation criteria
 
 Escalate to platform admin / engineering (redacted detail only) if: A2P is stuck
-pending, readiness looks mock-contaminated, a number is in
-`reconciliation_required`, or all gates appear correct but delivery still fails.
+pending, readiness looks mock-contaminated, provider diagnostic errors persist
+after a read-only sync, a number is in `reconciliation_required`, or all gates
+appear correct but delivery still fails.
 
 ## Related platform-admin docs
 

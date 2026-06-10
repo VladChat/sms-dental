@@ -244,6 +244,17 @@ export function getPhoneNumberReleaseCronSecret(): string {
   return secret;
 }
 
+export function getProtectedJobCronSecret(): string {
+  const secret =
+    process.env.CRON_SECRET ??
+    process.env.PHONE_NUMBER_RELEASE_CRON_SECRET ??
+    "";
+  if (!secret) {
+    throw new Error("Protected job cron secret is not configured");
+  }
+  return secret;
+}
+
 // Twilio number purchase safety mode. Search is always allowed when the
 // Twilio client is configured. Live Twilio purchase proceeds only when the
 // committed runtime config explicitly sets mode to "live".
