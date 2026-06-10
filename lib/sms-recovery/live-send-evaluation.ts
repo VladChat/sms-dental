@@ -66,6 +66,63 @@ export function blockingReasonForTollfreeCoverage(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Mode gate for the recovery send path
+// ---------------------------------------------------------------------------
+// One shared, pure decision for the mode-dependent guards in sendRecoverySms()
+// and the voice-greeting prediction. Exact-number readiness is required in
+// BOTH owner_test and live mode — the owner-test caller allowlist is an
+// additional gate, never a substitute for the called number being ready.
+// Per-patient guards (opt-out, duplicate suppression) are NOT decided here;
+// they always run after this gate in sendRecoverySms().
+
+export type RecoverySendMode = "disabled" | "owner_test" | "live";
+
+export type RecoverySendGateInput = {
+  mode: RecoverySendMode;
+  // SMS_TEST_ALLOWED_TO allowlist (owner_test mode only).
+  allowedTestNumbers: readonly string[];
+  patientPhone: string;
+  clinicSmsRecoveryEnabled: boolean;
+  // clinics.sms_status — required to be "active" for LOCAL numbers in live mode.
+  clinicSmsStatus: string | undefined;
+  // Result of evaluateSmsReadinessForLiveSend for the exact called number.
+  numberReadiness: { ok: boolean; reason: string; numberType?: "toll_free" | "local" };
+};
+
+export type RecoverySendGateResult = { ok: true } | { ok: false; reason: string };
+
+export function evaluateRecoverySendGate(
+  input: RecoverySendGateInput,
+): RecoverySendGateResult {
+  // Disabled (or any unknown) mode never sends.
+  if (input.mode !== "owner_test" && input.mode !== "live") {
+    return { ok: false, reason: `sms_mode_${input.mode}` };
+  }
+  // Exact-number readiness applies to both send modes.
+  if (!input.numberReadiness.ok) {
+    return { ok: false, reason: input.numberReadiness.reason };
+  }
+  if (input.mode === "live") {
+    if (!input.clinicSmsRecoveryEnabled) {
+      return { ok: false, reason: "clinic_sms_disabled" };
+    }
+    if (
+      input.numberReadiness.numberType === "local" &&
+      input.clinicSmsStatus !== "active"
+    ) {
+      return { ok: false, reason: "sms_status_not_active" };
+    }
+  }
+  if (
+    input.mode === "owner_test" &&
+    !input.allowedTestNumbers.includes(input.patientPhone)
+  ) {
+    return { ok: false, reason: "caller_not_allowlisted" };
+  }
+  return { ok: true };
+}
+
 // Local numbers: Messaging Service sender coverage AND approved-campaign
 // coverage are both required, fresh and error-free.
 export function blockingReasonForLocalNumberReadiness(

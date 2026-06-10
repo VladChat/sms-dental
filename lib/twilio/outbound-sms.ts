@@ -7,6 +7,7 @@ import {
 } from "../db/messages";
 import { touchConversation } from "../db/conversations";
 import { evaluateSmsReadinessForLiveSend } from "../db/sms-readiness";
+import { evaluateRecoverySendGate } from "../sms-recovery/live-send-evaluation";
 import {
   buildMissedCallRecoverySmsBody,
   getDuplicateSuppressionWindowMs,
@@ -45,47 +46,34 @@ export async function sendRecoverySms(
     return { sent: false, reason: `sms_mode_${config.mode}` };
   }
 
-  // Guard 2 (live mode only): clinic must have sms_recovery_enabled = true.
-  // New clinics default to false — safe until explicitly onboarded.
-  // In owner_test mode the allowlist is the gate; this flag is not checked.
-  if (config.mode === "live" && !input.clinic.sms_recovery_enabled) {
-    logger.info("twilio.sms.skipped_clinic_disabled", {
+  // Guard 2: exact-number readiness — enforced in BOTH owner_test and live.
+  // The selected business number must be active/routable with active texting
+  // status, Messaging Service coverage, and (local) production-safe A2P.
+  // Missing/stale rows fail closed before Twilio. The owner-test allowlist is
+  // an additional gate below, never a substitute for number readiness.
+  const readiness = await evaluateSmsReadinessForLiveSend(
+    input.clinic.id,
+    input.twilioPhone,
+  );
+
+  // Guard 3: mode-specific gates in one shared, unit-tested decision —
+  // live: clinic.sms_recovery_enabled + (local) clinic.sms_status active;
+  // owner_test: caller must be in the SMS_TEST_ALLOWED_TO allowlist.
+  const gate = evaluateRecoverySendGate({
+    mode: config.mode,
+    allowedTestNumbers: config.allowedNumbers,
+    patientPhone: input.patientPhone,
+    clinicSmsRecoveryEnabled: input.clinic.sms_recovery_enabled,
+    clinicSmsStatus: input.clinic.sms_status,
+    numberReadiness: readiness,
+  });
+  if (!gate.ok) {
+    logger.info("twilio.sms.send_blocked", {
       clinicId: input.clinic.id,
+      mode: config.mode,
+      reason: gate.reason,
     });
-    return { sent: false, reason: "clinic_sms_disabled" };
-  }
-
-  // Guard 2b (live mode only): the selected business number must have active
-  // per-number texting status. Local numbers also require production-safe A2P /
-  // Messaging Service readiness. Missing/stale rows fail closed before Twilio.
-  if (config.mode === "live") {
-    const readiness = await evaluateSmsReadinessForLiveSend(
-      input.clinic.id,
-      input.twilioPhone,
-    );
-    if (!readiness.ok) {
-      logger.info("twilio.sms.skipped_readiness_blocked", {
-        clinicId: input.clinic.id,
-        reason: readiness.reason,
-      });
-      return { sent: false, reason: readiness.reason };
-    }
-
-    if (readiness.numberType === "local" && input.clinic.sms_status !== "active") {
-      logger.info("twilio.sms.skipped_sms_status_not_active", {
-        clinicId: input.clinic.id,
-        smsStatus: input.clinic.sms_status ?? "unknown",
-      });
-      return { sent: false, reason: "sms_status_not_active" };
-    }
-  }
-
-  // Guard 3 (owner_test mode only): patient phone must be in the explicit allowlist.
-  if (config.mode === "owner_test" && !config.allowedNumbers.includes(input.patientPhone)) {
-    logger.info("twilio.sms.skipped_not_allowlisted", {
-      clinicId: input.clinic.id,
-    });
-    return { sent: false, reason: "caller_not_allowlisted" };
+    return { sent: false, reason: gate.reason };
   }
 
   // Guard 4: opt-out check.

@@ -12,6 +12,7 @@ import { lookupClinicByPhoneIncludingScheduled, type ClinicRow } from "@/lib/db/
 import { upsertCallEvent } from "@/lib/db/call-events";
 import { hasSentRecoverySmsSince } from "@/lib/db/messages";
 import { evaluateSmsReadinessForLiveSend } from "@/lib/db/sms-readiness";
+import { evaluateRecoverySendGate } from "@/lib/sms-recovery/live-send-evaluation";
 import { getDuplicateSuppressionWindowMs } from "@/lib/sms-recovery/templates";
 import { getSmsRecoveryConfig } from "@/lib/env";
 import { logger } from "@/lib/logging/logger";
@@ -40,17 +41,22 @@ async function predictGreeting(
 ): Promise<GreetingPrediction> {
   const config = getSmsRecoveryConfig();
 
-  // Mirror the guard sequence in sendRecoverySms (read-only).
-  if (config.mode === "owner_test") {
-    if (!config.allowedNumbers.includes(from)) return "none";
-  } else if (config.mode === "live") {
-    if (!clinic.sms_recovery_enabled) return "none";
-    const readiness = await evaluateSmsReadinessForLiveSend(clinic.id, to);
-    if (!readiness.ok) return "none";
-    if (readiness.numberType === "local" && clinic.sms_status !== "active") return "none";
-  } else {
+  // Mirror the guard sequence in sendRecoverySms (read-only) through the SAME
+  // shared gate decision, so the greeting matches what voice/status will do.
+  // Exact-number readiness applies in BOTH owner_test and live mode.
+  if (config.mode !== "owner_test" && config.mode !== "live") {
     return "none"; // disabled
   }
+  const readiness = await evaluateSmsReadinessForLiveSend(clinic.id, to);
+  const gate = evaluateRecoverySendGate({
+    mode: config.mode,
+    allowedTestNumbers: config.allowedNumbers,
+    patientPhone: from,
+    clinicSmsRecoveryEnabled: clinic.sms_recovery_enabled,
+    clinicSmsStatus: clinic.sms_status,
+    numberReadiness: readiness,
+  });
+  if (!gate.ok) return "none";
 
   // Opt-out check (read-only).
   const sql = getDb();

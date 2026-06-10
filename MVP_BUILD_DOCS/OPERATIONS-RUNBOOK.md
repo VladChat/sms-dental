@@ -406,6 +406,10 @@ Default behavior (`SMS_RECOVERY_MODE` unset or `disabled`): **no SMS is ever sen
 - `SMS_RECOVERY_MODE=owner_test`
 - Caller `From` number is in `SMS_TEST_ALLOWED_TO`
 - Clinic mapping exists for the dialed `To` number
+- The exact dialed number passes the SAME exact-number readiness gate as live
+  mode (active row, `texting_status='active'`, fresh Messaging Service sender
+  coverage, local A2P readiness when applicable) — added 2026-06-10. The
+  allowlist is an additional guard, never a substitute for number readiness.
 - Caller is not opted out (`opt_outs` table)
 - No outbound SMS was sent to this (clinic, caller) pair in the past 24 hours
 
@@ -2714,6 +2718,26 @@ more observable.
 - Each send also sets a per-message `statusCallback` to
   `/api/webhooks/twilio/messaging/status` (in addition to the Messaging Service
   level callback).
+
+### owner_test now enforces exact-number readiness (2026-06-10)
+
+`SMS_RECOVERY_MODE=owner_test` runs the SAME exact-number readiness gate as
+live mode before any Twilio call. The mode-dependent guard ordering lives in
+one shared, unit-tested pure decision —
+`evaluateRecoverySendGate()` in `lib/sms-recovery/live-send-evaluation.ts` —
+used by both `sendRecoverySms()` and the voice-greeting prediction:
+
+1. mode must be `owner_test` or `live` (else `sms_mode_<mode>`);
+2. exact-number readiness (`evaluateSmsReadinessForLiveSend`) — both modes;
+3. live only: `clinics.sms_recovery_enabled` (`clinic_sms_disabled`);
+4. live + local only: `clinics.sms_status='active'` (`sms_status_not_active`);
+5. owner_test only: caller in `SMS_TEST_ALLOWED_TO` (`caller_not_allowlisted`);
+6. then the per-patient guards (opt-out, duplicate suppression) as before.
+
+Consequence: an owner-test call to a number that is suspended, scheduled for
+removal, not texting-active, or missing fresh Messaging Service coverage sends
+NOTHING — same blocking reasons as live. Tests: `tests/sms-recovery-send-gate.test.ts`
+(`npm run test:sms-recovery`).
 
 ### Confirmed bug fixed: sender-pool matching (2026-06-10)
 

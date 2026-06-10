@@ -6012,3 +6012,30 @@ Not done (intentionally):
 - No Twilio resources created/mutated; all Twilio access read-only.
 - `SMS_RECOVERY_MODE` not changed; `sms_recovery_enabled` not changed; no broad
   activation; no AI voice runtime.
+
+---
+
+## 2026-06-10 — owner_test mode now enforces exact-number readiness
+
+Follow-up safety hardening to the live SMS send hardening deployed earlier
+today: `SMS_RECOVERY_MODE=owner_test` now runs the SAME exact-number readiness
+gate as live mode (active row, texting_status active, fresh Messaging Service
+sender coverage, local A2P when applicable) before any Twilio call. The
+owner-test caller allowlist remains an additional guard, not a substitute for
+number readiness.
+
+What changed:
+
+- New shared pure gate `evaluateRecoverySendGate()` in
+  `lib/sms-recovery/live-send-evaluation.ts`; used by `sendRecoverySms()` and
+  the voice-greeting prediction so both stay in lockstep. Guard order: mode →
+  exact-number readiness (both modes) → live `sms_recovery_enabled` → live+local
+  `sms_status` → owner_test allowlist → opt-out → duplicate suppression.
+- New tests `tests/sms-recovery-send-gate.test.ts` (13 cases) added to
+  `npm run test:sms-recovery`; single-send-path static check unchanged and
+  passing.
+- Live-mode behavior unchanged except reason precedence: when both apply,
+  the readiness reason is now returned before `clinic_sms_disabled`.
+
+Not done: no SMS sent, no call placed, no Twilio/env/Stripe/DNS changes, no
+`sms_recovery_enabled` or `SMS_RECOVERY_MODE` change, no migrations.

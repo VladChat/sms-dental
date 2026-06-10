@@ -18,6 +18,7 @@
     "tests/sms-live-send-evaluation.test.ts",
     "tests/sms-message-status.test.ts",
     "tests/sms-single-send-path.test.ts",
+    "tests/sms-recovery-send-gate.test.ts",
     "lib/phone-numbers/twilio-release-deadline.ts",
     "lib/phone-numbers/twilio-number-inventory.ts",
     "lib/texting-status/status-mapping.ts",
