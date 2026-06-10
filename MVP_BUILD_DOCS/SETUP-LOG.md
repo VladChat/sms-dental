@@ -6070,3 +6070,47 @@ and `npm run build` all pass. No `lint` script exists in `package.json`.
 Not done: no AI call runtime, no full owner/admin voice settings UI, no calls
 placed, no SMS sent, no Twilio resources created or mutated, no Vercel
 environment variables changed, and no migrations.
+
+---
+
+## 2026-06-10 — front-desk workspace reply follow-up polish
+
+Verified the latest production inbound SMS test for Fairstone Dental Smile and
+polished the existing `/workspace` follow-up view. No raw patient phone number or
+private payload is recorded here.
+
+Production verification:
+
+- A real inbound ordinary patient reply to the clinic's toll-free test number was
+  found in `messages` with `direction='inbound'`, `detected_keyword=null`, and a
+  `conversation_id`.
+- The matching `patient_conversations.last_message_at` was updated at the inbound
+  message time, and the existing workspace query can read the conversation.
+- No opt-out row exists for that patient/clinic pair, and no outbound message was
+  created after the ordinary inbound reply.
+- The conversation outcome fields were still empty before UI save.
+
+What changed:
+
+- The selected workspace detail panel now shows `Latest patient reply` without
+  requiring staff to open the full conversation.
+- Added a visible `Call patient` action as a normal `tel:` link only. It does not
+  send SMS, place a Twilio call, or automate follow-up.
+- Replaced the noisy repeated empty patient-detail rows with one minimum-necessary
+  note when those fields have no source yet.
+- Kept the existing `/workspace` route, real conversation list, full conversation
+  toggle, outcome form, clinic-scoped access, and record-only ordinary inbound
+  reply behavior.
+- Added unit coverage for workspace status derivation, saved outcome status,
+  latest inbound reply selection, and ordinary appointment replies remaining
+  non-keyword while STOP/START still classify correctly.
+- Updated `FRONT-DESK-WORKSPACE.md`, the operations runbook, and Knowledge System
+  workspace articles/inventory.
+
+Validation before deploy: `npm run typecheck`, `npm run test:phone-numbers`
+(32 pass), `npm run test:a2p` (64 pass), `npm run test:sms-recovery` (52 pass),
+and `npm run build` all pass. No `lint` script exists in `package.json`.
+
+Not done: no new inbox, no AI, no auto-reply, no SMS sent, no calls placed, no
+Twilio resources mutated, no Vercel env changes, no migrations, and no production
+outcome was written during verification.

@@ -11,7 +11,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md
   - MVP_BUILD_DOCS/PROJECT-CONTEXT.md
   - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - front-desk-workspace-overview
   - ../missed-calls-and-messages/how-front-desk-should-handle-patient-replies
@@ -79,8 +79,9 @@ reason for the visit), confirm it directly with the patient.
 ## What to expect
 
 - The workspace helps you **review** requests and **record outcomes**. Sending text
-  replies from the workspace, click-to-call, and task assignment are not available
-  today — follow up using your normal phone process.
+  replies from the workspace, automated calling, and task assignment are not
+  available today. The **Call patient** action is a normal phone link for your
+  device; it does not place an automated call.
 - A status can change as the conversation or the recorded outcome changes.
 - Recording an outcome helps your team keep track of which patients still need
   follow-up.

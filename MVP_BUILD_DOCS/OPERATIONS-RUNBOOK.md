@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-10 (live SMS send hardening: exact sender, toll-free Messaging Service coverage, delivery-status persistence, operator audit)
+Last updated: 2026-06-10 (front desk workspace reply polish; live SMS send hardening: exact sender, toll-free Messaging Service coverage, delivery-status persistence, operator audit)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1164,14 +1164,18 @@ mention a "Documents section" or the pre-2026-05-30 layout.
 
 ---
 
-## Front desk workspace `/workspace` (read-only) — 2026-05-31
+## Front desk workspace `/workspace` — 2026-05-31, updated 2026-06-10
 
 Operational view for clinic staff to review missed-call SMS replies and patient
 requests. Separate from the owner/admin `/account` area. Full spec:
 `FRONT-DESK-WORKSPACE.md`.
 
-- **Route:** `app/workspace/page.tsx` (server, `force-dynamic`, nodejs). Read-only
-  — no writes, no SMS, no call actions, no status mutations.
+- **Route:** `app/workspace/page.tsx` (server, `force-dynamic`, nodejs).
+  The page shows existing patient conversations, highlights the latest inbound
+  patient reply in the selected detail panel, exposes a normal `tel:` link
+  labeled `Call patient`, and lets staff save an explicit outcome through
+  `POST /api/workspace/outcome`. It still sends no SMS and places no Twilio
+  outbound calls.
 - **Access:** gated by the same `mcd_account` httpOnly cookie as `/account`
   (owner-accessible preview until staff auth exists). No valid context → safe
   "open your account link" message. Not public. Tokens never in URL / logs;
@@ -1179,15 +1183,21 @@ requests. Separate from the owner/admin `/account` area. Full spec:
 - **Data:** `lib/db/front-desk.ts` `listClinicConversations(clinicId)` reads only
   front-desk-safe columns from `patient_conversations` + `messages` (no
   raw_payload, Twilio SIDs, errors, owner/billing/compliance fields). No new
-  table (the read-only view works from existing data; a proposed
-  `patient_requests` table is documented for later).
+  table (the view works from existing conversation data; a proposed
+  `patient_requests` table is documented for later if first-class request state
+  becomes necessary).
 - **Privacy:** minimum-necessary display. The workspace never shows EIN, legal
   business details, billing/payment, SMS approval controls, approval documents,
   owner setup settings, Twilio details, or internal IDs (conversation UUIDs are
-  used only as React keys). Unknown fields render `Not provided yet`.
+  used only as React keys). When patient detail fields have no source yet, the
+  detail panel shows one short note instead of repeating empty fields.
 - **Status vocabulary (derived):** New / Needs reply / Waiting for patient /
   Ready to call / Booked / Closed. Conservative derivation from conversation
   lifecycle + latest message direction; `Ready to call` not auto-assigned yet.
+- **Ordinary inbound replies:** stored in `messages`, update
+  `patient_conversations.last_message_at`, appear in `/workspace`, and do not
+  create an outbound auto-reply. STOP/START behavior remains the separate opt-out
+  path documented in section 10.
 
 `/account` cleanup (same pass): removed the duplicate Billing `Needs setup`
 badge (status only on the Payment method row); one no-charge note;

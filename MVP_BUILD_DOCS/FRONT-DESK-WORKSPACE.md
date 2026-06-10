@@ -1,7 +1,7 @@
 # Front Desk Workspace
 
-Status: Active (read-only foundation)
-Last updated: 2026-05-31
+Status: Active (reply review + outcome recording MVP)
+Last updated: 2026-06-10
 
 The front-desk workspace (`/workspace`) is the operational view where clinic
 staff review the results of missed-call SMS recovery — patient replies and
@@ -21,16 +21,17 @@ EIN, legal business details, billing/payment method, SMS approval controls,
 approval documents, owner setup settings, Twilio technical details, internal IDs
 (including conversation UUIDs), or raw compliance/webhook records.
 
-## 2. Current scope (this pass)
+## 2. Current scope
 
-**Read-only foundation.** The first `/workspace` build shows existing
-missed-call SMS conversations as front-desk patient request cards. There are no
-write actions yet:
+`/workspace` shows existing missed-call SMS conversations as front-desk patient
+request cards. It now supports the minimal human follow-up workflow:
 
 - no outbound replies;
-- no call actions;
-- no status mutations;
-- no staff auth;
+- visible latest patient reply without opening the full conversation;
+- a normal browser/phone `tel:` link labeled `Call patient` (not a Twilio
+  outbound call and not automation);
+- status mutations only through the explicit outcome form;
+- no new staff invite/onboarding system in this pass;
 - no new task-management system;
 - no new database tables.
 
@@ -64,13 +65,16 @@ UI shape (`app/workspace/_components/workspace-types.ts` → `PatientRequestCard
 | preferredTime          | — (no column yet)                             | `Not provided yet`. |
 | summary                | — (no column yet)                             | `Not provided yet`; never AI-generated. |
 | latestMessage          | latest `messages.body` in the conversation    | Snippet on the card. |
+| latestInboundReply     | latest inbound `messages.body` in the conversation | Shown in detail as `Latest patient reply`; not inferred. |
 | status                 | derived (see below)                           | |
 | createdAt              | `patient_conversations.created_at`            | |
 | lastActivityAt         | `patient_conversations.last_message_at`       | falls back to `created_at`. |
 | timeline               | `messages` (direction, body, created_at)      | Safe columns only. |
 
-Unknown fields always render as `Not provided yet`. No external AI calls, no
-speculative summaries, no inferred medical details.
+Unknown fields are not repeated as a long list when there is no source data. The
+detail view instead says: `Patient details are not collected yet. Use the reply
+and phone number to follow up.` No external AI calls, no speculative summaries,
+no inferred medical details.
 
 ## 5. Status vocabulary
 
@@ -110,7 +114,7 @@ signals (e.g. missed-call origin, opt-out state) but are not surfaced yet.
 Planned write capabilities for later passes, behind staff auth:
 
 - reply to a patient (outbound SMS) — compliance + opt-out gated;
-- call / click-to-call;
+- Twilio-powered click-to-call or call automation;
 - mark booked / mark handled / set status;
 - internal notes and tasks;
 - assignment/routing between staff.
@@ -277,4 +281,5 @@ outcome and an optional note per real patient conversation.
 - **Samples:** a clearly labeled, non-persistent training layer below real cards,
   with a `Hide` / `Show samples` toggle (local state) that never affects real
   cards. Sample outcome UI is disabled (`Sample preview · not saved`); the previous
-  "contact support" modal is gone. Empty state: `No real patient requests yet.`
+  "contact support" modal is gone. Empty state: `No patient replies yet. Replies
+  to recovery texts will appear here.`

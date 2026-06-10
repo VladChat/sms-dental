@@ -22,7 +22,7 @@ export type WorkspaceTimelineItem = {
 
 // The front-desk-safe view of a patient request. Fields that have no source in
 // the current schema (name, request type, preferred time, summary) are null and
-// rendered as "Not provided yet" — never invented or AI-generated.
+// never invented or AI-generated.
 export type PatientRequestCard = {
   // Opaque key for React/selection only. Not an internal ID shown to the user.
   id: string;
@@ -80,6 +80,16 @@ export function workspaceStatusForOutcome(
     default:
       return null;
   }
+}
+
+export function getLatestInboundTimelineItem(
+  timeline: WorkspaceTimelineItem[],
+): WorkspaceTimelineItem | null {
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const item = timeline[i];
+    if (item.direction === "inbound") return item;
+  }
+  return null;
 }
 
 export const WORKSPACE_STATUS_META: Record<

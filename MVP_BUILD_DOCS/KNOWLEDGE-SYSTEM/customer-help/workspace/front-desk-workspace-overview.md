@@ -10,7 +10,7 @@ owner: product
 source_of_truth:
   - MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md
   - MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - ../missed-calls-and-messages/how-front-desk-should-handle-patient-replies
   - ../missed-calls-and-messages/patient-opt-out-stop-start
@@ -38,10 +38,11 @@ reviewing those replies and tracking your follow-up.
 ### What you can see
 
 - The patient's phone number.
-- The latest message and the conversation history (patient and office messages with
-  timestamps).
+- The latest patient reply, visible on the selected request without opening the
+  full conversation.
+- The conversation history (patient and office messages with timestamps).
 - A status for each request (see below).
-- Fields the system does not have yet, shown as **"not provided yet."**
+- A short note when patient details have not been collected yet.
 
 ### What you cannot see (and why)
 
@@ -53,12 +54,12 @@ belong to the owner account, not the front desk.
 ### Reading a request card
 
 - **Patient phone** — how to reach the patient.
-- **Latest message** — a quick snippet of the most recent reply.
+- **Latest message** — a quick snippet of the most recent activity.
 - **Status** — where the request stands. Statuses include: **New**, **Needs
   reply**, **Waiting for patient**, **Ready to call**, **Booked**, and **Closed**.
-- **"Not provided yet"** — means the system simply does not have that detail (for
-  example, patient name or request type). It is not an error; confirm with the
-  patient if you need it. Do not guess.
+- **Patient details are not collected yet** — means the system simply does not
+  have details such as patient name or request type. It is not an error; confirm
+  with the patient if you need it. Do not guess.
 
 ### Recording outcomes
 
@@ -75,6 +76,8 @@ them.
 ## What you can do
 
 - Open the workspace to review patient replies and request cards.
+- Use **Call patient** to open your device's normal phone dialer for the patient
+  number. This does not place an automated call from Missed Calls Dental.
 - Follow up with patients through your clinic's normal process. See
   [How front desk should handle patient replies](../missed-calls-and-messages/how-front-desk-should-handle-patient-replies.md).
 - Record an outcome and note after you follow up.
@@ -82,8 +85,8 @@ them.
 ## What to expect
 
 - The workspace currently helps you **review** replies and **record outcomes**.
-- Sending text replies from the workspace, click-to-call, and task assignment are
-  not available today — follow up using your normal phone process.
+- Sending text replies from the workspace, automated calling, and task assignment
+  are not available today — follow up using your normal phone process.
 - Always respect patient opt-outs. See
   [Patient opt-out — STOP and START](../missed-calls-and-messages/patient-opt-out-stop-start.md).
 

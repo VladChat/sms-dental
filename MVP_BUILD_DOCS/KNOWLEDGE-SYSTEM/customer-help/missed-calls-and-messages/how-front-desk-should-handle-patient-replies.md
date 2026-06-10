@@ -11,7 +11,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md
   - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
   - MVP_BUILD_DOCS/PROJECT-CONTEXT.md
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - ../workspace/front-desk-workspace-overview
   - patient-opt-out-stop-start
@@ -69,14 +69,18 @@ See [Patient opt-out — STOP and START](patient-opt-out-stop-start.md).
 ## What you can do
 
 - Open the **workspace** to see patient replies and request cards.
+- Read the **Latest patient reply** section on the selected request before
+  opening the full conversation.
 - Review each reply and follow up using your clinic's normal process (for example,
-  calling the patient back to schedule).
+  using **Call patient** to open your device's normal phone dialer and call the
+  patient back to schedule).
 - Record the outcome of a follow-up — for example, appointment booked, no
   appointment booked, or could not reach the patient — plus a short note if helpful.
 
 > Sending text replies directly from the workspace is not available today. Use the
 > workspace to review replies and track outcomes, and follow up with the patient
-> through your normal phone process.
+> through your normal phone process. The **Call patient** action is a normal phone
+> link; it does not send a text or place an automated Twilio call.
 
 ## What to expect
 

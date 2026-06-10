@@ -5,6 +5,7 @@ import {
   WORKSPACE_STATUS_META,
   NOT_PROVIDED,
   formatDateTime,
+  getLatestInboundTimelineItem,
   workspaceStatusForOutcome,
   type PatientRequestCard,
 } from "./workspace-types";
@@ -37,9 +38,9 @@ export function Workspace({ cards }: { cards: PatientRequestCard[] }) {
       {hasReal ? (
         <RequestSection cards={realCards} kind="real" />
       ) : (
-        samplesHidden && (
-          <p className="ws-empty-real t-body">No real patient requests yet.</p>
-        )
+        <p className="ws-empty-real t-body">
+          No patient replies yet. Replies to recovery texts will appear here.
+        </p>
       )}
 
       {samplesHidden ? (
@@ -157,6 +158,10 @@ function RequestDetail({
   onSaved: (id: string, outcome: FrontDeskOutcome, note: string) => void;
 }) {
   const [showConversation, setShowConversation] = useState(false);
+  const latestInbound = getLatestInboundTimelineItem(card.timeline);
+  const hasCollectedDetails = Boolean(
+    card.patientName || card.requestType || card.preferredTime || card.summary,
+  );
 
   return (
     <section className="card card-pad ws-detail" aria-labelledby="ws-detail-title">
@@ -175,14 +180,46 @@ function RequestDetail({
         </div>
       </header>
 
-      <dl className="ws-detail-rows">
-        <Row label="Patient name" value={card.patientName ?? NOT_PROVIDED} />
-        <Row label="Request type" value={card.requestType ?? NOT_PROVIDED} />
-        <Row label="Preferred time" value={card.preferredTime ?? NOT_PROVIDED} />
-        <Row label="Summary" value={card.summary ?? NOT_PROVIDED} />
-        <Row label="First seen" value={formatDateTime(card.createdAt)} />
-        <Row label="Last activity" value={formatDateTime(card.lastActivityAt)} />
-      </dl>
+      <section className="ws-latest-reply" aria-labelledby={`ws-latest-reply-${card.id}`}>
+        <div className="ws-latest-head">
+          <div>
+            <h3 id={`ws-latest-reply-${card.id}`} className="t-h4">Latest patient reply</h3>
+            <p className="t-helper ws-meta" style={{ marginTop: "var(--space-1)" }}>
+              {latestInbound ? `Patient replied · ${formatDateTime(latestInbound.at)}` : "No patient reply yet"}
+            </p>
+          </div>
+          <a className="btn btn-primary btn-sm ws-call-action" href={`tel:${card.callerPhone}`}>
+            Call patient
+          </a>
+        </div>
+        {latestInbound ? (
+          <p className="t-body ws-latest-body">{latestInbound.body || NOT_PROVIDED}</p>
+        ) : (
+          <p className="t-small ws-empty-note">
+            No inbound patient reply is available in this conversation yet.
+          </p>
+        )}
+      </section>
+
+      <section className="ws-patient-details" aria-labelledby={`ws-patient-details-${card.id}`}>
+        <h3 id={`ws-patient-details-${card.id}`} className="t-h4">Patient details</h3>
+        {hasCollectedDetails ? (
+          <dl className="ws-detail-rows">
+            {card.patientName && <Row label="Patient name" value={card.patientName} />}
+            {card.requestType && <Row label="Request type" value={card.requestType} />}
+            {card.preferredTime && <Row label="Preferred time" value={card.preferredTime} />}
+            {card.summary && <Row label="Summary" value={card.summary} />}
+          </dl>
+        ) : (
+          <p className="t-small ws-empty-note">
+            Patient details are not collected yet. Use the reply and phone number to follow up.
+          </p>
+        )}
+        <dl className="ws-detail-rows ws-time-rows">
+          <Row label="First seen" value={formatDateTime(card.createdAt)} />
+          <Row label="Last activity" value={formatDateTime(card.lastActivityAt)} />
+        </dl>
+      </section>
 
       <div className="ws-conversation">
         <button
@@ -190,7 +227,7 @@ function RequestDetail({
           className="btn btn-secondary btn-sm"
           onClick={() => setShowConversation((prev) => !prev)}
         >
-          {showConversation ? "Hide conversation" : "View conversation"}
+          {showConversation ? "Hide full conversation" : "View full conversation"}
         </button>
         {showConversation && (
           <div style={{ marginTop: "var(--space-4)" }}>

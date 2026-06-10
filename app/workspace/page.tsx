@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 // Map a front-desk-safe conversation into a UI card. A saved front-desk outcome
 // is the primary source of the card's status; otherwise we fall back to the
 // conservative timeline/lifecycle derivation. Name/request-type/preferred-time/
-// summary have no source columns yet, so they stay null ("Not provided yet").
+// summary have no source columns yet, so they stay null and are never inferred.
 function toCard(c: FrontDeskConversation): PatientRequestCard {
   const timeline = c.messages.map((m) => ({
     id: m.id,
