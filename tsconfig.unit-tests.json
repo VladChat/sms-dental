@@ -19,13 +19,16 @@
     "tests/sms-message-status.test.ts",
     "tests/sms-single-send-path.test.ts",
     "tests/sms-recovery-send-gate.test.ts",
+    "tests/voice-greeting-config.test.ts",
     "lib/phone-numbers/twilio-release-deadline.ts",
     "lib/phone-numbers/twilio-number-inventory.ts",
     "lib/texting-status/status-mapping.ts",
     "lib/sms-recovery/templates.ts",
     "lib/sms-recovery/live-send-evaluation.ts",
     "lib/sms-recovery/message-status.ts",
+    "lib/sms-recovery/voice-twiml.ts",
     "config/texting-status-sync.config.ts",
-    "config/sms-recovery.config.ts"
+    "config/sms-recovery.config.ts",
+    "config/voice-greeting.config.ts"
   ]
 }

@@ -14,31 +14,25 @@ import { hasSentRecoverySmsSince } from "@/lib/db/messages";
 import { evaluateSmsReadinessForLiveSend } from "@/lib/db/sms-readiness";
 import { evaluateRecoverySendGate } from "@/lib/sms-recovery/live-send-evaluation";
 import { getDuplicateSuppressionWindowMs } from "@/lib/sms-recovery/templates";
+import {
+  buildInactiveNumberVoiceTwiml,
+  buildMissedCallVoiceTwiml,
+  type VoiceGreetingPrediction,
+} from "@/lib/sms-recovery/voice-twiml";
 import { getSmsRecoveryConfig } from "@/lib/env";
 import { logger } from "@/lib/logging/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
 // Prediction for which greeting to play. Read-only — never sends SMS.
 // Mirrors the guard logic in sendRecoverySms() so the greeting matches
 // what voice/status will do after the call ends.
-type GreetingPrediction = "will_send" | "duplicate" | "none";
-
 async function predictGreeting(
   from: string,
   to: string,
   clinic: ClinicRow,
-): Promise<GreetingPrediction> {
+): Promise<VoiceGreetingPrediction> {
   const config = getSmsRecoveryConfig();
 
   // Mirror the guard sequence in sendRecoverySms (read-only) through the SAME
@@ -74,30 +68,10 @@ async function predictGreeting(
   return alreadySent ? "duplicate" : "will_send";
 }
 
-function buildVoiceTwiml(
-  clinicName: string | null,
-  prediction: GreetingPrediction,
-): string {
-  const name = clinicName ? escapeXml(clinicName) : "us";
-  let message: string;
-  if (prediction === "will_send") {
-    message = `Thanks for calling ${name}. Sorry we missed you. We'll text you now so you can request an appointment or a call back.`;
-  } else if (prediction === "duplicate") {
-    message = `Thanks for calling ${name}. Sorry we missed you. We already sent a text, and our team will follow up shortly.`;
-  } else {
-    message = `Thanks for calling ${name}. Sorry we missed you. Our team will follow up shortly.`;
-  }
-  return `<Response><Say voice="alice">${message}</Say><Hangup/></Response>`;
-}
-
 // Greeting for a number scheduled for removal. The number is still held by our
 // Twilio account (so Twilio still calls this webhook) but no longer routes to the
 // clinic and must never trigger recovery SMS. Play a short inactive-line notice
 // and hang up.
-function buildInactiveNumberTwiml(): string {
-  return `<Response><Say voice="alice">This number is no longer in service.</Say><Hangup/></Response>`;
-}
-
 // Twilio incoming voice webhook.
 //   1. Validate Twilio signature.
 //   2. Record webhook_event idempotently.
@@ -152,7 +126,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Steps 3–4: call event + read-only greeting prediction.
-  let prediction: GreetingPrediction = "none";
+  let prediction: VoiceGreetingPrediction = "none";
   let clinicNameForTwiml: string | null = null;
 
   if (!isDuplicate && isDatabaseConfigured() && callSid) {
@@ -176,7 +150,7 @@ export async function POST(request: NextRequest) {
       // recovery SMS. Return the inactive-line greeting and hang up.
       if (routing && routing.removalStatus === "scheduled") {
         logger.info("twilio.voice.scheduled_number", { to });
-        return twimlResponse(buildInactiveNumberTwiml());
+        return twimlResponse(buildInactiveNumberVoiceTwiml());
       }
 
       const clinic = routing && routing.removalStatus === "active" ? routing.clinic : null;
@@ -204,5 +178,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return twimlResponse(buildVoiceTwiml(clinicNameForTwiml, prediction));
+  return twimlResponse(buildMissedCallVoiceTwiml(clinicNameForTwiml, prediction));
 }

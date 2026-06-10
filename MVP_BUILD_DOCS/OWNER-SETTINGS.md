@@ -18,6 +18,16 @@ Admin email: internal-admin@missedcallsdental.local
 Support email: support@missedcallsdental.com
 Default timezone: America/Chicago
 
+## Voice Settings Foundation
+
+Default spoken language: en-US
+Current default voice: `config/voice-greeting.config.ts` (`defaultVoiceId`)
+Future owner/admin voice selection: expose only the curated English US voice list
+from `config/voice-greeting.config.ts`, not the full Twilio catalog. The list is
+operator-curated for current missed-call greetings, future voice messages, and
+future AI Call Assistant / AI answered calls. Old basic voices such as `alice`,
+`man`, and `woman` are not customer-selectable defaults.
+
 ## Domain
 
 Primary domain: https://missedcallsdental.com/

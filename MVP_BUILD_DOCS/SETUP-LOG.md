@@ -6039,3 +6039,34 @@ What changed:
 
 Not done: no SMS sent, no call placed, no Twilio/env/Stripe/DNS changes, no
 `sms_recovery_enabled` or `SMS_RECOVERY_MODE` change, no migrations.
+
+---
+
+## 2026-06-10 — voice greeting foundation added for missed-call TwiML
+
+Added the durable voice-selection foundation for the current missed-call voice
+greeting and future AI Call Assistant work.
+
+What changed:
+
+- Added `config/voice-greeting.config.ts` as the curated source for English US
+  (`en-US`) Twilio `<Say>` voices. The list has 10 modern provider-prefixed
+  voice options balanced by `genderPresentation` (5 female, 5 male); the default
+  is `Google.en-US-Chirp3-HD-Leda`.
+- Moved missed-call and inactive-number TwiML generation into
+  `lib/sms-recovery/voice-twiml.ts`; the voice webhook now uses the configured
+  `language` and `voice` instead of the old basic `alice` voice.
+- Added unit coverage for the curated list, default voice, provider-prefixed
+  Twilio voice IDs, `en-US` language, XML escaping, and the exclusion of
+  `alice`, `man`, and `woman`.
+- Updated project, owner-settings, operations, and Knowledge System docs so
+  future clinic settings, future voice messages, and the AI Call Assistant reuse
+  this curated voice foundation before any AI runtime work.
+
+Validation before deploy: `npm run typecheck`, `npm run test:phone-numbers`
+(32 pass), `npm run test:a2p` (64 pass), `npm run test:sms-recovery` (47 pass),
+and `npm run build` all pass. No `lint` script exists in `package.json`.
+
+Not done: no AI call runtime, no full owner/admin voice settings UI, no calls
+placed, no SMS sent, no Twilio resources created or mutated, no Vercel
+environment variables changed, and no migrations.

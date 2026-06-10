@@ -170,6 +170,17 @@ When configured, the AI assistant may:
 The assistant **must not** give diagnosis, treatment advice, medical promises,
 fake urgency, or aggressive sales messaging, and must never imply emergency triage.
 
+Future clinic settings must also support voice selection for the current
+missed-call greeting, future voice messages, and future AI answered calls. The
+product is US-first, so the default spoken language is `en-US`. Do not expose
+Twilio's full voice catalog to clinic users; expose a curated English US list
+from `config/voice-greeting.config.ts` (about 10 operator-curated voices,
+balanced between female-presenting and male-presenting options, using modern
+neural/generative voices where practical). Old basic voices such as `alice`,
+`man`, and `woman` are not customer-selectable defaults. Punctuation, sentence
+shape, and any future minimal pauses are part of voice quality and should be
+treated as product copy, not incidental formatting.
+
 **Scope guardrails for future implementation:**
 
 - Do not enable live AI voice behavior without explicit owner approval and gating

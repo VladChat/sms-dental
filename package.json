@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:a2p": "tsc -p tsconfig.a2p-tests.json && node --test .tmp-tests/tests/a2p-brand-status.test.js .tmp-tests/tests/a2p-lifecycle.test.js .tmp-tests/tests/a2p-lifecycle-confirm.test.js .tmp-tests/tests/a2p-platform-profile.test.js .tmp-tests/tests/a2p-provider-payload.test.js .tmp-tests/tests/a2p-recovery.test.js .tmp-tests/tests/a2p-submission-modes.test.js .tmp-tests/tests/a2p-trusthub-helpers.test.js",
     "test:phone-numbers": "tsc -p tsconfig.unit-tests.json && node --test .tmp-tests/tests/twilio-release-deadline.test.js .tmp-tests/tests/twilio-number-inventory.test.js .tmp-tests/tests/texting-status-sync.test.js",
-    "test:sms-recovery": "tsc -p tsconfig.unit-tests.json && node --test .tmp-tests/tests/sms-recovery-template.test.js .tmp-tests/tests/sms-live-send-evaluation.test.js .tmp-tests/tests/sms-message-status.test.js .tmp-tests/tests/sms-single-send-path.test.js .tmp-tests/tests/sms-recovery-send-gate.test.js"
+    "test:sms-recovery": "tsc -p tsconfig.unit-tests.json && node --test .tmp-tests/tests/sms-recovery-template.test.js .tmp-tests/tests/sms-live-send-evaluation.test.js .tmp-tests/tests/sms-message-status.test.js .tmp-tests/tests/sms-single-send-path.test.js .tmp-tests/tests/sms-recovery-send-gate.test.js .tmp-tests/tests/voice-greeting-config.test.js"
   },
   "engines": {
     "node": ">=20.0.0"

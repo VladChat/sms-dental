@@ -128,7 +128,9 @@ Operational test requirement:
 - Twilio webhooks have been configured through API.
 - Inbound SMS webhook: verified and recorded in Supabase.
 - Inbound voice webhook: verified end-to-end (Twilio → Vercel → Supabase).
-- Voice call behavior: callers hear a polite announcement ("Thanks for calling. We missed your call and will be in touch shortly.") then the call ends cleanly.
+- Voice call behavior: callers hear a dynamic missed-call greeting using the
+  configured default `en-US` voice from `config/voice-greeting.config.ts`, then
+  the call ends cleanly.
 - Outbound SMS has not been enabled.
 
 ---
@@ -278,15 +280,19 @@ Current behavior:
 - Twilio-signed requests pass validation.
 - Inbound SMS: verified.
 - Inbound voice: verified. Returns dynamic `<Say>` + `<Hangup/>` TwiML. Callers hear a first-call or repeat-call greeting then the call ends cleanly.
+- Voice quality: `voice/incoming` sets both `<Say language="en-US">` and the
+  configured default voice from `config/voice-greeting.config.ts`. The curated
+  list is operator-curated from Twilio Text-to-Speech docs, not provider-ranked.
+  Do not use `alice`, `man`, or `woman` as customer-selectable defaults.
 - `voice/incoming` handler: validates signature, records `webhook_events`, upserts `call_events`, performs read-only greeting prediction, returns TwiML. Does NOT send SMS.
 - `voice/status` handler: receives `CallStatus=completed` after the call ends, validates signature, records `webhook_events` (keyed `voice:status:<CallSid>`), looks up clinic, calls `sendRecoverySms()`. SMS is sent here, not in voice/incoming.
 - Duplicate Twilio retries of either endpoint are deduplicated by `webhook_events` unique constraint.
 
 Voice greeting logic (read-only prediction in voice/incoming):
 
-- `will_send` (first call, SMS eligible): "Thanks for calling {{clinic_name}}. Sorry we missed you. We'll text you now so you can request an appointment or a call back."
-- `duplicate` (24h window, SMS suppressed): "Thanks for calling {{clinic_name}}. Sorry we missed you. We already sent a text, and our team will follow up shortly."
-- `none` (no clinic / gated / error): "Thanks for calling us. Sorry we missed you. Our team will follow up shortly."
+- `will_send` (first call, SMS eligible): "Hi, thanks for calling {{clinic_name}}. We're sorry we missed you. We'll send you a text now, so our team can follow up."
+- `duplicate` (24h window, SMS suppressed): "Hi, thanks for calling {{clinic_name}}. We're sorry we missed you. We already sent a text, and our team will follow up shortly."
+- `none` (no clinic / gated / error): "Hi, thanks for calling us. We're sorry we missed you. Our team will follow up shortly."
 
 Current phone number and Messaging Service webhook fields were updated through Twilio API and verified by API read-back.
 
@@ -2801,6 +2807,11 @@ the sender pool.
   `CallHandlingMode = "sms_only" | "ai_then_sms" | "transfer_only"` with
   `CURRENT_CALL_HANDLING_MODE = "sms_only"`. Nothing reads the future values;
   no AI voice runtime exists.
+- `config/voice-greeting.config.ts` defines the current default `en-US` voice and
+  curated English US voice options for current missed-call greetings, future
+  voice messages, and future AI Call Assistant / AI answered calls. The future
+  settings UI should persist a clinic-selected option from this curated list
+  before any AI voice runtime is implemented.
 
 ---
 
