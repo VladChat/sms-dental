@@ -11,7 +11,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md
   - config/billing.config.ts
   - AGENTS.md
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - number-removal-restore-detach
   - ../platform-admin/billing-operations
@@ -36,9 +36,9 @@ why this cycle differs from next cycle.
 
 ## Customer-safe explanation
 
-The plan is a base monthly subscription that includes a set amount of calling and
-texting, with paid add-ons for extra numbers and for usage above the included
-limits. Changes to numbers show on the next cycle.
+The plan is a base monthly subscription that includes regular calling, AI
+answered call time, and texting, with paid add-ons for extra numbers and for
+usage above the included limits. Changes to numbers show on the next cycle.
 
 ## Internal triage checklist
 
@@ -49,8 +49,8 @@ limits. Changes to numbers show on the next cycle.
 - In `/admin`, view the clinic's billing **state/presence** (status,
   customer/subscription presence, trial end). See
   [../platform-admin/billing-operations.md](../platform-admin/billing-operations.md).
-- Recall the model: base plan + included usage (1 number, 1,000 call minutes, 1,000
-  SMS segments shared); additional toll-free is a paid add-on; local carries
+- Recall the model: base plan + included usage (1 number, regular call minutes,
+  AI answered call minutes, and SMS segments shared); additional toll-free is a paid add-on; local carries
   separate regulatory + service fees; overage rates exist but usage billing is not
   fully live; trial starts after first number assignment.
 
@@ -88,11 +88,12 @@ Escalate (engineering) for apparent double-billing, a quantity mismatch, a
 
 ## Customer-safe response summary
 
-> Your plan is a base monthly subscription that includes a set amount of calling and
-> texting, with paid add-ons for extra numbers and for usage above the included
-> limits. If you recently changed a number, this cycle still counts it and the next
-> cycle reflects the change — changes apply next cycle rather than as an immediate
-> refund or credit. I can confirm the exact figures from your plan details.
+> Your plan is a base monthly subscription that includes regular calling, AI
+> answered call time, and texting, with paid add-ons for extra numbers and for
+> usage above the included limits. If you recently changed a number, this cycle
+> still counts it and the next cycle reflects the change — changes apply next
+> cycle rather than as an immediate refund or credit. I can confirm the exact
+> figures from your plan details.
 
 ## Source of truth
 

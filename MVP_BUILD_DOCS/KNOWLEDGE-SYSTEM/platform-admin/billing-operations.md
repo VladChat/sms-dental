@@ -11,7 +11,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md
   - config/billing.config.ts
   - AGENTS.md
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - clinic-console
   - phone-number-lifecycle
@@ -49,17 +49,18 @@ those as truth; never hard-code or restate amounts outside config-driven docs/UI
 
 Current model (verify against config before quoting):
 
-- **Base plan $99/month** — includes **1** business number, **1,000** call minutes,
-  **1,000** SMS segments (shared across all of the clinic's numbers).
+- **Base plan $99/month** — includes **1** business number, **1,000** regular call
+  minutes, **100** minutes of AI answered calls, and **1,000** SMS segments
+  (shared across all of the clinic's numbers).
 - **Additional business number $20/month**.
 - **Toll-free:** first toll-free included in plan; additional toll-free $20/month;
   toll-free verification included.
 - **Local (always a paid add-on):** local number $20/month; monthly SMS compliance
   $15/month; carrier brand registration $9 one-time; campaign registration/vetting
   $30 one-time; setup fee $20 one-time.
-- **Overage:** per-minute and per-segment rates exist in config, but usage metering
-  / live overage billing is **not fully live** — do not show metered usage charges
-  as if billed today.
+- **Overage:** regular call time, AI answered call time, and SMS segment rates
+  exist in config, but usage metering / live overage billing is **not fully
+  live** — do not show metered usage charges as if billed today.
 
 Never call any number "free" — the first toll-free is "included in plan."
 

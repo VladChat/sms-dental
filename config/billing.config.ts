@@ -18,6 +18,7 @@ export const billingConfig = {
     monthlyUnitAmountCents: 9900,
     includedBusinessNumbers: 1,
     includedCallMinutes: 1000,
+    includedAiAnsweredCallMinutes: 100,
     includedSmsSegments: 1000,
   },
 
@@ -28,6 +29,7 @@ export const billingConfig = {
 
   overage: {
     callMinuteUnitAmountCents: 7,
+    aiAnsweredCallMinuteUnitAmountCents: 39,
     smsSegmentUnitAmountCents: 6,
   },
 

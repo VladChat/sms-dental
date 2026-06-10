@@ -2,7 +2,7 @@
 
 Status: active (articles ready; not yet published)
 Audience: Clinic owners · Visibility: `clinic_owner`
-Last updated: 2026-06-09
+Last updated: 2026-06-10
 
 Help for understanding the plan, the monthly bill, and how changes are billed.
 
@@ -15,10 +15,11 @@ must say the price is sourced from the canonical billing files, and the figure
 must match them exactly. This prevents drift and conflicting numbers.
 
 At time of writing the canonical files define a **$99/month** base plan that
-includes 1 business number, 1,000 call minutes, and 1,000 SMS segments
-(shared across all of the clinic's numbers); additional toll-free numbers are a
-paid add-on; local numbers carry separate regulatory + service fees; and overage
-rates apply above the included limits. **Always re-verify against
+includes 1 business number, 1,000 regular call minutes, 100 minutes of AI
+answered calls, and 1,000 SMS segments (shared across all of the clinic's
+numbers); additional toll-free numbers are a paid add-on; local numbers carry
+separate regulatory + service fees; and overage rates apply above the included
+limits. **Always re-verify against
 `config/billing.config.ts` before publishing** — treat the file as truth, not
 this paragraph.
 
@@ -33,8 +34,9 @@ this paragraph.
 ## Customer-safe notes
 
 - Explain the plan in plain terms: a base monthly plan that includes a set amount
-  of calling and texting, with paid add-ons for extra numbers and usage above the
-  included limits. Source every figure from the canonical files.
+  of regular calling, AI answered call time, and texting, with paid add-ons for
+  extra numbers and usage above the included limits. Source every figure from the
+  canonical files.
 - Explain an **SMS segment** simply (a billing unit; long messages can use more
   than one segment) — matching the in-app tooltip wording.
 - **Current vs next cycle:** when a number is removed or changed, the current

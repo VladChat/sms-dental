@@ -94,6 +94,16 @@ export function BillingCard({
   const additionalMonthly = billingConfig.additionalBusinessNumber.monthlyUnitAmountCents;
   const baseMonthlyLabel = `${formatUsdFromCents(baseMonthly)}/month`;
   const additionalMonthlyLabel = `${formatUsdFromCents(additionalMonthly)}/month`;
+  const includedBusinessNumbers = billingConfig.basePlan.includedBusinessNumbers;
+  const regularCallOverageLabel = `${formatUsdFromCents(
+    billingConfig.overage.callMinuteUnitAmountCents,
+  )}/min`;
+  const aiAnsweredCallOverageLabel = `${formatUsdFromCents(
+    billingConfig.overage.aiAnsweredCallMinuteUnitAmountCents,
+  )}/min`;
+  const smsSegmentOverageLabel = formatUsdFromCents(
+    billingConfig.overage.smsSegmentUnitAmountCents,
+  );
   const currentMonthlyTotalLabel = `${formatUsdFromCents(summary.current.totalAmountCents)}/month`;
   const nextCycleTotalLabel = `${formatUsdFromCents(summary.nextCycle.totalAmountCents)}/month`;
   const showNextCycle = summary.nextCycle.totalAmountCents !== summary.current.totalAmountCents;
@@ -122,10 +132,13 @@ export function BillingCard({
           <p className="t-eyebrow" id="billing-included-title">Included each month</p>
           <ul className="acct-plan-list">
             <li>
-              {formatInteger(billingConfig.basePlan.includedBusinessNumbers)} business{" "}
-              {billingConfig.basePlan.includedBusinessNumbers === 1 ? "number" : "numbers"}
+              {formatInteger(includedBusinessNumbers)} business{" "}
+              {includedBusinessNumbers === 1 ? "number" : "numbers"}
             </li>
-            <li>{formatInteger(billingConfig.basePlan.includedCallMinutes)} call minutes</li>
+            <li>{formatInteger(billingConfig.basePlan.includedCallMinutes)} regular call minutes</li>
+            <li>
+              {formatInteger(billingConfig.basePlan.includedAiAnsweredCallMinutes)} minutes of AI answered calls
+            </li>
             <li>
               <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
                 {formatInteger(billingConfig.basePlan.includedSmsSegments)} SMS segments
@@ -141,9 +154,17 @@ export function BillingCard({
         <section className="acct-billing-block" aria-labelledby="billing-overage-title">
           <p className="t-eyebrow" id="billing-overage-title">Usage above included limits</p>
           <ul className="acct-plan-list">
-            <li>{formatUsdFromCents(billingConfig.overage.callMinuteUnitAmountCents)} per additional call minute</li>
-            <li>{formatUsdFromCents(billingConfig.overage.smsSegmentUnitAmountCents)} per additional SMS segment</li>
+            <li>Additional regular call time: {regularCallOverageLabel}</li>
+            <li>Additional AI answered call time: {aiAnsweredCallOverageLabel}</li>
+            <li>Additional SMS segment: {smsSegmentOverageLabel}</li>
           </ul>
+        </section>
+
+        <section className="acct-billing-block" aria-labelledby="billing-additional-numbers-title">
+          <p className="t-eyebrow" id="billing-additional-numbers-title">Additional phone numbers</p>
+          <p className="t-small" style={{ color: "var(--text)", fontWeight: 600, margin: "var(--space-1) 0 0" }}>
+            {additionalMonthlyLabel} each
+          </p>
         </section>
 
         {paymentMethodSetup === "success" && hasPaymentMethod && (
@@ -307,10 +328,13 @@ export function BillingCard({
           <p className="t-eyebrow">Included each month</p>
           <ul className="acct-plan-list">
             <li>
-              {formatInteger(billingConfig.basePlan.includedBusinessNumbers)} business{" "}
-              {billingConfig.basePlan.includedBusinessNumbers === 1 ? "number" : "numbers"}
+              {formatInteger(includedBusinessNumbers)} business{" "}
+              {includedBusinessNumbers === 1 ? "number" : "numbers"}
             </li>
-            <li>{formatInteger(billingConfig.basePlan.includedCallMinutes)} call minutes</li>
+            <li>{formatInteger(billingConfig.basePlan.includedCallMinutes)} regular call minutes</li>
+            <li>
+              {formatInteger(billingConfig.basePlan.includedAiAnsweredCallMinutes)} minutes of AI answered calls
+            </li>
             <li>
               <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
                 {formatInteger(billingConfig.basePlan.includedSmsSegments)} SMS segments
@@ -324,10 +348,11 @@ export function BillingCard({
         </div>
 
         <div>
-          <p className="t-eyebrow">Usage above the included monthly limits</p>
+          <p className="t-eyebrow">Usage above included limits</p>
           <ul className="acct-plan-list">
-            <li>{formatUsdFromCents(billingConfig.overage.callMinuteUnitAmountCents)} per additional call minute</li>
-            <li>{formatUsdFromCents(billingConfig.overage.smsSegmentUnitAmountCents)} per additional SMS segment</li>
+            <li>Additional regular call time: {regularCallOverageLabel}</li>
+            <li>Additional AI answered call time: {aiAnsweredCallOverageLabel}</li>
+            <li>Additional SMS segment: {smsSegmentOverageLabel}</li>
           </ul>
         </div>
 

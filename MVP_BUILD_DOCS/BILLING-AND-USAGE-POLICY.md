@@ -18,7 +18,8 @@ UI, API validation, consent text, DB snapshots). Do not duplicate these amounts.
 Included each month (shared across **all** business numbers on the account):
 
 - **1** business number (`includedBusinessNumbers`)
-- **1,000** call minutes (`includedCallMinutes`)
+- **1,000** regular call minutes (`includedCallMinutes`)
+- **100** minutes of AI answered calls (`includedAiAnsweredCallMinutes`)
 - **1,000** SMS segments (`includedSmsSegments`)
 
 **SMS segment:** a billing unit. Long messages and some characters can use more
@@ -46,10 +47,15 @@ to owners via an accessible question-mark tooltip in the Billing panel.)
 
 ## Usage above the included monthly limits
 
-- **$0.07** per additional call minute (`overage.callMinuteUnitAmountCents = 7`)
-- **$0.06** per additional SMS segment (`overage.smsSegmentUnitAmountCents = 6`)
+- Additional regular call time: **$0.07/min**
+  (`overage.callMinuteUnitAmountCents = 7`)
+- Additional AI answered call time: **$0.39/min**
+  (`overage.aiAnsweredCallMinuteUnitAmountCents = 39`)
+- Additional SMS segment: **$0.06**
+  (`overage.smsSegmentUnitAmountCents = 6`)
 - Overage values are documented in config, but usage metering and usage billing
-  are not implemented as live billing behavior yet.
+  are not implemented as live billing behavior yet. AI answered call runtime and
+  metering are also not implemented yet.
 
 ## Number lifecycle guarantees (non-negotiable)
 
@@ -197,12 +203,14 @@ usage numbers until this lands. Tracked here so it is not forgotten.
 Acceptance criteria for the future milestone:
 
 - Aggregate usage **per clinic billing period** (the Stripe subscription cycle).
-- **Total call minutes** summed across all of the clinic's phone numbers.
+- **Total regular call minutes** summed across all of the clinic's phone numbers.
+- **Total AI answered call minutes** summed across all AI answered calls.
 - **Total SMS segments** summed across all of the clinic's phone numbers.
-- Included limits applied to the account total: **1,000 call minutes** and
-  **1,000 SMS segments** (shared across all numbers; from `billing.config.ts`).
-- Overage: **$0.07 / additional call minute** and **$0.06 / additional SMS
-  segment** (from `billing.config.ts`).
+- Included limits applied to the account total: regular call minutes, AI answered
+  call minutes, and SMS segments (shared across all numbers; from
+  `billing.config.ts`).
+- Overage: additional regular call time, additional AI answered call time, and
+  additional SMS segment rates (from `billing.config.ts`).
 - Additional phone numbers: **quantity × $20/month** (from the Stripe additional-
   number subscription item quantity).
 - An **estimated monthly total** = base $99 + (additional numbers × $20) + overage.
@@ -333,22 +341,22 @@ Billing behavior:
 The client never supplies lifecycle state, Stripe quantity, number type, slot
 class, or price. All lifecycle and billing decisions are server-side.
 
-## Future billing note — AI Call Assistant (NOT live)
+## AI Call Assistant billing note (NOT live)
 
-> **Status: future / not implemented.** This is a forward-looking note only. No
-> AI usage is metered or billed today. Do not add any AI numbers here or anywhere
-> else as a second source of truth.
+> **Status: future runtime / not implemented.** Plan copy may show the AI
+> answered call allowance and overage rate from `config/billing.config.ts`, but
+> no AI usage is metered or billed today. Do not add AI numbers anywhere else as
+> a second source of truth.
 
 The planned **AI Call Assistant** voice feature (see `PROJECT-CONTEXT.md`) will
 introduce a new future billable usage category: **AI answered call usage**.
 
-- **AI included minutes and AI overage rates must be defined in
-  `config/billing.config.ts`** before any UI or billing implementation, following
-  the same single-source-of-truth rule as the rest of this policy.
+- **AI included minutes and AI overage rates are defined in
+  `config/billing.config.ts`**, following the same single-source-of-truth rule as
+  the rest of this policy.
 - Do **not** hard-code AI minute limits or AI rates in page components, API
-  routes, Stripe logic, billing calculations, or documentation (including this
-  file) as a second source of truth. This file describes policy; the numbers live
-  in `config/billing.config.ts`.
+  routes, Stripe logic, or billing calculations. This file describes policy; the
+  numbers live in `config/billing.config.ts`.
 - Customer-facing wording must use **"AI answered calls"** / **"AI answered call
   time"** — never "Conversation Relay minutes" or "call-tracking minutes".
 - Usage metering and billing for AI answered calls is **not live** until it is

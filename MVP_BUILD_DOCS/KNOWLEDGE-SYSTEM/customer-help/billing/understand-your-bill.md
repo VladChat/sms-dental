@@ -11,7 +11,7 @@ source_of_truth:
   - config/billing.config.ts
   - MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md
   - AGENTS.md
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - current-vs-next-cycle
   - local-vs-toll-free-charges
@@ -22,10 +22,10 @@ related:
 
 ## Summary
 
-Your account runs on one monthly plan with a set amount of included calling and
-texting. Extra business numbers and certain number types add their own charges.
-This article explains the parts of your bill in plain terms. The exact amounts
-always come from your plan details in your account.
+Your account runs on one monthly plan with included regular calling, AI answered
+call time, and texting. Extra business numbers and certain number types add their
+own charges. This article explains the parts of your bill in plain terms. The
+exact amounts always come from your plan details in your account.
 
 ## Applies to
 
@@ -37,11 +37,13 @@ Your bill is made up of a few simple parts:
 
 - **Base plan — $99/month.** This is your main subscription. It includes:
   - **1 business number**
-  - **1,000 call minutes**
+  - **1,000 regular call minutes**
+  - **100 minutes of AI answered calls**
   - **1,000 SMS segments**
 
-  The included call minutes and SMS segments are shared across **all** of the
-  business numbers on your account, not per number.
+  The included regular call minutes, AI answered call minutes, and SMS segments
+  are shared across **all** of the business numbers on your account, not per
+  number.
 
   An **SMS segment** is a billing unit for texting. A long text message can use
   more than one segment, so the included amount is measured in segments rather
@@ -57,8 +59,8 @@ Your bill is made up of a few simple parts:
   breakdown.
 
 - **Usage above the included amounts.** Your plan defines per-unit rates for
-  calling and texting that go beyond the included 1,000 minutes and 1,000
-  segments. Usage-based charges are still being rolled out, so you should not
+  regular call time, AI answered call time, and SMS segments above the included
+  amounts. Usage-based charges are still being rolled out, so you should not
   expect to see metered usage charges on your bill until that feature is active
   and you are notified.
 
