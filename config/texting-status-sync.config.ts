@@ -8,7 +8,7 @@ const HOUR_MS = 60 * 60 * 1000;
 export const textingStatusSyncConfig = {
   cron: {
     path: "/api/jobs/sync-phone-number-texting-status",
-    schedule: "0 */6 * * *",
+    schedule: "0 10 * * *",
     batchSize: 25,
   },
   singleClinicBatchSize: 50,

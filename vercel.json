@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/jobs/sync-phone-number-texting-status",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 10 * * *"
     }
   ]
 }

@@ -2734,11 +2734,13 @@ Automatic sync model:
   - active toll-free reconciliation toggle
 - Protected cron route:
   `GET|POST /api/jobs/sync-phone-number-texting-status`.
-- Vercel cron schedule is `0 */6 * * *` in `vercel.json`. This is safe because
-  the job processes only rows due by stale-window selection and caps each run to
-  the configured batch size. The schedule is necessarily repeated in
-  `vercel.json` because Vercel reads a static config file; tune business values in
-  `config/texting-status-sync.config.ts`.
+- Vercel cron schedule is `0 10 * * *` in `vercel.json`. The current Vercel plan
+  is Hobby, which rejects cron schedules more frequent than once per day at build
+  time. A daily cadence is safe because the job processes only rows due by
+  stale-window selection and caps each run to the configured batch size; manual
+  admin sync and event-triggered sync cover immediate updates. The schedule is
+  necessarily repeated in `vercel.json` because Vercel reads a static config file;
+  tune business values in `config/texting-status-sync.config.ts`.
 - Auth uses the protected job bearer pattern:
   `Authorization: Bearer <CRON_SECRET>`. `PHONE_NUMBER_RELEASE_CRON_SECRET` is
   accepted as a fallback for manual/external scheduling compatibility.
