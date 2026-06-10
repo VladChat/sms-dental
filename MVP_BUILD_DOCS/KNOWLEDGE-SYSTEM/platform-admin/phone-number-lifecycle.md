@@ -12,7 +12,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md
   - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
   - MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - clinic-console
   - billing-operations
@@ -50,7 +50,8 @@ Every number has a durable `number_type`: `toll_free` or `local`.
 
 ## Lifecycle states
 
-- **Active** — assigned and routing calls/texts for the clinic.
+- **Active** — assigned and eligible for routing under the normal routing gates.
+  This lifecycle state is separate from per-number texting approval/capability.
 - **Suspended** — paused by admin within the same clinic; routing inactive; the
   number, billing quantity, and limit count are kept (still billed, still counts
   toward the limit).
@@ -65,6 +66,25 @@ Number rows/history are **never physically deleted** — lifecycle history is
 preserved internally for audit/reconciliation. If a delayed provider release
 fails, the existing SID and release error are preserved for reconciliation; do not
 clear or overwrite them.
+
+## Texting approval/capability status
+
+Each `clinic_phone_numbers` row has its own texting approval/capability fields:
+`texting_status`, `texting_status_source`, and `texting_status_updated_at`.
+Allowed statuses are `preparing`, `waiting_for_approval`, `active`, and `failed`.
+
+Do not use `clinics.sms_status` as the customer-facing status for every number.
+`clinics.sms_status` remains the clinic-wide SMS approval / local A2P workflow
+state. Owner-facing number cards combine lifecycle and capability: a number with
+`is_active=false` or `removal_status='scheduled'` renders texting as not active
+even if its stored `texting_status` is `active`.
+
+Assignment defaults are conservative: owner-purchased numbers, admin-assigned
+existing numbers, and reassigned detached rows start as
+`texting_status='waiting_for_approval'`, source `assignment_default`. Toll-free
+rows become `active` only after a reliable number-specific toll-free verification
+source confirms approval. Local rows may become `active` only from a reliable
+local/A2P success transition for the covered active local numbers.
 
 ## Operations at a glance
 
@@ -111,7 +131,8 @@ already-owned/detached number). Same provisioning architecture as onboarding.
 Gated by `TWILIO_NUMBER_PURCHASE_ENABLED`; when off, the action is blocked with a
 reason — no provider call, no DB write. On success it configures Voice/SMS
 webhooks, attaches the Messaging Service best-effort, stores the mapping, and
-writes an audit row. **SMS recovery is not enabled by assignment.**
+writes an audit row. The number's texting status starts as
+`waiting_for_approval`. **SMS recovery is not enabled by assignment.**
 
 ## Limits
 
@@ -139,6 +160,9 @@ never below the held count).
 ### What NOT to do operationally
 - Do not manually clear or overwrite a preserved SID / release error or a
   `reconciliation_required` state.
+- Do not set `clinics.sms_status='active'` to make one assigned number look
+  approved. Update that number's own `texting_status` only after provider
+  verification.
 - Do not force a provider release outside the secured release job.
 - Do not use Detach when the customer asked to keep the number (Suspend or leave
   active instead), and do not use Remove when only a pause is intended.

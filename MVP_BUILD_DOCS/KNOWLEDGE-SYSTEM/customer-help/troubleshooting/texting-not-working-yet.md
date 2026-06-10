@@ -12,8 +12,9 @@ source_of_truth:
   - MVP_BUILD_DOCS/SMS-APPROVAL-FIELD-MAPPING.md
   - MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md
   - MVP_BUILD_DOCS/PROJECT-CONTEXT.md
+  - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
   - config/runtime.config.ts
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - ../sms-approval/why-sms-is-not-active-immediately
   - ../sms-approval/what-sms-approval-means
@@ -26,9 +27,10 @@ related:
 
 If patient texting is not sending yet, the most common reason is that **SMS
 approval and texting activation are separate steps** from setting up your number,
-adding a payment method, or starting your plan. Texting turns on only after
-approval and configuration are complete — it is never switched on automatically.
-This article helps you check the likely causes.
+adding a payment method, or starting your plan. Each assigned business number has
+its own **Texting** status. Texting turns on only after approval and
+configuration are complete — it is never switched on automatically. This article
+helps you check the likely causes.
 
 ## Applies to
 
@@ -49,6 +51,12 @@ up — does **not** mean texting is on. Texting to patients stays off until SMS
 approval and the required configuration are complete. This protects message
 delivery and keeps your texting compliant.
 
+If your account has more than one business number, the numbers can show different
+Texting statuses. For example, one number may still be waiting for its local SMS
+approval while another number is waiting on toll-free verification. The **SMS
+approval** section shows the broader approval workflow; the **Phone number**
+section shows each assigned number's own Texting status.
+
 > "SMS approval" is the carrier approval process your texting service needs before
 > it can be activated. See
 > [What SMS approval means](../sms-approval/what-sms-approval-means.md).
@@ -60,8 +68,8 @@ not active.
 
 Check these in your account, in order:
 
-1. **Number status.** Confirm a business number is assigned and active. A number
-   can be assigned for calls while texting is still pending.
+1. **Number status.** Confirm the specific business number is assigned and active.
+   A number can be assigned for calls while texting is still pending.
 2. **SMS approval status.** Open the **SMS approval** section and confirm you have
    completed the required information. After you submit, texting typically shows
    **Waiting for approval** while the review is in progress.
@@ -69,10 +77,11 @@ Check these in your account, in order:
    and SMS approval details are complete and accurate — missing or inaccurate
    details can hold up approval. See
    [What information is needed for SMS approval](../sms-approval/what-information-is-needed-for-sms-approval.md).
-4. **Texting status.** Look at the **Texting** status specifically (Not active →
-   Waiting for approval → Active). Note that finishing the SMS approval section may
-   show that section as "Complete," but the separate Texting status is what tells
-   you whether texting is actually live.
+4. **Texting status.** In **Phone number**, look at the **Texting** status for each
+   assigned number specifically (Not active → Waiting for approval / verification
+   pending → Active). Note that finishing the SMS approval section may show that
+   section as "Complete," but the separate Texting status is what tells you
+   whether texting is actually live for that number.
 5. **Activation confirmed.** Texting is active only after approval and
    configuration finish. If everything looks complete but texting is still not
    active, that is a good time to contact support.
@@ -116,4 +125,5 @@ Email: **support@missedcallsdental.com**
 - `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` — texting is separate from number
   assignment and billing
 - `MVP_BUILD_DOCS/PROJECT-CONTEXT.md` — SMS enablement is gated, not automatic
+- `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` — per-number texting status model
 - `config/runtime.config.ts` — texting enablement is gated

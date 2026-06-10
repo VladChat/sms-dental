@@ -229,6 +229,9 @@ export async function assignExistingTwilioNumber(args: {
             activated_at = now(),
             twilio_phone_number_sid = ${sid},
             twilio_purchased_at = coalesce(twilio_purchased_at, ${purchasedAt}),
+            texting_status = 'waiting_for_approval',
+            texting_status_source = 'assignment_default',
+            texting_status_updated_at = now(),
             twilio_release_status = 'not_required',
             twilio_release_error = null,
             twilio_released_at = null,
@@ -252,12 +255,14 @@ export async function assignExistingTwilioNumber(args: {
             (clinic_id, phone_number, number_type, twilio_phone_number_sid, role, is_active,
              source, billing_class, monthly_unit_amount_cents, currency,
              purchased_by_profile_id, purchased_by_email, activated_at,
-             twilio_purchased_at, removal_status, twilio_release_status)
+             twilio_purchased_at, removal_status, twilio_release_status,
+             texting_status, texting_status_source, texting_status_updated_at)
           values
             (${args.clinicId}, ${phoneNumber}, 'toll_free', ${sid}, 'office_texting', true,
              'admin', 'included', 0, ${currency},
              ${args.actorProfileId}, ${args.actorEmail}, now(),
-             ${purchasedAt}, 'active', 'not_required')
+             ${purchasedAt}, 'active', 'not_required',
+             'waiting_for_approval', 'assignment_default', now())
           returning phone_number
         `;
         assignedRow = rows[0];

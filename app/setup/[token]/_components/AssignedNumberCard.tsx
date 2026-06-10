@@ -2,14 +2,13 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { StatusBadge } from "./AccountUI";
+import { StatusBadge, type StatusKind } from "./AccountUI";
 import { ConfirmationDialog } from "./ConfirmationDialog";
 import { NumberTypeChooser } from "./NumberTypeChooser";
 import { OwnerNumberSearch } from "./OwnerNumberSearch";
 import type {
   AssignedBusinessNumberSummary,
   OwnerNumberEntitlement,
-  SmsStatus,
 } from "./account-types";
 import {
   assignedNumberBillingLabel,
@@ -39,7 +38,6 @@ const TAG_ROW: CSSProperties = {
 
 export function AssignedNumberCard({
   assignedNumbers,
-  smsStatus,
   areaCode,
   postalCode,
   hasPaymentMethod,
@@ -52,7 +50,6 @@ export function AssignedNumberCard({
   onPurchased,
 }: {
   assignedNumbers: AssignedBusinessNumberSummary[];
-  smsStatus: SmsStatus;
   areaCode: string | null;
   postalCode: string | null;
   hasPaymentMethod: boolean;
@@ -77,7 +74,7 @@ export function AssignedNumberCard({
       )}
 
       {assignedNumbers.map((n) => (
-        <AssignedRow key={n.id} n={n} smsStatus={smsStatus} />
+        <AssignedRow key={n.id} n={n} />
       ))}
 
       <NumberAction
@@ -96,16 +93,11 @@ export function AssignedNumberCard({
   );
 }
 
-function AssignedRow({
-  n,
-  smsStatus,
-}: {
-  n: AssignedBusinessNumberSummary;
-  smsStatus: SmsStatus;
-}) {
+function AssignedRow({ n }: { n: AssignedBusinessNumberSummary }) {
   const router = useRouter();
   const isLocal = n.numberType === "local";
   const scheduled = n.removalStatus === "scheduled";
+  const textingBadge = textingBadgeFor(n);
   // Restore is allowed only while still scheduled, before Twilio release, and
   // before the estimated release deadline (permanentRemovalAt) passes. Mirrors the
   // server-side rule in restoreScheduledPhoneNumber().
@@ -164,7 +156,7 @@ function AssignedRow({
           {n.isActive && !scheduled ? <StatusBadge kind="active" /> : <StatusBadge kind="not_active" />}
         </Row>
         <Row label="Texting">
-          {smsStatus === "active" && !scheduled ? <StatusBadge kind="active" /> : <StatusBadge kind="waiting" />}
+          <StatusBadge kind={textingBadge.kind} label={textingBadge.label} />
         </Row>
         <Row label="Billing">
           <span className="t-small" style={{ color: "var(--text-muted)" }}>
@@ -349,6 +341,31 @@ function AssignedRow({
       )}
     </div>
   );
+}
+
+function textingBadgeFor(
+  n: AssignedBusinessNumberSummary,
+): { kind: StatusKind; label?: string } {
+  if (n.removalStatus === "scheduled" || !n.isActive) {
+    return { kind: "not_active", label: "Not active" };
+  }
+
+  switch (n.textingStatus) {
+    case "active":
+      return { kind: "active", label: "Active" };
+    case "waiting_for_approval":
+      return {
+        kind: "waiting",
+        label:
+          n.numberType === "local"
+            ? "Waiting for A2P approval"
+            : "Toll-free verification pending",
+      };
+    case "preparing":
+      return { kind: "pending", label: "Preparing" };
+    case "failed":
+      return { kind: "needs_action", label: "Needs review" };
+  }
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {

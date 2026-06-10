@@ -11,7 +11,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md
   - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
   - AGENTS.md
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - a2p-approval-question
   - ../platform-admin/a2p-review-and-submission
@@ -37,9 +37,9 @@ A clinic reports patients are not receiving the missed-call follow-up text, or
 
 ## Customer-safe explanation
 
-Texting goes live only after SMS approval is complete and texting is enabled for the
-clinic. Until then, calls are still recorded but no patient text is sent. This is by
-design and protects message delivery.
+Texting goes live only after SMS approval is complete and texting is active for
+the specific business number involved. Until then, calls are still recorded but no
+patient text is sent. This is by design and protects message delivery.
 
 ## Internal triage checklist
 
@@ -49,14 +49,17 @@ Work the gates in order in `/admin` (use the console, not raw SQL):
    from the **live** submission (not a mock brand)? See
    [../platform-admin/a2p-review-and-submission.md](../platform-admin/a2p-review-and-submission.md).
 2. **Assigned active number** — is a business number assigned and active?
-3. **Per-clinic enablement** — is SMS recovery enabled for the clinic
+3. **Per-number texting status** — for the called / assigned business number, is
+   `clinic_phone_numbers.texting_status='active'`, and is the number still
+   `is_active=true` with `removal_status='active'`?
+4. **Per-clinic enablement** — is SMS recovery enabled for the clinic
    (`sms_recovery_enabled`)? Safe default is off.
-4. **Ops mode** — is `SMS_RECOVERY_MODE=live` (or the clinic in the current
+5. **Ops mode** — is `SMS_RECOVERY_MODE=live` (or the clinic in the current
    test-mode allowlist)?
-5. **Opt-out** — did the specific patient reply STOP?
-6. **Duplicate suppression** — was a recovery SMS already sent to that patient in the
+6. **Opt-out** — did the specific patient reply STOP?
+7. **Duplicate suppression** — was a recovery SMS already sent to that patient in the
    last 24 hours?
-7. **Carrier filtering** — possible for an unverified/unregistered number even when
+8. **Carrier filtering** — possible for an unverified/unregistered number even when
    gates look correct.
 
 ## What not to expose to the customer
@@ -69,6 +72,9 @@ Work the gates in order in `/admin` (use the console, not raw SQL):
 
 - If SMS approval is incomplete or pending: tell the clinic texting turns on after
   approval; point them to completing SMS Approval Information; do not promise a date.
+- If one assigned number is active and another is pending, triage the specific
+  business number involved. Do not infer every number's texting status from the
+  clinic-level SMS approval state.
 - If a patient opted out: that is correct behavior; do not re-enable texting to that
   patient. See [../platform-admin/support-boundaries.md](../platform-admin/support-boundaries.md).
 - If it was a duplicate within 24h: explain one follow-up per missed call; not an
@@ -92,9 +98,9 @@ pending, readiness looks mock-contaminated, a number is in
 ## Customer-safe response summary
 
 > Calls are being recorded, but patient texting turns on only after your SMS
-> approval is complete and texting is enabled for your clinic. Your current texting
-> status is "[Waiting for approval / Not active]." Once approval is finished we'll
-> enable texting and follow up with you.
+> approval is complete and texting is active for that business number. Your current
+> texting status for the number is "[Waiting for approval / Not active]." Once
+> approval is finished we'll follow up with you.
 
 ## Source of truth
 

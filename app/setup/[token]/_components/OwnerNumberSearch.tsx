@@ -45,6 +45,7 @@ type PurchaseResponse = {
     numberType: NumberType;
     role: string;
     isActive: boolean;
+    textingStatus?: AssignedBusinessNumberSummary["textingStatus"];
     billingClass: "legacy" | "included" | "additional";
     createdAt: string;
   };
@@ -180,6 +181,7 @@ export function OwnerNumberSearch({
         numberType: a.numberType,
         role: a.role,
         isActive: a.isActive,
+        textingStatus: a.textingStatus ?? "waiting_for_approval",
         billingClass: a.billingClass,
         createdAt: a.createdAt,
         removalStatus: "active",

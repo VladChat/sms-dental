@@ -26,6 +26,11 @@ export type SmsApprovalFields = {
 
 export type LocalNumberStatus = "preparing" | "reserved" | "assigned";
 export type SmsStatus = "preparing" | "waiting_for_approval" | "active";
+export type PhoneNumberTextingStatus =
+  | "preparing"
+  | "waiting_for_approval"
+  | "active"
+  | "failed";
 
 // Safe, non-secret saved payment-method summary surfaced to the owner UI. No raw
 // card data — Stripe holds the sensitive values.
@@ -52,6 +57,7 @@ export type AssignedBusinessNumberSummary = {
   numberType: "toll_free" | "local";
   role: string;
   isActive: boolean;
+  textingStatus: PhoneNumberTextingStatus;
   billingClass: "legacy" | "included" | "additional";
   createdAt: string | null;
   removalStatus: "active" | "scheduled" | "permanently_removed";

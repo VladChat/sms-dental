@@ -137,7 +137,11 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
     }
   }
 
-  const phoneStatus = phoneSectionStatus(data.number.localNumberStatus, smsStatus, hasPaymentMethod);
+  const phoneStatus = phoneSectionStatus(
+    data.number.localNumberStatus,
+    data.number.assignedNumbers,
+    hasPaymentMethod,
+  );
   const bizStatus: StatusKind = bizDone ? "complete" : "needs_setup";
   const smsSectionStatus: StatusKind = smsDone ? "complete" : "needs_setup";
   const billingStatus: StatusKind = hasPaymentMethod ? "complete" : "needs_setup";
@@ -216,7 +220,6 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
             >
               <AssignedNumberCard
                 assignedNumbers={data.number.assignedNumbers}
-                smsStatus={data.number.smsStatus}
                 areaCode={data.number.areaCode}
                 postalCode={data.number.postalCode}
                 hasPaymentMethod={hasPaymentMethod}
@@ -377,11 +380,16 @@ function withRepDefaults(data: BusinessProfileData): SmsApprovalFields {
 
 function phoneSectionStatus(
   localNumberStatus: BusinessProfileData["number"]["localNumberStatus"],
-  smsStatus: SmsStatus,
+  assignedNumbers: BusinessProfileData["number"]["assignedNumbers"],
   hasPaymentMethod: boolean,
 ): StatusKind {
-  if (smsStatus === "active") return "active";
-  if (smsStatus === "waiting_for_approval") return "waiting";
+  const routedNumbers = assignedNumbers.filter(
+    (n) => n.isActive && n.removalStatus === "active",
+  );
+  if (routedNumbers.some((n) => n.textingStatus === "active")) return "active";
+  if (routedNumbers.some((n) => n.textingStatus === "failed")) return "needs_action";
+  if (routedNumbers.length > 0) return "waiting";
+  if (assignedNumbers.length > 0) return "pending";
   if (localNumberStatus === "assigned" || localNumberStatus === "reserved") return "pending";
   if (!hasPaymentMethod) return "needs_setup";
   return "pending";

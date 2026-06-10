@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-01 (platform admin login completion + reset routing)
+Last updated: 2026-06-10 (per-number texting status model)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -2669,6 +2669,73 @@ Failure behavior:
 - Twilio succeeds but DB activation fails: `reconciliation_required`; Twilio SID
   and local invoice marker are preserved.
 - Toll-free behavior is unchanged.
+
+---
+
+## Per-number texting status model — operate & verify (2026-06-10)
+
+Customer-facing **Texting** status on `/account?section=phone` comes from each
+`clinic_phone_numbers` row, not from one clinic-wide SMS status painted across all
+numbers.
+
+Schema source:
+
+- Migration: `supabase/migrations/20260613000200_per_number_texting_status.sql`.
+- Columns on `clinic_phone_numbers`:
+  - `texting_status text not null default 'waiting_for_approval'`
+  - `texting_status_source text not null default 'system'`
+  - `texting_status_updated_at timestamptz not null default now()`
+- Allowed `texting_status`: `preparing`, `waiting_for_approval`, `active`,
+  `failed`.
+
+Operational model:
+
+- `texting_status` is the per-number approval/capability state for texting.
+- Lifecycle/routing still comes from `is_active`, `removal_status`, and
+  `twilio_release_status`.
+- Clinic-level `clinics.sms_status` remains the SMS approval / local A2P workflow
+  status. It is not the status of every assigned number.
+- Owner UI renders Texting as **Not active** whenever `is_active=false` or
+  `removal_status='scheduled'`, even if `texting_status='active'`.
+- `waiting_for_approval` displays differently by number type: local =
+  **Waiting for A2P approval**; toll-free = **Toll-free verification pending**.
+
+Backfill and assignment safety:
+
+- Existing local numbers may be backfilled from `clinics.sms_status`, because that
+  clinic field is the current local/A2P approximation.
+- Existing toll-free numbers stay `waiting_for_approval` unless a reliable
+  number-specific verification source confirms approval. Do not mass-mark
+  toll-free rows active.
+- New owner-purchased numbers, admin-assigned existing numbers, and reassigned
+  detached rows default to `texting_status='waiting_for_approval'`,
+  `texting_status_source='assignment_default'`.
+- Reassignment resets the status to waiting so stale `active` approval cannot
+  follow a number into a new clinic assignment.
+
+Manual toll-free verification update after confirming Twilio approval for a
+specific number:
+
+```sql
+update public.clinic_phone_numbers
+set
+  texting_status = 'active',
+  texting_status_source = 'manual_twilio_verified',
+  texting_status_updated_at = now()
+where phone_number = '+18447234944'
+  and number_type = 'toll_free'
+  and removal_status = 'active';
+```
+
+Do not update `clinics.sms_status` just to make one toll-free number display as
+active. Use a number-specific update after provider verification. If a future
+local A2P approval workflow gains a reliable success transition, it should update
+active local `clinic_phone_numbers` rows with `texting_status='active'`; do not
+invent that transition from incomplete readiness data.
+
+Safety invariants: this model does not send SMS, enable `sms_recovery_enabled`,
+change `SMS_RECOVERY_MODE`, change routing, release/buy numbers, attach Messaging
+Service senders, or alter billing.
 
 ---
 

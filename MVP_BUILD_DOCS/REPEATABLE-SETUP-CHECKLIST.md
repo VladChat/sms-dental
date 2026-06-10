@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Repeatable setup checklist for this project and future similar SaaS projects  
-Last updated: 2026-05-26
+Last updated: 2026-06-10
 
 Use this checklist when repeating the same pattern for another client/project.
 
@@ -775,6 +775,26 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       the database for audit and reconciliation.
 - [ ] Secure cron/job routes with a bearer secret; for Vercel Cron, use
       `CRON_SECRET` so Vercel automatically supplies the Authorization header.
+
+---
+
+## Per-resource capability status vs lifecycle (reusable lessons)
+
+- [ ] Model lifecycle/routing state separately from provider approval/capability
+      state. A resource can be assigned and routable for calls while its texting,
+      compliance, or provider approval capability is still pending.
+- [ ] If approval is per resource, store the customer-facing capability status on
+      that resource row. Do not paint a tenant-wide workflow status onto every
+      resource card unless the provider model truly works that way.
+- [ ] Backfill conservatively: derive from tenant-level status only when it is a
+      safe approximation for that resource type; leave unknown or separately
+      verified resource types pending until confirmed.
+- [ ] Default newly assigned or reassigned resources to pending unless a reliable
+      provider signal proves they are already approved. Reassignment should clear
+      stale active capability state.
+- [ ] Customer display should combine lifecycle and capability: inactive or
+      scheduled-removal resources render as not active even if a stored capability
+      status says active.
 
 ---
 

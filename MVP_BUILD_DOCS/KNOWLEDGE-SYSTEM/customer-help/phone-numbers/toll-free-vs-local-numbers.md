@@ -12,7 +12,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md
   - config/billing.config.ts
   - MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md
-last_verified: 2026-06-09
+last_verified: 2026-06-10
 related:
   - remove-a-number
   - restore-a-removed-number
@@ -59,6 +59,8 @@ For either type, **calls and texting can become ready at different times.** A
 number can start handling calls while its texting is still going through approval.
 Texting to patients only turns on after the required approval and configuration
 are complete — it is never enabled automatically just because a number was added.
+Each assigned number has its own **Texting** status, so two numbers on the same
+account can be at different stages.
 See
 [Why SMS is not active immediately](../sms-approval/why-sms-is-not-active-immediately.md).
 
@@ -79,8 +81,10 @@ See
 
 - Your account decides the number type, whether it is included or a paid add-on,
   and the price — you do not have to work this out yourself.
-- A local number will show as **waiting for approval** for texting until SMS
-  approval is complete.
+- A local number may show **Waiting for A2P approval** until local SMS approval is
+  complete.
+- A toll-free number may show **Toll-free verification pending** until toll-free
+  verification is confirmed for that number.
 - You can hold more than one business number on your account, up to your account's
   limit. If you need more, contact support.
 

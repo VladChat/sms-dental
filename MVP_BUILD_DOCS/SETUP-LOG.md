@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-05-26
+Last updated: 2026-06-10
 
 This log records what was done, in order, without storing secrets.
 
@@ -5501,6 +5501,67 @@ Safety confirmation:
 - No mock Campaign was created.
 - No phone numbers were attached.
 - SMS recovery / patient SMS was not enabled.
+
+---
+
+## 2026-06-10 — Per-phone-number texting status source of truth
+
+Implemented a per-number texting approval/capability model so owner Account →
+Phone numbers can show different Texting statuses for different assigned numbers.
+
+What changed:
+
+- New migration `supabase/migrations/20260613000200_per_number_texting_status.sql`
+  adds `clinic_phone_numbers.texting_status`, `texting_status_source`, and
+  `texting_status_updated_at` with allowed statuses `preparing`,
+  `waiting_for_approval`, `active`, and `failed`.
+- Owner `/account?section=phone` summary mapping now reads each phone row's own
+  texting status. Legacy fallback is local-only from `clinics.sms_status`; toll-free
+  fallback stays `waiting_for_approval`.
+- `AssignedNumberCard` no longer receives one global `smsStatus` for every row.
+  It renders Texting from the number's own status, while scheduled or inactive
+  numbers display **Not active** regardless of stored approval status.
+- Future owner purchases, admin existing-number assignment, and detached-row
+  reassignment default to `waiting_for_approval` with source
+  `assignment_default`, preventing stale approval from following a number into a
+  new assignment.
+- Added `updatePhoneNumberTextingStatus(...)`, scoped to texting status fields only
+  (no routing, billing, removal, Twilio release, or provider side effects).
+- Updated operations docs and Knowledge System customer/support/admin articles for
+  the per-number model.
+
+Backfill behavior:
+
+- Existing local rows may derive initial `texting_status` from `clinics.sms_status`
+  where the row still has the default `waiting_for_approval` / `system` values.
+- Existing toll-free rows are not automatically marked active. They remain
+  `waiting_for_approval` until a reliable number-specific Twilio/operator
+  verification source confirms approval.
+
+Future behavior:
+
+- Future local numbers default to waiting unless an existing reliable local/A2P
+  success transition has already covered that number. No such reliable active
+  transition was found in the current codebase, so none was invented.
+- Future toll-free numbers default to waiting until toll-free verification is
+  confirmed for that specific number.
+
+Validation:
+
+- `git diff --check` pass.
+- `npm run typecheck` pass.
+- `npm run test:phone-numbers` pass (21/21).
+- `npm run test:a2p` pass (64 passing assertions).
+- `npm run build` pass.
+- `npm run lint` not run: no `lint` script exists in `package.json`.
+
+Migration status: not applied to production in this task.
+
+Side effects avoided: no SMS sent, no `sms_recovery_enabled` change, no
+`SMS_RECOVERY_MODE` change, no call-routing change, no billing change, no
+Twilio/Stripe/provider mutation, no secrets printed or committed.
+
+Commit: this change set (`Fix per-number texting status display`).
 
 ---
 

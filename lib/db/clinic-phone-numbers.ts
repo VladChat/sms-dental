@@ -1,5 +1,23 @@
 import { getDb } from "./client";
 
+export const PHONE_NUMBER_TEXTING_STATUSES = [
+  "preparing",
+  "waiting_for_approval",
+  "active",
+  "failed",
+] as const;
+
+export type PhoneNumberTextingStatus = (typeof PHONE_NUMBER_TEXTING_STATUSES)[number];
+
+export function isPhoneNumberTextingStatus(
+  value: unknown,
+): value is PhoneNumberTextingStatus {
+  return (
+    typeof value === "string" &&
+    (PHONE_NUMBER_TEXTING_STATUSES as readonly string[]).includes(value)
+  );
+}
+
 export type ClinicPhoneNumberRow = {
   id: string;
   clinic_id: string;
@@ -43,6 +61,9 @@ export type ClinicPhoneNumberRow = {
   twilio_released_at: Date | null;
   twilio_release_status: "not_required" | "pending" | "released" | "failed";
   twilio_release_error: string | null;
+  texting_status: PhoneNumberTextingStatus;
+  texting_status_source: string;
+  texting_status_updated_at: Date;
 };
 
 /**
@@ -113,6 +134,38 @@ export async function markPhoneNumberReleased(phoneNumberId: string): Promise<vo
 }
 
 /**
+ * Update only the per-number texting approval/capability fields. This helper is
+ * intentionally scoped away from routing, lifecycle, billing, and Twilio release
+ * columns so an approval/status correction cannot change call behavior.
+ */
+export async function updatePhoneNumberTextingStatus(params: {
+  phoneNumberId: string;
+  clinicId?: string | null;
+  status: PhoneNumberTextingStatus;
+  source: string;
+}): Promise<ClinicPhoneNumberRow | null> {
+  if (!isPhoneNumberTextingStatus(params.status)) {
+    throw new Error(`Invalid phone-number texting status: ${String(params.status)}`);
+  }
+  const source = params.source.trim();
+  if (!source) {
+    throw new Error("Phone-number texting status source is required");
+  }
+
+  const sql = getDb();
+  const rows = await sql<ClinicPhoneNumberRow[]>`
+    update public.clinic_phone_numbers set
+      texting_status = ${params.status},
+      texting_status_source = ${source},
+      texting_status_updated_at = now()
+    where id = ${params.phoneNumberId}
+      and (${params.clinicId ?? null}::uuid is null or clinic_id = ${params.clinicId ?? null}::uuid)
+    returning *
+  `;
+  return rows[0] ?? null;
+}
+
+/**
  * Returns the active office texting number for the clinic, if any.
  * Used to enforce idempotent purchase at the clinic level.
  */
@@ -167,16 +220,22 @@ export async function upsertOfficeTextingNumber(params: {
   const sql = getDb();
   const rows = await sql<ClinicPhoneNumberRow[]>`
     insert into public.clinic_phone_numbers
-      (clinic_id, phone_number, twilio_phone_number_sid, role, is_active, twilio_purchased_at)
+      (clinic_id, phone_number, twilio_phone_number_sid, role, is_active,
+       twilio_purchased_at, texting_status, texting_status_source,
+       texting_status_updated_at)
     values
       (${params.clinicId}, ${params.phoneNumber}, ${params.twilioPhoneNumberSid},
-       'office_texting', true, now())
+       'office_texting', true, now(), 'waiting_for_approval',
+       'assignment_default', now())
     on conflict (phone_number)
     do update set
       clinic_id = excluded.clinic_id,
       twilio_phone_number_sid = excluded.twilio_phone_number_sid,
       role = excluded.role,
       is_active = true,
+      texting_status = 'waiting_for_approval',
+      texting_status_source = 'assignment_default',
+      texting_status_updated_at = now(),
       -- Safe fallback billing anchor: keep an existing value, else stamp now().
       twilio_purchased_at = coalesce(public.clinic_phone_numbers.twilio_purchased_at, now()),
       removal_status = 'active',

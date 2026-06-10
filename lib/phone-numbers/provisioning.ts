@@ -562,7 +562,8 @@ export async function provisionClinicPhoneNumber(
            purchased_by_profile_id, purchased_by_email, activated_at,
            twilio_address_sid, twilio_emergency_address_sid,
            twilio_emergency_address_status, twilio_address_configured_at,
-           twilio_purchased_at)
+           twilio_purchased_at, texting_status, texting_status_source,
+           texting_status_updated_at)
         values
           (${clinicId}, ${purchasedNumber}, ${numberType}, ${sid}, 'office_texting', true,
            ${source}, 'included', 0, ${billingConfig.currency},
@@ -570,13 +571,17 @@ export async function provisionClinicPhoneNumber(
            ${twilioAddressSid}, ${twilioEmergencyAddressSid},
            ${twilioEmergencyAddressStatus},
            ${twilioAddressConfiguredAt},
-           ${twilioPurchasedAt})
+           ${twilioPurchasedAt}, 'waiting_for_approval', 'assignment_default',
+           now())
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
           number_type = excluded.number_type,
           twilio_phone_number_sid = excluded.twilio_phone_number_sid,
           role = 'office_texting',
           is_active = true,
+          texting_status = 'waiting_for_approval',
+          texting_status_source = 'assignment_default',
+          texting_status_updated_at = now(),
           source = excluded.source,
           billing_class = excluded.billing_class,
           monthly_unit_amount_cents = excluded.monthly_unit_amount_cents,
@@ -736,7 +741,8 @@ async function assignLocalNumber(args: {
            purchased_by_profile_id, purchased_by_email, activated_at,
            twilio_address_sid, twilio_emergency_address_sid,
            twilio_emergency_address_status, twilio_address_configured_at,
-           twilio_purchased_at)
+           twilio_purchased_at, texting_status, texting_status_source,
+           texting_status_updated_at)
         values
           (${clinicId}, ${purchasedNumber}, 'local', ${sid}, 'office_texting', true,
            ${source}, 'additional', ${amount}, ${billingConfig.currency},
@@ -744,13 +750,17 @@ async function assignLocalNumber(args: {
            ${twilioAddressSid}, ${twilioEmergencyAddressSid},
            ${twilioEmergencyAddressStatus},
            ${twilioAddressConfiguredAt},
-           ${twilioPurchasedAt})
+           ${twilioPurchasedAt}, 'waiting_for_approval', 'assignment_default',
+           now())
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
           number_type = excluded.number_type,
           twilio_phone_number_sid = excluded.twilio_phone_number_sid,
           role = 'office_texting',
           is_active = true,
+          texting_status = 'waiting_for_approval',
+          texting_status_source = 'assignment_default',
+          texting_status_updated_at = now(),
           source = excluded.source,
           billing_class = excluded.billing_class,
           monthly_unit_amount_cents = excluded.monthly_unit_amount_cents,
@@ -949,7 +959,8 @@ async function assignAdditionalNumber(args: {
            purchased_by_profile_id, purchased_by_email, activated_at,
            twilio_address_sid, twilio_emergency_address_sid,
            twilio_emergency_address_status, twilio_address_configured_at,
-           twilio_purchased_at)
+           twilio_purchased_at, texting_status, texting_status_source,
+           texting_status_updated_at)
         values
           (${clinicId}, ${purchasedNumber}, ${numberType}, ${sid}, 'office_texting', true,
            ${source}, 'additional', ${amount}, ${billingConfig.currency},
@@ -957,13 +968,17 @@ async function assignAdditionalNumber(args: {
            ${twilioAddressSid}, ${twilioEmergencyAddressSid},
            ${twilioEmergencyAddressStatus},
            ${twilioAddressConfiguredAt},
-           ${twilioPurchasedAt})
+           ${twilioPurchasedAt}, 'waiting_for_approval', 'assignment_default',
+           now())
         on conflict (phone_number) do update set
           clinic_id = excluded.clinic_id,
           number_type = excluded.number_type,
           twilio_phone_number_sid = excluded.twilio_phone_number_sid,
           role = 'office_texting',
           is_active = true,
+          texting_status = 'waiting_for_approval',
+          texting_status_source = 'assignment_default',
+          texting_status_updated_at = now(),
           source = excluded.source,
           billing_class = excluded.billing_class,
           monthly_unit_amount_cents = excluded.monthly_unit_amount_cents,

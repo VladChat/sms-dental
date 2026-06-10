@@ -5,6 +5,7 @@ import { lookupSetupRequestByRawToken } from "../../lib/onboarding/verify";
 import { findClinicById } from "../../lib/db/clinics";
 import {
   listClinicPhoneNumbersForClinic,
+  isPhoneNumberTextingStatus,
   type ClinicPhoneNumberRow,
 } from "../../lib/db/clinic-phone-numbers";
 import { getNumberEntitlement } from "../../lib/billing/number-entitlements";
@@ -20,8 +21,10 @@ import { BusinessProfile, type BusinessProfileData } from "../setup/[token]/_com
 import type {
   AssignedBusinessNumberSummary,
   OwnerNumberEntitlement,
+  PhoneNumberTextingStatus,
   PaymentMethodSetupResult,
   PaymentMethodSummary,
+  SmsStatus,
 } from "../setup/[token]/_components/account-types";
 import { PageShell } from "../setup/[token]/_components/PageShell";
 import { phoneAreaCode } from "../../lib/twilio/numbers";
@@ -77,7 +80,24 @@ function buildBilling(
   };
 }
 
-function toAssignedSummary(row: ClinicPhoneNumberRow): AssignedBusinessNumberSummary {
+function textingStatusForSummary(
+  row: ClinicPhoneNumberRow,
+  clinicSmsStatus: SmsStatus,
+): PhoneNumberTextingStatus {
+  if (isPhoneNumberTextingStatus(row.texting_status)) return row.texting_status;
+  const numberType = row.number_type === "toll_free" ? "toll_free" : "local";
+
+  // Legacy/pre-migration safety: clinic-level sms_status is a local/A2P
+  // workflow approximation only. Never let it make a toll-free number appear
+  // active; toll-free verification must be recorded on the number row itself.
+  if (numberType === "local") return clinicSmsStatus;
+  return "waiting_for_approval";
+}
+
+function toAssignedSummary(
+  row: ClinicPhoneNumberRow,
+  clinicSmsStatus: SmsStatus,
+): AssignedBusinessNumberSummary {
   return {
     id: row.id,
     phoneNumber: row.phone_number,
@@ -85,6 +105,7 @@ function toAssignedSummary(row: ClinicPhoneNumberRow): AssignedBusinessNumberSum
     numberType: row.number_type === "toll_free" ? "toll_free" : "local",
     role: row.role,
     isActive: row.is_active,
+    textingStatus: textingStatusForSummary(row, clinicSmsStatus),
     billingClass: row.billing_class,
     createdAt: row.created_at ? row.created_at.toISOString() : null,
     // Detached rows are excluded from owner lists upstream; coerce defensively so
@@ -181,7 +202,7 @@ export default async function AccountPage({
     const clinic = access.clinic;
     const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
     const assignedRows = await listClinicPhoneNumbersForClinic(clinic.id).catch(() => []);
-    const assignedNumbers = assignedRows.map(toAssignedSummary);
+    const assignedNumbers = assignedRows.map((row) => toAssignedSummary(row, clinic.sms_status));
     const entitlement = await loadOwnerEntitlement(clinic.id, assignedNumbers);
 
     const memberships = await listActiveMembershipsForClinic(clinic.id).catch(() => []);
@@ -254,7 +275,7 @@ export default async function AccountPage({
   }
   const publicBaseUrl = getAppDomainsSafe()?.appBaseUrl ?? "";
   const assignedRows = await listClinicPhoneNumbersForClinic(clinic.id).catch(() => []);
-  const assignedNumbers = assignedRows.map(toAssignedSummary);
+  const assignedNumbers = assignedRows.map((row) => toAssignedSummary(row, clinic.sms_status));
   const entitlement = await loadOwnerEntitlement(clinic.id, assignedNumbers);
 
   const data = buildData({

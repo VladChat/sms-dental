@@ -1,7 +1,7 @@
 # 07 — Content Inventory
 
 Status: active (customer-help complete and ready; platform-admin + support-runbooks verified internal)
-Last updated: 2026-06-09
+Last updated: 2026-06-10
 
 The working list of current and future Knowledge System articles. Update this
 table whenever an article is added, changed, or its status/visibility changes
@@ -20,7 +20,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | CH-03 | Why SMS is not active immediately | customer-help/sms-approval | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, BILLING-AND-USAGE-POLICY.md, config/runtime.config.ts, AGENTS.md | /account | Texting is a separate step from number setup; cross-listed in getting-started |
 | CH-04 | What SMS approval means | customer-help/sms-approval | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, AGENTS.md | /account | "SMS approval" customer term; A2P kept internal |
 | CH-05 | What information is needed for SMS approval | customer-help/sms-approval | clinic_owner | ready | SMS-APPROVAL-FIELD-MAPPING.md, A2P-10DLC-COMPLIANCE-READINESS.md, AGENTS.md | /account | Only customer-entered fields; Business Profile vs SMS Approval Information |
-| CH-06 | Toll-free vs local numbers | customer-help/phone-numbers | clinic_owner | ready | AGENTS.md, BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, A2P-10DLC-COMPLIANCE-READINESS.md | /account | Customer-relevant differences; prices cited from canonical files |
+| CH-06 | Toll-free vs local numbers | customer-help/phone-numbers | clinic_owner | ready | AGENTS.md, BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, A2P-10DLC-COMPLIANCE-READINESS.md | /account | Customer-relevant differences; per-number texting readiness; prices cited from canonical files |
 | CH-07 | Remove a number | customer-help/phone-numbers | clinic_owner | ready | AGENTS.md (lifecycle), BILLING-AND-USAGE-POLICY.md | /account | "Remove", never "Release"; stops service immediately; next-cycle billing |
 | CH-08 | Restore a removed number | customer-help/phone-numbers | clinic_owner | ready | AGENTS.md (lifecycle), BILLING-AND-USAGE-POLICY.md | /account | Only before permanent removal; restore alone does not enable texting |
 | CH-09 | Understand your bill | customer-help/billing | clinic_owner | ready | config/billing.config.ts, BILLING-AND-USAGE-POLICY.md, AGENTS.md | /account | Base plan + included usage + add-ons; amounts from canonical files |
@@ -31,7 +31,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | CH-14 | Contact support | customer-help/troubleshooting | customer_authenticated | ready | README.md, OWNER-SETTINGS.md, config/runtime.config.ts | /account, /workspace | What to include / what not to send; support@missedcallsdental.com |
 | CH-15 | Local vs toll-free charges | customer-help/billing | clinic_owner | ready | config/billing.config.ts, BILLING-AND-USAGE-POLICY.md, AGENTS.md | /account | Toll-free vs local billing models; first toll-free included; local fees |
 | CH-16 | Front-desk workspace overview | customer-help/workspace | clinic_staff | ready | FRONT-DESK-WORKSPACE.md, AUTH-AND-ACCESS-CONTROL.md | /workspace | What staff can/can't see; request cards; statuses; samples; "not provided yet" |
-| CH-17 | My texting isn't working yet | customer-help/troubleshooting | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, BILLING-AND-USAGE-POLICY.md, PROJECT-CONTEXT.md, config/runtime.config.ts | /account | Texting activation is separate from number/billing; what to check; no instant activation |
+| CH-17 | My texting isn't working yet | customer-help/troubleshooting | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, BILLING-AND-USAGE-POLICY.md, PROJECT-CONTEXT.md, OPERATIONS-RUNBOOK.md, config/runtime.config.ts | /account | Texting activation is per number and separate from number/billing; what to check; no instant activation |
 | CH-18 | I can't sign in | customer-help/troubleshooting | customer_authenticated | ready | AUTH-AND-ACCESS-CONTROL.md, FRONT-DESK-WORKSPACE.md, config/runtime.config.ts | /account, /workspace | Right email/area, password reset, staff access via owner; never send password |
 | CH-19 | Understanding patient request statuses | customer-help/workspace | clinic_staff | ready | FRONT-DESK-WORKSPACE.md, PROJECT-CONTEXT.md, OPERATIONS-RUNBOOK.md | /workspace | Status meanings; "not provided yet"; what not to assume; no medical advice |
 
@@ -41,7 +41,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 |---|---|---|---|---|---|---|---|
 | PA-01 | Platform admin console overview | platform-admin/README.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md, AUTH-AND-ACCESS-CONTROL.md | /admin | Index; roles (admin vs owner vs front desk); redaction; SoT map |
 | PA-02 | Clinic console tabs and responsibilities | platform-admin/clinic-console.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §4/§15–22, AUTH-AND-ACCESS-CONTROL.md | /admin | Editable super-admin console; implemented vs blocked/future |
-| PA-03 | Phone number lifecycle: active, suspended, scheduled removal, permanently removed, detached | platform-admin/phone-number-lifecycle.md | platform_admin | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, OPERATIONS-RUNBOOK.md, PLATFORM-ADMIN-CONSOLE-PLAN.md | /admin | All states + operations table; customer-safe vs internal |
+| PA-03 | Phone number lifecycle: active, suspended, scheduled removal, permanently removed, detached | platform-admin/phone-number-lifecycle.md | platform_admin | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, OPERATIONS-RUNBOOK.md, PLATFORM-ADMIN-CONSOLE-PLAN.md | /admin | All states + operations table; per-number texting status; customer-safe vs internal |
 | PA-04 | Suspend vs detach vs remove | platform-admin/phone-number-lifecycle.md | platform_admin | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, PLATFORM-ADMIN-CONSOLE-PLAN.md | /admin | Distinct operations; do not conflate (see lifecycle table) |
 | PA-05 | A2P review and submission safety gates | platform-admin/a2p-review-and-submission.md | platform_admin | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, config/runtime.config.ts, AGENTS.md | /admin | Field split; review package; live submit billable/allowlisted/gated |
 | PA-06 | Billing operations and quantity sync | platform-admin/billing-operations.md | platform_admin | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | /admin | No secrets/price IDs; support-explainable vs operator review |
@@ -55,7 +55,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 
 | ID | Title | Folder | Visibility | Status | Source of truth | Surface | Notes |
 |---|---|---|---|---|---|---|---|
-| RB-01 | SMS not sending | support-runbooks/sms-not-sending.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, OPERATIONS-RUNBOOK.md, AGENTS.md | support | 12-section; gate-by-gate triage; customer-safe summary |
+| RB-01 | SMS not sending | support-runbooks/sms-not-sending.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, OPERATIONS-RUNBOOK.md, AGENTS.md | support | Gate-by-gate triage including per-number texting status; customer-safe summary |
 | RB-02 | Number removal / restore / detach question | support-runbooks/number-removal-restore-detach.md | internal_ops | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, OPERATIONS-RUNBOOK.md | support | 12-section; customer vs admin operations; next-cycle billing |
 | RB-03 | Billing question | support-runbooks/billing-question.md | internal_ops | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | support | 12-section; current vs next cycle; no proration; no refund promise |
 | RB-04 | A2P approval question | support-runbooks/a2p-approval-question.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, config/runtime.config.ts | support | 12-section; "SMS approval" wording; no exact-date promise |
