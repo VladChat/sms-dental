@@ -77,6 +77,13 @@ export type AdminClinicPhoneNumber = {
   textingProviderErrorCode: string | null;
   textingProviderErrorMessage: string | null;
   textingProviderSyncedAt: string | null;
+  // Per-number SMS send readiness, computed with the same evaluation the
+  // live-send guard uses (auditSmsSendReadiness). Nulls mean the audit could
+  // not run (e.g. readiness migration missing) — treat as blocked/unknown.
+  messagingServiceCoverage: string | null;
+  readinessLastSyncedAt: string | null;
+  numberReady: boolean;
+  sendBlockingReason: string | null;
 };
 
 export type AdminSmsReadinessNumber = {

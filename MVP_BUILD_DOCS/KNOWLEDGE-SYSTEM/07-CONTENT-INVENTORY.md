@@ -57,7 +57,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 
 | ID | Title | Folder | Visibility | Status | Source of truth | Surface | Notes |
 |---|---|---|---|---|---|---|---|
-| RB-01 | SMS not sending | support-runbooks/sms-not-sending.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, OPERATIONS-RUNBOOK.md, AGENTS.md | support | Gate-by-gate triage including per-number texting status, read-only sync, provider diagnostics; customer-safe summary |
+| RB-01 | SMS not sending | support-runbooks/sms-not-sending.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, OPERATIONS-RUNBOOK.md, AGENTS.md | support | Gate-by-gate triage including per-number texting status, Messaging Service sender coverage (both number types), read-only sync, provider diagnostics, persisted delivery status; customer-safe summary |
 | RB-02 | Number removal / restore / detach question | support-runbooks/number-removal-restore-detach.md | internal_ops | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, OPERATIONS-RUNBOOK.md | support | 12-section; customer vs admin operations; next-cycle billing |
 | RB-03 | Billing question | support-runbooks/billing-question.md | internal_ops | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | support | 12-section; regular/AI/SMS plan terms; current vs next cycle; no refund promise |
 | RB-04 | A2P approval question | support-runbooks/a2p-approval-question.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, config/runtime.config.ts | support | 12-section; "SMS approval" wording; no exact-date promise |

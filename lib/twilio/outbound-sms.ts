@@ -1,5 +1,5 @@
 import { getTwilioClient } from "./client";
-import { getTwilioMessagingEnv, getSmsRecoveryConfig } from "../env";
+import { getTwilioMessagingEnv, getSmsRecoveryConfig, getAppDomainsSafe } from "../env";
 import { getDb } from "../db/client";
 import {
   hasSentRecoverySmsSince,
@@ -7,6 +7,11 @@ import {
 } from "../db/messages";
 import { touchConversation } from "../db/conversations";
 import { evaluateSmsReadinessForLiveSend } from "../db/sms-readiness";
+import {
+  buildMissedCallRecoverySmsBody,
+  getDuplicateSuppressionWindowMs,
+} from "../sms-recovery/templates";
+import { normalizePhone } from "../phone/normalize";
 import { logger } from "../logging/logger";
 
 export type SendRecoverySmsInput = {
@@ -89,33 +94,48 @@ export async function sendRecoverySms(
     return { sent: false, reason: "opted_out" };
   }
 
-  // Guard 5: duplicate suppression — no repeat SMS within 24 hours.
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // Guard 5: duplicate suppression — no repeat SMS within the configured window.
+  const suppressionStart = new Date(Date.now() - getDuplicateSuppressionWindowMs());
   const alreadySent = await hasSentRecoverySmsSince(
     input.clinic.id,
     input.patientPhone,
-    oneDayAgo,
+    suppressionStart,
   );
   if (alreadySent) {
     logger.info("twilio.sms.skipped_duplicate", { clinicId: input.clinic.id });
     return { sent: false, reason: "duplicate_suppressed" };
   }
 
-  // All guards passed. Build message body.
-  const body = `Hi, this is ${input.clinic.name}. We missed your call. Would you like us to help schedule an appointment?`;
+  // All guards passed. Build the fixed, compliance-reviewed message body.
+  const body = buildMissedCallRecoverySmsBody(input.clinic.name);
 
   const { TWILIO_MESSAGING_SERVICE_SID } = getTwilioMessagingEnv();
   const client = getTwilioClient();
+
+  // Per-message delivery status callback (in addition to the Messaging Service
+  // level callback) so message rows can be updated even if the service-level
+  // setting is ever lost.
+  const appBaseUrl = getAppDomainsSafe()?.appBaseUrl;
+  const statusCallback = appBaseUrl
+    ? `${appBaseUrl}/api/webhooks/twilio/messaging/status`
+    : undefined;
 
   let messageSid: string;
   let messageStatus: string;
   let messageFrom: string;
 
   try {
+    // `from` + `messagingServiceSid` together pin the sender to the EXACT number
+    // the patient called, while keeping Messaging Service features (opt-out
+    // handling, callbacks). Twilio rejects the send (error 21712) if this number
+    // is not in the service's sender pool — fail closed, never another clinic's
+    // number.
     const msg = await client.messages.create({
       body,
       to: input.patientPhone,
+      from: input.twilioPhone,
       messagingServiceSid: TWILIO_MESSAGING_SERVICE_SID,
+      ...(statusCallback ? { statusCallback } : {}),
     });
     messageSid = msg.sid;
     messageStatus = msg.status as string;
@@ -128,6 +148,21 @@ export async function sendRecoverySms(
     return { sent: false, reason: "twilio_send_error" };
   }
 
+  // Record the ACTUAL sender Twilio used. A mismatch with the expected number
+  // is a serious diagnostic problem (wrong clinic identity on the SMS) — log it
+  // loudly for the operator. The message has already left, so this cannot be
+  // blocked here; the guard above makes it practically unreachable.
+  const senderMismatch =
+    normalizePhone(messageFrom) !== normalizePhone(input.twilioPhone);
+  if (senderMismatch) {
+    logger.error("twilio.sms.sender_mismatch", {
+      clinicId: input.clinic.id,
+      messageSid,
+      expectedFrom: input.twilioPhone,
+      actualFrom: messageFrom,
+    });
+  }
+
   // Record send in messages table (non-fatal on failure).
   try {
     await recordOutboundMessage({
@@ -138,7 +173,14 @@ export async function sendRecoverySms(
       toNumber: input.patientPhone,
       body,
       status: messageStatus,
-      rawPayload: { sid: messageSid, status: messageStatus, to: input.patientPhone },
+      rawPayload: {
+        sid: messageSid,
+        status: messageStatus,
+        to: input.patientPhone,
+        from: messageFrom,
+        expected_from: input.twilioPhone,
+        sender_mismatch: senderMismatch,
+      },
     });
     if (input.conversationId) {
       await touchConversation(input.conversationId);

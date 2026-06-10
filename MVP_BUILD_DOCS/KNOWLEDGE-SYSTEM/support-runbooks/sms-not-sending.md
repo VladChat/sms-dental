@@ -52,19 +52,27 @@ Work the gates in order in `/admin` (use the console, not raw SQL):
 3. **Per-number texting status** — for the called / assigned business number, is
    `clinic_phone_numbers.texting_status='active'`, and is the number still
    `is_active=true` with `removal_status='active'`?
-4. **Fresh status sync** — if provider approval looks complete but the local row
-   is pending, run the admin **Run readiness sync** action once. It uses the same
-   read-only sync as the cron. Check provider status / error / last synced fields
-   on the phone-number card before escalating.
-5. **Per-clinic enablement** — is SMS recovery enabled for the clinic
+4. **Messaging Service coverage (both number types)** — the phone-number card shows
+   a **Ready to send SMS** row and a **Messaging Service** row. A toll-free number
+   with approved verification still cannot send until it is in the Messaging
+   Service sender pool with fresh readiness data; local numbers also need campaign
+   coverage. The blocking reason on the card is the same one the live-send guard
+   returns.
+5. **Fresh status sync** — if provider approval looks complete but the local row
+   is pending or stale, run the admin **Run readiness sync** action once. It uses
+   the same read-only sync as the cron. Check provider status / error / last
+   synced fields on the phone-number card before escalating.
+6. **Per-clinic enablement** — is SMS recovery enabled for the clinic
    (`sms_recovery_enabled`)? Safe default is off.
-6. **Ops mode** — is `SMS_RECOVERY_MODE=live` (or the clinic in the current
+7. **Ops mode** — is `SMS_RECOVERY_MODE=live` (or the clinic in the current
    test-mode allowlist)?
-7. **Opt-out** — did the specific patient reply STOP?
-8. **Duplicate suppression** — was a recovery SMS already sent to that patient in the
+8. **Opt-out** — did the specific patient reply STOP?
+9. **Duplicate suppression** — was a recovery SMS already sent to that patient in the
    last 24 hours?
-9. **Carrier filtering** — possible for an unverified/unregistered number even when
-   gates look correct.
+10. **Carrier filtering** — possible for an unverified/unregistered number even when
+    gates look correct. Delivery outcomes are now persisted on the outbound message
+    row (status + provider error code) by the status callback, so check the message
+    record before assuming carrier filtering.
 
 ## What not to expose to the customer
 

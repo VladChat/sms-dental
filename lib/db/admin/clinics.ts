@@ -2,7 +2,12 @@ import { getDb } from "../client";
 import {
   listActiveMembershipsForClinic,
 } from "../clinic-memberships";
-import { getSmsReadinessSummary } from "../sms-readiness";
+import {
+  auditSmsSendReadiness,
+  getSmsReadinessSummary,
+  type SmsSendReadinessAuditRow,
+} from "../sms-readiness";
+import { getSmsRecoveryConfig } from "../../env";
 import { listProfilesByIds } from "../profiles";
 import {
   maskPhone,
@@ -224,7 +229,24 @@ export async function getAdminClinicDetail(
       and removal_status <> 'detached'
     order by is_active desc, created_at asc
   `.catch(() => []);
-  const phoneNumbers: AdminClinicPhoneNumber[] = phoneRows.map((p) => ({
+  // Per-number send readiness — the same evaluation the live-send guard uses,
+  // so the operator view cannot disagree with enforcement. Resilient: when the
+  // audit cannot run (e.g. readiness tables missing) every number reads as
+  // blocked/unknown rather than ready.
+  const sendAuditByPhoneId = new Map<string, SmsSendReadinessAuditRow>();
+  try {
+    const auditRows = await auditSmsSendReadiness({
+      clinicId,
+      smsRecoveryMode: getSmsRecoveryConfig().mode,
+    });
+    for (const row of auditRows) sendAuditByPhoneId.set(row.phoneNumberId, row);
+  } catch {
+    // leave the map empty — UI shows "readiness unavailable" / blocked.
+  }
+
+  const phoneNumbers: AdminClinicPhoneNumber[] = phoneRows.map((p) => {
+    const audit = sendAuditByPhoneId.get(p.id) ?? null;
+    return {
     id: p.id,
     phoneMasked: maskPhone(p.phone_number),
     phoneE164: p.phone_number,
@@ -249,7 +271,14 @@ export async function getAdminClinicDetail(
     textingProviderErrorCode: p.texting_provider_error_code,
     textingProviderErrorMessage: p.texting_provider_error_message,
     textingProviderSyncedAt: p.texting_provider_synced_at ? p.texting_provider_synced_at.toISOString() : null,
-  }));
+    messagingServiceCoverage: audit?.messagingServiceSenderStatus ?? null,
+    readinessLastSyncedAt: audit?.readinessLastSyncedAt ?? null,
+    numberReady: audit?.numberReady ?? false,
+    sendBlockingReason: audit
+      ? audit.blockingReason
+      : "sms_readiness_audit_unavailable",
+    };
+  });
 
   // Recent purchase attempts (durable audit) + held-attempt count for the limit.
   const attemptRows = await sql<

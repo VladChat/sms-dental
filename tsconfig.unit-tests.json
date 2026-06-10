@@ -14,9 +14,17 @@
     "tests/twilio-release-deadline.test.ts",
     "tests/twilio-number-inventory.test.ts",
     "tests/texting-status-sync.test.ts",
+    "tests/sms-recovery-template.test.ts",
+    "tests/sms-live-send-evaluation.test.ts",
+    "tests/sms-message-status.test.ts",
+    "tests/sms-single-send-path.test.ts",
     "lib/phone-numbers/twilio-release-deadline.ts",
     "lib/phone-numbers/twilio-number-inventory.ts",
     "lib/texting-status/status-mapping.ts",
-    "config/texting-status-sync.config.ts"
+    "lib/sms-recovery/templates.ts",
+    "lib/sms-recovery/live-send-evaluation.ts",
+    "lib/sms-recovery/message-status.ts",
+    "config/texting-status-sync.config.ts",
+    "config/sms-recovery.config.ts"
   ]
 }

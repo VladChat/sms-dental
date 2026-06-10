@@ -7,6 +7,8 @@ import {
 } from "../db/clinic-phone-numbers";
 import { syncClinicSmsReadinessFromTwilio } from "../twilio/sms-readiness-sync";
 import { readTollfreeVerificationForPhoneNumberSid } from "../twilio/tollfree-verification";
+import { readMessagingServiceSenderCoverage } from "../twilio/messaging-service-coverage";
+import { upsertNumberSmsReadiness } from "../db/sms-readiness";
 import { logger } from "../logging/logger";
 import {
   mapLocalReadinessToTextingStatus,
@@ -138,6 +140,7 @@ async function syncTollfreeRow(
       providerErrorCode: null,
       providerErrorMessage: null,
     });
+    await recordTollfreeMessagingServiceCoverage(row);
     countDecision(row, decision.textingStatus, summary);
   } catch (err) {
     summary.failed += 1;
@@ -149,6 +152,48 @@ async function syncTollfreeRow(
       providerErrorMessage: safeMessage(err),
     });
     logger.warn("texting_status.sync.tollfree_failed", {
+      clinicId: row.clinic_id,
+      phoneNumberId: row.id,
+      message: safeMessage(err),
+    });
+  }
+}
+
+// Record read-only Messaging Service sender coverage for a TOLL-FREE number in
+// clinic_sms_number_readiness. Live SMS send and clinic launch require this row
+// to be fresh and 'covered' for toll-free numbers; missing/stale/errored rows
+// fail closed. A2P campaign coverage does not apply to toll-free numbers — the
+// column is recorded as 'unknown' and is never required for them.
+async function recordTollfreeMessagingServiceCoverage(
+  row: TextingStatusSyncPhoneNumberRow,
+): Promise<void> {
+  try {
+    const coverage = await readMessagingServiceSenderCoverage(row.twilio_phone_number_sid!);
+    await upsertNumberSmsReadiness(row.clinic_id, {
+      clinicPhoneNumberId: row.id,
+      phoneNumber: row.phone_number,
+      twilioPhoneNumberSid: row.twilio_phone_number_sid,
+      messagingServiceSid: coverage.messagingServiceSid,
+      messagingServiceSenderStatus: coverage.status,
+      a2pCampaignCoverageStatus: "unknown",
+      productionSafe: coverage.status === "covered",
+      launchBlockingReason:
+        coverage.status === "covered"
+          ? null
+          : coverage.status === "error"
+            ? "messaging_service_lookup_failed"
+            : "number_not_in_messaging_service",
+      statusSource: "read_only_sync",
+      lastSyncedAt: new Date(),
+      lastSyncErrorCode:
+        coverage.status === "error" ? "messaging_service_lookup_failed" : null,
+      lastSyncErrorMessage: coverage.status === "error" ? coverage.errorMessage : null,
+    });
+  } catch (err) {
+    // Coverage recording is diagnostics for the fail-closed send guard; a write
+    // failure must not abort the verification sync. The guard treats a missing/
+    // stale row as blocked, so failing here cannot open a send path.
+    logger.warn("texting_status.sync.tollfree_coverage_record_failed", {
       clinicId: row.clinic_id,
       phoneNumberId: row.id,
       message: safeMessage(err),

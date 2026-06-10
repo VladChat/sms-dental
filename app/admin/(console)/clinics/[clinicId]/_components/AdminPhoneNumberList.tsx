@@ -27,10 +27,69 @@ function textingLabel(p: AdminClinicPhoneNumber): string {
 
 function textingNextAction(p: AdminClinicPhoneNumber): string {
   if (!p.isActive || p.removalStatus !== "active") return "Reactivate or restore before texting can be live.";
-  if (p.textingStatus === "active") return "No action required.";
+  if (p.textingStatus === "active" && p.numberReady) return "No action required.";
   if (p.textingProviderErrorCode) return "Review provider error and run texting status sync again.";
+  if (p.sendBlockingReason === "number_not_in_messaging_service") {
+    return "Add this number to the Messaging Service sender pool in Twilio, then run readiness sync.";
+  }
+  if (
+    p.sendBlockingReason === "number_readiness_missing" ||
+    p.sendBlockingReason === "number_sms_readiness_stale"
+  ) {
+    return "Run readiness sync to refresh Messaging Service coverage.";
+  }
   if (p.numberType === "toll_free") return "Confirm toll-free verification in Twilio or wait for the next sync.";
   return "Run readiness sync after A2P and Messaging Service coverage are ready.";
+}
+
+// Human meaning for the per-number send readiness computed server-side with the
+// SAME logic as the live-send guard. Only "Ready to send SMS" means live send
+// would pass the exact-number checks (per-patient opt-out/duplicate guards and
+// the clinic/mode gates still apply at send time).
+function sendReadinessLabel(p: AdminClinicPhoneNumber): string {
+  if (p.numberReady) return "Ready to send SMS";
+  switch (p.sendBlockingReason) {
+    case "phone_number_not_active":
+      return "Number not active";
+    case "phone_number_texting_not_active":
+      return p.numberType === "toll_free"
+        ? "Waiting for Toll-Free Verification"
+        : "Waiting for A2P approval";
+    case "number_not_in_messaging_service":
+      return "Not in Messaging Service";
+    case "number_readiness_missing":
+      return "Readiness not synced yet";
+    case "number_sms_readiness_stale":
+      return "Stale readiness data";
+    case "number_sms_readiness_sync_error":
+    case "messaging_service_lookup_failed":
+      return "Provider sync error";
+    case "clinic_sms_readiness_missing":
+      return "Clinic readiness not synced";
+    case "sms_recovery_disabled_for_clinic":
+      return "SMS Recovery disabled for clinic";
+    case "sms_recovery_mode_not_live":
+      return "Live SMS mode is off";
+    case "sms_readiness_audit_unavailable":
+      return "Readiness data unavailable";
+    default:
+      return p.sendBlockingReason ? humanizeToken(p.sendBlockingReason) : "Blocked";
+  }
+}
+
+function coverageLabel(p: AdminClinicPhoneNumber): string {
+  switch (p.messagingServiceCoverage) {
+    case "covered":
+      return "In Messaging Service sender pool";
+    case "missing":
+      return "Not in Messaging Service";
+    case "error":
+      return "Coverage check error";
+    case "unknown":
+      return "Unknown — run readiness sync";
+    default:
+      return "Not synced yet";
+  }
 }
 
 // Client-side convenience gate for offering "Detach from clinic". The server
@@ -140,6 +199,11 @@ export function AdminPhoneNumberList({
                 <Row label="Texting status">
                   <Badge tone={textingTone(p)}>{textingLabel(p)}</Badge>
                 </Row>
+                <Row label="Ready to send SMS">
+                  <Badge tone={p.numberReady ? "success" : "warning"}>{sendReadinessLabel(p)}</Badge>
+                </Row>
+                <Row label="Messaging Service">{coverageLabel(p)}</Row>
+                <Row label="Readiness synced">{fmtDateTime(p.readinessLastSyncedAt)}</Row>
                 <Row label="Texting source"><span className="t-mono">{p.textingStatusSource}</span></Row>
                 <Row label="Texting updated">{fmtDateTime(p.textingStatusUpdatedAt)}</Row>
                 <Row label="Provider status">

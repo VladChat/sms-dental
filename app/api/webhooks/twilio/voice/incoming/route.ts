@@ -12,6 +12,7 @@ import { lookupClinicByPhoneIncludingScheduled, type ClinicRow } from "@/lib/db/
 import { upsertCallEvent } from "@/lib/db/call-events";
 import { hasSentRecoverySmsSince } from "@/lib/db/messages";
 import { evaluateSmsReadinessForLiveSend } from "@/lib/db/sms-readiness";
+import { getDuplicateSuppressionWindowMs } from "@/lib/sms-recovery/templates";
 import { getSmsRecoveryConfig } from "@/lib/env";
 import { logger } from "@/lib/logging/logger";
 
@@ -61,9 +62,9 @@ async function predictGreeting(
   `;
   if (optRows[0] && optRows[0].opted_back_in_at === null) return "none";
 
-  // Duplicate suppression window check (read-only).
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const alreadySent = await hasSentRecoverySmsSince(clinic.id, from, oneDayAgo);
+  // Duplicate suppression window check (read-only, same window as the sender).
+  const suppressionStart = new Date(Date.now() - getDuplicateSuppressionWindowMs());
+  const alreadySent = await hasSentRecoverySmsSince(clinic.id, from, suppressionStart);
   return alreadySent ? "duplicate" : "will_send";
 }
 

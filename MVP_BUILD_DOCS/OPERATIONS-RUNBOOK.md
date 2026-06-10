@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-10 (automatic phone-number texting-status sync)
+Last updated: 2026-06-10 (live SMS send hardening: exact sender, toll-free Messaging Service coverage, delivery-status persistence, operator audit)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -413,11 +413,15 @@ Default behavior (`SMS_RECOVERY_MODE` unset or `disabled`): **no SMS is ever sen
 
 ### SMS message template
 
+Fixed template (single source: `config/sms-recovery.config.ts`, built only by
+`lib/sms-recovery/templates.ts` — updated 2026-06-10):
+
 ```
-Hi, this is {{clinic_name}}. We missed your call. Would you like us to help schedule an appointment?
+Hi, this is {{clinic_name}}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.
 ```
 
-No AI mention. No urgency. No medical advice. No appointment promise.
+No AI mention. No urgency. No medical advice. No appointment promise. Includes
+explicit STOP opt-out language. Clinics cannot edit SMS copy in the MVP.
 
 ### Owner test setup
 
@@ -2673,6 +2677,93 @@ Failure behavior:
 - Twilio succeeds but DB activation fails: `reconciliation_required`; Twilio SID
   and local invoice marker are preserved.
 - Toll-free behavior is unchanged.
+
+---
+
+## Live SMS send hardening — operate & verify (2026-06-10)
+
+Production hardening of the single guarded recovery-SMS path. No SMS behavior
+was enabled; everything below makes the existing fail-closed path stricter and
+more observable.
+
+### Fixed SMS template (single source)
+
+- Template + send tunables live in `config/sms-recovery.config.ts`; the only
+  interpolation point is `lib/sms-recovery/templates.ts`
+  (`buildMissedCallRecoverySmsBody`). Do not format recovery SMS bodies anywhere
+  else.
+- Approved MVP text:
+  `Hi, this is {{clinic_name}}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.`
+- The builder sanitizes/truncates the clinic name, falls back to a neutral
+  identity when the name is blank, and enforces a max body length. Tests:
+  `npm run test:sms-recovery`.
+- Duplicate suppression window comes from
+  `smsRecoveryConfig.duplicateSuppressionHours` (24h) — used by both the sender
+  and the voice-greeting prediction.
+
+### Exact-sender send (Messaging Service + From)
+
+- `sendRecoverySms()` now calls Twilio with BOTH `messagingServiceSid` AND
+  `from = <the exact number the patient called>`. Twilio rejects the send with
+  error 21712 if that number is not in the Messaging Service sender pool, so the
+  send fails closed instead of silently using another clinic's sender.
+- The actual `msg.from` returned by Twilio is recorded on the message row
+  (`raw_payload.from` / `expected_from` / `sender_mismatch`); a mismatch logs
+  `twilio.sms.sender_mismatch` at error level — treat it as a serious diagnostic
+  problem.
+- Each send also sets a per-message `statusCallback` to
+  `/api/webhooks/twilio/messaging/status` (in addition to the Messaging Service
+  level callback).
+
+### Toll-free readiness now requires Messaging Service coverage
+
+- `texting_status='active'` (toll-free verification approved) is NOT enough to
+  send from a toll-free number anymore. The live-send guard and the admin launch
+  gate also require a fresh `clinic_sms_number_readiness` row for the exact
+  number with `messaging_service_sender_status='covered'` and no sync error.
+- The texting-status sync (cron + admin "Run readiness sync" + event-triggered)
+  records this row for toll-free numbers via a read-only per-number sender-pool
+  lookup. Local numbers keep the existing A2P readiness model (campaign coverage
+  required); toll-free numbers are never required to have campaign coverage.
+- Stable per-number blocking reasons (shared by guard, admin UI, audit):
+  `phone_number_not_active`, `phone_number_texting_not_active`,
+  `number_readiness_missing`, `number_sms_readiness_stale`,
+  `number_sms_readiness_sync_error`, `number_not_in_messaging_service`,
+  `number_not_campaign_covered`.
+
+### Delivery status persistence
+
+- `/api/webhooks/twilio/messaging/status` still records `webhook_events`
+  idempotently AND now updates the matching outbound `messages` row by
+  `twilio_message_sid` (status, `error_code`, `error_message`, `updated_at`).
+- Out-of-order/duplicate callbacks are safe: a later `sent` never overwrites
+  `delivered` (`lib/sms-recovery/message-status.ts`). A missing message row is
+  logged (`twilio.sms.status.message_row_missing`) and acked with 200 — Twilio
+  never receives an error for normal retries.
+
+### Operator readiness audit
+
+- `GET /api/admin/sms-readiness/audit[?clinic_id=<uuid>]` — platform-admin-only,
+  read-only (local DB only; no Twilio calls). One row per assigned number with
+  clinic, number type, Twilio PN SID, texting status, provider status/error,
+  Messaging Service coverage, A2P coverage (local), `numberReady`, `canSendSms`,
+  the first `blockingReason`, and last-synced timestamps. It uses the SAME
+  evaluation as the live-send guard, so the audit cannot disagree with
+  enforcement.
+- The admin clinic Phone-number card shows the same per-number result as
+  "Ready to send SMS" / "Messaging Service" / "Readiness synced" rows with a
+  type-aware next action.
+- Single-send-path enforcement is covered by a static test
+  (`tests/sms-single-send-path.test.ts`): `messages.create` may exist only in
+  `lib/twilio/outbound-sms.ts`, and `sendRecoverySms` may be called only from
+  the voice status webhook.
+
+### Future AI Call Assistant compatibility (naming only)
+
+- `config/sms-recovery.config.ts` defines the placeholder
+  `CallHandlingMode = "sms_only" | "ai_then_sms" | "transfer_only"` with
+  `CURRENT_CALL_HANDLING_MODE = "sms_only"`. Nothing reads the future values;
+  no AI voice runtime exists.
 
 ---
 

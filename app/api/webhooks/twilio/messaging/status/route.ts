@@ -6,17 +6,21 @@ import {
 } from "@/lib/twilio/request";
 import { verifyTwilioSignature } from "@/lib/twilio/signature";
 import { recordWebhookEvent } from "@/lib/db/webhook-events";
+import { updateOutboundMessageStatus } from "@/lib/db/messages";
 import { isDatabaseConfigured } from "@/lib/db/client";
 import { logger } from "@/lib/logging/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Twilio message status callback. Foundation behavior:
+// Twilio message status callback.
 //   - validate signature
 //   - parse form payload
-//   - log/record a webhook_event idempotently (one per (MessageSid, status))
-//   - return a 200 JSON ack (Twilio does not require TwiML on status callbacks)
+//   - record a webhook_event idempotently (one per (MessageSid, status))
+//   - update the matching outbound messages row (status + provider error),
+//     idempotently and without regressing a more advanced status
+//   - return a 200 JSON ack (Twilio does not require TwiML on status callbacks);
+//     normal provider retries never receive an error from this route
 export async function POST(request: NextRequest) {
   const url = reconstructTwilioWebhookUrl(request);
   const params = await readTwilioFormPayload(request);
@@ -44,6 +48,31 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       logger.error("twilio.sms.status.persist_failed", {
+        messageSid,
+        messageStatus,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+    }
+
+    // Update the outbound message row. Runs even when the webhook event was a
+    // duplicate — the helper is idempotent and never regresses a status. A
+    // missing row (e.g. a Twilio compliance auto-reply we never recorded) is
+    // logged and acknowledged, not an error to Twilio.
+    try {
+      const result = await updateOutboundMessageStatus({
+        twilioMessageSid: messageSid,
+        status: messageStatus,
+        errorCode: errorCode || null,
+        errorMessage: params.ErrorMessage || null,
+      });
+      if (!result.found) {
+        logger.info("twilio.sms.status.message_row_missing", {
+          messageSid,
+          messageStatus,
+        });
+      }
+    } catch (err) {
+      logger.error("twilio.sms.status.message_update_failed", {
         messageSid,
         messageStatus,
         message: err instanceof Error ? err.message : "unknown",
