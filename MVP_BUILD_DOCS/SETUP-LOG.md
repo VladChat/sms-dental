@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-10
+Last updated: 2026-06-10 (live SMS send hardening deployed)
 
 This log records what was done, in order, without storing secrets.
 
@@ -5929,3 +5929,86 @@ Not done:
 - Owner account UI could not be browser-verified because the agent did not have
   an authenticated owner/admin browser session; production DB state backing the UI
   was verified directly.
+
+---
+
+## 2026-06-10 — Live SMS send hardening deployed (exact sender, toll-free coverage, status persistence)
+
+Hardened the single guarded recovery-SMS path and deployed to production
+(Vercel project `sms-dental`, Supabase ref `qfjpvbvfvhbtebwivcdc`). No SMS
+behavior was enabled; everything is stricter/fail-closed plus new diagnostics.
+Operating reference: OPERATIONS-RUNBOOK "Live SMS send hardening — operate &
+verify (2026-06-10)".
+
+What changed (code):
+
+- Fixed SMS template centralized in `config/sms-recovery.config.ts` +
+  `lib/sms-recovery/templates.ts`; new approved copy ends with
+  "Reply STOP to opt out." Duplicate-suppression window now config-sourced.
+- `sendRecoverySms()` sends with BOTH `from=<exact called number>` AND
+  `messagingServiceSid`, so Twilio fails closed (21712) if the number is not in
+  the sender pool; actual `msg.from` recorded; mismatch logged as error. Added
+  per-message `statusCallback`.
+- Toll-free live send and admin launch now require a fresh
+  `clinic_sms_number_readiness` row with `messaging_service_sender_status='covered'`
+  (toll-free verification alone is no longer enough). The texting-status sync
+  writes that row via a read-only per-number sender-pool lookup.
+- `/api/webhooks/twilio/messaging/status` updates the outbound `messages` row
+  (status/error_code/error_message) idempotently, never regressing a more
+  advanced status.
+- New platform-admin audit `GET /api/admin/sms-readiness/audit` + per-number
+  "Ready to send SMS" / "Messaging Service" rows in the admin clinic console.
+- New test suite `npm run test:sms-recovery` (template, live-send evaluation,
+  status transitions, single-send-path static check).
+
+Confirmed production bug found and fixed:
+
+- `lib/twilio/sms-readiness-sync.ts` matched Messaging Service sender-pool
+  entries on `sender.phoneNumberSid`, but the Twilio API returns the PN SID as
+  the resource `sid` (no `phoneNumberSid` property — verified against the live
+  API). The sender set was therefore always empty and every number was
+  permanently reported `not_in_messaging_service` even when covered. This is
+  what the 2026-06-06 audit observed. Fixed to match on `sid` (fallback kept).
+
+Commits / deployments (both READY, aliased to app.missedcallsdental.com):
+
+- `7920add5797f0fe00b3040a89e3628b0fb2a19cd` → `dpl_Bud43XYTGdjaPVrBCdUtKY64jkUE`
+- `3a0955619710f65ed8052e74a67092be5c451590` (sender-pool fix) →
+  `dpl_BonwWQNmEmL8hCHna9TH2opUZXdu`
+
+Migrations: none needed (messages.error_code/error_message and the readiness
+tables already existed; verified `clinic_sms_readiness`,
+`clinic_sms_number_readiness`, `clinic_a2p_submissions` present in production).
+
+Validation before deploy: `npm run typecheck`, `npm run test:phone-numbers`
+(32 pass), `npm run test:a2p` (64 pass), `npm run test:sms-recovery` (28 pass),
+`npm run build`, `git diff --check` — all pass.
+
+Production verification after deploy:
+
+- `GET /api/health` → ok:true.
+- Unsigned POSTs to voice/incoming, voice/status, messaging/incoming,
+  messaging/status → all 403 (signature gate intact).
+- Twilio read-only checks: Messaging Service `MG83239dc7dfdf8aa6c9b397e8258f7d93`
+  has inbound URL + status callback pointed at the app; sender pool contains
+  `+18447234944`, `+12244009986`, `+12243442685`; toll-free verification for
+  `+18447234944` is `TWILIO_APPROVED`.
+- Ran the same texting-status sync the admin button uses (forced, all clinics):
+  checked=1, failed=0. The only active assigned number today is Fairstone''s
+  toll-free `+18447234944`; both Fairstone local numbers are
+  `removal_status='scheduled'`.
+- After sync, the toll-free readiness row reads
+  `messaging_service_sender_status='covered'`, `production_safe=true`, fresh
+  `last_synced_at`, no error — the number is "Ready to send SMS" at the
+  number level. Live send remains blocked by `sms_recovery_enabled=false`
+  (Fairstone) and `SMS_RECOVERY_MODE=owner_test` (production env).
+- Only `Owner Test Dental Office` has `sms_recovery_enabled=true` and it has 0
+  active numbers, so no live send path exists anywhere.
+
+Not done (intentionally):
+
+- No SMS sent (no test call placed; controlled owner-test call remains the next
+  manual validation step).
+- No Twilio resources created/mutated; all Twilio access read-only.
+- `SMS_RECOVERY_MODE` not changed; `sms_recovery_enabled` not changed; no broad
+  activation; no AI voice runtime.

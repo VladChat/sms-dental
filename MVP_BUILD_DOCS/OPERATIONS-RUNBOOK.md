@@ -2715,6 +2715,19 @@ more observable.
   `/api/webhooks/twilio/messaging/status` (in addition to the Messaging Service
   level callback).
 
+### Confirmed bug fixed: sender-pool matching (2026-06-10)
+
+The readiness sync previously matched Messaging Service sender-pool entries on
+`sender.phoneNumberSid`, but the Twilio API returns the PN SID as the resource
+`sid` (there is no `phoneNumberSid` property — verified against the live API).
+The sender set was always empty, so EVERY number was permanently reported
+`not_in_messaging_service` even when actually covered (this is what the
+2026-06-06 read-only audit observed). Fixed in commit `3a09556`: match on
+`sid`, keep `phoneNumberSid` as a defensive fallback. If readiness ever shows
+"Not in Messaging Service" while the Twilio console clearly lists the number as
+a sender, suspect a provider field-shape drift like this one before touching
+the sender pool.
+
 ### Toll-free readiness now requires Messaging Service coverage
 
 - `texting_status='active'` (toll-free verification approved) is NOT enough to
