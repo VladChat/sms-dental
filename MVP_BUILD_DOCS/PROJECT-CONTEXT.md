@@ -123,7 +123,9 @@ The MVP should include:
 
 The MVP should not include:
 
-- AI receptionist behavior
+- AI receptionist / AI voice answering behavior (the planned **AI Call Assistant**
+  voice feature is **future-only** and is not implemented in the current MVP — see
+  "Planned Future Feature — AI Call Assistant" below)
 - medical diagnosis
 - dental advice
 - call recording
@@ -135,6 +137,51 @@ The MVP should not include:
 - aggressive sales automation
 - fake urgency
 - fake medical claims
+
+---
+
+## Planned Future Feature — AI Call Assistant (NOT in current MVP)
+
+> **Status: planned / future only.** This is not current MVP behavior and must not
+> be implemented, billed, or enabled in this scope. The current product remains
+> Missed Calls Dental: missed-call **SMS recovery**. This section exists so future
+> agents understand the intended direction without building it prematurely.
+
+**AI Call Assistant** is a planned future **voice** feature that lets a clinic
+have calls answered by an AI assistant when those calls are forwarded to a
+dedicated **AI assistant number**.
+
+- **Phone forwarding decides when calls reach the AI assistant.** As with the
+  current SMS recovery paths, the clinic (or its phone provider) controls
+  forwarding. If a call reaches the AI assistant number, the assistant answers.
+- **Intended for missed-call overflow, busy-line, and after-hours recovery** —
+  the same recovery problem the product already solves, extended to voice.
+- It is **not** a phone-system replacement, dental CRM, PMS integration,
+  diagnosis tool, or medical-advice tool.
+
+When configured, the AI assistant may:
+
+- collect the caller's name, phone number, and reason for the call,
+- capture appointment or callback intent,
+- create a call summary,
+- trigger an SMS follow-up, and/or
+- transfer the caller to the clinic.
+
+The assistant **must not** give diagnosis, treatment advice, medical promises,
+fake urgency, or aggressive sales messaging, and must never imply emergency triage.
+
+**Scope guardrails for future implementation:**
+
+- Do not enable live AI voice behavior without explicit owner approval and gating
+  (same discipline as live SMS).
+- Any AI usage limits/rates are billing values and must come from
+  `config/billing.config.ts` per the billing source-of-truth rules — never
+  hard-coded in components, API routes, Stripe logic, or docs. See
+  `BILLING-AND-USAGE-POLICY.md` ("Future billing note — AI Call Assistant").
+- Customer-facing language is "AI answered calls" / "AI answered call time";
+  technical terms (e.g. ConversationRelay, STT/TTS, model/token usage) stay
+  internal. Implementation guidance lives in `Skills/twilio-dental-sms.md`;
+  customer/product language in `Skills/missed-calls-dental-product-context.md`.
 
 ---
 

@@ -33,6 +33,7 @@ for Project Facts").
 | Platform admin | `MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md` |
 | Front desk | `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md` |
 | A2P / SMS approval | `MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md`, `MVP_BUILD_DOCS/SMS-APPROVAL-FIELD-MAPPING.md` |
+| AI Call Assistant / future voice assistant (planned) | product/architecture `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`; billing/usage `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` + `config/billing.config.ts`; Twilio/voice implementation guidance `Skills/twilio-dental-sms.md`; customer/product language `Skills/missed-calls-dental-product-context.md` |
 | Operations | `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` |
 | Chronological setup/deployment facts | `MVP_BUILD_DOCS/SETUP-LOG.md` |
 | Repeatable setup lessons | `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md` |

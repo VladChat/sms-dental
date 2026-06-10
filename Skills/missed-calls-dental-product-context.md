@@ -95,3 +95,39 @@ The site must be good enough for Stripe verification, Twilio review, and real cl
 
 Current onboarding/account source of truth:
 Create office profile (clinic name, main office phone, ZIP code) first, then Business Profile cards for Business Information and A2P Approval Information. Owners purchase the first business number through `/account` after saving a payment method; the first number is included and does not charge that day. Paid plan conversion is explicit through Stripe Checkout and webhook-confirmed subscription status. SMS recovery remains separately gated by compliance, QA, owner approval, runtime mode, and clinic settings; it is never enabled automatically.
+
+## Future planned feature: AI Call Assistant
+
+Status: planned / future only. Not part of the current MVP. The current product is
+missed-call SMS recovery. Do not build, bill, or enable this in current scope.
+
+What it is, in customer terms:
+- AI Call Assistant lets a clinic have **AI answered calls** when calls are
+  forwarded to a dedicated **AI assistant number** (for missed-call overflow,
+  busy lines, and after-hours). Phone forwarding decides which calls reach it; if a
+  call reaches the AI assistant number, the assistant answers.
+- When configured, the assistant can collect the caller's name, phone number, and
+  reason for the call, capture appointment/callback intent, create a **call
+  summary**, send an SMS follow-up, or transfer the caller to the clinic.
+- It is not a front-desk replacement, not a dental CRM, not a PMS integration, and
+  never gives diagnosis, treatment advice, medical promises, fake urgency, or
+  aggressive sales messaging.
+
+Customer-facing language to use:
+- "AI Call Assistant", "AI answered calls", "AI answered call time",
+  "AI assistant number", "forwarded calls", "call summaries".
+- Usage is measured as **AI answered call time** (not "Conversation Relay minutes"
+  or "call-tracking minutes").
+
+Do NOT show clinic users technical terms:
+- ConversationRelay, STT, TTS, OpenAI model, WebSocket, Twilio SID, webhook
+  status, token usage, latency, raw prompts, or raw logs. These stay internal.
+
+Clinic users should see simple controls only:
+- AI assistant status (Off / Test / Live), AI assistant number, transfer-to-person
+  number, the clinic information the assistant uses, a test-call button, and recent
+  AI call summaries.
+
+Sources of truth: product/architecture `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`;
+billing/usage `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` + `config/billing.config.ts`;
+implementation guidance `Skills/twilio-dental-sms.md`.

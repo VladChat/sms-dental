@@ -80,6 +80,12 @@ direct integrations with every phone provider
 Fly.io deployment
 ```
 
+> **Planned future feature (not v0.1): AI Call Assistant** — an AI voice answering
+> option for calls forwarded to a dedicated AI assistant number (missed-call
+> overflow, busy-line, after-hours). It is documented as future-only in
+> `PROJECT-CONTEXT.md`; do **not** implement, bill, or enable it as part of the
+> current MVP.
+
 ---
 
 ## Recommended reading order for the AI agent
@@ -156,5 +162,5 @@ that exact stated scope only. Safety gates still apply.
 If the AI agent gets confused, reset it with this:
 
 ```txt
-Build the MVP exactly as scoped: a call event reaches the system through conditional forwarding, a system-prepared local number path, or later provider integrations. The backend validates the event, records it, sends safe SMS recovery only after approval/configuration, handles replies, shows a recovery inbox, and later supports billing. No AI receptionist, no PMS sync, no phone-system replacement, no Fly.io. Use Vercel, Supabase, Twilio, Stripe. Work locally/staging first. Production actions require owner approval as defined in `AGENT-RULES.md`; a current explicit Vlad prompt counts only for the exact authorized scope.
+Build the MVP exactly as scoped: a call event reaches the system through conditional forwarding, a system-prepared local number path, or later provider integrations. The backend validates the event, records it, sends safe SMS recovery only after approval/configuration, handles replies, shows a recovery inbox, and later supports billing. No AI receptionist in the current MVP (AI Call Assistant is a planned future voice feature only — see `PROJECT-CONTEXT.md`), no PMS sync, no phone-system replacement, no Fly.io. Use Vercel, Supabase, Twilio, Stripe. Work locally/staging first. Production actions require owner approval as defined in `AGENT-RULES.md`; a current explicit Vlad prompt counts only for the exact authorized scope.
 ```

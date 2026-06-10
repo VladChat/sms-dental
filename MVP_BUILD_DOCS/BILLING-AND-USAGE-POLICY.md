@@ -332,3 +332,29 @@ Billing behavior:
 
 The client never supplies lifecycle state, Stripe quantity, number type, slot
 class, or price. All lifecycle and billing decisions are server-side.
+
+## Future billing note — AI Call Assistant (NOT live)
+
+> **Status: future / not implemented.** This is a forward-looking note only. No
+> AI usage is metered or billed today. Do not add any AI numbers here or anywhere
+> else as a second source of truth.
+
+The planned **AI Call Assistant** voice feature (see `PROJECT-CONTEXT.md`) will
+introduce a new future billable usage category: **AI answered call usage**.
+
+- **AI included minutes and AI overage rates must be defined in
+  `config/billing.config.ts`** before any UI or billing implementation, following
+  the same single-source-of-truth rule as the rest of this policy.
+- Do **not** hard-code AI minute limits or AI rates in page components, API
+  routes, Stripe logic, billing calculations, or documentation (including this
+  file) as a second source of truth. This file describes policy; the numbers live
+  in `config/billing.config.ts`.
+- Customer-facing wording must use **"AI answered calls"** / **"AI answered call
+  time"** — never "Conversation Relay minutes" or "call-tracking minutes".
+- Usage metering and billing for AI answered calls is **not live** until it is
+  explicitly implemented and approved (the same discipline as the deferred
+  call-minute / SMS-segment usage-metering milestone above).
+- Outbound voice cost (e.g. transferring a caller to the clinic) is a separate
+  consideration handled per the Twilio implementation guidance in
+  `Skills/twilio-dental-sms.md`; it does not change the rule that AI usage
+  amounts come from `config/billing.config.ts`.

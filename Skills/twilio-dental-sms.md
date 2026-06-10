@@ -1,11 +1,14 @@
 ---
 name: twilio-dental-sms
-description: Use this skill when working on Twilio, SMS, missed calls, phone numbers, messaging webhooks, A2P compliance, opt-out handling, or SMS wording for the Dental SMS project.
+description: Use this skill when working on Twilio, SMS, missed calls, phone numbers, messaging webhooks, A2P compliance, opt-out handling, or SMS wording for the Dental SMS project. Also covers the planned future AI voice answering work (AI Call Assistant) — Twilio Voice, ConversationRelay, voice webhooks/WebSocket handlers — which is future-only and must not be enabled without explicit owner approval.
 ---
 
 # Twilio Dental SMS Skill
 
-Use this skill for all Twilio-related work in the Dental SMS project.
+Use this skill for all Twilio-related work in the Dental SMS project — both the
+current SMS recovery MVP and the planned future AI voice answering feature
+(AI Call Assistant). The SMS compliance rules below always apply; the voice
+guidance is future-only.
 
 Project:
 Dental SMS
@@ -33,6 +36,8 @@ Use this skill when the task involves:
 - Twilio webhook security
 - Twilio delivery status
 - Twilio production readiness
+- Future AI voice answering (AI Call Assistant): Twilio Voice, ConversationRelay,
+  voice call webhooks, WebSocket handlers, transfer-to-clinic outbound calls
 
 Core rules:
 - Keep SMS messages short, clear, and professional.
@@ -80,6 +85,36 @@ Compliance guidance:
 - Do not continue messaging users who opted out.
 - Keep clinic identity clear in messages.
 - Avoid misleading sender identity.
+
+## Future: AI voice answering (AI Call Assistant) — planned, not live
+
+Status: planned / future only. Do not enable live AI voice behavior without
+explicit owner approval and gating (same discipline as live patient SMS). All SMS
+compliance rules above remain unchanged.
+
+Planned architecture:
+- For AI voice answering, Twilio handles the phone call and the voice connection.
+- The preferred planned architecture is **Twilio Voice + Twilio ConversationRelay
+  + a backend AI orchestration / OpenAI reasoning layer**.
+- `ConversationRelay` (and `STT`, `TTS`, model names, token usage, latency) are
+  technical/internal terms. **Never surface them to clinic customers** — customers
+  see only "AI Call Assistant", "AI answered calls", and "AI answered call time".
+
+Security and reliability (apply when this is built):
+- Voice webhooks and WebSocket handlers must validate requests/signatures where
+  applicable, and reject unsigned/unverified requests.
+- Keep handlers idempotent; deduplicate repeated provider events.
+- Never expose Twilio (or AI provider) secrets to the browser; keep all
+  credentials server-side only.
+- Store call events/summaries safely (redacted), the same way call/message events
+  are stored today. No raw secrets or raw prompts in logs.
+
+Cost note:
+- Outbound voice cost applies only when Twilio places a **separate outbound call**
+  — for example, transferring the caller to the clinic. Answering a forwarded
+  inbound call is not the same as placing an outbound call.
+- AI answered call usage is a future billable category; limits/rates must come from
+  `config/billing.config.ts` (see `BILLING-AND-USAGE-POLICY.md`), never hard-coded.
 
 For this project, Twilio work must prioritize:
 1. Reliability

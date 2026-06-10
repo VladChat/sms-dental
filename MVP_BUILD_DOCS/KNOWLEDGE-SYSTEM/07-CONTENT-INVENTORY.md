@@ -34,6 +34,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | CH-17 | My texting isn't working yet | customer-help/troubleshooting | clinic_owner | ready | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, BILLING-AND-USAGE-POLICY.md, PROJECT-CONTEXT.md, OPERATIONS-RUNBOOK.md, config/runtime.config.ts | /account | Texting activation is per number and separate from number/billing; automatic status refresh; what to check; no instant activation |
 | CH-18 | I can't sign in | customer-help/troubleshooting | customer_authenticated | ready | AUTH-AND-ACCESS-CONTROL.md, FRONT-DESK-WORKSPACE.md, config/runtime.config.ts | /account, /workspace | Right email/area, password reset, staff access via owner; never send password |
 | CH-19 | Understanding patient request statuses | customer-help/workspace | clinic_staff | ready | FRONT-DESK-WORKSPACE.md, PROJECT-CONTEXT.md, OPERATIONS-RUNBOOK.md | /workspace | Status meanings; "not provided yet"; what not to assume; no medical advice |
+| CH-20 | How AI Call Assistant works | customer-help/ai-call-assistant (planned) | clinic_owner | draft | PROJECT-CONTEXT.md, BILLING-AND-USAGE-POLICY.md | /account | Planned future voice feature; "AI answered calls" wording; not live; body not written |
 
 ## Platform admin
 
@@ -50,6 +51,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | PA-09 | Troubleshoot SMS not sending (admin view) | platform-admin/a2p-review-and-submission.md | platform_admin | internal | OPERATIONS-RUNBOOK.md §9, A2P-10DLC-COMPLIANCE-READINESS.md | /admin | Links to runbook RB-01 |
 | PA-10 | Troubleshoot billing mismatch (admin view) | platform-admin/billing-operations.md | platform_admin | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts | /admin | Links to runbook RB-03 |
 | PA-11 | Support boundaries (what admin may/may not do) | platform-admin/support-boundaries.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §6/§9–10, AUTH-AND-ACCESS-CONTROL.md §17, FRONT-DESK-WORKSPACE.md | /admin | Role boundaries; blocked-by-design; customer-safe vs internal wording |
+| PA-12 | AI Call Assistant admin overview | platform-admin/ai-call-assistant.md (planned) | platform_admin | internal | PROJECT-CONTEXT.md, Skills/twilio-dental-sms.md | /admin | Planned future feature; admin can see status/number/transfer/knowledge/test/last call/errors/usage; ConversationRelay etc. internal-only; not live; body not written |
 
 ## Support runbooks
 
@@ -60,6 +62,8 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | RB-03 | Billing question | support-runbooks/billing-question.md | internal_ops | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | support | 12-section; current vs next cycle; no proration; no refund promise |
 | RB-04 | A2P approval question | support-runbooks/a2p-approval-question.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, config/runtime.config.ts | support | 12-section; "SMS approval" wording; no exact-date promise |
 | RB-05 | Clinic cannot access account | support-runbooks/clinic-cannot-access-account.md | internal_ops | internal | AUTH-AND-ACCESS-CONTROL.md, FRONT-DESK-WORKSPACE.md | support | 12-section; login/reset/role; never request password |
+| RB-06 | AI assistant not answering | support-runbooks/ai-assistant-not-answering.md (planned) | internal_ops | draft | PROJECT-CONTEXT.md, Skills/twilio-dental-sms.md | support | Planned future feature (AI Call Assistant); forwarding/status/gating triage; not live; body not written |
+| RB-07 | AI answered call billing question | support-runbooks/ai-answered-call-billing-question.md (planned) | internal_ops | draft | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts | support | Planned future feature; "AI answered call time"; amounts from config; not live; body not written |
 
 ## Developer / ops
 
