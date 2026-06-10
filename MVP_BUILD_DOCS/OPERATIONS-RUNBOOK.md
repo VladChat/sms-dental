@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-10 (front desk workspace reply polish; live SMS send hardening: exact sender, toll-free Messaging Service coverage, delivery-status persistence, operator audit)
+Last updated: 2026-06-10 (AI Front Desk Knowledge account foundation: clinic-approved answer library, AI replies off; plus front desk workspace reply polish and live SMS send hardening)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3216,3 +3216,56 @@ As of the 2026-06-07 read-only audit:
 - the only Messaging Service found was `MG83239dc7dfdf8aa6c9b397e8258f7d93`
   (`Missed Call SMS - Dental MVP`) and it already has senders attached, so it
   is not safe to reuse for mock A2P
+
+---
+
+## AI Front Desk Knowledge (account foundation) — operate & verify (2026-06-10)
+
+Owner/admin account section that stores the clinic-approved answer library a
+FUTURE AI assistant may use. Foundation only: **AI replies are off**, nothing
+reads this data at runtime, and it is not part of the SMS approval/billing
+setup path.
+
+What exists:
+
+- Account section: `/account?section=ai_knowledge` ("AI Front Desk Knowledge",
+  under the Account nav group after Team access).
+- API: `GET|POST /api/account/ai-knowledge` — authenticated owner/admin only
+  (`resolveAuthClinicAccess()`); front-desk role is rejected.
+- Table: `public.clinic_ai_knowledge_entries` (migration
+  `20260614000100_clinic_ai_knowledge.sql`, applied 2026-06-10). Clinic-scoped,
+  `unique (clinic_id, question_key)`, status/source_type check constraints,
+  `set_updated_at` trigger, RLS enabled with no policies (service-role access
+  through `SUPABASE_DB_URL` only).
+- Catalog: `config/ai-front-desk-knowledge.config.ts` (41 committed questions).
+  Question keys/categories/questions come from this file server-side; the API
+  rejects unknown keys, invalid statuses, answers over 700 chars, approved with
+  empty answer, sample/demo text, and non-`manual` client source types.
+- Website: read from `clinics.website` (Business profile owns the field). No
+  website input exists in AI Knowledge and no crawling happens anywhere.
+
+Operating rules:
+
+- Safety entries (`medical_advice_handoff`, `urgent_symptoms_handoff`) always
+  use the fixed standard reply (includes 911); the API refuses to approve
+  custom text for them. Do not weaken this.
+- Unsaved catalog questions appear as virtual `system_default` entries; saving
+  upserts the clinic row. New catalog questions appear automatically.
+- Do not store PHI, patient conversations, website HTML, or model prompts in
+  `clinic_ai_knowledge_entries`.
+
+Verify after deploy:
+
+1. `/account?section=ai_knowledge` renders the section with the "AI replies are
+   off" banner and the website source card.
+2. `GET /api/account/ai-knowledge` unauthenticated returns 401 JSON.
+3. Read-only DB check:
+
+```sql
+select count(*) from public.clinic_ai_knowledge_entries;
+select conname from pg_constraint
+where conrelid = 'public.clinic_ai_knowledge_entries'::regclass;
+```
+
+Tests: `npm run test:ai-knowledge` (catalog integrity, safety copy, merge,
+validation).

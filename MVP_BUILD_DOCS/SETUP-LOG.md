@@ -6114,3 +6114,67 @@ and `npm run build` all pass. No `lint` script exists in `package.json`.
 Not done: no new inbox, no AI, no auto-reply, no SMS sent, no calls placed, no
 Twilio resources mutated, no Vercel env changes, no migrations, and no production
 outcome was written during verification.
+
+---
+
+## 2026-06-10 — AI Front Desk Knowledge account foundation (non-live)
+
+Built the first account-side foundation for the future AI Front Desk agent:
+a clinic-approved answer library owners review before any AI can ever use it.
+**No AI runtime, no AI provider calls, no website crawler, no Twilio/SMS
+behavior changes, no patient-facing changes.**
+
+What changed:
+
+- New committed catalog `config/ai-front-desk-knowledge.config.ts` — 41 common
+  patient questions in 6 categories (Hours & Location, Appointments, Insurance,
+  Services, Payment & Policies, Safety & Handoff) with owner-friendly wording,
+  recommended flags, default statuses, and short handoff defaults (medical and
+  urgent defaults include 911 and never give diagnosis/treatment advice).
+- New pure helpers `lib/ai-knowledge/entries.ts` (catalog merge + update
+  validation) and DB helper `lib/db/ai-knowledge.ts`
+  (`listClinicAiKnowledgeEntries`, `upsertClinicAiKnowledgeEntry`), both
+  clinic-scoped. Unsaved catalog questions return as virtual `system_default`
+  entries so new questions appear automatically.
+- New API `GET|POST /api/account/ai-knowledge` using
+  `resolveAuthClinicAccess()`; front-desk role rejected. POST validates against
+  the committed catalog only (unknown keys, invalid statuses, >700-char
+  answers, approved-with-empty-answer, sample/demo text, and non-`manual`
+  client source types are rejected; safety entries cannot be "approved" and
+  always keep the standard reply).
+- New account section `/account?section=ai_knowledge` ("AI Front Desk
+  Knowledge") under the Account nav group after Team access, rendered by
+  `app/setup/[token]/_components/AiKnowledgeCard.tsx`. Shows an "AI replies are
+  off" banner, a website source card that READS `clinics.website` from Business
+  profile (no duplicate website input), approved/needs-review/handoff summary
+  counts, and per-question cards with Save draft / Approve answer / Use handoff
+  / Do not answer automatically. Not part of setup completion for SMS
+  approval/billing.
+- New migration `supabase/migrations/20260614000100_clinic_ai_knowledge.sql` —
+  additive table `public.clinic_ai_knowledge_entries` with
+  `unique (clinic_id, question_key)`, status + source_type check constraints,
+  clinic/status/category indexes, `set_updated_at` trigger, RLS enabled (no
+  policies; service-role only). No PHI, conversations, website HTML, or model
+  prompts are stored.
+- New tests `tests/ai-knowledge-catalog.test.ts` (24 tests) + npm script
+  `test:ai-knowledge` (catalog integrity, safety copy, merge behavior, update
+  validation).
+- Docs: PROJECT-CONTEXT.md (built foundation + future phases), operations
+  runbook section, Knowledge System article CH-21
+  (`customer-help/ai-front-desk-knowledge/`) + content inventory.
+
+Migration status: **APPLIED to production 2026-06-10** (owner-authorized in the
+task prompt) on Supabase project `qfjpvbvfvhbtebwivcdc` via the Supabase
+Management API (MCP `apply_migration`); history row recorded as version
+`20260614000100` / `clinic_ai_knowledge` to match the repo file. Pre-check
+confirmed the table did not exist; post-apply verification confirmed 3
+constraints, 3 indexes, the `set_updated_at` trigger, RLS enabled, and 0 rows.
+
+Validation: `npm run typecheck`, `npm run test:ai-knowledge` (24 pass),
+`npm run test:phone-numbers` (32 pass), `npm run test:a2p` (64 pass),
+`npm run test:sms-recovery` (52 pass), `npm run build`, and `git diff --check`
+all pass. No `lint` script exists in `package.json`.
+
+Not done / explicitly out of scope: no SMS sent, no calls placed, no Twilio
+mutations, no AI provider calls or env vars, no website crawling, no Stripe
+changes, no Vercel env changes, `docs/` untouched.

@@ -35,6 +35,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | CH-18 | I can't sign in | customer-help/troubleshooting | customer_authenticated | ready | AUTH-AND-ACCESS-CONTROL.md, FRONT-DESK-WORKSPACE.md, config/runtime.config.ts | /account, /workspace | Right email/area, password reset, staff access via owner; never send password |
 | CH-19 | Understanding patient request statuses | customer-help/workspace | clinic_staff | ready | FRONT-DESK-WORKSPACE.md, PROJECT-CONTEXT.md, OPERATIONS-RUNBOOK.md | /workspace | Status meanings; missing patient details; Call patient phone link is not automation; what not to assume; no medical advice |
 | CH-20 | How AI Call Assistant works | customer-help/ai-call-assistant (planned) | clinic_owner | draft | PROJECT-CONTEXT.md, BILLING-AND-USAGE-POLICY.md, config/voice-greeting.config.ts | /account | Planned future voice feature; future curated English US voice selection; "AI answered calls" wording; not live; body not written |
+| CH-21 | Prepare answers for future AI | customer-help/ai-front-desk-knowledge | clinic_owner | ready | config/ai-front-desk-knowledge.config.ts, PROJECT-CONTEXT.md | /account | AI Front Desk Knowledge foundation; approve/handoff/do-not-answer; AI replies not live; website stays in Business profile |
 
 ## Platform admin
 

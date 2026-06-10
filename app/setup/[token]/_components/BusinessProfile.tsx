@@ -9,6 +9,7 @@ import { AssignedNumberCard } from "./AssignedNumberCard";
 import { BillingCard } from "./BillingCard";
 import { AccountAccessCard } from "./AccountAccessCard";
 import { TeamAccessCard } from "./TeamAccessCard";
+import { AiKnowledgeCard } from "./AiKnowledgeCard";
 import type {
   BusinessProfileData,
   BusinessProfileFields,
@@ -19,7 +20,7 @@ import type {
 export type { BusinessProfileData } from "./account-types";
 
 type SetupSectionId = "phone" | "business" | "sms" | "billing";
-type AccountSectionId = "account_access" | "team_access";
+type AccountSectionId = "account_access" | "team_access" | "ai_knowledge";
 type SectionId = SetupSectionId | AccountSectionId;
 const ONE_TIME_RETURN_PARAMS = ["payment_method_setup", "paid_plan"] as const;
 
@@ -156,6 +157,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
   const accountNavItems: { id: AccountSectionId; label: string }[] = [
     { id: "account_access", label: "Account access" },
     { id: "team_access", label: "Team access" },
+    { id: "ai_knowledge", label: "AI knowledge" },
   ];
 
   return (
@@ -328,6 +330,19 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
               />
             </Section>
           )}
+
+          {active === "ai_knowledge" && (
+            <Section
+              id="ai-knowledge"
+              title="AI Front Desk Knowledge"
+              description="Prepare approved answers for future SMS and voice AI. AI replies are not live yet."
+            >
+              <AiKnowledgeCard
+                website={biz.website}
+                onGoToBusinessProfile={() => setActiveSection("business")}
+              />
+            </Section>
+          )}
         </div>
       </div>
     </main>
@@ -335,7 +350,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
 }
 
 const VALID_SECTIONS: SectionId[] = [
-  "phone", "business", "sms", "billing", "account_access", "team_access",
+  "phone", "business", "sms", "billing", "account_access", "team_access", "ai_knowledge",
 ];
 
 // Map an optional ?section=… value to a known section. Defaults to "phone"
