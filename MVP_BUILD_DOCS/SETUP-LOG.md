@@ -5833,7 +5833,8 @@ What changed:
   batch sizes, stale windows, Twilio list limits, source labels, and active
   reconciliation behavior.
 - Added protected job `GET|POST /api/jobs/sync-phone-number-texting-status` and
-  `vercel.json` cron `0 */6 * * *`. The job processes only active, non-removed,
+  `vercel.json` cron `0 10 * * *` (daily; adjusted during production rollout for
+  the current Vercel Hobby plan). The job processes only active, non-removed,
   stale/due rows in a bounded batch.
 - Added additive diagnostics migration
   `supabase/migrations/20260613000300_texting_status_sync_diagnostics.sql`
@@ -5877,3 +5878,54 @@ Not done:
 - No SMS recovery auto-enabled.
 - No hardcoded phone-number-specific fix for `+18447234944`; that number remains
   only the real-world validation case after migration/deploy.
+
+---
+
+## 2026-06-10 — Production rollout for phone-number texting-status sync
+
+Rolled out the automatic per-number texting-status sync to production for the
+Supabase project ref `qfjpvbvfvhbtebwivcdc` and Vercel project `sms-dental`
+(`prj_f5C6GmEFNwvBYq0EFJAX3UXKcepI`).
+
+What changed:
+
+- Applied additive production migrations
+  `20260613000200_per_number_texting_status.sql` and
+  `20260613000300_texting_status_sync_diagnostics.sql`.
+- Recorded both versions in `supabase_migrations.schema_migrations` after direct
+  SQL apply, so Supabase migration history matches the verified schema.
+- Adjusted the texting-status cron to daily `0 10 * * *` because the current
+  Vercel Hobby plan rejects more frequent cron schedules.
+- Populated/rotated production `CRON_SECRET` in Vercel. The value was not printed
+  or stored in the repo.
+- Deployed commit `78ba2e93a1da97c1bcbebbeb67187f597a5adff0` to production:
+  deployment `dpl_6b9W4byHsWafKxyA8YXKtkQ7dDCm`,
+  `https://sms-dental-hjpoxtv4m-vladchat-1500s-projects.vercel.app`, READY and
+  aliased to `https://app.missedcallsdental.com`.
+
+Verification:
+
+- `clinic_phone_numbers` has the per-number texting status columns, diagnostic
+  provider fields, check constraints, and due-row indexes.
+- Vercel deployment metadata registers cron
+  `/api/jobs/sync-phone-number-texting-status` at `0 10 * * *`.
+- Unauthenticated cron request returned 401; authenticated request returned 200
+  with JSON summary counts.
+- Immediate forced sync using the shared app sync service checked the production
+  row for `+18447234944` against its actual Twilio Phone Number SID, read Twilio
+  Toll-Free Verification status `TWILIO_APPROVED`, and updated the row from
+  `waiting_for_approval` to `active` with source
+  `twilio_tollfree_verification_sync`.
+- Guardrail counts after sync: local numbers active for texting `0`;
+  removed/scheduled numbers active for texting `0`; SMS recovery remained not
+  globally enabled (`SMS_RECOVERY_MODE=owner_test`; 1 of 7 clinics had
+  `sms_recovery_enabled=true` before/after).
+
+Not done:
+
+- No SMS sent.
+- No Twilio resources created, updated, submitted, purchased, or deleted; Twilio
+  access was read-only verification lookup.
+- Owner account UI could not be browser-verified because the agent did not have
+  an authenticated owner/admin browser session; production DB state backing the UI
+  was verified directly.
