@@ -21,7 +21,14 @@ import { logger } from "../logging/logger";
 type MessagingServiceResource = {
   fetch(): Promise<{ sid: string; friendlyName?: string | null }>;
   phoneNumbers: {
-    list(input: { limit: number }): Promise<Array<{ phoneNumberSid?: string | null }>>;
+    // The sender-pool resource's `sid` IS the IncomingPhoneNumber PN SID.
+    // (Verified against the live API 2026-06-10: there is no `phoneNumberSid`
+    // property on list items — matching on it left the sender set empty and
+    // marked every covered number "missing".) Keep `phoneNumberSid` as a
+    // defensive fallback in case a future SDK adds it.
+    list(input: {
+      limit: number;
+    }): Promise<Array<{ sid?: string | null; phoneNumberSid?: string | null }>>;
   };
   usAppToPerson?: {
     list(input: { limit: number }): Promise<TwilioCampaignLike[]>;
@@ -71,7 +78,7 @@ export async function syncClinicSmsReadinessFromTwilio(
     const senders = await service.phoneNumbers.list({ limit: 1000 });
     senderSidSet = new Set(
       senders
-        .map((sender) => sender.phoneNumberSid ?? null)
+        .flatMap((sender) => [sender.sid ?? null, sender.phoneNumberSid ?? null])
         .filter((sid): sid is string => typeof sid === "string" && sid.length > 0),
     );
   } catch (err) {
