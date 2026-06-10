@@ -6178,3 +6178,38 @@ all pass. No `lint` script exists in `package.json`.
 Not done / explicitly out of scope: no SMS sent, no calls placed, no Twilio
 mutations, no AI provider calls or env vars, no website crawling, no Stripe
 changes, no Vercel env changes, `docs/` untouched.
+
+---
+
+## 2026-06-10 — Production rollout: AI Front Desk Knowledge foundation
+
+Deployed and verified the AI Front Desk Knowledge foundation in production.
+
+- Commit `201045ddec69535bed8a65abf2d8f6d342529310`
+  ("account: add AI front desk knowledge foundation") pushed to `origin/main`.
+- The GitHub-triggered Vercel deployment
+  `dpl_6ffdGfjNoBxHjjiTTt6s2xSKHKLo` sat in INITIALIZING with no build events
+  for ~25 minutes, so it was cancelled and the same commit was redeployed via
+  the Vercel REST API (`POST /v13/deployments` with the git source). The fresh
+  deployment `dpl_2LtnDqbLP75RP2jhG22Z3aUVw38Z` built normally, reached READY,
+  and is aliased to `https://app.missedcallsdental.com`.
+
+Production verification (all pass):
+
+- `GET /api/health` -> 200 `ok: true`, `service: missed-calls-dental`.
+- `GET /api/account/ai-knowledge` unauthenticated -> 401 JSON
+  ("Please sign in to continue."), as designed.
+- `/account?section=ai_knowledge` -> 200 (renders the sign-in gate when
+  unauthenticated; section requires owner/admin session).
+- `/account?section=business` -> 200 (existing Business profile unaffected).
+- `/workspace` -> 200 with the expected auth gate.
+- Migration `20260614000100_clinic_ai_knowledge.sql` was already applied and
+  verified earlier the same day (see previous entry).
+
+Operational note: a Vercel git-triggered deployment can rarely hang in
+INITIALIZING with empty build logs; cancelling it
+(`PATCH /v12/deployments/{id}/cancel`) and re-creating the deployment for the
+same commit SHA over the REST API recovers cleanly.
+
+No SMS sent, no calls placed, no Twilio/Stripe mutations, no env or DNS
+changes, no AI provider calls.
