@@ -144,6 +144,11 @@ DNS changes
 Sending real patient SMS
 ```
 
+See `AGENT-RULES.md` section 5 for what counts as approval. If Vlad explicitly
+asks for a deploy, migration, production rollout, provider-console/API check, or
+production verification in the current task prompt, that prompt is approval for
+that exact stated scope only. Safety gates still apply.
+
 ---
 
 ## One-file summary
@@ -151,5 +156,5 @@ Sending real patient SMS
 If the AI agent gets confused, reset it with this:
 
 ```txt
-Build the MVP exactly as scoped: a call event reaches the system through conditional forwarding, a system-prepared local number path, or later provider integrations. The backend validates the event, records it, sends safe SMS recovery only after approval/configuration, handles replies, shows a recovery inbox, and later supports billing. No AI receptionist, no PMS sync, no phone-system replacement, no Fly.io. Use Vercel, Supabase, Twilio, Stripe. Work locally/staging first. Production actions require owner approval.
+Build the MVP exactly as scoped: a call event reaches the system through conditional forwarding, a system-prepared local number path, or later provider integrations. The backend validates the event, records it, sends safe SMS recovery only after approval/configuration, handles replies, shows a recovery inbox, and later supports billing. No AI receptionist, no PMS sync, no phone-system replacement, no Fly.io. Use Vercel, Supabase, Twilio, Stripe. Work locally/staging first. Production actions require owner approval as defined in `AGENT-RULES.md`; a current explicit Vlad prompt counts only for the exact authorized scope.
 ```

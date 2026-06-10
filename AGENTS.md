@@ -37,6 +37,16 @@ When project values conflict, use this priority:
 - `MVP_BUILD_DOCS/AGENT-RULES.md`
 - `Skills/missed-calls-dental-product-context.md`
 
+## Production Authorization Note
+
+For production deploys, Supabase migrations, production env changes, provider
+console/API checks, and end-to-end rollout/verification, follow
+`MVP_BUILD_DOCS/AGENT-RULES.md` section 5. When Vlad explicitly asks for one of
+those actions in the current task prompt, that prompt is owner approval for the
+exact stated scope only. Do not expand the scope, skip safety gates, print
+secrets, or ask Vlad to manually perform provider-console/CLI checks that the
+agent has been asked and has access to complete.
+
 ## Form and Onboarding Scope Rule (Project-Wide)
 
 For every form, onboarding step, setup flow, dashboard setting, or user-input screen, ask only for information required to complete the next immediate step.

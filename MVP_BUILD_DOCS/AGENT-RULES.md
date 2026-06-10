@@ -150,11 +150,16 @@ full database URLs with passwords
 
 ## 5. Approval-required actions
 
-Requires owner approval:
+Production/provider mutations are still guarded. The key distinction is whether
+Vlad has explicitly authorized the production scope in the current task prompt.
+
+### No explicit owner authorization in the current task prompt
+
+Without explicit current-task authorization, the agent must not:
 
 ```txt
 apply Supabase migrations
-execute SQL that changes data or schema
+execute production SQL that changes data or schema
 change Vercel production env vars
 deploy production
 create or change Stripe live products/prices/subscriptions
@@ -162,8 +167,49 @@ change Twilio production webhook URLs
 purchase Twilio numbers
 send real patient SMS
 modify DNS
-upgrade provider account or change paid billing settings
+upgrade provider account or change paid provider/billing settings
 ```
+
+In this case, implement safe local/source changes, run available validation, and
+report the exact production action still awaiting owner authorization.
+
+### Explicit owner authorization in the current task prompt
+
+When Vlad explicitly asks the agent to deploy, apply migrations, update
+production env vars, perform production rollout, verify production, check provider
+console/API state, or complete an end-to-end release, that prompt is owner
+approval for that exact scoped action.
+
+In that case, the agent should perform the requested production
+rollout/migration/deploy/verification if access is available. Do not stop with
+instructions for Vlad to manually check Supabase, Vercel, Twilio, Stripe, DNS, or
+the production database when the prompt authorized the agent to complete that
+work.
+
+The agent must not expand scope beyond what Vlad authorized. Example: approval to
+apply one named additive Supabase migration is not approval to run unrelated SQL,
+change Vercel env vars, send SMS, purchase numbers, or mutate Twilio webhooks.
+
+If access is missing, report the exact blocker and the exact missing
+permission/tool/env/CLI/auth state. Do not ask Vlad to perform manual
+provider-console or production-DB checks unless the only blocker is unavailable
+access/tooling.
+
+Required safety gates for any authorized production action:
+
+- Run available validation commands before production deploy or migration.
+- Confirm repository branch and commit before acting.
+- Confirm target Supabase/Vercel/project identity when tooling allows.
+- Apply only additive/safe migrations unless destructive changes are explicitly
+  authorized.
+- Do not print secrets, tokens, full connection strings, or raw sensitive
+  provider payloads.
+- Use the minimum necessary provider/API/SQL action for the authorized scope.
+- Verify the outcome after deployment, migration, env update, or provider check.
+- Document durable operational changes/results when the Operational
+  Documentation Update Rule requires it.
+- Final report must include exact status and verification results, not a request
+  for Vlad to verify manually.
 
 ---
 
