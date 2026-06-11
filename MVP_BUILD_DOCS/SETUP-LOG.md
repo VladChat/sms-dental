@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (Fairstone live activation rolled back after uncontrolled test caller)
+Last updated: 2026-06-11 (Fairstone internal production live mode enabled)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6878,6 +6878,58 @@ Rollback completed:
   `sms_recovery_enabled=false`; Owner Test Dental Office
   `sms_recovery_enabled=false`; Fairstone `sms_status='waiting_for_approval'`;
   readiness remained fresh and provider coverage remained ready.
+
+No Twilio resource mutation, A2P action, Stripe change, number lifecycle action,
+secret printing, deletion, phone-number release, or patient-data dump occurred.
+
+---
+
+## 2026-06-11 — Fairstone internal production live mode enabled
+
+Enabled internal production LIVE missed-call SMS recovery for Fairstone Dental
+Smile only. This is an internal production live test state, not a real customer
+clinic launch; current clinics are test clinics and the Fairstone number is not
+publicly advertised.
+
+Preflight:
+
+- Verified production `SMS_RECOVERY_MODE=owner_test`.
+- Verified zero clinics had `sms_recovery_enabled=true`.
+- Verified Fairstone `sms_recovery_enabled=false`.
+- Verified Fairstone pilot number `+1***4944` was active, toll-free,
+  `removal_status='active'`, `texting_status='active'`.
+- Verified readiness was fresh, `production_safe=true`, no sync error, no launch
+  blocking reason, Messaging Service sender coverage `covered`, and toll-free
+  verification `TWILIO_APPROVED`.
+
+Validation before activation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 52 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `git diff --check` clean.
+
+Activation:
+
+- Set production `SMS_RECOVERY_MODE=live`.
+- Deployed production config: Vercel deployment
+  `dpl_4TEaEpPo8MFBtvGh6oEzKmGZV7QZ` reached `Ready`; production health returned
+  200.
+- Set only Fairstone
+  (`f37f24a1-070f-436b-b803-956f55466093`) `sms_recovery_enabled=true`.
+- Left Fairstone `sms_status='waiting_for_approval'` unchanged because the
+  enabled number is toll-free and the live-send gate does not require local A2P
+  `sms_status='active'` for toll-free.
+
+Final verified state:
+
+- Production `SMS_RECOVERY_MODE=live`.
+- Exactly one clinic has `sms_recovery_enabled=true`: Fairstone Dental Smile.
+- Owner Test Dental Office (`owner-test`) remains `sms_recovery_enabled=false`.
+- Fairstone readiness remained fresh and provider coverage remained ready.
+- No recent test call/message from controlled caller `+1***7848` was present at
+  final verification, so live mode is ready for manual internal testing.
 
 No Twilio resource mutation, A2P action, Stripe change, number lifecycle action,
 secret printing, deletion, phone-number release, or patient-data dump occurred.
