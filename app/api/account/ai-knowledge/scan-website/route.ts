@@ -12,9 +12,14 @@ export const maxDuration = 90;
 
 // POST /api/account/ai-knowledge/scan-website
 //
-// Scans the clinic's OWN website (clinics.website — never a client-provided
-// URL) and stores draft facts the owner must review. Same-origin fetch only,
-// hard page/byte limits, no AI provider calls, no raw HTML stored.
+// Loads basic information from the clinic's OWN website (clinics.website —
+// never a client-provided URL) and stores draft facts the owner must review.
+// Same-site homepage variants + same-origin follow-up fetches only, hard
+// page/byte limits, no AI provider calls, no raw HTML stored.
+//
+// Owner-facing failures are NEUTRAL: an unreachable or invalid website returns
+// `loaded: false` (the UI shows "No website information was loaded"), never a
+// technical error. The technical reason stays in the scan run log + server log.
 export async function POST(): Promise<NextResponse> {
   const result = await requireOwnerAdminAccess("Front desk users cannot manage AI knowledge.");
   if (!result.allowed) return result.response;
@@ -29,28 +34,33 @@ export async function POST(): Promise<NextResponse> {
         postalCode: access.clinic.postal_code,
       },
     });
+    if (!outcome.ok && outcome.reason === "no_website") {
+      // The UI hides the button without a website; this is a stale-state guard.
+      return jsonBadRequest("Add a website in Business profile first.");
+    }
     if (!outcome.ok) {
-      if (outcome.reason === "no_website") {
-        return jsonBadRequest("Add a website in Business profile first.");
-      }
-      if (outcome.reason === "invalid_website") {
-        return jsonBadRequest(
-          "Your Business profile website doesn't look like a public website address. Please check it.",
-        );
-      }
-      return jsonError(502, "scan_failed", "We couldn't load your website. Please try again later.");
+      // invalid_website / fetch_failed → neutral no-info state for the owner.
+      console.warn(
+        `ai-knowledge scan returned no info (clinic ${access.clinic.id}): ${outcome.reason}`,
+      );
+      const facts = await getClinicAiFacts(access.clinic.id);
+      return jsonOk({
+        ok: true,
+        scan: { loaded: false, factsFound: 0, reviewNotes: null },
+        facts,
+      });
     }
     const facts = await getClinicAiFacts(access.clinic.id);
     return jsonOk({
       ok: true,
       scan: {
-        pagesScanned: outcome.pagesScanned,
+        loaded: outcome.factsFound > 0,
         factsFound: outcome.factsFound,
         reviewNotes: outcome.reviewNotes,
       },
       facts,
     });
   } catch {
-    return jsonError(500, "scan_failed", "We couldn't scan your website. Please try again.");
+    return jsonError(500, "scan_failed", "Something went wrong. Please try again.");
   }
 }

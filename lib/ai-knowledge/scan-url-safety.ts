@@ -78,6 +78,39 @@ export function isSameOrigin(a: URL, b: URL): boolean {
   return a.origin === b.origin;
 }
 
+// Homepage redirects may flip between http/https and the www variant of the
+// same hostname (very common). Anything else is treated as cross-domain.
+export function isAcceptableHomepageHost(originalHost: string, candidateHost: string): boolean {
+  const a = originalHost.toLowerCase();
+  const b = candidateHost.toLowerCase();
+  return a === b || `www.${a}` === b || a === `www.${b}`;
+}
+
+// Safe same-site homepage variants to try in order when bootstrapping a scan:
+// https://host, https://<www-toggled host>, http://host, http://<www-toggled>.
+// Only the scheme and the www prefix vary — never the registrable host. Every
+// variant re-passes validateScanUrl, so unsafe inputs yield no variants.
+export function homepageVariants(validated: URL): URL[] {
+  const host = validated.hostname;
+  const altHost = host.toLowerCase().startsWith("www.") ? host.slice(4) : `www.${host}`;
+  const pathAndQuery = `${validated.pathname}${validated.search}`;
+  const candidates = [
+    `https://${host}${pathAndQuery}`,
+    `https://${altHost}${pathAndQuery}`,
+    `http://${host}${pathAndQuery}`,
+    `http://${altHost}${pathAndQuery}`,
+  ];
+  const variants: URL[] = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const checked = validateScanUrl(candidate);
+    if (!checked.ok || seen.has(checked.url.href)) continue;
+    seen.add(checked.url.href);
+    variants.push(checked.url);
+  }
+  return variants;
+}
+
 // Resolve an in-page link against the scanned origin. Returns a normalized
 // absolute URL string, or null when the link is unsafe, cross-origin, or not
 // an http(s) document link.

@@ -6331,3 +6331,56 @@ Production verification (all pass):
 
 No SMS sent, no calls placed, no Twilio/Stripe mutations, no env or DNS
 changes, no AI provider calls, no raw website HTML stored.
+
+---
+
+## 2026-06-10 — AI Knowledge UX + website loader refinements
+
+Focused fix on the structured-facts AI Knowledge page. No AI runtime, no
+Twilio/SMS changes, no schema changes.
+
+What changed:
+
+- Website loader (`lib/ai-knowledge/website-scan.ts`) now bootstraps the
+  homepage from safe same-site variants via `homepageVariants()` in
+  `scan-url-safety.ts`: https://host, https://www-variant, http://host,
+  http://www-variant (scheme + www only, each re-validated). Cross-domain
+  redirects remain rejected; follow-up pages stay same-origin with the
+  resolved homepage origin.
+- Real-world finding: `https://allyexp.com` (Business profile website of the
+  test clinic) redirects to a DIFFERENT domain, `allyexporter.com`, on every
+  variant — so it is correctly not scanned under the same-site policy. Setting
+  the Business profile website to `https://allyexporter.com` loads fine (the
+  page is a small placeholder with no dental facts, so the scan reports no
+  information found).
+- Owner-facing scan outcomes are now neutral: unreachable/invalid sites and
+  zero-fact scans all show "No website information was loaded. You can fill in
+  the sections below." The scan API returns `loaded: false` instead of a 502
+  technical message; the technical reason stays in
+  `clinic_website_scan_runs.error_message` + a server log line.
+- UI (`AiKnowledgeCard.tsx`): Website block moved to the top (after the global
+  principle, before Business profile facts) with helper "We can try to load
+  basic information from your website…" and button "Load website information";
+  the bottom "Website check" accordion was removed. Global principle second
+  line now reads "Questions AI cannot answer go to someone in your office."
+  "Preferred time question" renamed to "Preferred first time question".
+  Accordion headers got small summaries (Insurance/Services "N selected",
+  Hours "Needs setup").
+- Services/insurance single-save model: Add only updates the visible list
+  (checked by default, "Added items are saved when you click Save."); custom
+  items show an accessible Remove button (defaults cannot be removed); one
+  Save persists selections + `customToAdd` (labels validated, keys minted
+  server-side) + `customToRemove` in a single transaction
+  (`saveServiceSection`/`saveInsuranceSection` in `lib/db/ai-knowledge.ts`,
+  payload validated by `validateCatalogSectionUpdate` in
+  `lib/ai-knowledge/facts.ts`). Duplicate labels rejected case-insensitively;
+  50-entry caps enforced in validation and re-checked in the transaction.
+  The old immediate-add API actions were removed.
+
+Validation: `npm run typecheck`, `npm run test:ai-knowledge` (39 pass, up from
+32), `npm run test:phone-numbers` (32), `npm run test:a2p` (64),
+`npm run test:sms-recovery` (52), `npm run build`, `git diff --check` — all
+pass. No `lint` script exists in `package.json`.
+
+Not done: no SMS sent, no calls, no Twilio mutations, no AI provider calls, no
+env changes, no migrations, no raw website HTML stored, `docs/` untouched.

@@ -3,12 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { jsonBadRequest, jsonError, jsonOk } from "../../../../../lib/http/responses";
 import { requireOwnerAdminAccess } from "../../../../../lib/auth/owner-admin";
 import {
-  addCustomService,
   getClinicAiFacts,
-  listAllowedServiceKeys,
-  saveServiceSelections,
+  listCustomServiceEntries,
+  saveServiceSection,
 } from "../../../../../lib/db/ai-knowledge";
-import { validateCustomLabel, validateSelections } from "../../../../../lib/ai-knowledge/facts";
+import { validateCatalogSectionUpdate } from "../../../../../lib/ai-knowledge/facts";
 import {
   DEFAULT_SERVICES,
   MAX_SERVICES_PER_CLINIC,
@@ -18,8 +17,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/account/ai-knowledge/services
-// { action: "save", selections: [{ key, selected }] } — save the checkbox list.
-// { action: "add", label } — add a custom service (key minted server-side).
+//
+// One save persists the whole section: checkbox selections, newly added
+// custom services (labels validated, keys minted server-side), and removed
+// custom services. Default catalog entries can only be (un)checked, never
+// removed. Max 50 entries per clinic.
+//
+// { selections: [{ key, selected }], customToAdd: [{ label, selected }],
+//   customToRemove: ["custom_…"] }
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const result = await requireOwnerAdminAccess("Front desk users cannot manage AI knowledge.");
   if (!result.allowed) return result.response;
@@ -31,30 +36,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch {
     return jsonBadRequest("Invalid request body");
   }
-  const input = (body ?? {}) as Record<string, unknown>;
 
   try {
-    if (input.action === "add") {
-      const label = validateCustomLabel(input.label);
-      if (!label.ok) return jsonBadRequest(label.message);
-      if (DEFAULT_SERVICES.some((s) => s.label.toLowerCase() === label.value.toLowerCase())) {
-        return jsonBadRequest("That service is already in the list.");
-      }
-      const added = await addCustomService(access.clinic.id, label.value, access.userId);
-      if (!added.ok) {
-        return jsonBadRequest(
-          added.reason === "limit_reached"
-            ? `You can list up to ${MAX_SERVICES_PER_CLINIC} services.`
-            : "That service is already in the list.",
-        );
-      }
-    } else if (input.action === "save") {
-      const allowedKeys = await listAllowedServiceKeys(access.clinic.id);
-      const selections = validateSelections(input.selections, allowedKeys);
-      if (!selections.ok) return jsonBadRequest(selections.message);
-      await saveServiceSelections(access.clinic.id, selections.value, access.userId);
-    } else {
-      return jsonBadRequest("Invalid request body");
+    const existingCustom = await listCustomServiceEntries(access.clinic.id);
+    const validated = validateCatalogSectionUpdate(body, {
+      allowedKeys: new Set([
+        ...DEFAULT_SERVICES.map((s) => s.key),
+        ...existingCustom.map((c) => c.key),
+      ]),
+      existingCustom,
+      defaultLabels: DEFAULT_SERVICES.map((s) => s.label),
+      catalogSize: DEFAULT_SERVICES.length,
+      maxEntries: MAX_SERVICES_PER_CLINIC,
+    });
+    if (!validated.ok) return jsonBadRequest(validated.message);
+
+    const saved = await saveServiceSection(access.clinic.id, validated.value, access.userId);
+    if (!saved.ok) {
+      return jsonBadRequest(`You can list up to ${MAX_SERVICES_PER_CLINIC} services.`);
     }
     const facts = await getClinicAiFacts(access.clinic.id);
     return jsonOk({ ok: true, facts });

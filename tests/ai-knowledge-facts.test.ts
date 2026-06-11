@@ -17,11 +17,11 @@ import {
   customKeyFromLabel,
   customLimitReached,
   validateAppointmentSettings,
+  validateCatalogSectionUpdate,
   validateCustomLabel,
   validateHoursInput,
   validateOfficePolicies,
   validatePaymentSettings,
-  validateSelections,
 } from "../lib/ai-knowledge/facts";
 
 // ------------------------------------------------------------------ catalogs
@@ -103,25 +103,141 @@ test("custom entry count cannot exceed the 50-entry cap", () => {
   assert.equal(customLimitReached(DEFAULT_SERVICES.length, remaining + 5, MAX_SERVICES_PER_CLINIC), true);
 });
 
-// ---------------------------------------------------------------- selections
+// -------------------------------------------------------- section save payload
 
-test("selection save accepts known keys and rejects unknown keys", () => {
-  const allowed = new Set(["cleanings", "implants", "custom_laser_dentistry"]);
-  const good = validateSelections(
-    [
-      { key: "cleanings", selected: true },
-      { key: "custom_laser_dentistry", selected: false },
-    ],
-    allowed,
+// A section save persists selections + custom additions + custom removals in
+// one request. Shared context for the tests below: 2 defaults, 1 existing
+// custom row ("Farma"), cap of 50.
+function sectionCtx(overrides?: Partial<Parameters<typeof validateCatalogSectionUpdate>[1]>) {
+  return {
+    allowedKeys: new Set(["cleanings", "implants", "custom_farma"]),
+    existingCustom: [{ key: "custom_farma", label: "Farma" }],
+    defaultLabels: ["Cleanings", "Implants"],
+    catalogSize: 2,
+    maxEntries: 50,
+    ...overrides,
+  };
+}
+
+test("section save accepts selections, additions, and removals together", () => {
+  const result = validateCatalogSectionUpdate(
+    {
+      selections: [
+        { key: "cleanings", selected: true },
+        { key: "implants", selected: false },
+      ],
+      customToAdd: [{ label: "Laser dentistry", selected: true }],
+      customToRemove: ["custom_farma"],
+    },
+    sectionCtx(),
   );
-  assert.ok(good.ok);
-  assert.equal(good.value.length, 2);
+  assert.ok(result.ok);
+  assert.equal(result.value.selections.length, 2);
+  assert.deepEqual(result.value.customToAdd, [{ label: "Laser dentistry", selected: true }]);
+  assert.deepEqual(result.value.customToRemove, ["custom_farma"]);
+});
 
-  const unknown = validateSelections([{ key: "made_up", selected: true }], allowed);
+test("custom additions can be saved and custom removals drop their selections", () => {
+  const result = validateCatalogSectionUpdate(
+    {
+      selections: [
+        { key: "cleanings", selected: true },
+        { key: "custom_farma", selected: true }, // being removed below
+      ],
+      customToRemove: ["custom_farma"],
+    },
+    sectionCtx(),
+  );
+  assert.ok(result.ok);
+  assert.deepEqual(result.value.selections, [{ key: "cleanings", selected: true }]);
+});
+
+test("default catalog entries cannot be removed through the remove payload", () => {
+  const defaultKey = validateCatalogSectionUpdate(
+    { customToRemove: ["cleanings"] },
+    sectionCtx(),
+  );
+  assert.equal(defaultKey.ok, false);
+
+  const unknownKey = validateCatalogSectionUpdate(
+    { customToRemove: ["custom_never_existed"] },
+    sectionCtx(),
+  );
+  assert.equal(unknownKey.ok, false);
+});
+
+test("section save rejects unknown selection keys and bad shapes", () => {
+  const unknown = validateCatalogSectionUpdate(
+    { selections: [{ key: "made_up", selected: true }] },
+    sectionCtx(),
+  );
   assert.equal(unknown.ok, false);
 
-  const badShape = validateSelections([{ key: "cleanings", selected: "yes" }], allowed);
+  const badShape = validateCatalogSectionUpdate(
+    { selections: [{ key: "cleanings", selected: "yes" }] },
+    sectionCtx(),
+  );
   assert.equal(badShape.ok, false);
+});
+
+test("duplicate custom labels are rejected case-insensitively", () => {
+  const vsDefault = validateCatalogSectionUpdate(
+    { customToAdd: [{ label: "cleanings", selected: true }] },
+    sectionCtx(),
+  );
+  assert.equal(vsDefault.ok, false);
+
+  const vsExisting = validateCatalogSectionUpdate(
+    { customToAdd: [{ label: "FARMA", selected: true }] },
+    sectionCtx(),
+  );
+  assert.equal(vsExisting.ok, false);
+
+  const withinBatch = validateCatalogSectionUpdate(
+    {
+      customToAdd: [
+        { label: "Laser dentistry", selected: true },
+        { label: "laser DENTISTRY", selected: true },
+      ],
+    },
+    sectionCtx(),
+  );
+  assert.equal(withinBatch.ok, false);
+
+  // Removing the existing custom frees its label for re-adding in the same save.
+  const reAddAfterRemove = validateCatalogSectionUpdate(
+    {
+      customToAdd: [{ label: "Farma", selected: true }],
+      customToRemove: ["custom_farma"],
+    },
+    sectionCtx(),
+  );
+  assert.ok(reAddAfterRemove.ok);
+});
+
+test("section save enforces the 50-entry cap including removals and additions", () => {
+  const full = sectionCtx({
+    existingCustom: Array.from({ length: 48 }, (_, i) => ({
+      key: `custom_extra_${i}`,
+      label: `Extra ${i}`,
+    })),
+    allowedKeys: new Set(["cleanings", "implants"]),
+  });
+  // 2 defaults + 48 customs = 50 → one more is rejected…
+  const over = validateCatalogSectionUpdate(
+    { customToAdd: [{ label: "One more", selected: true }] },
+    full,
+  );
+  assert.equal(over.ok, false);
+  // …unless a removal frees a slot in the same save.
+  const swap = validateCatalogSectionUpdate(
+    {
+      customToAdd: [{ label: "One more", selected: true }],
+      customToRemove: ["custom_extra_0"],
+    },
+    full,
+  );
+  assert.ok(swap.ok);
 });
 
 // --------------------------------------------------------------------- hours

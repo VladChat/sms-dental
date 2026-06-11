@@ -5,7 +5,12 @@
 // stores them as 'needs_review' drafts the owner must approve. Strictly no AI
 // provider calls, no browser automation, no cookies/auth, no raw HTML storage.
 
-import { isSameOrigin, validateScanUrl } from "./scan-url-safety";
+import {
+  homepageVariants,
+  isAcceptableHomepageHost,
+  isSameOrigin,
+  validateScanUrl,
+} from "./scan-url-safety";
 import {
   aggregatePageFacts,
   countAggregatedFacts,
@@ -28,14 +33,6 @@ const SCAN_USER_AGENT = "MissedCallsDentalSiteScan/1.0 (+https://missedcallsdent
 export type WebsiteScanOutcome =
   | { ok: true; pagesScanned: number; factsFound: number; reviewNotes: string | null }
   | { ok: false; reason: "no_website" | "invalid_website" | "fetch_failed" };
-
-// The homepage may redirect between http/https and the www variant of the
-// same hostname (very common). Anything else is treated as cross-origin.
-function isAcceptableHomepageHost(originalHost: string, candidateHost: string): boolean {
-  const a = originalHost.toLowerCase();
-  const b = candidateHost.toLowerCase();
-  return a === b || `www.${a}` === b || a === `www.${b}`;
-}
 
 async function readBodyCapped(res: Response): Promise<string> {
   const reader = res.body?.getReader();
@@ -176,7 +173,13 @@ export async function runWebsiteScan(params: {
 
   const runId = await createScanRun(params.clinicId, checked.url.href);
   try {
-    const homepage = await fetchHtmlPage(checked.url.href, null, checked.url.hostname);
+    // Bootstrap the homepage from safe same-site variants (scheme + www only):
+    // the saved website often differs from the live host in exactly those ways.
+    let homepage: { url: string; html: string } | null = null;
+    for (const variant of homepageVariants(checked.url)) {
+      homepage = await fetchHtmlPage(variant.href, null, variant.hostname);
+      if (homepage) break;
+    }
     if (!homepage) {
       await completeScanRun({
         runId,
@@ -184,7 +187,7 @@ export async function runWebsiteScan(params: {
         pagesScanned: 0,
         factsFound: 0,
         reviewNotes: null,
-        errorMessage: "Could not load the website homepage.",
+        errorMessage: "Could not load the website homepage from any same-site variant.",
       });
       return { ok: false, reason: "fetch_failed" };
     }

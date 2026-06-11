@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  homepageVariants,
+  isAcceptableHomepageHost,
   isSameOrigin,
   sanitizeSameOriginLink,
   validateScanUrl,
@@ -58,6 +60,46 @@ test("scan URL accepts public websites and assumes https for bare domains", () =
   const bare = validateScanUrl("example.com");
   assert.ok(bare.ok);
   assert.equal(bare.url.protocol, "https:");
+});
+
+test("homepage variants cover scheme and www of the same site only", () => {
+  const bare = validateScanUrl("https://example.com");
+  assert.ok(bare.ok);
+  assert.deepEqual(
+    homepageVariants(bare.url).map((u) => u.href),
+    [
+      "https://example.com/",
+      "https://www.example.com/",
+      "http://example.com/",
+      "http://www.example.com/",
+    ],
+  );
+
+  const www = validateScanUrl("https://www.example.com");
+  assert.ok(www.ok);
+  assert.deepEqual(
+    homepageVariants(www.url).map((u) => u.href),
+    [
+      "https://www.example.com/",
+      "https://example.com/",
+      "http://www.example.com/",
+      "http://example.com/",
+    ],
+  );
+
+  // Every variant still passes the full safety checks.
+  for (const variant of homepageVariants(bare.url)) {
+    assert.ok(validateScanUrl(variant.href).ok);
+  }
+});
+
+test("homepage redirect tolerance allows www flips but never other domains", () => {
+  assert.equal(isAcceptableHomepageHost("example.com", "www.example.com"), true);
+  assert.equal(isAcceptableHomepageHost("www.example.com", "example.com"), true);
+  assert.equal(isAcceptableHomepageHost("example.com", "EXAMPLE.com"), true);
+  assert.equal(isAcceptableHomepageHost("example.com", "another-domain.example.org"), false);
+  assert.equal(isAcceptableHomepageHost("example.com", "evil-example.com"), false);
+  assert.equal(isAcceptableHomepageHost("example.com", "sub.example.com"), false);
 });
 
 test("links must stay same-origin and use document schemes", () => {

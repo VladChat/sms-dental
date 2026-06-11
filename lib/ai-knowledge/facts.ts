@@ -75,31 +75,108 @@ export function customLimitReached(
 
 export type FactSelection = { key: string; selected: boolean };
 
-// Validate a checkbox-selection payload. `allowedKeys` is the server-known
-// vocabulary: default catalog keys plus the clinic's existing custom keys.
-export function validateSelections(
+export type CatalogCustomAdd = { label: string; selected: boolean };
+
+// One section save persists everything at once: checkbox selections, newly
+// added custom entries, and removed custom entries.
+export type CatalogSectionUpdate = {
+  selections: FactSelection[];
+  customToAdd: CatalogCustomAdd[];
+  customToRemove: string[];
+};
+
+const LIST_SHAPE_MESSAGE = "Could not save this list. Please refresh and try again.";
+
+// Validate a full services/insurance section save. `allowedKeys` is the
+// server-known vocabulary (default catalog keys + this clinic's existing
+// custom keys); `existingCustom` carries the clinic's custom rows so removals
+// and duplicate labels are checked server-side. Custom keys are never taken
+// from the client — they are minted from validated labels.
+export function validateCatalogSectionUpdate(
   raw: unknown,
-  allowedKeys: ReadonlySet<string>,
-): FactValidationResult<FactSelection[]> {
-  if (!Array.isArray(raw) || raw.length === 0) {
+  ctx: {
+    allowedKeys: ReadonlySet<string>;
+    existingCustom: readonly { key: string; label: string }[];
+    defaultLabels: readonly string[];
+    catalogSize: number;
+    maxEntries: number;
+  },
+): FactValidationResult<CatalogSectionUpdate> {
+  const input = (raw ?? {}) as Record<string, unknown>;
+
+  // -- removals (custom entries only; defaults can never be removed)
+  const customToRemove: string[] = [];
+  if (input.customToRemove !== undefined && input.customToRemove !== null) {
+    if (!Array.isArray(input.customToRemove)) return { ok: false, message: LIST_SHAPE_MESSAGE };
+    const existingCustomKeys = new Set(ctx.existingCustom.map((c) => c.key));
+    for (const key of input.customToRemove) {
+      if (typeof key !== "string" || !isCustomKey(key) || !existingCustomKeys.has(key)) {
+        return { ok: false, message: LIST_SHAPE_MESSAGE };
+      }
+      if (!customToRemove.includes(key)) customToRemove.push(key);
+    }
+  }
+  const removedKeys = new Set(customToRemove);
+
+  // -- selections (drop entries for keys being removed)
+  const selections: FactSelection[] = [];
+  if (input.selections !== undefined && input.selections !== null) {
+    if (!Array.isArray(input.selections) || input.selections.length > ctx.allowedKeys.size) {
+      return { ok: false, message: LIST_SHAPE_MESSAGE };
+    }
+    const seen = new Set<string>();
+    for (const item of input.selections) {
+      const key = (item as { key?: unknown })?.key;
+      const selected = (item as { selected?: unknown })?.selected;
+      if (typeof key !== "string" || typeof selected !== "boolean" || !ctx.allowedKeys.has(key)) {
+        return { ok: false, message: LIST_SHAPE_MESSAGE };
+      }
+      if (seen.has(key) || removedKeys.has(key)) continue;
+      seen.add(key);
+      selections.push({ key, selected });
+    }
+  }
+
+  // -- additions (validated labels; duplicates rejected case-insensitively)
+  const customToAdd: CatalogCustomAdd[] = [];
+  if (input.customToAdd !== undefined && input.customToAdd !== null) {
+    if (!Array.isArray(input.customToAdd)) return { ok: false, message: LIST_SHAPE_MESSAGE };
+    const takenLabels = new Set<string>(ctx.defaultLabels.map((label) => label.toLowerCase()));
+    const takenKeys = new Set<string>();
+    for (const custom of ctx.existingCustom) {
+      if (removedKeys.has(custom.key)) continue;
+      takenLabels.add(custom.label.toLowerCase());
+      takenKeys.add(custom.key);
+    }
+    for (const item of input.customToAdd) {
+      const rawLabel = (item as { label?: unknown })?.label;
+      const rawSelected = (item as { selected?: unknown })?.selected;
+      if (rawSelected !== undefined && typeof rawSelected !== "boolean") {
+        return { ok: false, message: LIST_SHAPE_MESSAGE };
+      }
+      const label = validateCustomLabel(rawLabel);
+      if (!label.ok) return label;
+      const key = customKeyFromLabel(label.value);
+      if (takenLabels.has(label.value.toLowerCase()) || takenKeys.has(key)) {
+        return { ok: false, message: `“${label.value}” is already in the list.` };
+      }
+      takenLabels.add(label.value.toLowerCase());
+      takenKeys.add(key);
+      customToAdd.push({ label: label.value, selected: rawSelected ?? true });
+    }
+  }
+
+  // -- total entry cap (defaults + remaining customs + additions)
+  const remainingCustomCount = ctx.existingCustom.length - customToRemove.length;
+  if (ctx.catalogSize + remainingCustomCount + customToAdd.length > ctx.maxEntries) {
+    return { ok: false, message: `You can list up to ${ctx.maxEntries} items here.` };
+  }
+
+  if (selections.length === 0 && customToAdd.length === 0 && customToRemove.length === 0) {
     return { ok: false, message: "Nothing to save yet." };
   }
-  if (raw.length > allowedKeys.size) {
-    return { ok: false, message: "Too many items." };
-  }
-  const seen = new Set<string>();
-  const selections: FactSelection[] = [];
-  for (const item of raw) {
-    const key = (item as { key?: unknown })?.key;
-    const selected = (item as { selected?: unknown })?.selected;
-    if (typeof key !== "string" || typeof selected !== "boolean" || !allowedKeys.has(key)) {
-      return { ok: false, message: "Could not save this list. Please refresh and try again." };
-    }
-    if (seen.has(key)) continue;
-    seen.add(key);
-    selections.push({ key, selected });
-  }
-  return { ok: true, value: selections };
+
+  return { ok: true, value: { selections, customToAdd, customToRemove } };
 }
 
 // ------------------------------------------------------------------- hours

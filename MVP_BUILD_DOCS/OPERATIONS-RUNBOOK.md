@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-10 (AI Front Desk Knowledge replaced with structured clinic facts + safe website scan; the same-day question-answer model was dropped)
+Last updated: 2026-06-10 (AI Front Desk Knowledge UX refinements: website loader tries same-site homepage variants, neutral owner-facing scan outcomes, single-save services/insurance with removable custom entries)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3256,14 +3256,31 @@ What exists:
   `not_found | needs_review | approved | do_not_use`; sources:
   `manual | business_profile | website_draft | system_default`.
 - Catalogs/limits: `config/ai-front-desk-facts.config.ts`.
-- Website scan (`lib/ai-knowledge/website-scan.ts`): server-side fetch of
-  `clinics.website` only — never a client URL. Same-origin (www/scheme homepage
-  redirect tolerated), max 8 pages, 1 MB/page, 8s timeout, manual re-validated
-  redirects, no cookies/auth, rejects localhost/private/internal hosts and all
-  IP literals (`lib/ai-knowledge/scan-url-safety.ts`). Extraction is
+- Website loader (`lib/ai-knowledge/website-scan.ts`): server-side fetch of
+  `clinics.website` only — never a client URL. The homepage bootstrap tries
+  safe same-site variants in order (https://host, https://www-toggled host,
+  http://host, http://www-toggled — scheme and www prefix only, each
+  re-validated; `homepageVariants()` in `lib/ai-knowledge/scan-url-safety.ts`).
+  Redirects to the www/scheme variant of the same host are allowed; redirects
+  to any other domain are rejected (2026-06-10 real-world case: allyexp.com
+  redirects to allyexporter.com, so it is correctly not scanned — fix the
+  Business profile website instead). After the homepage resolves, all
+  follow-up pages are strict same-origin with the resolved origin. Max 8
+  pages, 1 MB/page, 8s timeout, manual re-validated redirects, no cookies/auth,
+  rejects localhost/private/internal hosts and all IP literals. Extraction is
   deterministic (JSON-LD + text patterns, `lib/ai-knowledge/website-extract.ts`)
   — no AI provider, no browser automation. Results are saved as
   `website_draft`/`needs_review` facts only.
+- Owner-facing scan outcomes are NEUTRAL: unreachable/invalid sites and
+  zero-fact scans all show "No website information was loaded. You can fill in
+  the sections below." — never technical error text. The technical reason is
+  recorded in `clinic_website_scan_runs.error_message` and the server log.
+- Services/insurance use a single section save: one POST persists checkbox
+  selections, newly added custom entries (`customToAdd`, labels validated +
+  keys minted server-side), and removed custom entries (`customToRemove`,
+  custom rows only — defaults can never be removed). Duplicate labels are
+  rejected case-insensitively; the 50-entry cap is checked in validation and
+  re-checked inside the save transaction.
 
 Operating rules:
 

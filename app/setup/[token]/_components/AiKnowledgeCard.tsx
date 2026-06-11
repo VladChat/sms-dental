@@ -9,31 +9,42 @@ import {
   DEFAULT_PREFERRED_TIME_QUESTION,
   HOURS_TIMEZONES,
   MAX_CUSTOM_LABEL_LENGTH,
+  MAX_INSURANCE_PLANS_PER_CLINIC,
   MAX_POLICY_TEXT_LENGTH,
   MAX_PREFERRED_TIME_QUESTION_LENGTH,
   MAX_PRICING_POLICY_LENGTH,
+  MAX_SERVICES_PER_CLINIC,
 } from "../../../../config/ai-front-desk-facts.config";
 
 // AI Front Desk Knowledge — structured clinic facts the owner reviews and
-// approves. Facts-first accordion UI: hours, services, insurance,
-// appointments, payment, policies, website scan. Address/website stay owned
-// by Business profile; this card only reads them.
+// approves. Facts-first accordion UI: website loader on top, then business
+// profile facts, hours, appointments, insurance, services, payment, policies.
+// Address/website stay owned by Business profile; this card only reads them.
+// Owner-facing copy stays short and plain — no technical wording.
 
 const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // show Monday first
 
 type HoursDayState = { weekday: number; closed: boolean; opensAt: string; closesAt: string };
-type CatalogItemState = { key: string; label: string; selected: boolean; isCustom: boolean; suggested: boolean };
+type CatalogItemState = {
+  key: string;
+  label: string;
+  selected: boolean;
+  isCustom: boolean;
+  suggested: boolean;
+  // Added locally and not saved yet (persists on Save, not before).
+  pending?: boolean;
+};
 
 type SaveState = { saving: boolean; error: string | null; saved: boolean };
 const IDLE_SAVE: SaveState = { saving: false, error: null, saved: false };
 
 type LoadState = "loading" | "signin_required" | "error" | "ready";
 
-type ScanResultState = {
-  factsFound: number;
-  reviewNotes: string | null;
-} | null;
+// Outcome of the latest "Load website information" click. `loaded` is false
+// for both "nothing useful found" and "site unreachable" — the owner sees one
+// neutral message either way.
+type ScanResultState = { loaded: boolean; reviewNotes: string | null } | null;
 
 export function AiKnowledgeCard({
   businessProfile,
@@ -47,9 +58,12 @@ export function AiKnowledgeCard({
   const [timezone, setTimezone] = useState<string>("America/Chicago");
   const [hoursDays, setHoursDays] = useState<HoursDayState[]>([]);
   const [hoursSuggested, setHoursSuggested] = useState(false);
+  const [hoursPersisted, setHoursPersisted] = useState(false);
 
   const [services, setServices] = useState<CatalogItemState[]>([]);
   const [insurance, setInsurance] = useState<CatalogItemState[]>([]);
+  const [removedServiceKeys, setRemovedServiceKeys] = useState<string[]>([]);
+  const [removedInsuranceKeys, setRemovedInsuranceKeys] = useState<string[]>([]);
   const [newServiceLabel, setNewServiceLabel] = useState("");
   const [newInsuranceLabel, setNewInsuranceLabel] = useState("");
 
@@ -84,9 +98,7 @@ export function AiKnowledgeCard({
 
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
   const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResultState>(null);
-  const [lastScanNote, setLastScanNote] = useState<string | null>(null);
 
   function saveState(section: string): SaveState {
     return saveStates[section] ?? IDLE_SAVE;
@@ -106,8 +118,11 @@ export function AiKnowledgeCard({
       })),
     );
     setHoursSuggested(facts.hours.suggested);
+    setHoursPersisted(facts.hours.persisted);
     setServices(facts.services);
     setInsurance(facts.insurancePlans);
+    setRemovedServiceKeys([]);
+    setRemovedInsuranceKeys([]);
     setAppointments({
       acceptingNewPatients: facts.appointments.acceptingNewPatients ?? false,
       cleaningAppointments: facts.appointments.cleaningAppointments ?? false,
@@ -134,11 +149,6 @@ export function AiKnowledgeCard({
       accessibilityNotes: facts.policies.accessibilityNotes ?? "",
       suggested: facts.policies.suggested,
     });
-    if (facts.lastScan && facts.lastScan.status === "completed") {
-      setLastScanNote(
-        `Your last website check found ${facts.lastScan.factsFound} suggestion${facts.lastScan.factsFound === 1 ? "" : "s"}.`,
-      );
-    }
   }
 
   useEffect(() => {
@@ -229,33 +239,84 @@ export function AiKnowledgeCard({
     });
     if (facts) {
       setHoursSuggested(facts.hours.suggested);
+      setHoursPersisted(facts.hours.persisted);
     }
   }
 
-  async function saveSelections(section: "services" | "insurance") {
+  // One Save persists the whole list: checked/unchecked entries, newly added
+  // custom items, and removed custom items.
+  async function saveCatalogSection(section: "services" | "insurance") {
     const items = section === "services" ? services : insurance;
+    const removed = section === "services" ? removedServiceKeys : removedInsuranceKeys;
     const facts = await postSection(section, section, {
-      action: "save",
-      selections: items.map((item) => ({ key: item.key, selected: item.selected })),
+      selections: items
+        .filter((item) => !item.pending)
+        .map((item) => ({ key: item.key, selected: item.selected })),
+      customToAdd: items
+        .filter((item) => item.pending)
+        .map((item) => ({ label: item.label, selected: item.selected })),
+      customToRemove: removed,
     });
-    if (facts) {
-      if (section === "services") setServices(facts.services);
-      else setInsurance(facts.insurancePlans);
-    }
-  }
-
-  async function addCustom(section: "services" | "insurance") {
-    const label = section === "services" ? newServiceLabel : newInsuranceLabel;
-    const facts = await postSection(section, section, { action: "add", label });
     if (facts) {
       if (section === "services") {
         setServices(facts.services);
-        setNewServiceLabel("");
+        setRemovedServiceKeys([]);
       } else {
         setInsurance(facts.insurancePlans);
-        setNewInsuranceLabel("");
+        setRemovedInsuranceKeys([]);
       }
     }
+  }
+
+  // Adding only updates the visible list; nothing is stored until Save.
+  function addCustomLocally(section: "services" | "insurance") {
+    const [label, items, max] =
+      section === "services"
+        ? [newServiceLabel.trim().replace(/\s+/g, " "), services, MAX_SERVICES_PER_CLINIC]
+        : [newInsuranceLabel.trim().replace(/\s+/g, " "), insurance, MAX_INSURANCE_PLANS_PER_CLINIC];
+    if (label.length === 0) return;
+    if (items.some((item) => item.label.toLowerCase() === label.toLowerCase())) {
+      setSave(section, { saving: false, error: `“${label}” is already in the list.`, saved: false });
+      return;
+    }
+    if (items.length >= max) {
+      setSave(section, {
+        saving: false,
+        error: `You can list up to ${max} ${section === "services" ? "services" : "insurance plans"}.`,
+        saved: false,
+      });
+      return;
+    }
+    const newItem: CatalogItemState = {
+      key: `pending:${label.toLowerCase()}`,
+      label,
+      selected: true,
+      isCustom: true,
+      suggested: false,
+      pending: true,
+    };
+    if (section === "services") {
+      setServices((prev) => [...prev, newItem]);
+      setNewServiceLabel("");
+    } else {
+      setInsurance((prev) => [...prev, newItem]);
+      setNewInsuranceLabel("");
+    }
+    setSave(section, IDLE_SAVE);
+  }
+
+  // Remove is for custom items only. Pending items vanish locally; existing
+  // custom items are deleted when the owner clicks Save.
+  function removeCustomLocally(section: "services" | "insurance", item: CatalogItemState) {
+    if (!item.isCustom) return;
+    if (section === "services") {
+      setServices((prev) => prev.filter((s) => s.key !== item.key));
+      if (!item.pending) setRemovedServiceKeys((prev) => [...prev, item.key]);
+    } else {
+      setInsurance((prev) => prev.filter((p) => p.key !== item.key));
+      if (!item.pending) setRemovedInsuranceKeys((prev) => [...prev, item.key]);
+    }
+    setSave(section, IDLE_SAVE);
   }
 
   async function saveAppointments() {
@@ -296,9 +357,8 @@ export function AiKnowledgeCard({
     if (facts) setPolicies((prev) => ({ ...prev, suggested: facts.policies.suggested }));
   }
 
-  async function scanWebsite() {
+  async function loadWebsiteInformation() {
     setScanning(true);
-    setScanError(null);
     setScanResult(null);
     try {
       const res = await fetch("/api/account/ai-knowledge/scan-website", {
@@ -309,22 +369,21 @@ export function AiKnowledgeCard({
         | {
             ok?: boolean;
             facts?: AiFactsView;
-            scan?: { factsFound?: number; reviewNotes?: string | null };
-            error?: { message?: string };
+            scan?: { loaded?: boolean; reviewNotes?: string | null };
           }
         | null;
       if (!res.ok || !json?.ok || !json.facts) {
-        setScanError(json?.error?.message ?? "We couldn't check your website. Please try again.");
+        // Neutral state — never technical error text for the owner.
+        setScanResult({ loaded: false, reviewNotes: null });
         return;
       }
       applyFacts(json.facts);
       setScanResult({
-        factsFound: json.scan?.factsFound ?? 0,
+        loaded: json.scan?.loaded === true,
         reviewNotes: json.scan?.reviewNotes ?? null,
       });
-      setLastScanNote(null);
     } catch {
-      setScanError("We couldn't check your website. Please try again.");
+      setScanResult({ loaded: false, reviewNotes: null });
     } finally {
       setScanning(false);
     }
@@ -356,6 +415,8 @@ export function AiKnowledgeCard({
   const hasAddress = businessProfile.streetAddress.trim().length > 0 && businessProfile.city.trim().length > 0;
   const anyServiceSuggested = services.some((item) => item.suggested);
   const anyInsuranceSuggested = insurance.some((item) => item.suggested);
+  const selectedServiceCount = services.filter((item) => item.selected).length;
+  const selectedInsuranceCount = insurance.filter((item) => item.selected).length;
 
   return (
     <div className="aifacts-stack">
@@ -364,9 +425,63 @@ export function AiKnowledgeCard({
           Add what AI can safely say to patients.
         </p>
         <p className="t-small" style={{ margin: 0 }}>
-          Questions without an approved answer go to your office. AI never gives medical advice.
+          Questions AI cannot answer go to someone in your office. AI never gives medical advice.
         </p>
       </div>
+
+      {/* -------------------------------------------------------- website */}
+      <section className="aifacts-acc" aria-labelledby="aifacts-website-title" style={{ padding: "var(--space-4) var(--space-5) var(--space-5)" }}>
+        <h3 id="aifacts-website-title" className="t-h4" style={{ marginBottom: "var(--space-2)" }}>Website</h3>
+        {website ? (
+          <div style={{ display: "grid", gap: "var(--space-3)" }}>
+            <p className="t-small" style={{ overflowWrap: "anywhere", fontWeight: 600, margin: 0 }}>{website}</p>
+            <p className="t-small" style={{ margin: 0 }}>
+              We can try to load basic information from your website. You can review everything
+              before saving.
+            </p>
+            <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={loadWebsiteInformation}
+                disabled={scanning}
+              >
+                {scanning ? "Loading…" : "Load website information"}
+              </button>
+              {scanning && (
+                <span className="t-small" role="status" aria-live="polite">
+                  Loading website information…
+                </span>
+              )}
+            </div>
+            {scanResult && scanResult.loaded && (
+              <div className="alert alert-success" role="status">
+                <span>
+                  Website information loaded. Review the highlighted sections and save what is
+                  correct.
+                  {scanResult.reviewNotes ? ` ${scanResult.reviewNotes}` : ""}
+                </span>
+              </div>
+            )}
+            {scanResult && !scanResult.loaded && (
+              <div className="alert alert-info" role="status">
+                <span>No website information was loaded. You can fill in the sections below.</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "var(--space-3)" }}>
+            <p className="t-small" style={{ margin: 0 }}>
+              Add a website in Business profile to load information from it.
+            </p>
+            <p style={{ margin: 0 }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={onGoToBusinessProfile}>
+                Edit Business profile
+              </button>
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* ------------------------------------------------ business profile */}
       <Accordion title="Business profile facts" defaultOpen>
@@ -407,7 +522,11 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* ---------------------------------------------------------- hours */}
-      <Accordion title="Hours & location" badge={hoursSuggested ? "Review" : undefined}>
+      <Accordion
+        title="Hours & location"
+        badge={hoursSuggested ? "Review" : undefined}
+        meta={hoursPersisted ? undefined : "Needs setup"}
+      >
         <p className="t-small">Set normal office hours.</p>
         {hoursSuggested && (
           <p className="t-small" style={{ fontWeight: 600 }}>
@@ -522,7 +641,7 @@ export function AiKnowledgeCard({
           />
         </div>
         <Field
-          label="Preferred time question"
+          label="Preferred first time question"
           name="aifacts-preferred-time"
           value={appointments.preferredTimeQuestion}
           onChange={(v) => {
@@ -536,7 +655,11 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* ------------------------------------------------------ insurance */}
-      <Accordion title="Insurance" badge={anyInsuranceSuggested ? "Review" : undefined}>
+      <Accordion
+        title="Insurance"
+        badge={anyInsuranceSuggested ? "Review" : undefined}
+        meta={`${selectedInsuranceCount} selected`}
+      >
         <p className="t-small">Select insurance plans your office accepts.</p>
         <CatalogChecklist
           idPrefix="aifacts-ins"
@@ -544,20 +667,29 @@ export function AiKnowledgeCard({
           onToggle={(key, selected) =>
             setInsurance((prev) => prev.map((item) => (item.key === key ? { ...item, selected } : item)))
           }
+          onRemove={(item) => removeCustomLocally("insurance", item)}
         />
         <AddCustomRow
           label="Add insurance"
           inputId="aifacts-add-insurance"
           value={newInsuranceLabel}
           onChange={setNewInsuranceLabel}
-          onAdd={() => addCustom("insurance")}
+          onAdd={() => addCustomLocally("insurance")}
           disabled={saveState("insurance").saving}
         />
-        <SectionSave section="insurance" state={saveState("insurance")} onSave={() => saveSelections("insurance")} />
+        <SectionSave
+          section="insurance"
+          state={saveState("insurance")}
+          onSave={() => saveCatalogSection("insurance")}
+        />
       </Accordion>
 
       {/* ------------------------------------------------------- services */}
-      <Accordion title="Services" badge={anyServiceSuggested ? "Review" : undefined}>
+      <Accordion
+        title="Services"
+        badge={anyServiceSuggested ? "Review" : undefined}
+        meta={`${selectedServiceCount} selected`}
+      >
         <p className="t-small">Select services your office offers.</p>
         <CatalogChecklist
           idPrefix="aifacts-svc"
@@ -565,16 +697,21 @@ export function AiKnowledgeCard({
           onToggle={(key, selected) =>
             setServices((prev) => prev.map((item) => (item.key === key ? { ...item, selected } : item)))
           }
+          onRemove={(item) => removeCustomLocally("services", item)}
         />
         <AddCustomRow
           label="Add service"
           inputId="aifacts-add-service"
           value={newServiceLabel}
           onChange={setNewServiceLabel}
-          onAdd={() => addCustom("services")}
+          onAdd={() => addCustomLocally("services")}
           disabled={saveState("services").saving}
         />
-        <SectionSave section="services" state={saveState("services")} onSave={() => saveSelections("services")} />
+        <SectionSave
+          section="services"
+          state={saveState("services")}
+          onSave={() => saveCatalogSection("services")}
+        />
       </Accordion>
 
       {/* -------------------------------------------------------- payment */}
@@ -668,52 +805,6 @@ export function AiKnowledgeCard({
         />
         <SectionSave section="policies" state={saveState("policies")} onSave={savePolicies} />
       </Accordion>
-
-      {/* --------------------------------------------------- website scan */}
-      <Accordion title="Website check">
-        {website ? (
-          <>
-            <p className="t-small">Scan your website to suggest draft facts.</p>
-            <p className="t-small" style={{ overflowWrap: "anywhere", fontWeight: 600 }}>{website}</p>
-            <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center", flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-primary btn-sm" onClick={scanWebsite} disabled={scanning}>
-                {scanning ? "Scanning…" : "Scan website"}
-              </button>
-              {scanning && (
-                <span className="t-small" role="status" aria-live="polite">
-                  Checking your website…
-                </span>
-              )}
-            </div>
-            {scanResult && (
-              <div className="alert alert-success" role="status">
-                <span>
-                  <strong>Found draft facts</strong>
-                  {scanResult.factsFound > 0
-                    ? "Review the suggestions marked “Review” above, then save each section to approve."
-                    : "We didn’t find new suggestions this time. You can still fill in each section above."}
-                  {scanResult.reviewNotes ? ` ${scanResult.reviewNotes}` : ""}
-                </span>
-              </div>
-            )}
-            {scanError && (
-              <div className="alert alert-error" role="alert">
-                <span>{scanError}</span>
-              </div>
-            )}
-            {!scanResult && !scanError && lastScanNote && <p className="t-small">{lastScanNote}</p>}
-          </>
-        ) : (
-          <>
-            <p className="t-small">Add a website in Business profile to scan for draft facts.</p>
-            <p style={{ margin: 0 }}>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={onGoToBusinessProfile}>
-                Go to Business profile
-              </button>
-            </p>
-          </>
-        )}
-      </Accordion>
     </div>
   );
 }
@@ -723,11 +814,14 @@ export function AiKnowledgeCard({
 function Accordion({
   title,
   badge,
+  meta,
   defaultOpen = false,
   children,
 }: {
   title: string;
   badge?: string;
+  // Short muted summary shown in the header (e.g. "3 selected").
+  meta?: string;
   defaultOpen?: boolean;
   children: ReactNode;
 }) {
@@ -743,6 +837,7 @@ function Accordion({
         <span className="aifacts-acc-title">
           <h3 className="t-h4" style={{ font: "inherit", margin: 0 }}>{title}</h3>
           {badge && <span className="badge badge-info">{badge}</span>}
+          {meta && <span className="t-small" style={{ fontWeight: 400 }}>· {meta}</span>}
         </span>
       </summary>
       <div className="aifacts-acc-body">{children}</div>
@@ -789,21 +884,39 @@ function CatalogChecklist({
   idPrefix,
   items,
   onToggle,
+  onRemove,
 }: {
   idPrefix: string;
   items: CatalogItemState[];
   onToggle: (key: string, selected: boolean) => void;
+  // Custom items only; default catalog items can only be unchecked.
+  onRemove: (item: CatalogItemState) => void;
 }) {
   return (
     <div className="aifacts-check-grid" role="group" aria-label="Options">
       {items.map((item) => (
-        <CheckOption
+        <span
           key={`${idPrefix}-${item.key}`}
-          label={item.label}
-          checked={item.selected}
-          onChange={(v) => onToggle(item.key, v)}
-          suggested={item.suggested && item.selected}
-        />
+          style={{ display: "inline-flex", alignItems: "flex-start", gap: "var(--space-2)" }}
+        >
+          <CheckOption
+            label={item.label}
+            checked={item.selected}
+            onChange={(v) => onToggle(item.key, v)}
+            suggested={item.suggested && item.selected}
+          />
+          {item.isCustom && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              aria-label={`Remove ${item.label}`}
+              onClick={() => onRemove(item)}
+              style={{ flex: "0 0 auto" }}
+            >
+              Remove
+            </button>
+          )}
+        </span>
       ))}
     </div>
   );
@@ -850,6 +963,7 @@ function AddCustomRow({
           Add
         </button>
       </div>
+      <p className="helper">Added items are saved when you click Save.</p>
     </div>
   );
 }

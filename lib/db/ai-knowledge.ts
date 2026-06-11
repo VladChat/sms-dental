@@ -14,7 +14,7 @@ import {
   customLimitReached,
   isCustomKey,
   type AppointmentSettingsValue,
-  type FactSelection,
+  type CatalogSectionUpdate,
   type HoursValue,
   type OfficePoliciesValue,
   type PaymentSettingsValue,
@@ -326,24 +326,27 @@ export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
   };
 }
 
-// Keys the selection endpoints accept: default catalog plus this clinic's
-// existing custom keys (custom keys are only ever minted server-side).
-export async function listAllowedServiceKeys(clinicId: string): Promise<Set<string>> {
+// The clinic's existing custom entries (key + label). Routes use these to
+// validate removals and duplicate labels; custom keys are only ever minted
+// server-side.
+export type CustomCatalogEntry = { key: string; label: string };
+
+export async function listCustomServiceEntries(clinicId: string): Promise<CustomCatalogEntry[]> {
   const sql = getDb();
-  const rows = await sql<{ service_key: string }[]>`
-    select service_key from public.clinic_ai_services
+  const rows = await sql<{ service_key: string; label: string }[]>`
+    select service_key, label from public.clinic_ai_services
     where clinic_id = ${clinicId} and is_custom = true
   `;
-  return new Set([...DEFAULT_SERVICES.map((s) => s.key), ...rows.map((r) => r.service_key)]);
+  return rows.map((r) => ({ key: r.service_key, label: r.label }));
 }
 
-export async function listAllowedInsuranceKeys(clinicId: string): Promise<Set<string>> {
+export async function listCustomInsuranceEntries(clinicId: string): Promise<CustomCatalogEntry[]> {
   const sql = getDb();
-  const rows = await sql<{ plan_key: string }[]>`
-    select plan_key from public.clinic_ai_insurance_plans
+  const rows = await sql<{ plan_key: string; label: string }[]>`
+    select plan_key, label from public.clinic_ai_insurance_plans
     where clinic_id = ${clinicId} and is_custom = true
   `;
-  return new Set([...DEFAULT_INSURANCE_PLANS.map((p) => p.key), ...rows.map((r) => r.plan_key)]);
+  return rows.map((r) => ({ key: r.plan_key, label: r.label }));
 }
 
 // ------------------------------------------------------------------- saves
@@ -387,16 +390,64 @@ export async function saveClinicHours(
   });
 }
 
-async function saveSelections(
+export type SaveCatalogSectionResult = { ok: true } | { ok: false; reason: "limit_reached" };
+
+// Persist one full section save: remove custom rows, insert new custom rows
+// (keys minted server-side from validated labels), and upsert checkbox
+// selections — all in one transaction. Owner saves are reviewed: status
+// 'approved', source 'manual'. The entry cap is re-checked inside the
+// transaction (validation already checked it; this guards races).
+async function saveCatalogSection(
   table: "clinic_ai_services" | "clinic_ai_insurance_plans",
   keyField: "service_key" | "plan_key",
+  catalogSize: number,
+  maxEntries: number,
   clinicId: string,
-  selections: FactSelection[],
+  update: CatalogSectionUpdate,
   reviewedByProfileId: string | null,
-): Promise<void> {
+): Promise<SaveCatalogSectionResult> {
   const sql = getDb();
-  await sql.begin(async (tx) => {
-    for (const selection of selections) {
+  return sql.begin(async (tx) => {
+    for (const key of update.customToRemove) {
+      await tx`
+        delete from ${tx(`public.${table}`)}
+        where clinic_id = ${clinicId} and ${tx(keyField)} = ${key} and is_custom = true
+      `;
+    }
+
+    const [{ count }] = await tx<{ count: string }[]>`
+      select count(*)::text as count from ${tx(`public.${table}`)}
+      where clinic_id = ${clinicId} and is_custom = true
+    `;
+    if (
+      update.customToAdd.length > 0 &&
+      customLimitReached(catalogSize, Number(count) + update.customToAdd.length - 1, maxEntries)
+    ) {
+      // Throwing rolls back the deletes too; map to a friendly result instead.
+      throw new CatalogLimitReachedError();
+    }
+
+    for (let i = 0; i < update.customToAdd.length; i += 1) {
+      const custom = update.customToAdd[i];
+      await tx`
+        insert into ${tx(`public.${table}`)} (
+          clinic_id, ${tx(keyField)}, label, selected, is_custom,
+          status, source_type, reviewed_at, reviewed_by_profile_id, sort_order
+        ) values (
+          ${clinicId}, ${customKeyFromLabel(custom.label)}, ${custom.label}, ${custom.selected}, true,
+          'approved', 'manual', now(), ${reviewedByProfileId}, ${1000 + Number(count) + i}
+        )
+        on conflict (clinic_id, ${tx(keyField)}) do update set
+          label = excluded.label,
+          selected = excluded.selected,
+          status = 'approved',
+          source_type = 'manual',
+          reviewed_at = excluded.reviewed_at,
+          reviewed_by_profile_id = excluded.reviewed_by_profile_id
+      `;
+    }
+
+    for (const selection of update.selections) {
       const catalogItem =
         keyField === "service_key"
           ? findDefaultService(selection.key)
@@ -417,112 +468,63 @@ async function saveSelections(
             reviewed_by_profile_id = excluded.reviewed_by_profile_id
         `;
       } else if (isCustomKey(selection.key)) {
-        // Custom rows always exist already (created by the add-custom path);
-        // unknown keys were rejected during validation.
+        // Existing custom rows only; unknown keys were rejected in validation
+        // and removed keys were dropped from selections there too.
         await tx`
           update ${tx(`public.${table}`)} set
             selected = ${selection.selected},
             status = 'approved',
             reviewed_at = now(),
             reviewed_by_profile_id = ${reviewedByProfileId}
-          where clinic_id = ${clinicId} and ${tx(keyField)} = ${selection.key}
+          where clinic_id = ${clinicId} and ${tx(keyField)} = ${selection.key} and is_custom = true
         `;
       }
     }
-  });
-}
 
-export async function saveServiceSelections(
-  clinicId: string,
-  selections: FactSelection[],
-  reviewedByProfileId: string | null,
-): Promise<void> {
-  await saveSelections("clinic_ai_services", "service_key", clinicId, selections, reviewedByProfileId);
-}
-
-export async function saveInsuranceSelections(
-  clinicId: string,
-  selections: FactSelection[],
-  reviewedByProfileId: string | null,
-): Promise<void> {
-  await saveSelections(
-    "clinic_ai_insurance_plans",
-    "plan_key",
-    clinicId,
-    selections,
-    reviewedByProfileId,
-  );
-}
-
-export type AddCustomEntryResult =
-  | { ok: true }
-  | { ok: false; reason: "limit_reached" | "already_exists" };
-
-async function addCustomEntry(
-  table: "clinic_ai_services" | "clinic_ai_insurance_plans",
-  keyField: "service_key" | "plan_key",
-  catalogSize: number,
-  maxEntries: number,
-  clinicId: string,
-  label: string,
-  reviewedByProfileId: string | null,
-): Promise<AddCustomEntryResult> {
-  const sql = getDb();
-  const key = customKeyFromLabel(label);
-  return sql.begin(async (tx) => {
-    const [{ count }] = await tx<{ count: string }[]>`
-      select count(*)::text as count from ${tx(`public.${table}`)}
-      where clinic_id = ${clinicId} and is_custom = true
-    `;
-    if (customLimitReached(catalogSize, Number(count), maxEntries)) {
+    return { ok: true } as const;
+  }).catch((error: unknown) => {
+    if (error instanceof CatalogLimitReachedError) {
       return { ok: false, reason: "limit_reached" } as const;
     }
-    const inserted = await tx<{ id: string }[]>`
-      insert into ${tx(`public.${table}`)} (
-        clinic_id, ${tx(keyField)}, label, selected, is_custom,
-        status, source_type, reviewed_at, reviewed_by_profile_id, sort_order
-      ) values (
-        ${clinicId}, ${key}, ${label}, true, true,
-        'approved', 'manual', now(), ${reviewedByProfileId}, ${1000 + Number(count)}
-      )
-      on conflict (clinic_id, ${tx(keyField)}) do nothing
-      returning id
-    `;
-    if (inserted.length === 0) {
-      return { ok: false, reason: "already_exists" } as const;
-    }
-    return { ok: true } as const;
+    throw error;
   });
 }
 
-export async function addCustomService(
+class CatalogLimitReachedError extends Error {
+  constructor() {
+    super("catalog entry limit reached");
+    this.name = "CatalogLimitReachedError";
+  }
+}
+
+export async function saveServiceSection(
   clinicId: string,
-  label: string,
+  update: CatalogSectionUpdate,
   reviewedByProfileId: string | null,
-): Promise<AddCustomEntryResult> {
-  return addCustomEntry(
+): Promise<SaveCatalogSectionResult> {
+  return saveCatalogSection(
     "clinic_ai_services",
     "service_key",
     DEFAULT_SERVICES.length,
     MAX_SERVICES_PER_CLINIC,
     clinicId,
-    label,
+    update,
     reviewedByProfileId,
   );
 }
 
-export async function addCustomInsurancePlan(
+export async function saveInsuranceSection(
   clinicId: string,
-  label: string,
+  update: CatalogSectionUpdate,
   reviewedByProfileId: string | null,
-): Promise<AddCustomEntryResult> {
-  return addCustomEntry(
+): Promise<SaveCatalogSectionResult> {
+  return saveCatalogSection(
     "clinic_ai_insurance_plans",
     "plan_key",
     DEFAULT_INSURANCE_PLANS.length,
     MAX_INSURANCE_PLANS_PER_CLINIC,
     clinicId,
-    label,
+    update,
     reviewedByProfileId,
   );
 }

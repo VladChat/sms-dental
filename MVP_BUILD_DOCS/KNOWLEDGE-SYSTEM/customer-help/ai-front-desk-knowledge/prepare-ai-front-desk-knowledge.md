@@ -42,22 +42,25 @@ Clinic owners and admins. Front-desk staff do not manage AI knowledge.
 - Medical and urgent questions always go to your office. That rule is built in
   and is not a setting.
 
-### Website check
+### Website information
 
-If your Business profile has a website, you can scan it to suggest facts —
-hours, services, insurance plans, and payment options found on your site appear
-as suggestions marked "Review". Nothing from your website is used until you
-review and save the section yourself. The scan never changes your Business
-profile.
+At the top of the section, if your Business profile has a website, you can use
+**Load website information** — hours, services, insurance plans, and payment
+options found on your site appear as suggestions marked "Review". Nothing from
+your website is used until you review and save the section yourself, and the
+load never changes your Business profile. If nothing could be loaded, you
+simply fill in the sections yourself.
 
 ## What you can do
 
 - Open **/account → AI knowledge** and work through the sections.
+- Use **Load website information** to pre-fill suggestions, then review and
+  save what is correct.
 - Set normal office hours by weekday.
-- Check services and insurance plans, and add your own items if something is
-  missing (up to 50 each).
+- Check services and insurance plans, add your own items if something is
+  missing (up to 50 each), and remove items you added — changes are saved when
+  you click Save.
 - Choose the appointment requests your office handles.
-- Scan your website to pre-fill suggestions, then review and save.
 
 ## What to expect
 
