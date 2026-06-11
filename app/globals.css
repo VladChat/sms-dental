@@ -411,6 +411,22 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 /* ------------------------------------- AI front desk facts (account) */
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .aifacts-stack { display:grid; gap:var(--space-4); }
+.aifacts-intro {
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+.aifacts-intro-title {
+  margin: 0;
+  font: 700 1.05rem/1.35 var(--font-sans);
+  color: var(--text);
+}
+.aifacts-intro-body {
+  margin: 0;
+  font: var(--body-sm);
+  line-height: 1.65;
+  color: var(--text-secondary);
+  max-width: 56rem;
+}
 .aifacts-acc { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
 .aifacts-acc > summary {
   display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);

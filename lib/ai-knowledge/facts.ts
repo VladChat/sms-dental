@@ -16,7 +16,6 @@ import {
   MAX_LANGUAGE_LENGTH,
   MAX_POLICY_TEXT_LENGTH,
   MAX_PREFERRED_TIME_QUESTION_LENGTH,
-  MAX_PRICING_POLICY_LENGTH,
 } from "../../config/ai-front-desk-facts.config";
 
 export type FactValidationResult<T> =
@@ -327,55 +326,163 @@ export function validateAppointmentSettings(
   };
 }
 
-// ------------------------------------------------------------------ payment
+// ----------------------------------------------------------- payment methods
 
-export type PaymentSettingsValue = {
-  paymentPlans: boolean | null;
-  financing: boolean | null;
-  carecredit: boolean | null;
-  membershipPlan: boolean | null;
-  pricingPolicy: string | null;
+// Which payment methods the office accepts. Each maps 1:1 to a boolean column.
+// No custom additions — the list is fixed.
+export type PaymentMethodsValue = {
+  cash: boolean | null;
+  creditDebitCards: boolean | null;
+  personalChecks: boolean | null;
+  hsaFsaCards: boolean | null;
 };
 
-export function validatePaymentSettings(
+export function validatePaymentMethods(
   raw: unknown,
-): FactValidationResult<PaymentSettingsValue> {
+): FactValidationResult<PaymentMethodsValue> {
   const input = (raw ?? {}) as Record<string, unknown>;
   const fields = {
-    paymentPlans: optionalBoolean(input.paymentPlans),
-    financing: optionalBoolean(input.financing),
-    carecredit: optionalBoolean(input.carecredit),
-    membershipPlan: optionalBoolean(input.membershipPlan),
+    cash: optionalBoolean(input.cash),
+    creditDebitCards: optionalBoolean(input.creditDebitCards),
+    personalChecks: optionalBoolean(input.personalChecks),
+    hsaFsaCards: optionalBoolean(input.hsaFsaCards),
   };
   for (const value of Object.values(fields)) {
     if (value === undefined) {
       return { ok: false, message: "Could not save. Please refresh and try again." };
     }
   }
-  let pricingPolicy: string | null = null;
-  if (typeof input.pricingPolicy === "string") {
-    const trimmed = input.pricingPolicy.trim();
-    if (trimmed.length > MAX_PRICING_POLICY_LENGTH) {
-      return {
-        ok: false,
-        message: `Keep the pricing note under ${MAX_PRICING_POLICY_LENGTH} characters.`,
-      };
-    }
-    if (containsSampleData(trimmed)) {
-      return { ok: false, message: "Please replace the sample text with your office’s wording." };
-    }
-    pricingPolicy = trimmed.length > 0 ? trimmed : null;
-  } else if (input.pricingPolicy !== undefined && input.pricingPolicy !== null) {
-    return { ok: false, message: "Could not save. Please refresh and try again." };
-  }
   return {
     ok: true,
     value: {
-      paymentPlans: fields.paymentPlans as boolean | null,
-      financing: fields.financing as boolean | null,
-      carecredit: fields.carecredit as boolean | null,
-      membershipPlan: fields.membershipPlan as boolean | null,
-      pricingPolicy,
+      cash: fields.cash as boolean | null,
+      creditDebitCards: fields.creditDebitCards as boolean | null,
+      personalChecks: fields.personalChecks as boolean | null,
+      hsaFsaCards: fields.hsaFsaCards as boolean | null,
+    },
+  };
+}
+
+// --------------------------------------------------------- financing & plans
+
+// The default financing options (fixed booleans) plus a custom-options update
+// (the same add/remove/select pattern used for services/insurance). Default
+// financing options are not removable — only the custom ones are.
+export type FinancingDefaultsValue = {
+  inOfficePaymentPlans: boolean | null;
+  carecredit: boolean | null;
+  alphaeonCredit: boolean | null;
+  membershipPlan: boolean | null;
+};
+
+export type FinancingSectionUpdate = {
+  defaults: FinancingDefaultsValue;
+  custom: CatalogSectionUpdate;
+};
+
+// Validate a full Financing & plans save: the four default booleans plus a
+// custom-options update. `existingCustom` is the clinic's saved custom rows;
+// custom keys are minted server-side and never trusted from the client. The
+// default financing labels are reserved so a custom option can't shadow one.
+export function validateFinancingUpdate(
+  raw: unknown,
+  ctx: {
+    existingCustom: readonly { key: string; label: string }[];
+    defaultLabels: readonly string[];
+    maxEntries: number;
+  },
+): FactValidationResult<FinancingSectionUpdate> {
+  const input = (raw ?? {}) as Record<string, unknown>;
+  const defaults = {
+    inOfficePaymentPlans: optionalBoolean(input.inOfficePaymentPlans),
+    carecredit: optionalBoolean(input.carecredit),
+    alphaeonCredit: optionalBoolean(input.alphaeonCredit),
+    membershipPlan: optionalBoolean(input.membershipPlan),
+  };
+  for (const value of Object.values(defaults)) {
+    if (value === undefined) {
+      return { ok: false, message: "Could not save. Please refresh and try again." };
+    }
+  }
+
+  // -- removals (existing custom rows only)
+  const existingCustomKeys = new Set(ctx.existingCustom.map((c) => c.key));
+  const customToRemove: string[] = [];
+  if (input.customToRemove !== undefined && input.customToRemove !== null) {
+    if (!Array.isArray(input.customToRemove)) return { ok: false, message: LIST_SHAPE_MESSAGE };
+    for (const key of input.customToRemove) {
+      if (typeof key !== "string" || !isCustomKey(key) || !existingCustomKeys.has(key)) {
+        return { ok: false, message: LIST_SHAPE_MESSAGE };
+      }
+      if (!customToRemove.includes(key)) customToRemove.push(key);
+    }
+  }
+  const removedKeys = new Set(customToRemove);
+
+  // -- selections (existing custom rows only; drop ones being removed)
+  const selections: FactSelection[] = [];
+  if (input.selections !== undefined && input.selections !== null) {
+    if (!Array.isArray(input.selections) || input.selections.length > existingCustomKeys.size) {
+      return { ok: false, message: LIST_SHAPE_MESSAGE };
+    }
+    const seen = new Set<string>();
+    for (const item of input.selections) {
+      const key = (item as { key?: unknown })?.key;
+      const selected = (item as { selected?: unknown })?.selected;
+      if (typeof key !== "string" || typeof selected !== "boolean" || !existingCustomKeys.has(key)) {
+        return { ok: false, message: LIST_SHAPE_MESSAGE };
+      }
+      if (seen.has(key) || removedKeys.has(key)) continue;
+      seen.add(key);
+      selections.push({ key, selected });
+    }
+  }
+
+  // -- additions (validated labels; duplicates rejected case-insensitively)
+  const customToAdd: CatalogCustomAdd[] = [];
+  if (input.customToAdd !== undefined && input.customToAdd !== null) {
+    if (!Array.isArray(input.customToAdd)) return { ok: false, message: LIST_SHAPE_MESSAGE };
+    const takenLabels = new Set<string>(ctx.defaultLabels.map((label) => label.toLowerCase()));
+    const takenKeys = new Set<string>();
+    for (const custom of ctx.existingCustom) {
+      if (removedKeys.has(custom.key)) continue;
+      takenLabels.add(custom.label.toLowerCase());
+      takenKeys.add(custom.key);
+    }
+    for (const item of input.customToAdd) {
+      const rawLabel = (item as { label?: unknown })?.label;
+      const rawSelected = (item as { selected?: unknown })?.selected;
+      if (rawSelected !== undefined && typeof rawSelected !== "boolean") {
+        return { ok: false, message: LIST_SHAPE_MESSAGE };
+      }
+      const label = validateCustomLabel(rawLabel);
+      if (!label.ok) return label;
+      const key = customKeyFromLabel(label.value);
+      if (takenLabels.has(label.value.toLowerCase()) || takenKeys.has(key)) {
+        return { ok: false, message: `“${label.value}” is already in the list.` };
+      }
+      takenLabels.add(label.value.toLowerCase());
+      takenKeys.add(key);
+      customToAdd.push({ label: label.value, selected: rawSelected ?? true });
+    }
+  }
+
+  // -- custom-options cap (existing customs minus removals plus additions)
+  const remainingCustomCount = ctx.existingCustom.length - customToRemove.length;
+  if (remainingCustomCount + customToAdd.length > ctx.maxEntries) {
+    return { ok: false, message: `You can list up to ${ctx.maxEntries} financing options.` };
+  }
+
+  return {
+    ok: true,
+    value: {
+      defaults: {
+        inOfficePaymentPlans: defaults.inOfficePaymentPlans as boolean | null,
+        carecredit: defaults.carecredit as boolean | null,
+        alphaeonCredit: defaults.alphaeonCredit as boolean | null,
+        membershipPlan: defaults.membershipPlan as boolean | null,
+      },
+      custom: { selections, customToAdd, customToRemove },
     },
   };
 }

@@ -40,6 +40,7 @@ export type AiFactSourceType = (typeof AI_FACT_SOURCE_TYPES)[number];
 // practical).
 export const MAX_SERVICES_PER_CLINIC = 50;
 export const MAX_INSURANCE_PLANS_PER_CLINIC = 50;
+export const MAX_FINANCING_OPTIONS_PER_CLINIC = 50;
 export const MAX_CUSTOM_LABEL_LENGTH = 80;
 export const MAX_HOURS_INTERVALS_PER_DAY = 3;
 export const MAX_PREFERRED_TIME_QUESTION_LENGTH = 180;
@@ -118,6 +119,25 @@ export const DEFAULT_INSURANCE_PLANS: readonly AiFactCatalogItem[] = [
   { key: "dental_discount_plans", label: "DentalPlans / discount plans", scanKeywords: ["dentalplans", "discount plan", "savings plan"] },
   { key: "medicaid", label: "Medicaid" },
   { key: "medicare_advantage", label: "Medicare Advantage dental plans", scanKeywords: ["medicare advantage", "medicare"] },
+];
+
+// Fixed payment methods an office can accept. Keys map 1:1 to boolean columns
+// on clinic_ai_payment_settings. No custom additions here.
+export const PAYMENT_METHODS: readonly AiFactCatalogItem[] = [
+  { key: "cash", label: "Cash" },
+  { key: "credit_debit_cards", label: "Credit/debit cards" },
+  { key: "personal_checks", label: "Personal checks" },
+  { key: "hsa_fsa_cards", label: "HSA/FSA cards" },
+];
+
+// Default financing options. Keys map 1:1 to boolean columns on
+// clinic_ai_payment_settings; owners may also add custom financing options
+// (stored in clinic_ai_financing_options, max 50 per clinic).
+export const FINANCING_DEFAULTS: readonly AiFactCatalogItem[] = [
+  { key: "in_office_payment_plans", label: "In-office payment plans" },
+  { key: "carecredit", label: "CareCredit" },
+  { key: "alphaeon_credit", label: "Alphaeon Credit" },
+  { key: "membership_plan", label: "Membership plan" },
 ];
 
 const serviceByKey = new Map(DEFAULT_SERVICES.map((item) => [item.key, item]));

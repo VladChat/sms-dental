@@ -37,6 +37,7 @@ export type PageFacts = {
     paymentPlans: boolean;
     financing: boolean;
     carecredit: boolean;
+    alphaeonCredit: boolean;
     membershipPlan: boolean;
     excerpt: string | null;
   };
@@ -462,14 +463,15 @@ export function extractPageFacts(input: { url: string; html: string }): PageFact
   const paymentPlans = lowerText.includes("payment plan");
   const financing = lowerText.includes("financing") || lowerText.includes("finance options");
   const carecredit = lowerText.includes("carecredit") || lowerText.includes("care credit");
+  const alphaeonCredit = lowerText.includes("alphaeon");
   const membershipPlan =
     lowerText.includes("membership plan") ||
     lowerText.includes("membership program") ||
     lowerText.includes("in-house membership") ||
     lowerText.includes("in-house plan");
   let paymentExcerpt: string | null = null;
-  if (paymentPlans || financing || carecredit || membershipPlan) {
-    const index = ["payment plan", "financing", "carecredit", "care credit", "membership plan"]
+  if (paymentPlans || financing || carecredit || alphaeonCredit || membershipPlan) {
+    const index = ["payment plan", "financing", "carecredit", "care credit", "alphaeon", "membership plan"]
       .map((term) => lowerText.indexOf(term))
       .filter((i) => i >= 0)
       .sort((a, b) => a - b)[0];
@@ -490,7 +492,7 @@ export function extractPageFacts(input: { url: string; html: string }): PageFact
     hours,
     services: matchCatalogItems(lowerText, text, DEFAULT_SERVICES),
     insurancePlans: matchCatalogItems(lowerText, text, DEFAULT_INSURANCE_PLANS),
-    payment: { paymentPlans, financing, carecredit, membershipPlan, excerpt: paymentExcerpt },
+    payment: { paymentPlans, financing, carecredit, alphaeonCredit, membershipPlan, excerpt: paymentExcerpt },
     languages: languagesFromText(text, lowerText),
     acceptingNewPatients:
       /accepting new patients|welcoming new patients|new patients (?:are )?welcome|now accepting patients/i.test(text),
@@ -515,7 +517,7 @@ export function aggregatePageFacts(pages: PageFacts[]): AggregatedFacts {
     hours: [],
     services: [],
     insurancePlans: [],
-    payment: { paymentPlans: false, financing: false, carecredit: false, membershipPlan: false, excerpt: null },
+    payment: { paymentPlans: false, financing: false, carecredit: false, alphaeonCredit: false, membershipPlan: false, excerpt: null },
     languages: [],
     acceptingNewPatients: false,
     emergencyAppointments: false,
@@ -557,6 +559,7 @@ export function aggregatePageFacts(pages: PageFacts[]): AggregatedFacts {
     if (page.payment.paymentPlans) result.payment.paymentPlans = true;
     if (page.payment.financing) result.payment.financing = true;
     if (page.payment.carecredit) result.payment.carecredit = true;
+    if (page.payment.alphaeonCredit) result.payment.alphaeonCredit = true;
     if (page.payment.membershipPlan) result.payment.membershipPlan = true;
     if (!result.payment.excerpt && page.payment.excerpt) {
       result.payment.excerpt = page.payment.excerpt;
@@ -596,6 +599,7 @@ export function countAggregatedFacts(facts: AggregatedFacts): number {
   if (facts.payment.paymentPlans) count += 1;
   if (facts.payment.financing) count += 1;
   if (facts.payment.carecredit) count += 1;
+  if (facts.payment.alphaeonCredit) count += 1;
   if (facts.payment.membershipPlan) count += 1;
   count += facts.languages.length > 0 ? 1 : 0;
   if (facts.acceptingNewPatients) count += 1;

@@ -256,8 +256,29 @@ test("payment options and languages are detected", () => {
   assert.equal(facts.payment.carecredit, true);
   assert.equal(facts.payment.paymentPlans, true);
   assert.equal(facts.payment.financing, false);
+  assert.equal(facts.payment.alphaeonCredit, false);
   assert.ok(facts.languages.includes("Spanish"));
   assert.ok(facts.languages.includes("Russian"));
+});
+
+test("financing brands map to the new fields (CareCredit, Alphaeon, payment plans)", () => {
+  const html = `<html><body>
+    <p>Financing available through CareCredit and Alphaeon Credit, plus in-office payment plans.</p>
+  </body></html>`;
+  const facts = extractPageFacts({ url: "https://www.example.com/financing", html });
+  assert.equal(facts.payment.carecredit, true);
+  assert.equal(facts.payment.alphaeonCredit, true);
+  assert.equal(facts.payment.paymentPlans, true);
+
+  // Alphaeon also survives aggregation across pages.
+  const other = extractPageFacts({
+    url: "https://www.example.com/",
+    html: "<html><body><p>Welcome to our practice.</p></body></html>",
+  });
+  const aggregated = aggregatePageFacts([other, facts]);
+  assert.equal(aggregated.payment.alphaeonCredit, true);
+  assert.equal(aggregated.payment.carecredit, true);
+  assert.equal(aggregated.payment.paymentPlans, true);
 });
 
 // --------------------------------------------- new patient form link (strict)

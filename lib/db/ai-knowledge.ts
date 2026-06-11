@@ -6,6 +6,7 @@ import {
   DEFAULT_PREFERRED_TIME_QUESTION,
   DEFAULT_SERVICES,
   LOCKED_LANGUAGE,
+  MAX_FINANCING_OPTIONS_PER_CLINIC,
   MAX_INSURANCE_PLANS_PER_CLINIC,
   MAX_SERVICES_PER_CLINIC,
   findDefaultInsurancePlan,
@@ -18,9 +19,11 @@ import {
   looksLikeFormLink,
   type AppointmentSettingsValue,
   type CatalogSectionUpdate,
+  type FinancingDefaultsValue,
+  type FinancingSectionUpdate,
   type HoursValue,
   type OfficePoliciesValue,
-  type PaymentSettingsValue,
+  type PaymentMethodsValue,
 } from "../ai-knowledge/facts";
 import type { AggregatedFacts } from "../ai-knowledge/website-extract";
 
@@ -63,12 +66,24 @@ type AppointmentSettingsRow = {
 };
 
 type PaymentSettingsRow = {
-  payment_plans: boolean | null;
-  financing: boolean | null;
+  cash: boolean | null;
+  credit_debit_cards: boolean | null;
+  personal_checks: boolean | null;
+  hsa_fsa_cards: boolean | null;
+  in_office_payment_plans: boolean | null;
   carecredit: boolean | null;
+  alphaeon_credit: boolean | null;
   membership_plan: boolean | null;
-  pricing_policy: string | null;
   status: string;
+};
+
+type FinancingOptionRow = {
+  option_key: string;
+  label: string;
+  selected: boolean;
+  is_custom: boolean;
+  status: string;
+  sort_order: number;
 };
 
 type OfficePoliciesRow = {
@@ -131,11 +146,19 @@ export type AiFactsView = {
     suggested: boolean;
   };
   payment: {
-    paymentPlans: boolean | null;
-    financing: boolean | null;
-    carecredit: boolean | null;
-    membershipPlan: boolean | null;
-    pricingPolicy: string | null;
+    methods: {
+      cash: boolean | null;
+      creditDebitCards: boolean | null;
+      personalChecks: boolean | null;
+      hsaFsaCards: boolean | null;
+    };
+    financing: {
+      inOfficePaymentPlans: boolean | null;
+      carecredit: boolean | null;
+      alphaeonCredit: boolean | null;
+      membershipPlan: boolean | null;
+      customOptions: AiFactsCatalogEntryView[];
+    };
     persisted: boolean;
     suggested: boolean;
   };
@@ -242,12 +265,35 @@ function languagesView(stored: string[]): AiFactsCatalogEntryView[] {
   return items;
 }
 
+// Custom financing options view. Default financing options are booleans on the
+// payment row; this table holds only the owner-added custom rows.
+function financingOptionsView(rows: FinancingOptionRow[]): AiFactsCatalogEntryView[] {
+  return rows
+    .filter((row) => row.is_custom)
+    .sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label))
+    .map((row) => ({
+      key: row.option_key,
+      label: row.label,
+      selected: row.selected,
+      isCustom: true,
+      suggested: row.status === "needs_review",
+    }));
+}
+
 // ----------------------------------------------------------------- queries
 
 export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
   const sql = getDb();
-  const [hoursRows, serviceRows, insuranceRows, appointmentRows, paymentRows, policyRows, scanRows] =
-    await Promise.all([
+  const [
+    hoursRows,
+    serviceRows,
+    insuranceRows,
+    appointmentRows,
+    paymentRows,
+    financingRows,
+    policyRows,
+    scanRows,
+  ] = await Promise.all([
       sql<HoursRow[]>`
         select weekday, interval_index, is_closed, opens_at, closes_at, timezone, status
         from public.clinic_ai_hours
@@ -271,8 +317,14 @@ export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
         where clinic_id = ${clinicId}
       `,
       sql<PaymentSettingsRow[]>`
-        select payment_plans, financing, carecredit, membership_plan, pricing_policy, status
+        select cash, credit_debit_cards, personal_checks, hsa_fsa_cards,
+               in_office_payment_plans, carecredit, alphaeon_credit, membership_plan, status
         from public.clinic_ai_payment_settings
+        where clinic_id = ${clinicId}
+      `,
+      sql<FinancingOptionRow[]>`
+        select option_key, label, selected, is_custom, status, sort_order
+        from public.clinic_ai_financing_options
         where clinic_id = ${clinicId}
       `,
       sql<OfficePoliciesRow[]>`
@@ -337,13 +389,23 @@ export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
       suggested: appointments?.status === "needs_review",
     },
     payment: {
-      paymentPlans: payment?.payment_plans ?? null,
-      financing: payment?.financing ?? null,
-      carecredit: payment?.carecredit ?? null,
-      membershipPlan: payment?.membership_plan ?? null,
-      pricingPolicy: payment?.pricing_policy ?? null,
+      methods: {
+        cash: payment?.cash ?? null,
+        creditDebitCards: payment?.credit_debit_cards ?? null,
+        personalChecks: payment?.personal_checks ?? null,
+        hsaFsaCards: payment?.hsa_fsa_cards ?? null,
+      },
+      financing: {
+        inOfficePaymentPlans: payment?.in_office_payment_plans ?? null,
+        carecredit: payment?.carecredit ?? null,
+        alphaeonCredit: payment?.alphaeon_credit ?? null,
+        membershipPlan: payment?.membership_plan ?? null,
+        customOptions: financingOptionsView(financingRows),
+      },
       persisted: payment !== null,
-      suggested: payment?.status === "needs_review",
+      suggested:
+        payment?.status === "needs_review" ||
+        financingRows.some((row) => row.status === "needs_review"),
     },
     policies: {
       // Form link only — drop any legacy/noisy non-link value (e.g. a website
@@ -399,6 +461,15 @@ export async function listCustomInsuranceEntries(clinicId: string): Promise<Cust
     where clinic_id = ${clinicId} and is_custom = true
   `;
   return rows.map((r) => ({ key: r.plan_key, label: r.label }));
+}
+
+export async function listCustomFinancingEntries(clinicId: string): Promise<CustomCatalogEntry[]> {
+  const sql = getDb();
+  const rows = await sql<{ option_key: string; label: string }[]>`
+    select option_key, label from public.clinic_ai_financing_options
+    where clinic_id = ${clinicId} and is_custom = true
+  `;
+  return rows.map((r) => ({ key: r.option_key, label: r.label }));
 }
 
 // ------------------------------------------------------------------- saves
@@ -611,32 +682,129 @@ export async function saveAppointmentSettings(
   `;
 }
 
-export async function savePaymentSettings(
+// Save the Payment methods section (which methods the office accepts). Touches
+// only the method columns on the shared payment row, so a financing save never
+// clobbers it and vice versa. The legacy pricing_policy column is cleared.
+export async function savePaymentMethods(
   clinicId: string,
-  value: PaymentSettingsValue,
+  value: PaymentMethodsValue,
   reviewedByProfileId: string | null,
 ): Promise<void> {
   const sql = getDb();
   await sql`
     insert into public.clinic_ai_payment_settings (
-      clinic_id, payment_plans, financing, carecredit, membership_plan, pricing_policy,
+      clinic_id, cash, credit_debit_cards, personal_checks, hsa_fsa_cards, pricing_policy,
       status, source_type, reviewed_at, reviewed_by_profile_id
     ) values (
-      ${clinicId}, ${value.paymentPlans}, ${value.financing}, ${value.carecredit},
-      ${value.membershipPlan}, ${value.pricingPolicy},
+      ${clinicId}, ${value.cash}, ${value.creditDebitCards}, ${value.personalChecks},
+      ${value.hsaFsaCards}, null,
       'approved', 'manual', now(), ${reviewedByProfileId}
     )
     on conflict (clinic_id) do update set
-      payment_plans = excluded.payment_plans,
-      financing = excluded.financing,
-      carecredit = excluded.carecredit,
-      membership_plan = excluded.membership_plan,
-      pricing_policy = excluded.pricing_policy,
+      cash = excluded.cash,
+      credit_debit_cards = excluded.credit_debit_cards,
+      personal_checks = excluded.personal_checks,
+      hsa_fsa_cards = excluded.hsa_fsa_cards,
+      pricing_policy = null,
       status = 'approved',
       source_type = 'manual',
       reviewed_at = excluded.reviewed_at,
       reviewed_by_profile_id = excluded.reviewed_by_profile_id
   `;
+}
+
+export type SaveFinancingResult = { ok: true } | { ok: false; reason: "limit_reached" };
+
+// Save the whole Financing & plans section in one transaction: the default
+// financing booleans on the payment row, plus the custom-options add/remove/
+// select on clinic_ai_financing_options. Custom keys are minted server-side.
+// The 50-option cap is re-checked inside the transaction (guards races).
+export async function saveFinancingSection(
+  clinicId: string,
+  defaults: FinancingDefaultsValue,
+  custom: FinancingSectionUpdate["custom"],
+  reviewedByProfileId: string | null,
+): Promise<SaveFinancingResult> {
+  const sql = getDb();
+  return sql
+    .begin(async (tx) => {
+      // Default financing booleans live on the shared payment row. Touch only
+      // those columns so a Payment methods save is never clobbered; clear the
+      // legacy pricing_policy column.
+      await tx`
+        insert into public.clinic_ai_payment_settings (
+          clinic_id, in_office_payment_plans, carecredit, alphaeon_credit, membership_plan,
+          pricing_policy, status, source_type, reviewed_at, reviewed_by_profile_id
+        ) values (
+          ${clinicId}, ${defaults.inOfficePaymentPlans}, ${defaults.carecredit},
+          ${defaults.alphaeonCredit}, ${defaults.membershipPlan},
+          null, 'approved', 'manual', now(), ${reviewedByProfileId}
+        )
+        on conflict (clinic_id) do update set
+          in_office_payment_plans = excluded.in_office_payment_plans,
+          carecredit = excluded.carecredit,
+          alphaeon_credit = excluded.alphaeon_credit,
+          membership_plan = excluded.membership_plan,
+          pricing_policy = null,
+          status = 'approved',
+          source_type = 'manual',
+          reviewed_at = excluded.reviewed_at,
+          reviewed_by_profile_id = excluded.reviewed_by_profile_id
+      `;
+
+      for (const key of custom.customToRemove) {
+        await tx`
+          delete from public.clinic_ai_financing_options
+          where clinic_id = ${clinicId} and option_key = ${key} and is_custom = true
+        `;
+      }
+
+      const [{ count }] = await tx<{ count: string }[]>`
+        select count(*)::text as count from public.clinic_ai_financing_options
+        where clinic_id = ${clinicId} and is_custom = true
+      `;
+      if (Number(count) + custom.customToAdd.length > MAX_FINANCING_OPTIONS_PER_CLINIC) {
+        throw new CatalogLimitReachedError();
+      }
+
+      for (let i = 0; i < custom.customToAdd.length; i += 1) {
+        const option = custom.customToAdd[i];
+        await tx`
+          insert into public.clinic_ai_financing_options (
+            clinic_id, option_key, label, selected, is_custom,
+            status, source_type, sort_order
+          ) values (
+            ${clinicId}, ${customKeyFromLabel(option.label)}, ${option.label}, ${option.selected}, true,
+            'approved', 'manual', ${1000 + Number(count) + i}
+          )
+          on conflict (clinic_id, option_key) do update set
+            label = excluded.label,
+            selected = excluded.selected,
+            status = 'approved',
+            source_type = 'manual'
+        `;
+      }
+
+      for (const selection of custom.selections) {
+        // Existing custom rows only; unknown/removed keys were dropped in
+        // validation.
+        if (!isCustomKey(selection.key)) continue;
+        await tx`
+          update public.clinic_ai_financing_options set
+            selected = ${selection.selected},
+            status = 'approved'
+          where clinic_id = ${clinicId} and option_key = ${selection.key} and is_custom = true
+        `;
+      }
+
+      return { ok: true } as const;
+    })
+    .catch((error: unknown) => {
+      if (error instanceof CatalogLimitReachedError) {
+        return { ok: false, reason: "limit_reached" } as const;
+      }
+      throw error;
+    });
 }
 
 // Save office policy text fields. Languages live in their own column managed by
@@ -846,11 +1014,16 @@ export async function applyScanDrafts(
       }
     }
 
+    // Map detected financing facts to the structured columns. Payment-plan
+    // text → in_office_payment_plans, CareCredit → carecredit, Alphaeon →
+    // alphaeon_credit, membership → membership_plan. Payment METHODS (cash,
+    // cards, checks, HSA/FSA) are never inferred from generic page text.
+    const inOfficePaymentPlans = facts.payment.paymentPlans ? true : null;
+    const carecredit = facts.payment.carecredit ? true : null;
+    const alphaeonCredit = facts.payment.alphaeonCredit ? true : null;
+    const membershipPlan = facts.payment.membershipPlan ? true : null;
     const paymentFound =
-      facts.payment.paymentPlans ||
-      facts.payment.financing ||
-      facts.payment.carecredit ||
-      facts.payment.membershipPlan;
+      inOfficePaymentPlans || carecredit || alphaeonCredit || membershipPlan;
     if (paymentFound) {
       const [payment] = await tx<{ status: string }[]>`
         select status from public.clinic_ai_payment_settings where clinic_id = ${clinicId}
@@ -858,24 +1031,24 @@ export async function applyScanDrafts(
       if (!payment) {
         await tx`
           insert into public.clinic_ai_payment_settings (
-            clinic_id, payment_plans, financing, carecredit, membership_plan,
+            clinic_id, in_office_payment_plans, carecredit, alphaeon_credit, membership_plan,
             status, source_type, source_url, source_excerpt
           ) values (
             ${clinicId},
-            ${facts.payment.paymentPlans ? true : null},
-            ${facts.payment.financing ? true : null},
-            ${facts.payment.carecredit ? true : null},
-            ${facts.payment.membershipPlan ? true : null},
+            ${inOfficePaymentPlans},
+            ${carecredit},
+            ${alphaeonCredit},
+            ${membershipPlan},
             'needs_review', 'website_draft', ${urlFor("payment")}, ${facts.payment.excerpt}
           )
         `;
       } else if (payment.status !== "approved") {
         await tx`
           update public.clinic_ai_payment_settings set
-            payment_plans = coalesce(payment_plans, ${facts.payment.paymentPlans ? true : null}),
-            financing = coalesce(financing, ${facts.payment.financing ? true : null}),
-            carecredit = coalesce(carecredit, ${facts.payment.carecredit ? true : null}),
-            membership_plan = coalesce(membership_plan, ${facts.payment.membershipPlan ? true : null}),
+            in_office_payment_plans = coalesce(in_office_payment_plans, ${inOfficePaymentPlans}),
+            carecredit = coalesce(carecredit, ${carecredit}),
+            alphaeon_credit = coalesce(alphaeon_credit, ${alphaeonCredit}),
+            membership_plan = coalesce(membership_plan, ${membershipPlan}),
             status = 'needs_review',
             source_type = 'website_draft',
             source_url = ${urlFor("payment")},

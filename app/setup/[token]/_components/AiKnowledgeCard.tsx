@@ -7,14 +7,15 @@ import type { BusinessProfileFields } from "./account-types";
 import type { AiFactsView } from "../../../../lib/db/ai-knowledge";
 import {
   DEFAULT_PREFERRED_TIME_QUESTION,
+  FINANCING_DEFAULTS,
   HOURS_TIMEZONES,
   MAX_CUSTOM_LABEL_LENGTH,
+  MAX_FINANCING_OPTIONS_PER_CLINIC,
   MAX_INSURANCE_PLANS_PER_CLINIC,
   MAX_LANGUAGE_LENGTH,
   MAX_LANGUAGES,
   MAX_POLICY_TEXT_LENGTH,
   MAX_PREFERRED_TIME_QUESTION_LENGTH,
-  MAX_PRICING_POLICY_LENGTH,
   MAX_SERVICES_PER_CLINIC,
 } from "../../../../config/ai-front-desk-facts.config";
 
@@ -84,14 +85,23 @@ export function AiKnowledgeCard({
     suggested: false,
   });
 
-  const [payment, setPayment] = useState({
-    paymentPlans: false,
-    financing: false,
-    carecredit: false,
-    membershipPlan: false,
-    pricingPolicy: "",
-    suggested: false,
+  const [paymentMethods, setPaymentMethods] = useState({
+    cash: false,
+    creditDebitCards: false,
+    personalChecks: false,
+    hsaFsaCards: false,
   });
+
+  const [financingDefaults, setFinancingDefaults] = useState({
+    inOfficePaymentPlans: false,
+    carecredit: false,
+    alphaeonCredit: false,
+    membershipPlan: false,
+  });
+  const [financingOptions, setFinancingOptions] = useState<CatalogItemState[]>([]);
+  const [removedFinancingKeys, setRemovedFinancingKeys] = useState<string[]>([]);
+  const [newFinancingLabel, setNewFinancingLabel] = useState("");
+  const [financingSuggested, setFinancingSuggested] = useState(false);
 
   const [policies, setPolicies] = useState({
     newPatientForms: "",
@@ -139,14 +149,21 @@ export function AiKnowledgeCard({
       preferredTimeQuestion: facts.appointments.preferredTimeQuestion,
       suggested: facts.appointments.suggested,
     });
-    setPayment({
-      paymentPlans: facts.payment.paymentPlans ?? false,
-      financing: facts.payment.financing ?? false,
-      carecredit: facts.payment.carecredit ?? false,
-      membershipPlan: facts.payment.membershipPlan ?? false,
-      pricingPolicy: facts.payment.pricingPolicy ?? "",
-      suggested: facts.payment.suggested,
+    setPaymentMethods({
+      cash: facts.payment.methods.cash ?? false,
+      creditDebitCards: facts.payment.methods.creditDebitCards ?? false,
+      personalChecks: facts.payment.methods.personalChecks ?? false,
+      hsaFsaCards: facts.payment.methods.hsaFsaCards ?? false,
     });
+    setFinancingDefaults({
+      inOfficePaymentPlans: facts.payment.financing.inOfficePaymentPlans ?? false,
+      carecredit: facts.payment.financing.carecredit ?? false,
+      alphaeonCredit: facts.payment.financing.alphaeonCredit ?? false,
+      membershipPlan: facts.payment.financing.membershipPlan ?? false,
+    });
+    setFinancingOptions(facts.payment.financing.customOptions);
+    setRemovedFinancingKeys([]);
+    setFinancingSuggested(facts.payment.suggested);
     setPolicies({
       newPatientForms: facts.policies.newPatientForms ?? "",
       whatToBring: facts.policies.whatToBring ?? "",
@@ -337,15 +354,91 @@ export function AiKnowledgeCard({
     if (facts) setAppointments((prev) => ({ ...prev, suggested: facts.appointments.suggested }));
   }
 
-  async function savePayment() {
-    const facts = await postSection("payment", "payment", {
-      paymentPlans: payment.paymentPlans,
-      financing: payment.financing,
-      carecredit: payment.carecredit,
-      membershipPlan: payment.membershipPlan,
-      pricingPolicy: payment.pricingPolicy,
+  async function savePaymentMethodsSection() {
+    await postSection("payment-methods", "payment", {
+      paymentMethods: {
+        cash: paymentMethods.cash,
+        creditDebitCards: paymentMethods.creditDebitCards,
+        personalChecks: paymentMethods.personalChecks,
+        hsaFsaCards: paymentMethods.hsaFsaCards,
+      },
     });
-    if (facts) setPayment((prev) => ({ ...prev, suggested: facts.payment.suggested }));
+  }
+
+  // One Save persists the whole Financing & plans section: the default
+  // booleans, newly added custom options, removed custom options, and the
+  // checked/unchecked state of existing custom options.
+  async function saveFinancing() {
+    const facts = await postSection("financing", "payment", {
+      financing: {
+        inOfficePaymentPlans: financingDefaults.inOfficePaymentPlans,
+        carecredit: financingDefaults.carecredit,
+        alphaeonCredit: financingDefaults.alphaeonCredit,
+        membershipPlan: financingDefaults.membershipPlan,
+        selections: financingOptions
+          .filter((item) => !item.pending)
+          .map((item) => ({ key: item.key, selected: item.selected })),
+        customToAdd: financingOptions
+          .filter((item) => item.pending)
+          .map((item) => ({ label: item.label, selected: item.selected })),
+        customToRemove: removedFinancingKeys,
+      },
+    });
+    if (facts) {
+      setFinancingDefaults({
+        inOfficePaymentPlans: facts.payment.financing.inOfficePaymentPlans ?? false,
+        carecredit: facts.payment.financing.carecredit ?? false,
+        alphaeonCredit: facts.payment.financing.alphaeonCredit ?? false,
+        membershipPlan: facts.payment.financing.membershipPlan ?? false,
+      });
+      setFinancingOptions(facts.payment.financing.customOptions);
+      setRemovedFinancingKeys([]);
+      setFinancingSuggested(facts.payment.suggested);
+    }
+  }
+
+  // Adding only updates the visible list; nothing is stored until Save.
+  function addFinancingLocally() {
+    const label = newFinancingLabel.trim().replace(/\s+/g, " ");
+    if (label.length === 0) return;
+    const takenLabels = [
+      ...FINANCING_DEFAULTS.map((option) => option.label),
+      ...financingOptions.map((item) => item.label),
+    ];
+    if (takenLabels.some((existing) => existing.toLowerCase() === label.toLowerCase())) {
+      setSave("financing", { saving: false, error: `“${label}” is already in the list.`, saved: false });
+      return;
+    }
+    if (financingOptions.length >= MAX_FINANCING_OPTIONS_PER_CLINIC) {
+      setSave("financing", {
+        saving: false,
+        error: `You can list up to ${MAX_FINANCING_OPTIONS_PER_CLINIC} financing options.`,
+        saved: false,
+      });
+      return;
+    }
+    setFinancingOptions((prev) => [
+      ...prev,
+      {
+        key: `pending:${label.toLowerCase()}`,
+        label,
+        selected: true,
+        isCustom: true,
+        suggested: false,
+        pending: true,
+      },
+    ]);
+    setNewFinancingLabel("");
+    setSave("financing", IDLE_SAVE);
+  }
+
+  // Remove is for custom options only. Pending items vanish locally; existing
+  // custom options are deleted when the owner clicks Save.
+  function removeFinancingLocally(item: CatalogItemState) {
+    if (!item.isCustom) return;
+    setFinancingOptions((prev) => prev.filter((o) => o.key !== item.key));
+    if (!item.pending) setRemovedFinancingKeys((prev) => [...prev, item.key]);
+    setSave("financing", IDLE_SAVE);
   }
 
   async function savePolicies() {
@@ -467,14 +560,25 @@ export function AiKnowledgeCard({
   const anyInsuranceSuggested = insurance.some((item) => item.suggested);
   const selectedServiceCount = services.filter((item) => item.selected).length;
   const selectedInsuranceCount = insurance.filter((item) => item.selected).length;
+  const selectedPaymentMethodCount = [
+    paymentMethods.cash,
+    paymentMethods.creditDebitCards,
+    paymentMethods.personalChecks,
+    paymentMethods.hsaFsaCards,
+  ].filter(Boolean).length;
+  const selectedFinancingCount =
+    [
+      financingDefaults.inOfficePaymentPlans,
+      financingDefaults.carecredit,
+      financingDefaults.alphaeonCredit,
+      financingDefaults.membershipPlan,
+    ].filter(Boolean).length + financingOptions.filter((item) => item.selected).length;
 
   return (
     <div className="aifacts-stack">
-      <div className="acct-callout" role="note" style={{ gap: "var(--space-3)" }}>
-        <p className="t-body" style={{ fontWeight: 700, margin: 0 }}>
-          Add what AI can safely say to patients.
-        </p>
-        <p className="t-small" style={{ margin: 0 }}>
+      <div className="acct-callout aifacts-intro" role="note">
+        <p className="aifacts-intro-title">Add what AI can safely say to patients.</p>
+        <p className="aifacts-intro-body">
           Questions AI cannot answer go to someone in your office. AI never gives medical advice.
         </p>
       </div>
@@ -764,43 +868,6 @@ export function AiKnowledgeCard({
         />
       </Accordion>
 
-      {/* -------------------------------------------------------- payment */}
-      <Accordion title="Payment" badge={payment.suggested ? "Review" : undefined}>
-        <p className="t-small">Add payment options patients may ask about.</p>
-        <div className="aifacts-check-grid">
-          <CheckOption
-            label="Payment plans"
-            checked={payment.paymentPlans}
-            onChange={(v) => setPayment((prev) => ({ ...prev, paymentPlans: v }))}
-          />
-          <CheckOption
-            label="Financing"
-            checked={payment.financing}
-            onChange={(v) => setPayment((prev) => ({ ...prev, financing: v }))}
-          />
-          <CheckOption
-            label="CareCredit"
-            checked={payment.carecredit}
-            onChange={(v) => setPayment((prev) => ({ ...prev, carecredit: v }))}
-          />
-          <CheckOption
-            label="Membership plan"
-            checked={payment.membershipPlan}
-            onChange={(v) => setPayment((prev) => ({ ...prev, membershipPlan: v }))}
-          />
-        </div>
-        <LabeledTextarea
-          id="aifacts-pricing-policy"
-          label="Pricing policy"
-          optional
-          value={payment.pricingPolicy}
-          maxLength={MAX_PRICING_POLICY_LENGTH}
-          onChange={(v) => setPayment((prev) => ({ ...prev, pricingPolicy: v }))}
-          helper="Optional. A short note, not exact prices."
-        />
-        <SectionSave section="payment" state={saveState("payment")} onSave={savePayment} />
-      </Accordion>
-
       {/* ------------------------------------------------------ languages */}
       <Accordion title="Languages">
         <p className="t-small">Select languages your office supports.</p>
@@ -821,6 +888,101 @@ export function AiKnowledgeCard({
           disabled={saveState("languages").saving}
         />
         <SectionSave section="languages" state={saveState("languages")} onSave={saveLanguages} />
+      </Accordion>
+
+      {/* ------------------------------------------------ payment methods */}
+      <Accordion title="Payment methods" meta={`${selectedPaymentMethodCount} selected`}>
+        <p className="t-small">Select payment methods your office accepts.</p>
+        <div className="aifacts-check-grid">
+          <CheckOption
+            label="Cash"
+            checked={paymentMethods.cash}
+            onChange={(v) => setPaymentMethods((prev) => ({ ...prev, cash: v }))}
+          />
+          <CheckOption
+            label="Credit/debit cards"
+            checked={paymentMethods.creditDebitCards}
+            onChange={(v) => setPaymentMethods((prev) => ({ ...prev, creditDebitCards: v }))}
+          />
+          <CheckOption
+            label="Personal checks"
+            checked={paymentMethods.personalChecks}
+            onChange={(v) => setPaymentMethods((prev) => ({ ...prev, personalChecks: v }))}
+          />
+          <CheckOption
+            label="HSA/FSA cards"
+            checked={paymentMethods.hsaFsaCards}
+            onChange={(v) => setPaymentMethods((prev) => ({ ...prev, hsaFsaCards: v }))}
+          />
+        </div>
+        <SectionSave
+          section="payment-methods"
+          state={saveState("payment-methods")}
+          onSave={savePaymentMethodsSection}
+        />
+      </Accordion>
+
+      {/* --------------------------------------------------- financing & plans */}
+      <Accordion
+        title="Financing & plans"
+        badge={financingSuggested ? "Review" : undefined}
+        meta={`${selectedFinancingCount} selected`}
+      >
+        <p className="t-small">Select financing options your office offers.</p>
+        <div className="aifacts-check-grid" role="group" aria-label="Financing options">
+          <CheckOption
+            label="In-office payment plans"
+            checked={financingDefaults.inOfficePaymentPlans}
+            onChange={(v) => setFinancingDefaults((prev) => ({ ...prev, inOfficePaymentPlans: v }))}
+          />
+          <CheckOption
+            label="CareCredit"
+            checked={financingDefaults.carecredit}
+            onChange={(v) => setFinancingDefaults((prev) => ({ ...prev, carecredit: v }))}
+          />
+          <CheckOption
+            label="Alphaeon Credit"
+            checked={financingDefaults.alphaeonCredit}
+            onChange={(v) => setFinancingDefaults((prev) => ({ ...prev, alphaeonCredit: v }))}
+          />
+          <CheckOption
+            label="Membership plan"
+            checked={financingDefaults.membershipPlan}
+            onChange={(v) => setFinancingDefaults((prev) => ({ ...prev, membershipPlan: v }))}
+          />
+          {financingOptions.map((item) => (
+            <div key={`aifacts-fin-${item.key}`} className="aifacts-check-cell">
+              <CheckOption
+                label={item.label}
+                checked={item.selected}
+                onChange={(v) =>
+                  setFinancingOptions((prev) =>
+                    prev.map((o) => (o.key === item.key ? { ...o, selected: v } : o)),
+                  )
+                }
+              />
+              {item.isCustom && (
+                <button
+                  type="button"
+                  className="aifacts-remove"
+                  aria-label={`Remove ${item.label}`}
+                  onClick={() => removeFinancingLocally(item)}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <AddCustomRow
+          label="Add financing option"
+          inputId="aifacts-add-financing"
+          value={newFinancingLabel}
+          onChange={setNewFinancingLabel}
+          onAdd={addFinancingLocally}
+          disabled={saveState("financing").saving}
+        />
+        <SectionSave section="financing" state={saveState("financing")} onSave={saveFinancing} />
       </Accordion>
 
       {/* ------------------------------------------------ office policies */}

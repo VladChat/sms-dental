@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -6,12 +8,13 @@ import {
   DEFAULT_LANGUAGES,
   DEFAULT_PREFERRED_TIME_QUESTION,
   DEFAULT_SERVICES,
+  FINANCING_DEFAULTS,
   MAX_CUSTOM_LABEL_LENGTH,
+  MAX_FINANCING_OPTIONS_PER_CLINIC,
   MAX_INSURANCE_PLANS_PER_CLINIC,
   MAX_LANGUAGES,
   MAX_POLICY_TEXT_LENGTH,
   MAX_PREFERRED_TIME_QUESTION_LENGTH,
-  MAX_PRICING_POLICY_LENGTH,
   MAX_SERVICES_PER_CLINIC,
 } from "../config/ai-front-desk-facts.config";
 import {
@@ -21,10 +24,11 @@ import {
   validateAppointmentSettings,
   validateCatalogSectionUpdate,
   validateCustomLabel,
+  validateFinancingUpdate,
   validateHoursInput,
   validateLanguagesList,
   validateOfficePolicies,
-  validatePaymentSettings,
+  validatePaymentMethods,
 } from "../lib/ai-knowledge/facts";
 
 // ------------------------------------------------------------------ catalogs
@@ -343,17 +347,158 @@ test("appointment settings default and cap the preferred time question", () => {
   assert.equal(sample.ok, false);
 });
 
-// ------------------------------------------------------------------- payment
+// ----------------------------------------------------------- payment methods
 
-test("payment settings cap the pricing policy and keep it optional", () => {
-  const ok = validatePaymentSettings({ paymentPlans: true, carecredit: true, pricingPolicy: " " });
+test("payment methods accept booleans and default omitted fields to null", () => {
+  const ok = validatePaymentMethods({ cash: true, hsaFsaCards: true });
   assert.ok(ok.ok);
-  assert.equal(ok.value.pricingPolicy, null);
-  assert.equal(ok.value.paymentPlans, true);
-  assert.equal(ok.value.financing, null);
+  assert.equal(ok.value.cash, true);
+  assert.equal(ok.value.hsaFsaCards, true);
+  assert.equal(ok.value.creditDebitCards, null);
+  assert.equal(ok.value.personalChecks, null);
+  // No pricing field is part of the payment-methods helper anymore.
+  assert.ok(!("pricingPolicy" in ok.value));
+});
 
-  const long = validatePaymentSettings({ pricingPolicy: "x".repeat(MAX_PRICING_POLICY_LENGTH + 1) });
-  assert.equal(long.ok, false);
+test("payment methods reject non-boolean values", () => {
+  const bad = validatePaymentMethods({ cash: "yes" });
+  assert.equal(bad.ok, false);
+});
+
+// --------------------------------------------------------- financing & plans
+
+// Shared context: 4 default financing labels reserved, 1 existing custom row
+// ("Cherry"), cap of 50.
+function financingCtx(overrides?: Partial<Parameters<typeof validateFinancingUpdate>[1]>) {
+  return {
+    existingCustom: [{ key: "custom_cherry", label: "Cherry" }],
+    defaultLabels: FINANCING_DEFAULTS.map((option) => option.label),
+    maxEntries: MAX_FINANCING_OPTIONS_PER_CLINIC,
+    ...overrides,
+  };
+}
+
+test("financing save accepts default booleans plus custom add/remove/select", () => {
+  const result = validateFinancingUpdate(
+    {
+      inOfficePaymentPlans: true,
+      carecredit: true,
+      alphaeonCredit: false,
+      membershipPlan: false,
+      customToAdd: [{ label: "Sunbit", selected: true }],
+      customToRemove: ["custom_cherry"],
+      selections: [],
+    },
+    financingCtx(),
+  );
+  assert.ok(result.ok);
+  assert.equal(result.value.defaults.inOfficePaymentPlans, true);
+  assert.equal(result.value.defaults.carecredit, true);
+  assert.equal(result.value.defaults.alphaeonCredit, false);
+  assert.deepEqual(result.value.custom.customToAdd, [{ label: "Sunbit", selected: true }]);
+  assert.deepEqual(result.value.custom.customToRemove, ["custom_cherry"]);
+  // No pricing field is part of the financing helper.
+  assert.ok(!("pricingPolicy" in result.value));
+});
+
+test("financing defaults are required and reject non-boolean values", () => {
+  const bad = validateFinancingUpdate({ carecredit: "maybe" }, financingCtx());
+  assert.equal(bad.ok, false);
+
+  const omittedOk = validateFinancingUpdate({ carecredit: true }, financingCtx());
+  assert.ok(omittedOk.ok);
+  assert.equal(omittedOk.value.defaults.inOfficePaymentPlans, null);
+});
+
+test("financing selections and removals are limited to existing custom rows", () => {
+  const removedSelectionDropped = validateFinancingUpdate(
+    {
+      selections: [{ key: "custom_cherry", selected: true }],
+      customToRemove: ["custom_cherry"],
+    },
+    financingCtx(),
+  );
+  assert.ok(removedSelectionDropped.ok);
+  assert.deepEqual(removedSelectionDropped.value.custom.selections, []);
+
+  // A default financing key is a boolean, never a custom selection key.
+  const defaultAsSelection = validateFinancingUpdate(
+    { selections: [{ key: "carecredit", selected: true }] },
+    financingCtx(),
+  );
+  assert.equal(defaultAsSelection.ok, false);
+
+  const unknownRemoval = validateFinancingUpdate(
+    { customToRemove: ["custom_never_existed"] },
+    financingCtx(),
+  );
+  assert.equal(unknownRemoval.ok, false);
+});
+
+test("duplicate custom financing labels are rejected case-insensitively", () => {
+  // vs a default financing label
+  const vsDefault = validateFinancingUpdate(
+    { customToAdd: [{ label: "carecredit", selected: true }] },
+    financingCtx(),
+  );
+  assert.equal(vsDefault.ok, false);
+
+  // vs an existing custom row
+  const vsExisting = validateFinancingUpdate(
+    { customToAdd: [{ label: "CHERRY", selected: true }] },
+    financingCtx(),
+  );
+  assert.equal(vsExisting.ok, false);
+
+  // within the same batch
+  const withinBatch = validateFinancingUpdate(
+    { customToAdd: [{ label: "Sunbit", selected: true }, { label: "sunbit", selected: true }] },
+    financingCtx(),
+  );
+  assert.equal(withinBatch.ok, false);
+
+  // removing the existing custom frees its label for re-adding in the same save
+  const reAddAfterRemove = validateFinancingUpdate(
+    { customToAdd: [{ label: "Cherry", selected: true }], customToRemove: ["custom_cherry"] },
+    financingCtx(),
+  );
+  assert.ok(reAddAfterRemove.ok);
+});
+
+test("financing enforces a 50 custom-option cap", () => {
+  const full = financingCtx({
+    existingCustom: Array.from({ length: MAX_FINANCING_OPTIONS_PER_CLINIC }, (_, i) => ({
+      key: `custom_opt_${i}`,
+      label: `Option ${i}`,
+    })),
+  });
+  const over = validateFinancingUpdate({ customToAdd: [{ label: "One more", selected: true }] }, full);
+  assert.equal(over.ok, false);
+
+  // …unless a removal frees a slot in the same save.
+  const swap = validateFinancingUpdate(
+    { customToAdd: [{ label: "One more", selected: true }], customToRemove: ["custom_opt_0"] },
+    full,
+  );
+  assert.ok(swap.ok);
+});
+
+// ------------------------------------------------------------------ UI guards
+
+test("AI knowledge intro uses a CSS class, not an inline gap style", () => {
+  const source = readFileSync(
+    join(process.cwd(), "app", "setup", "[token]", "_components", "AiKnowledgeCard.tsx"),
+    "utf8",
+  );
+  // The failed inline-spacing attempt must be gone.
+  assert.ok(!/style=\{\{\s*gap:\s*"var\(--space-3\)"\s*\}\}/.test(source));
+  // The real class-based intro must be present.
+  assert.ok(source.includes('className="acct-callout aifacts-intro"'));
+  assert.ok(source.includes("aifacts-intro-title"));
+  assert.ok(source.includes("aifacts-intro-body"));
+  // The removed Pricing policy textarea must not reappear in the owner UI.
+  assert.ok(!source.includes("MAX_PRICING_POLICY_LENGTH"));
+  assert.ok(!/Pricing policy/.test(source));
 });
 
 // ------------------------------------------------------------------ policies
