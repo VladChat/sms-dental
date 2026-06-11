@@ -6462,3 +6462,25 @@ pass. No `lint` script exists in `package.json`.
 
 Not done: no SMS sent, no calls, no Twilio mutations, no AI provider calls, no
 env changes, no migration, no raw website HTML stored, `docs/` untouched.
+
+---
+
+## 2026-06-10 — Production rollout: AI Knowledge UI cleanup
+
+- Commit `8e1df28b9ff13358dfafa43984411b3ebe0dadd4` pushed to `origin/main`;
+  GitHub-triggered Vercel deployment `dpl_FvgRLzi9pkSgFwt8KY76hmek37K4` READY
+  and aliased to `https://app.missedcallsdental.com`.
+
+Production verification (all pass):
+
+- `GET /api/health` -> 200 `ok: true`.
+- `POST /api/account/ai-knowledge/languages` unauthenticated -> 401 (new
+  owner/admin-only route is live).
+- `/account?section=ai_knowledge` -> 200; `/account?section=business` -> 200;
+  `/workspace` -> 200 (expected gates when unauthenticated).
+- New copy/UI (Languages section, Form link, placeholders, removed per-item
+  suggested text) verified by build + 51 unit tests; the authenticated
+  click-through is the owner's final check.
+
+No SMS, no calls, no Twilio/Stripe mutations, no env/DNS changes, no AI
+provider calls, no migration, no raw HTML stored.
