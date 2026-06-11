@@ -10,9 +10,15 @@ import { recordWebhookEvent } from "@/lib/db/webhook-events";
 import { isDatabaseConfigured } from "@/lib/db/client";
 import { normalizePhone } from "@/lib/phone/normalize";
 import { lookupClinicByPhoneIncludingScheduled } from "@/lib/db/clinics";
-import { getOrCreateConversation, touchConversation } from "@/lib/db/conversations";
+import {
+  getOrCreateConversation,
+  setPatientDisplayNameIfEmpty,
+  touchConversation,
+} from "@/lib/db/conversations";
 import { recordInboundMessage } from "@/lib/db/messages";
 import { upsertOptOut, clearOptOut } from "@/lib/db/opt-outs";
+import { extractPatientName } from "@/lib/sms-recovery/patient-name";
+import { maybeSendConversationAutoReply } from "@/lib/twilio/conversation-auto-reply";
 import { logger } from "@/lib/logging/logger";
 
 export const runtime = "nodejs";
@@ -107,6 +113,7 @@ export async function POST(request: NextRequest) {
         );
 
         // Record the inbound message.
+        let inboundIsDuplicate = false;
         try {
           const recorded = await recordInboundMessage({
             clinicId: clinic.id,
@@ -119,6 +126,7 @@ export async function POST(request: NextRequest) {
             detectedKeyword: keyword,
             rawPayload: params,
           });
+          inboundIsDuplicate = recorded.duplicate;
           if (!recorded.duplicate) {
             await touchConversation(conversationId);
           }
@@ -137,6 +145,42 @@ export async function POST(request: NextRequest) {
         } else if (keyword === "start") {
           await clearOptOut(clinic.id, from);
           logger.info("twilio.sms.opted_in", { clinicId: clinic.id });
+        }
+
+        // Ordinary (non-keyword), first-seen reply: conservatively collect a
+        // patient name and run the deterministic auto-reply flow. STOP/START/
+        // HELP and duplicate webhooks never reach name extraction or auto-reply.
+        // The auto-reply helper enforces every send guard itself and is a no-op
+        // when no admin settings enable follow-ups (max_auto_replies defaults 0).
+        if (!keyword && !inboundIsDuplicate) {
+          try {
+            const extractedName = extractPatientName(body);
+            if (extractedName) {
+              await setPatientDisplayNameIfEmpty(conversationId, extractedName);
+            }
+          } catch (err) {
+            logger.error("twilio.sms.name_extract_failed", {
+              messageSid,
+              message: err instanceof Error ? err.message : "unknown",
+            });
+          }
+
+          try {
+            await maybeSendConversationAutoReply({
+              clinic,
+              patientPhone: from,
+              twilioPhone: to,
+              conversationId,
+              keyword,
+              isDuplicateInbound: inboundIsDuplicate,
+            });
+          } catch (err) {
+            logger.error("twilio.sms.auto_reply_failed", {
+              messageSid,
+              message: err instanceof Error ? err.message : "unknown",
+            });
+            // Never surface auto-reply errors to Twilio — always return 200.
+          }
         }
       }
     } catch (err) {

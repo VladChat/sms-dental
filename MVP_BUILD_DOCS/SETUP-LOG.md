@@ -7050,3 +7050,70 @@ Final verified state:
 
 No Twilio resource mutation, A2P action, Stripe change, number lifecycle action,
 secret printing, deletion, phone-number release, or patient-data dump occurred.
+
+---
+
+## 2026-06-11 — System-admin AI Knowledge + SMS Conversation Builder v1
+
+Built admin-side AI Knowledge management and a deterministic SMS Conversation
+Builder. No AI runtime, no AI provider calls. Default behavior unchanged: with
+no saved conversation settings, `max_auto_replies` defaults to 0 and the
+missed-call SMS is byte-for-byte the existing fixed message.
+
+What changed:
+
+- Migration `supabase/migrations/20260619000100_sms_conversation_builder.sql`
+  (additive/idempotent): `clinic_sms_conversation_settings`
+  (max_auto_replies 0–3), `clinic_sms_message_templates` (initial seq 0 +
+  auto_reply seq 1–3, body ≤240, role/sequence checks), conversation state on
+  `patient_conversations` (`patient_display_name`, `sms_auto_reply_count`,
+  `sms_auto_reply_last_sent_at`), and `messages.message_kind`
+  (missed_call_recovery | conversation_auto_reply | manual | inbound). RLS
+  enabled on the two new tables.
+- Admin AI Knowledge: `AiKnowledgeCard` now takes `apiBasePath`
+  (owner default `/api/account/ai-knowledge` unchanged). New admin routes
+  `GET /api/admin/clinics/[clinicId]/ai-knowledge` + section POSTs (hours,
+  services, insurance, languages, payment, policies) + scan-website, guarded by
+  `lib/auth/admin-clinic.ts` (`requirePlatformAdminClinic`, clinic id from URL).
+  Shared handlers in `lib/ai-knowledge/section-handlers.ts` reuse the owner
+  validation/DB functions; admin saves audit `clinic.ai_knowledge.<section>.update`
+  / `clinic.ai_knowledge.website_scan` (redacted). New **AI knowledge** tab in
+  `AdminClinicConsole`.
+- SMS Conversation Builder: pure helpers
+  `lib/sms-recovery/conversation-templates.ts` (prefix/suffix, default middle,
+  follow-up suggestions, render with natural {{patient_name}} fallback,
+  `buildInitialSmsBody` delegating to the fixed builder when no middle),
+  `template-safety.ts` (banned phrases/URLs/emails/phones/unknown placeholders/
+  caps), `patient-name.ts` (conservative fail-closed extractor),
+  `auto-reply-evaluation.ts` (pure ordered decision). DB helper
+  `lib/db/sms-conversation-settings.ts`; conversation helpers
+  (`setPatientDisplayNameIfEmpty`, `getConversationAutoReplyState`,
+  `claimAutoReplySlot`) and message helpers (`message_kind`,
+  `hasPriorRecoveryOutbound`, recovery-filtered `hasSentRecoverySmsSince`).
+- Outbound: `outbound-sms.ts` builds the initial body from the saved middle
+  (safe fallback to the fixed default on any settings/build error) and records
+  `message_kind='missed_call_recovery'`.
+- Inbound webhook: after a first-seen ordinary reply, conservatively extracts +
+  stores a patient name, then `maybeSendConversationAutoReply`
+  (`lib/twilio/conversation-auto-reply.ts`) may send one deterministic
+  follow-up. It enforces mode, exact-number readiness, recovery gate, opt-out,
+  prior-recovery, max/enabled-slot, keyword and duplicate guards itself, claims
+  the slot atomically, and records `conversation_auto_reply`. Webhook still
+  returns empty TwiML.
+- Admin SMS builder API `GET|POST /api/admin/clinics/[clinicId]/sms-conversation`
+  (`clinic.sms_conversation.update` audit) + `AdminSmsConversationBuilder` UI;
+  new **SMS messages** tab.
+- Tests: `tests/sms-conversation-templates.test.ts`,
+  `tests/sms-patient-name.test.ts`, `tests/sms-auto-reply-evaluation.test.ts`,
+  `tests/admin-ai-knowledge-routing.test.ts`; updated single-send-path static
+  guard to allow the second fully-guarded send module. Added to
+  `test:sms-recovery` + the unit-tests tsconfig.
+
+Validation: `npm run typecheck`, `npm run test:sms-recovery` (92),
+`npm run test:ai-knowledge` (76), `npm run test:a2p` (65),
+`npm run test:phone-numbers` (32), `npm run build`, `git diff --check` — all
+pass. No `lint` script exists in `package.json`.
+
+Not done / out of scope: no SMS sent, no calls, no Twilio resource mutations,
+no A2P submit/retry, no Stripe changes, no phone-lifecycle changes, no env
+changes. No follow-up templates were enabled in production data.

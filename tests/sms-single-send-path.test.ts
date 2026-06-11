@@ -3,13 +3,21 @@ import test from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 
-// Static guard: every automated SMS send must go through sendRecoverySms() in
-// lib/twilio/outbound-sms.ts. A second Twilio Messages API call site anywhere in
-// app/ or lib/ would bypass the mode/readiness/opt-out/duplicate guards, so this
-// test fails if one appears.
+// Static guard: every automated SMS send must go through one of the two fully
+// guarded send modules. A Twilio Messages API call site anywhere else in app/ or
+// lib/ would bypass the mode/readiness/opt-out/duplicate guards, so this test
+// fails if one appears.
+//   - lib/twilio/outbound-sms.ts — missed-call recovery SMS (sendRecoverySms).
+//   - lib/twilio/conversation-auto-reply.ts — deterministic conversation
+//     auto-replies (maybeSendConversationAutoReply); enforces its own mode,
+//     exact-number readiness, clinic gate, opt-out, max-replies, enabled-slot,
+//     prior-recovery, keyword and duplicate guards.
 
 const REPO_ROOT = process.cwd();
-const ALLOWED_SEND_FILE = path.join("lib", "twilio", "outbound-sms.ts");
+const ALLOWED_SEND_FILES = new Set([
+  path.join("lib", "twilio", "outbound-sms.ts"),
+  path.join("lib", "twilio", "conversation-auto-reply.ts"),
+]);
 
 // Drop // and /* */ comment lines so doc references to a function name do not
 // count as call sites.
@@ -40,7 +48,7 @@ function listSourceFiles(dir: string): string[] {
   return out;
 }
 
-test("messages.create is called only from the guarded outbound-sms module", () => {
+test("messages.create is called only from the guarded send modules", () => {
   const files = [
     ...listSourceFiles(path.join(REPO_ROOT, "app")),
     ...listSourceFiles(path.join(REPO_ROOT, "lib")),
@@ -50,14 +58,14 @@ test("messages.create is called only from the guarded outbound-sms module", () =
     const source = stripCommentLines(fs.readFileSync(file, "utf8"));
     if (/\bmessages\s*\.\s*create\s*\(/.test(source)) {
       const rel = path.relative(REPO_ROOT, file);
-      if (rel !== ALLOWED_SEND_FILE) offenders.push(rel);
+      if (!ALLOWED_SEND_FILES.has(rel)) offenders.push(rel);
     }
   }
   assert.deepEqual(
     offenders,
     [],
-    `Twilio messages.create() must only be called from ${ALLOWED_SEND_FILE}. ` +
-      `Route new sends through sendRecoverySms(). Offenders: ${offenders.join(", ")}`,
+    `Twilio messages.create() must only be called from a guarded send module ` +
+      `(${[...ALLOWED_SEND_FILES].join(", ")}). Offenders: ${offenders.join(", ")}`,
   );
 });
 

@@ -97,9 +97,15 @@ type ScanResultState = { loaded: boolean; reviewNotes: string | null } | null;
 export function AiKnowledgeCard({
   businessProfile,
   onGoToBusinessProfile,
+  apiBasePath = "/api/account/ai-knowledge",
 }: {
   businessProfile: BusinessProfileFields;
   onGoToBusinessProfile: () => void;
+  // Base path for the AI Knowledge API. Owner /account uses the default;
+  // the platform-admin console passes /api/admin/clinics/{clinicId}/ai-knowledge.
+  // The route shapes (GET base, POST base/<section>, POST base/scan-website)
+  // are identical, so the same component drives both.
+  apiBasePath?: string;
 }) {
   const [load, setLoad] = useState<LoadState>("loading");
 
@@ -220,7 +226,7 @@ export function AiKnowledgeCard({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/account/ai-knowledge", { credentials: "include" });
+        const res = await fetch(apiBasePath, { credentials: "include" });
         if (cancelled) return;
         if (res.status === 401 || res.status === 403) {
           setLoad("signin_required");
@@ -254,7 +260,7 @@ export function AiKnowledgeCard({
   ): Promise<AiFactsView | null> {
     setSave(section, { saving: true, error: null });
     try {
-      const res = await fetch(`/api/account/ai-knowledge/${path}`, {
+      const res = await fetch(`${apiBasePath}/${path}`, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -529,7 +535,7 @@ export function AiKnowledgeCard({
     setScanning(true);
     setScanResult(null);
     try {
-      const res = await fetch("/api/account/ai-knowledge/scan-website", {
+      const res = await fetch(`${apiBasePath}/scan-website`, {
         method: "POST",
         credentials: "include",
       });

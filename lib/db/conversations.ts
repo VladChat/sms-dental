@@ -36,3 +36,69 @@ export async function touchConversation(conversationId: string): Promise<void> {
     where id = ${conversationId}
   `;
 }
+
+export type ConversationAutoReplyState = {
+  patientDisplayName: string | null;
+  smsAutoReplyCount: number;
+};
+
+// Read the conversation state the auto-reply decision needs.
+export async function getConversationAutoReplyState(
+  conversationId: string,
+): Promise<ConversationAutoReplyState | null> {
+  const sql = getDb();
+  const rows = await sql<{ patient_display_name: string | null; sms_auto_reply_count: number }[]>`
+    select patient_display_name, sms_auto_reply_count
+    from public.patient_conversations
+    where id = ${conversationId}
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    patientDisplayName: row.patient_display_name,
+    smsAutoReplyCount: row.sms_auto_reply_count ?? 0,
+  };
+}
+
+// Store a safely-extracted patient display name ONLY when none is set yet.
+// Never overwrites an existing name. Returns the stored name, or null when
+// nothing was written (already set, or input empty).
+export async function setPatientDisplayNameIfEmpty(
+  conversationId: string,
+  displayName: string,
+): Promise<string | null> {
+  const name = displayName.trim();
+  if (name.length === 0 || name.length > 80) return null;
+  const sql = getDb();
+  const rows = await sql<{ patient_display_name: string | null }[]>`
+    update public.patient_conversations
+    set patient_display_name = ${name},
+        updated_at = now()
+    where id = ${conversationId}
+      and (patient_display_name is null or patient_display_name = '')
+    returning patient_display_name
+  `;
+  return rows[0]?.patient_display_name ?? null;
+}
+
+// Atomically claim the next auto-reply slot. Uses an optimistic compare on the
+// current count so concurrent webhook deliveries (or retries) can never claim
+// the same slot twice. Returns the claimed sequence (the new count) or null
+// when the expected count no longer matches (already advanced).
+export async function claimAutoReplySlot(
+  conversationId: string,
+  expectedCount: number,
+): Promise<number | null> {
+  const sql = getDb();
+  const rows = await sql<{ sms_auto_reply_count: number }[]>`
+    update public.patient_conversations
+    set sms_auto_reply_count = ${expectedCount + 1},
+        sms_auto_reply_last_sent_at = now(),
+        updated_at = now()
+    where id = ${conversationId}
+      and sms_auto_reply_count = ${expectedCount}
+    returning sms_auto_reply_count
+  `;
+  return rows[0]?.sms_auto_reply_count ?? null;
+}

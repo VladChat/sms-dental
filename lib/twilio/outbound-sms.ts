@@ -15,6 +15,8 @@ import {
   buildMissedCallRecoverySmsBody,
   getDuplicateSuppressionWindowMs,
 } from "../sms-recovery/templates";
+import { buildInitialSmsBody } from "../sms-recovery/conversation-templates";
+import { getClinicConversationConfig } from "../db/sms-conversation-settings";
 import { normalizePhone } from "../phone/normalize";
 import { logger } from "../logging/logger";
 
@@ -108,8 +110,21 @@ export async function sendRecoverySms(
     });
   }
 
-  // All guards passed. Build the fixed, compliance-reviewed message body.
-  const body = buildMissedCallRecoverySmsBody(input.clinic.name);
+  // All guards passed. Build the message body. With no admin-configured initial
+  // middle this is byte-for-byte the fixed, compliance-reviewed default. A saved
+  // custom middle composes "Hi, this is {name}. {middle} Reply STOP to opt out."
+  // Settings/build failure falls back to the approved default — the safer path.
+  let body: string;
+  try {
+    const config = await getClinicConversationConfig(input.clinic.id);
+    body = buildInitialSmsBody(input.clinic.name, config.initialMiddle);
+  } catch (err) {
+    logger.warn("twilio.sms.initial_middle_fallback", {
+      clinicId: input.clinic.id,
+      message: err instanceof Error ? err.message : "unknown",
+    });
+    body = buildMissedCallRecoverySmsBody(input.clinic.name);
+  }
 
   const { TWILIO_MESSAGING_SERVICE_SID } = getTwilioMessagingEnv();
   const client = getTwilioClient();
@@ -175,6 +190,7 @@ export async function sendRecoverySms(
       toNumber: input.patientPhone,
       body,
       status: messageStatus,
+      messageKind: "missed_call_recovery",
       rawPayload: {
         sid: messageSid,
         status: messageStatus,

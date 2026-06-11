@@ -690,6 +690,8 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 
 /* Subsection heading inside an admin card */
 .adm-subhead { font:650 1rem/1.3 var(--font-display); color:var(--text); }
+/* Locked (non-editable) line in the admin SMS conversation builder */
+.adm-locked-line { padding:var(--space-2) var(--space-3); border:1px dashed var(--border); border-radius:var(--r-sm); background:var(--surface-2); }
 
 /* Compact internal metadata under the clinic name */
 .adm-meta { display:flex; flex-wrap:wrap; gap:var(--space-1) var(--space-4); margin:var(--space-3) 0 0; }

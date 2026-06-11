@@ -29,6 +29,8 @@ import { AdminPhoneNumberManager } from "./AdminPhoneNumberManager";
 import { AdminPhoneNumberList } from "./AdminPhoneNumberList";
 import { AdminAssignExistingNumber } from "./AdminAssignExistingNumber";
 import { AdminNumberControls } from "./AdminNumberControls";
+import { AdminSmsConversationBuilder } from "./AdminSmsConversationBuilder";
+import { AiKnowledgeCard } from "../../../../../setup/[token]/_components/AiKnowledgeCard";
 import { formatUsdFromCents } from "../../../../../../config/billing.config";
 
 type Tone = "success" | "neutral" | "warning" | "info" | "brand";
@@ -56,13 +58,23 @@ type A2pLaunchStatus = {
   launchBlockedReason: string | null;
 };
 
-type SectionId = "phone" | "business" | "sms" | "a2p" | "billing" | "admin";
+type SectionId =
+  | "phone"
+  | "business"
+  | "sms"
+  | "a2p"
+  | "ai_knowledge"
+  | "sms_messages"
+  | "billing"
+  | "admin";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "phone", label: "Phone number" },
   { id: "business", label: "Business profile" },
   { id: "sms", label: "SMS approval" },
   { id: "a2p", label: "A2P review" },
+  { id: "ai_knowledge", label: "AI knowledge" },
+  { id: "sms_messages", label: "SMS messages" },
   { id: "billing", label: "Billing" },
   { id: "admin", label: "Admin tools" },
 ];
@@ -522,6 +534,39 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             />
           </Panel>
 
+          {/* AI knowledge (platform-admin manages the clinic's structured facts) */}
+          <Panel id="ai_knowledge" active={active}>
+            <div className="adm-section-head">
+              <h2 className="t-h3">AI knowledge</h2>
+            </div>
+            <p className="t-helper" style={{ margin: "var(--space-1) 0 var(--space-4)" }}>
+              Manage this clinic’s structured front-desk facts. Saves to this clinic only and are
+              audit-logged. Same data the owner sees in their account.
+            </p>
+            <AiKnowledgeCard
+              apiBasePath={`/api/admin/clinics/${d.id}/ai-knowledge`}
+              businessProfile={{
+                name: d.name,
+                mainPhone: d.mainPhone ?? "",
+                streetAddress: d.street ?? "",
+                addressLine2: d.addressLine2 ?? "",
+                city: d.city ?? "",
+                stateRegion: d.stateRegion ?? "",
+                postalCode: d.postalCode ?? "",
+                website: d.website ?? "",
+              }}
+              onGoToBusinessProfile={() => goTo("business")}
+            />
+          </Panel>
+
+          {/* SMS messages — deterministic conversation builder (admin only) */}
+          <Panel id="sms_messages" active={active}>
+            <div className="adm-section-head">
+              <h2 className="t-h3">SMS messages</h2>
+            </div>
+            <AdminSmsConversationBuilder clinicId={d.id} />
+          </Panel>
+
           {/* Billing (compact) */}
           <Panel id="billing" active={active}>
             <div className="adm-section-head">
@@ -699,6 +744,8 @@ function sectionStatuses(
     business: d.businessInfoCompleted ? { text: "Complete", tone: "success" } : { text: "Needs setup", tone: "warning" },
     sms,
     a2p: a2pNavStatus(review),
+    ai_knowledge: { text: "Manage", tone: "neutral" },
+    sms_messages: { text: "Manage", tone: "neutral" },
     billing: d.stripeCustomerPresent ? { text: "Connected", tone: "success" } : { text: "Not connected", tone: "neutral" },
   };
 }

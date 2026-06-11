@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-11 (AI Knowledge follow-up: review badge follows the visible mode so Complete and Save never show together; Needs review badge has an owner help tooltip; Payment methods reordered — cards, HSA/FSA, checks, cash — and fixed Bank transfer / ACH added; no Zelle, fixed-list only)
+Last updated: 2026-06-11 (System-admin AI Knowledge + SMS Conversation Builder v1: platform admin manages AI Knowledge for a clinic from /admin/clinics/[clinicId]; deterministic admin-configured SMS conversation flow with up to 3 auto-replies, conservative patient-name extraction, no AI)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3371,3 +3371,79 @@ select to_regclass('public.clinic_ai_hours'),
 
 Tests: `npm run test:ai-knowledge` (catalog/limits, validation, URL safety,
 extraction).
+
+---
+
+## System-admin AI Knowledge + SMS Conversation Builder v1 — operate & verify (2026-06-11)
+
+Two platform-admin additions to `/admin/clinics/[clinicId]`. Both are
+admin-only; clinic owners cannot edit SMS copy and the owner `/account` flow is
+unchanged. No AI runtime — everything is deterministic.
+
+### AI Knowledge in the admin console
+
+- New nav tab **AI knowledge** renders the same `AiKnowledgeCard` the owner
+  uses, driven by `apiBasePath="/api/admin/clinics/{clinicId}/ai-knowledge"`
+  (owner default stays `/api/account/ai-knowledge`).
+- Admin API routes mirror the owner endpoints (GET + `/hours`, `/services`,
+  `/insurance`, `/languages`, `/payment`, `/policies`, `/scan-website`) but are
+  guarded by `requirePlatformAdminClinic` (in `lib/auth/admin-clinic.ts`) — the
+  clinic id always comes from the URL, never from membership. They reuse the
+  exact owner validation/DB functions via `lib/ai-knowledge/section-handlers.ts`.
+- Admin saves write compact, redacted audit events
+  (`clinic.ai_knowledge.<section>.update`, `clinic.ai_knowledge.website_scan`)
+  with section key + changed flag (+ scan facts count) only — never answer text
+  or patient data.
+
+### SMS Conversation Builder v1
+
+- New nav tab **SMS messages** (`AdminSmsConversationBuilder`) → admin API
+  `GET|POST /api/admin/clinics/[clinicId]/sms-conversation`
+  (`clinic.sms_conversation.update` audit).
+- Tables (migration `20260619000100_sms_conversation_builder.sql`):
+  `clinic_sms_conversation_settings` (`max_auto_replies` 0–3) and
+  `clinic_sms_message_templates` (`initial` seq 0 = editable middle only;
+  `auto_reply` seq 1–3 = full follow-up body, ≤240 chars). Conversation state
+  added to `patient_conversations` (`patient_display_name`,
+  `sms_auto_reply_count`, `sms_auto_reply_last_sent_at`) and a `message_kind`
+  classifier on `messages`.
+- **Initial SMS:** locked prefix `Hi, this is {{clinic_name}}.` + editable
+  middle + locked suffix `Reply STOP to opt out.` With no saved middle the
+  built body is byte-for-byte the existing fixed production message
+  (`buildInitialSmsBody` delegates to `buildMissedCallRecoverySmsBody`).
+- **Auto-replies:** after an ordinary patient reply, `maybeSendConversationAutoReply`
+  may send one deterministic follow-up. It enforces every guard itself: mode
+  (live/owner_test), exact-number readiness, recovery send gate
+  (clinic enabled / owner-test allowlist), opt-out, prior recovery outbound,
+  `max_auto_replies`, enabled+non-empty template slot, and never on
+  STOP/START/HELP or a duplicate webhook. Slots are claimed with an atomic
+  compare on `sms_auto_reply_count` so retries/races never double-send. The 4th+
+  reply is stored only (no send). Auto-replies are recorded with
+  `message_kind='conversation_auto_reply'` and are excluded from recovery
+  duplicate suppression (`hasSentRecoverySmsSince` counts only
+  recovery/legacy-null rows).
+- **Patient name:** `extractPatientName` is conservative and fail-closed (1–3
+  letter words, known lead-ins like "my name is", rejects digits/links/emails/
+  keywords/appointment words; ≤40-char messages). Stored only when empty; never
+  overwritten; never on STOP/START/HELP or duplicates. `{{patient_name}}`
+  resolves only when set, else the placeholder is removed cleanly.
+- **Template safety** (`template-safety.ts`, deterministic, no AI): rejects
+  banned spam/medical/urgency phrases, URLs, emails, phone numbers, unknown
+  placeholders, excessive punctuation, and all-caps shouting.
+
+### Default-safe / verify
+
+- With NO saved settings, `max_auto_replies` is 0 → no auto-replies, and the
+  missed-call SMS is unchanged. Auto-replies are inactive until an admin saves
+  and enables them for a specific clinic.
+- Verify after deploy: `GET /api/admin/clinics/{id}/ai-knowledge` and
+  `…/sms-conversation` return 401 unauthenticated; `/admin/clinics/{id}` shows
+  the **AI knowledge** and **SMS messages** tabs; `/account?section=ai_knowledge`
+  still works for owners.
+- DB check: `select to_regclass('public.clinic_sms_conversation_settings'),
+  to_regclass('public.clinic_sms_message_templates');` (both non-null);
+  `select count(*) from public.clinic_sms_conversation_settings;` (0 until an
+  admin saves).
+
+Tests: `npm run test:sms-recovery` (template render incl. default-equals-prod,
+safety, patient-name, auto-reply decision, single-send-path, admin routing).

@@ -22,6 +22,13 @@ function sanitizeClinicName(raw: string | null | undefined): string {
   return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated).trim();
 }
 
+// Resolve the clinic identity inserted into any SMS: sanitized clinic name, or
+// the honest fallback when blank. Shared by the fixed recovery template and the
+// admin-configurable conversation templates so identity handling never drifts.
+export function resolveClinicIdentity(clinicName: string | null | undefined): string {
+  return sanitizeClinicName(clinicName) || smsRecoveryConfig.fallbackClinicIdentity;
+}
+
 export function buildMissedCallRecoverySmsBody(
   clinicName: string | null | undefined,
 ): string {

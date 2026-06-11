@@ -19,6 +19,24 @@ export async function upsertOptOut(
   `;
 }
 
+// True when the (clinic, phone) pair currently has an active opt-out (a STOP
+// with no later START). Used by every outbound send path before sending.
+export async function isPhoneOptedOut(
+  clinicId: string,
+  phoneNumber: string,
+): Promise<boolean> {
+  const sql = getDb();
+  const rows = await sql<{ opted_back_in_at: string | null }[]>`
+    select opted_back_in_at
+    from public.opt_outs
+    where clinic_id   = ${clinicId}
+      and phone_number = ${phoneNumber}
+    limit 1
+  `;
+  if (!rows[0]) return false;
+  return rows[0].opted_back_in_at === null;
+}
+
 // Mark a (clinic, phone) pair as opted back in after a START message.
 // If no opt-out row exists the phone was never opted out — that is fine,
 // the UPDATE is a no-op and no error is raised.

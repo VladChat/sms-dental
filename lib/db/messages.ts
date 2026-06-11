@@ -1,6 +1,14 @@
 import { getDb } from "./client";
 import { shouldApplyMessageStatusTransition } from "../sms-recovery/message-status";
 
+// Stable, non-secret classifier for a message row. Existing rows are null and
+// are treated by direction (inbound = inbound, outbound = recovery).
+export type MessageKind =
+  | "missed_call_recovery"
+  | "conversation_auto_reply"
+  | "manual"
+  | "inbound";
+
 export type RecordInboundMessageInput = {
   clinicId: string;
   conversationId: string | null;
@@ -24,7 +32,7 @@ export async function recordInboundMessage(
   const rows = await sql<{ id: string }[]>`
     insert into public.messages
       (clinic_id, conversation_id, direction, twilio_message_sid,
-       from_number, to_number, body, status, detected_keyword, raw_payload, sent_at)
+       from_number, to_number, body, status, detected_keyword, message_kind, raw_payload, sent_at)
     values (
       ${input.clinicId},
       ${input.conversationId},
@@ -35,6 +43,7 @@ export async function recordInboundMessage(
       ${input.body},
       ${input.status},
       ${input.detectedKeyword},
+      'inbound',
       ${rawJson}::jsonb,
       now()
     )
@@ -54,10 +63,15 @@ export type RecordOutboundMessageInput = {
   body: string;
   status: string;
   rawPayload: unknown;
+  // Defaults to 'missed_call_recovery' for backward-compatible behavior.
+  messageKind?: MessageKind;
 };
 
-// Returns true when an outbound message to this (clinic, toNumber) pair
-// already exists within the given window. Prevents duplicate recovery SMS.
+// Returns true when a missed-call RECOVERY outbound to this (clinic, toNumber)
+// pair already exists within the given window. Auto-replies
+// (message_kind='conversation_auto_reply') are intentionally excluded so they
+// never affect recovery duplicate suppression. Legacy rows (null message_kind)
+// are counted as recovery — preserving existing behavior for existing data.
 export async function hasSentRecoverySmsSince(
   clinicId: string,
   toNumber: string,
@@ -70,7 +84,26 @@ export async function hasSentRecoverySmsSince(
     where clinic_id   = ${clinicId}
       and to_number   = ${toNumber}
       and direction   = 'outbound'
+      and (message_kind is null or message_kind = 'missed_call_recovery')
       and created_at >= ${since.toISOString()}
+    limit 1
+  `;
+  return parseInt(rows[0]?.cnt ?? "0", 10) > 0;
+}
+
+// True when the conversation already has a missed-call recovery outbound. The
+// auto-reply flow only runs inside an existing recovery thread. Legacy null
+// message_kind outbounds count as recovery.
+export async function hasPriorRecoveryOutbound(
+  conversationId: string,
+): Promise<boolean> {
+  const sql = getDb();
+  const rows = await sql<{ cnt: string }[]>`
+    select count(*) as cnt
+    from public.messages
+    where conversation_id = ${conversationId}
+      and direction = 'outbound'
+      and (message_kind is null or message_kind = 'missed_call_recovery')
     limit 1
   `;
   return parseInt(rows[0]?.cnt ?? "0", 10) > 0;
@@ -82,10 +115,11 @@ export async function recordOutboundMessage(
 ): Promise<{ id: string }> {
   const sql = getDb();
   const rawJson = JSON.stringify(input.rawPayload ?? null);
+  const messageKind = input.messageKind ?? "missed_call_recovery";
   const rows = await sql<{ id: string }[]>`
     insert into public.messages
       (clinic_id, conversation_id, direction, twilio_message_sid,
-       from_number, to_number, body, status, raw_payload, sent_at)
+       from_number, to_number, body, status, message_kind, raw_payload, sent_at)
     values (
       ${input.clinicId},
       ${input.conversationId},
@@ -95,6 +129,7 @@ export async function recordOutboundMessage(
       ${input.toNumber},
       ${input.body},
       ${input.status},
+      ${messageKind},
       ${rawJson}::jsonb,
       now()
     )
