@@ -7117,3 +7117,31 @@ pass. No `lint` script exists in `package.json`.
 Not done / out of scope: no SMS sent, no calls, no Twilio resource mutations,
 no A2P submit/retry, no Stripe changes, no phone-lifecycle changes, no env
 changes. No follow-up templates were enabled in production data.
+
+---
+
+## 2026-06-11 — Production rollout: admin SMS Conversation Builder + admin AI Knowledge
+
+- Commit `9bba26ea2493cceb6b64df76fad7342e7264b4a3` pushed to `origin/main`;
+  GitHub-triggered Vercel deployment `dpl_GxM2LXPPEnEGW98GxhofnWCuv1yX` READY and
+  aliased to `https://app.missedcallsdental.com`.
+- Migration `20260619000100_sms_conversation_builder.sql` **applied to
+  production** (Supabase project `qfjpvbvfvhbtebwivcdc`, MCP apply_migration;
+  history version aligned to `20260619000100`). Verified: both new tables
+  present, RLS enabled on both, 3 new `patient_conversations` columns,
+  `messages.message_kind` present. **0 rows** in
+  `clinic_sms_conversation_settings` / `clinic_sms_message_templates` →
+  auto-replies inactive for every clinic; missed-call SMS unchanged.
+
+Production verification (all pass):
+
+- `GET /api/health` → 200 `ok:true`.
+- `GET/POST /api/admin/clinics/{id}/ai-knowledge*` and
+  `GET /api/admin/clinics/{id}/sms-conversation` → 401 unauthenticated
+  (platform-admin guarded).
+- `GET /api/account/ai-knowledge` → 401 unauthenticated (owner behavior
+  unchanged).
+- `/account?section=ai_knowledge` → 200; `/workspace` → 200.
+
+No SMS sent, no calls, no Twilio/Stripe/A2P/phone-lifecycle mutations, no env
+changes. No follow-up templates enabled in production data.
