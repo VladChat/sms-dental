@@ -21,7 +21,8 @@
     "tests/sms-recovery-send-gate.test.ts",
     "tests/voice-greeting-config.test.ts",
     "tests/workspace-patient-replies.test.ts",
-    "tests/ai-knowledge-catalog.test.ts",
+    "tests/ai-knowledge-facts.test.ts",
+    "tests/ai-knowledge-website-scan.test.ts",
     "app/workspace/_components/workspace-types.ts",
     "lib/phone-numbers/twilio-release-deadline.ts",
     "lib/phone-numbers/twilio-number-inventory.ts",
@@ -34,7 +35,9 @@
     "config/texting-status-sync.config.ts",
     "config/sms-recovery.config.ts",
     "config/voice-greeting.config.ts",
-    "config/ai-front-desk-knowledge.config.ts",
-    "lib/ai-knowledge/entries.ts"
+    "config/ai-front-desk-facts.config.ts",
+    "lib/ai-knowledge/facts.ts",
+    "lib/ai-knowledge/scan-url-safety.ts",
+    "lib/ai-knowledge/website-extract.ts"
   ]
 }

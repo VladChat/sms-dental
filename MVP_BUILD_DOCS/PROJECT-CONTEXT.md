@@ -194,38 +194,53 @@ treated as product copy, not incidental formatting.
   internal. Implementation guidance lives in `Skills/twilio-dental-sms.md`;
   customer/product language in `Skills/missed-calls-dental-product-context.md`.
 
-### Built foundation — AI Front Desk Knowledge (account-side only, 2026-06-10)
+### Built foundation — AI Front Desk Knowledge: structured clinic facts (2026-06-10)
 
-The first non-live foundation for the future AI agent exists in production:
+The non-live foundation for the future AI agent exists in production. The
+original question-answer model (41 catalog questions with free-text answers in
+`clinic_ai_knowledge_entries`, migration `20260614000100`) was **replaced** the
+same day by a structured clinic-facts model; the old table held test-only rows
+and was dropped by migration
+`20260615000100_replace_ai_knowledge_with_structured_facts.sql`.
 
 - **What it is:** an owner/admin account section (`/account?section=ai_knowledge`,
-  "AI Front Desk Knowledge") where the clinic reviews a committed catalog of
-  common patient questions and saves approved / handoff / do-not-answer
-  decisions. **AI replies are NOT live** — nothing reads this data at runtime.
-- **Data:** `public.clinic_ai_knowledge_entries` (migration
-  `20260614000100_clinic_ai_knowledge.sql`), clinic-scoped with
-  `unique (clinic_id, question_key)`. No PHI, no patient conversations, no raw
-  website HTML, no prompts/responses.
-- **Catalog:** `config/ai-front-desk-knowledge.config.ts` — 41 questions across
-  Hours & Location, Appointments, Insurance, Services, Payment & Policies, and
-  Safety & Handoff. Keys/categories/questions are server-side facts; clients can
-  only set status/answer for known keys.
-- **Safety model:** approved answers are the only thing future AI may say;
-  unknown/unapproved/risky questions hand off to the front desk; medical/urgent
-  entries use fixed, non-editable handoff wording that always includes 911 for
-  emergencies and never gives diagnosis/treatment advice.
-- **Website:** the Business profile owns the website field. AI Knowledge only
-  reads `clinic.website` and shows it as the future website-scan source. No
-  crawler exists.
+  "AI Front Desk Knowledge") with accordion sections where the clinic reviews
+  and approves structured facts: weekly hours, services, insurance plans,
+  appointment intake settings, payment options, and office policies. **No AI
+  runtime reads this data** — nothing patient-facing depends on it.
+- **Data (source of truth):** structured tables `clinic_ai_hours`,
+  `clinic_ai_services`, `clinic_ai_insurance_plans`,
+  `clinic_ai_appointment_settings`, `clinic_ai_payment_settings`,
+  `clinic_ai_office_policies`, plus the `clinic_website_scan_runs` log. All
+  clinic-scoped; statuses `not_found | needs_review | approved | do_not_use`;
+  sources `manual | business_profile | website_draft | system_default`. No PHI,
+  no patient conversations, no raw website HTML, no AI prompts/responses.
+- **Catalogs/limits:** `config/ai-front-desk-facts.config.ts` — default service
+  and insurance lists (checkbox UI plus server-keyed custom entries, max 50
+  each, no "Other" option), text-length limits, timezone list.
+- **Business profile stays the owner of address and website.** AI Knowledge
+  reads them from `clinics` and never duplicates those fields.
+- **Website scan:** a deterministic, same-origin, server-side scan of
+  `clinic.website` (max 8 pages, 1 MB/page, no cookies, SSRF-guarded; no AI
+  provider, no browser automation) creates `website_draft` facts with
+  `needs_review` status. Scan results are never auto-approved — the owner must
+  review and save each section. The scan never edits the Business profile; a
+  detected address/phone mismatch is surfaced as a review note only.
+- **Safety is a system rule, not a clinic setting.** There is no owner-editable
+  safety section. The AI must never give diagnosis, treatment advice, medication
+  instructions, or clinical triage; unknown/unapproved questions go to the
+  office; dental pain/swelling/bleeding is flagged to the office as an urgent
+  dental concern, not diagnosed; the only reserved emergency wording is
+  "If this is a medical emergency, call 911." (never blanket-applied to every
+  toothache).
 - **Not in the setup path:** AI Knowledge never blocks SMS approval, billing, or
   the SMS Recovery MVP.
 
-Future phases (in order, all still future-only): (1) website draft auto-fill
-into `clinic_ai_knowledge_entries` as `website_draft` rows the owner must
-approve; (2) AI shadow mode that classifies inbound SMS and suggests replies in
+Future phases (in order, all still future-only): (1) better website extraction
+quality; (2) AI shadow mode that classifies inbound SMS and suggests replies in
 the workspace without sending; (3) controlled AI SMS replies limited to
-approved knowledge with handoff for everything else; (4) AI voice on the same
-knowledge/policy layer.
+approved structured facts with office handoff for everything else; (4) AI voice
+on the same facts/policy layer.
 
 ---
 

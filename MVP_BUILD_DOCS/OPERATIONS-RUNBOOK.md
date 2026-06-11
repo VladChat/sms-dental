@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-10 (AI Front Desk Knowledge account foundation: clinic-approved answer library, AI replies off; plus front desk workspace reply polish and live SMS send hardening)
+Last updated: 2026-06-10 (AI Front Desk Knowledge replaced with structured clinic facts + safe website scan; the same-day question-answer model was dropped)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3219,53 +3219,83 @@ As of the 2026-06-07 read-only audit:
 
 ---
 
-## AI Front Desk Knowledge (account foundation) — operate & verify (2026-06-10)
+## AI Front Desk Knowledge — structured clinic facts: operate & verify (2026-06-10)
 
-Owner/admin account section that stores the clinic-approved answer library a
-FUTURE AI assistant may use. Foundation only: **AI replies are off**, nothing
-reads this data at runtime, and it is not part of the SMS approval/billing
-setup path.
+> Supersedes the same-day question-answer foundation. The old
+> `clinic_ai_knowledge_entries` table (41-question catalog) held test-only rows
+> and was dropped by
+> `20260615000100_replace_ai_knowledge_with_structured_facts.sql`.
+
+Owner/admin account section that stores structured, clinic-approved facts a
+FUTURE AI assistant may use. Foundation only: nothing reads this data at
+runtime, no AI provider is called, and it is not part of the SMS
+approval/billing setup path.
 
 What exists:
 
 - Account section: `/account?section=ai_knowledge` ("AI Front Desk Knowledge",
-  under the Account nav group after Team access).
-- API: `GET|POST /api/account/ai-knowledge` — authenticated owner/admin only
-  (`resolveAuthClinicAccess()`); front-desk role is rejected.
-- Table: `public.clinic_ai_knowledge_entries` (migration
-  `20260614000100_clinic_ai_knowledge.sql`, applied 2026-06-10). Clinic-scoped,
-  `unique (clinic_id, question_key)`, status/source_type check constraints,
-  `set_updated_at` trigger, RLS enabled with no policies (service-role access
-  through `SUPABASE_DB_URL` only).
-- Catalog: `config/ai-front-desk-knowledge.config.ts` (41 committed questions).
-  Question keys/categories/questions come from this file server-side; the API
-  rejects unknown keys, invalid statuses, answers over 700 chars, approved with
-  empty answer, sample/demo text, and non-`manual` client source types.
-- Website: read from `clinics.website` (Business profile owns the field). No
-  website input exists in AI Knowledge and no crawling happens anywhere.
+  Account nav group after Team access). Accordion sections: Business profile
+  facts (read-only from `clinics`), Hours & location, Appointments, Insurance,
+  Services, Payment, Office policies, Website check. Owner-facing copy is
+  non-technical; the top principle is "Add what AI can safely say to patients.
+  Questions without an approved answer go to your office. AI never gives
+  medical advice."
+- APIs (owner/admin only via `requireOwnerAdminAccess()` in
+  `lib/auth/owner-admin.ts`; front-desk rejected):
+  `GET /api/account/ai-knowledge` plus POST
+  `/hours`, `/services`, `/insurance`, `/appointments`, `/payment`,
+  `/policies`, `/scan-website`.
+- Tables (migration `20260615000100…`, applied 2026-06-10): `clinic_ai_hours`
+  (weekday 0–6, up to 3 intervals/day, open<close checks), `clinic_ai_services`
+  and `clinic_ai_insurance_plans` (checkbox catalogs + server-keyed custom
+  entries, unique `(clinic_id, key)`, max 50 each enforced in API),
+  `clinic_ai_appointment_settings`, `clinic_ai_payment_settings`,
+  `clinic_ai_office_policies` (one row per clinic), and
+  `clinic_website_scan_runs` (run log; never raw HTML). All RLS-enabled with no
+  policies (service-role access via `SUPABASE_DB_URL` only). Statuses:
+  `not_found | needs_review | approved | do_not_use`; sources:
+  `manual | business_profile | website_draft | system_default`.
+- Catalogs/limits: `config/ai-front-desk-facts.config.ts`.
+- Website scan (`lib/ai-knowledge/website-scan.ts`): server-side fetch of
+  `clinics.website` only — never a client URL. Same-origin (www/scheme homepage
+  redirect tolerated), max 8 pages, 1 MB/page, 8s timeout, manual re-validated
+  redirects, no cookies/auth, rejects localhost/private/internal hosts and all
+  IP literals (`lib/ai-knowledge/scan-url-safety.ts`). Extraction is
+  deterministic (JSON-LD + text patterns, `lib/ai-knowledge/website-extract.ts`)
+  — no AI provider, no browser automation. Results are saved as
+  `website_draft`/`needs_review` facts only.
 
 Operating rules:
 
-- Safety entries (`medical_advice_handoff`, `urgent_symptoms_handoff`) always
-  use the fixed standard reply (includes 911); the API refuses to approve
-  custom text for them. Do not weaken this.
-- Unsaved catalog questions appear as virtual `system_default` entries; saving
-  upserts the clinic row. New catalog questions appear automatically.
-- Do not store PHI, patient conversations, website HTML, or model prompts in
-  `clinic_ai_knowledge_entries`.
+- Scan drafts are never auto-approved; the owner approves by saving a section
+  (status becomes `approved`). Scans never overwrite `approved` rows, never
+  replace owner-saved hours, and never edit the Business profile — an
+  address/phone mismatch becomes a short `review_notes` entry on the scan run.
+- Business profile owns address and website; AI Knowledge reads them from
+  `clinics` and must not duplicate those fields.
+- Safety is a system rule, not a clinic setting: no owner-editable safety
+  section exists, and emergency/medical wording is not clinic-editable. The
+  reserved emergency wording is "If this is a medical emergency, call 911."
+- Do not store PHI, patient conversations, raw website HTML, screenshots, or
+  model prompts in any of these tables.
 
 Verify after deploy:
 
-1. `/account?section=ai_knowledge` renders the section with the "AI replies are
-   off" banner and the website source card.
+1. `/account?section=ai_knowledge` renders the accordion UI with the top
+   principle.
 2. `GET /api/account/ai-knowledge` unauthenticated returns 401 JSON.
 3. Read-only DB check:
 
 ```sql
-select count(*) from public.clinic_ai_knowledge_entries;
-select conname from pg_constraint
-where conrelid = 'public.clinic_ai_knowledge_entries'::regclass;
+select to_regclass('public.clinic_ai_knowledge_entries');         -- must be null
+select to_regclass('public.clinic_ai_hours'),
+       to_regclass('public.clinic_ai_services'),
+       to_regclass('public.clinic_ai_insurance_plans'),
+       to_regclass('public.clinic_ai_appointment_settings'),
+       to_regclass('public.clinic_ai_payment_settings'),
+       to_regclass('public.clinic_ai_office_policies'),
+       to_regclass('public.clinic_website_scan_runs');            -- all non-null
 ```
 
-Tests: `npm run test:ai-knowledge` (catalog integrity, safety copy, merge,
-validation).
+Tests: `npm run test:ai-knowledge` (catalog/limits, validation, URL safety,
+extraction).

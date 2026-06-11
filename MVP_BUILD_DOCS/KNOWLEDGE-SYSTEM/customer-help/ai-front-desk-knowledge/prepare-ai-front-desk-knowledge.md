@@ -8,7 +8,7 @@ surface: /account
 category: ai-front-desk-knowledge
 owner: product
 source_of_truth:
-  - config/ai-front-desk-knowledge.config.ts
+  - config/ai-front-desk-facts.config.ts
   - MVP_BUILD_DOCS/PROJECT-CONTEXT.md
 last_verified: 2026-06-10
 related:
@@ -20,10 +20,11 @@ related:
 
 ## Summary
 
-Your account has an **AI Front Desk Knowledge** section where you can review
-common patient questions and approve the answers a future AI front desk
-assistant may use. **AI replies are not live yet** — saving answers here does
-not change what patients receive today.
+Your account has an **AI Front Desk Knowledge** section where you add the facts
+a future AI front desk assistant may safely share with patients: office hours,
+services, insurance plans, appointment requests your office handles, payment
+options, and basic office rules. Questions without an approved answer go to
+your office, and AI never gives medical advice.
 
 ## Applies to
 
@@ -31,41 +32,47 @@ Clinic owners and admins. Front-desk staff do not manage AI knowledge.
 
 ## What this means
 
-- We list common patient questions (hours, new patients, insurance, services,
-  payment, and safety situations).
-- For each question you can **approve an answer**, choose **handoff** (AI passes
-  the patient to your office), or choose **do not answer automatically**.
-- If you do not approve an answer, a future AI assistant will hand that question
-  to your front desk instead of guessing.
-- Medical, urgent, and treatment questions always use a standard short handoff
-  reply. That reply cannot be edited, so AI can never give medical advice.
+- You fill in simple sections instead of writing answers: set your weekly
+  hours, check the services you offer and the insurance plans you accept, and
+  add short notes for payment options and office rules.
+- Your clinic name, phone, address, and website come from **Business profile**
+  — you don't retype them here. If they change, update Business profile.
+- Anything you don't fill in or approve simply goes to your office. You don't
+  need to complete every section.
+- Medical and urgent questions always go to your office. That rule is built in
+  and is not a setting.
 
-### Website source
+### Website check
 
-The section shows the website from your **Business profile**. A future update
-will be able to scan that website and suggest draft answers for your review.
-You do not enter your website again here — edit it in Business profile if it
-changes. Website scanning is not live yet.
+If your Business profile has a website, you can scan it to suggest facts —
+hours, services, insurance plans, and payment options found on your site appear
+as suggestions marked "Review". Nothing from your website is used until you
+review and save the section yourself. The scan never changes your Business
+profile.
 
 ## What you can do
 
-- Open **/account → AI knowledge** to review the question list.
-- Add and approve short answers for questions you want answered automatically
-  in the future.
-- Choose handoff or do-not-answer for anything you prefer your office handles.
-- Save drafts and come back later — nothing here blocks your SMS setup or
-  billing.
+- Open **/account → AI knowledge** and work through the sections.
+- Set normal office hours by weekday.
+- Check services and insurance plans, and add your own items if something is
+  missing (up to 50 each).
+- Choose the appointment requests your office handles.
+- Scan your website to pre-fill suggestions, then review and save.
 
 ## What to expect
 
-- AI replies stay off. This section only prepares your approved answer library.
-- When AI features launch later, they will use only the answers you approved
-  here, and everything else will hand off to your front desk.
+- Saving a section approves it. Suggestions from your website stay marked
+  "Review" until you save.
+- When AI features launch later, they will use only the facts you approved
+  here; everything else goes to your front desk.
+- Nothing here changes how patients are texted today, and nothing here blocks
+  your SMS setup or billing.
 
 ## When to contact support
 
-Contact support if the section will not load or save, or if you have questions
-about how future AI features will use your answers.
+Contact support if a section will not load or save, if the website check keeps
+failing, or if you have questions about how future AI features will use your
+facts.
 
 Email: **support@missedcallsdental.com**
 
@@ -76,6 +83,7 @@ Email: **support@missedcallsdental.com**
 
 ## Source of truth
 
-- `config/ai-front-desk-knowledge.config.ts` — recommended questions, statuses,
-  and safety defaults
-- `MVP_BUILD_DOCS/PROJECT-CONTEXT.md` — foundation scope and future phases
+- `config/ai-front-desk-facts.config.ts` — service/insurance catalogs and
+  limits
+- `MVP_BUILD_DOCS/PROJECT-CONTEXT.md` — structured clinic-facts foundation
+  scope and future phases

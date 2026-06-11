@@ -1,88 +1,145 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { StatusBadge, type StatusKind } from "./AccountUI";
+import { useEffect, useState, type ReactNode } from "react";
+import { Field, SelectField } from "./AccountUI";
+import type { BusinessProfileFields } from "./account-types";
+// Type-only import: erased at compile time, so no server/DB code is bundled.
+import type { AiFactsView } from "../../../../lib/db/ai-knowledge";
 import {
-  AI_KNOWLEDGE_ANSWER_MAX_LENGTH,
-  AI_KNOWLEDGE_CATEGORIES,
-  aiFrontDeskKnowledgeCatalog,
-  defaultAnswerForCatalogItem,
-  type AiKnowledgeCatalogItem,
-  type AiKnowledgeSourceType,
-  type AiKnowledgeStatus,
-} from "../../../../config/ai-front-desk-knowledge.config";
+  DEFAULT_PREFERRED_TIME_QUESTION,
+  HOURS_TIMEZONES,
+  MAX_CUSTOM_LABEL_LENGTH,
+  MAX_POLICY_TEXT_LENGTH,
+  MAX_PREFERRED_TIME_QUESTION_LENGTH,
+  MAX_PRICING_POLICY_LENGTH,
+} from "../../../../config/ai-front-desk-facts.config";
 
-// AI Front Desk Knowledge (foundation only). Owners review/approve the answers
-// a FUTURE AI assistant may use with patients. AI replies are NOT live: nothing
-// in this card sends SMS, calls an AI provider, or crawls a website. The
-// Website field stays owned by Business profile — this card only reads it.
+// AI Front Desk Knowledge — structured clinic facts the owner reviews and
+// approves. Facts-first accordion UI: hours, services, insurance,
+// appointments, payment, policies, website scan. Address/website stay owned
+// by Business profile; this card only reads them.
 
-type EntryState = {
-  status: AiKnowledgeStatus;
-  answer: string;
-  sourceType: AiKnowledgeSourceType;
-  persisted: boolean;
-  saving: boolean;
-  error: string | null;
-  justSaved: boolean;
-};
+const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // show Monday first
 
-type FetchedEntry = {
-  questionKey: string;
-  status: AiKnowledgeStatus;
-  answer: string;
-  sourceType: AiKnowledgeSourceType;
-  persisted: boolean;
-};
+type HoursDayState = { weekday: number; closed: boolean; opensAt: string; closesAt: string };
+type CatalogItemState = { key: string; label: string; selected: boolean; isCustom: boolean; suggested: boolean };
 
-type LoadState =
-  | { kind: "loading" }
-  | { kind: "signin_required" }
-  | { kind: "error" }
-  | { kind: "ready"; website: string };
+type SaveState = { saving: boolean; error: string | null; saved: boolean };
+const IDLE_SAVE: SaveState = { saving: false, error: null, saved: false };
 
-const STATUS_BADGE: Record<AiKnowledgeStatus, { kind: StatusKind; label: string }> = {
-  approved: { kind: "complete", label: "Approved" },
-  needs_review: { kind: "waiting", label: "Needs review" },
-  handoff: { kind: "not_active", label: "Handoff to office" },
-  do_not_answer: { kind: "not_active", label: "Do not answer" },
-  not_found: { kind: "needs_setup", label: "No answer yet" },
-};
+type LoadState = "loading" | "signin_required" | "error" | "ready";
 
-const SOURCE_LABEL: Record<AiKnowledgeSourceType, string> = {
-  system_default: "System default",
-  manual: "Manual",
-  website_draft: "Website draft",
-  business_profile: "Business profile",
-};
-
-function initialEntryState(item: AiKnowledgeCatalogItem): EntryState {
-  return {
-    status: item.defaultStatus,
-    answer: defaultAnswerForCatalogItem(item),
-    sourceType: "system_default",
-    persisted: false,
-    saving: false,
-    error: null,
-    justSaved: false,
-  };
-}
+type ScanResultState = {
+  factsFound: number;
+  reviewNotes: string | null;
+} | null;
 
 export function AiKnowledgeCard({
-  website,
+  businessProfile,
   onGoToBusinessProfile,
 }: {
-  // Business profile website (initial server value). The GET response value
-  // wins once loaded so the card always shows the saved website.
-  website: string;
+  businessProfile: BusinessProfileFields;
   onGoToBusinessProfile: () => void;
 }) {
-  const [load, setLoad] = useState<LoadState>({ kind: "loading" });
-  const [entries, setEntries] = useState<Record<string, EntryState>>(() =>
-    Object.fromEntries(
-      aiFrontDeskKnowledgeCatalog.map((item) => [item.key, initialEntryState(item)]),
-    ),
-  );
+  const [load, setLoad] = useState<LoadState>("loading");
+
+  const [timezone, setTimezone] = useState<string>("America/Chicago");
+  const [hoursDays, setHoursDays] = useState<HoursDayState[]>([]);
+  const [hoursSuggested, setHoursSuggested] = useState(false);
+
+  const [services, setServices] = useState<CatalogItemState[]>([]);
+  const [insurance, setInsurance] = useState<CatalogItemState[]>([]);
+  const [newServiceLabel, setNewServiceLabel] = useState("");
+  const [newInsuranceLabel, setNewInsuranceLabel] = useState("");
+
+  const [appointments, setAppointments] = useState({
+    acceptingNewPatients: false,
+    cleaningAppointments: false,
+    sameDayAppointments: false,
+    emergencyAppointments: false,
+    rescheduleCancelRequests: false,
+    preferredTimeQuestion: DEFAULT_PREFERRED_TIME_QUESTION,
+    suggested: false,
+  });
+
+  const [payment, setPayment] = useState({
+    paymentPlans: false,
+    financing: false,
+    carecredit: false,
+    membershipPlan: false,
+    pricingPolicy: "",
+    suggested: false,
+  });
+
+  const [policies, setPolicies] = useState({
+    newPatientForms: "",
+    whatToBring: "",
+    cancellationPolicy: "",
+    languagesText: "",
+    parkingNotes: "",
+    accessibilityNotes: "",
+    suggested: false,
+  });
+
+  const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<ScanResultState>(null);
+  const [lastScanNote, setLastScanNote] = useState<string | null>(null);
+
+  function saveState(section: string): SaveState {
+    return saveStates[section] ?? IDLE_SAVE;
+  }
+  function setSave(section: string, state: SaveState) {
+    setSaveStates((prev) => ({ ...prev, [section]: state }));
+  }
+
+  function applyFacts(facts: AiFactsView) {
+    setTimezone(facts.hours.timezone);
+    setHoursDays(
+      facts.hours.days.map((day) => ({
+        weekday: day.weekday,
+        closed: day.closed,
+        opensAt: day.opensAt ?? "",
+        closesAt: day.closesAt ?? "",
+      })),
+    );
+    setHoursSuggested(facts.hours.suggested);
+    setServices(facts.services);
+    setInsurance(facts.insurancePlans);
+    setAppointments({
+      acceptingNewPatients: facts.appointments.acceptingNewPatients ?? false,
+      cleaningAppointments: facts.appointments.cleaningAppointments ?? false,
+      sameDayAppointments: facts.appointments.sameDayAppointments ?? false,
+      emergencyAppointments: facts.appointments.emergencyAppointments ?? false,
+      rescheduleCancelRequests: facts.appointments.rescheduleCancelRequests ?? false,
+      preferredTimeQuestion: facts.appointments.preferredTimeQuestion,
+      suggested: facts.appointments.suggested,
+    });
+    setPayment({
+      paymentPlans: facts.payment.paymentPlans ?? false,
+      financing: facts.payment.financing ?? false,
+      carecredit: facts.payment.carecredit ?? false,
+      membershipPlan: facts.payment.membershipPlan ?? false,
+      pricingPolicy: facts.payment.pricingPolicy ?? "",
+      suggested: facts.payment.suggested,
+    });
+    setPolicies({
+      newPatientForms: facts.policies.newPatientForms ?? "",
+      whatToBring: facts.policies.whatToBring ?? "",
+      cancellationPolicy: facts.policies.cancellationPolicy ?? "",
+      languagesText: facts.policies.languages.join(", "),
+      parkingNotes: facts.policies.parkingNotes ?? "",
+      accessibilityNotes: facts.policies.accessibilityNotes ?? "",
+      suggested: facts.policies.suggested,
+    });
+    if (facts.lastScan && facts.lastScan.status === "completed") {
+      setLastScanNote(
+        `Your last website check found ${facts.lastScan.factsFound} suggestion${facts.lastScan.factsFound === 1 ? "" : "s"}.`,
+      );
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -91,34 +148,21 @@ export function AiKnowledgeCard({
         const res = await fetch("/api/account/ai-knowledge", { credentials: "include" });
         if (cancelled) return;
         if (res.status === 401 || res.status === 403) {
-          setLoad({ kind: "signin_required" });
+          setLoad("signin_required");
           return;
         }
         const json = (await res.json().catch(() => null)) as
-          | { ok?: boolean; website?: string; entries?: FetchedEntry[] }
+          | { ok?: boolean; facts?: AiFactsView }
           | null;
         if (cancelled) return;
-        if (!res.ok || !json?.ok || !Array.isArray(json.entries)) {
-          setLoad({ kind: "error" });
+        if (!res.ok || !json?.ok || !json.facts) {
+          setLoad("error");
           return;
         }
-        setEntries((prev) => {
-          const next = { ...prev };
-          for (const e of json.entries ?? []) {
-            if (!next[e.questionKey]) continue;
-            next[e.questionKey] = {
-              ...next[e.questionKey],
-              status: e.status,
-              answer: e.answer,
-              sourceType: e.sourceType,
-              persisted: e.persisted,
-            };
-          }
-          return next;
-        });
-        setLoad({ kind: "ready", website: json.website ?? "" });
+        applyFacts(json.facts);
+        setLoad("ready");
       } catch {
-        if (!cancelled) setLoad({ kind: "error" });
+        if (!cancelled) setLoad("error");
       }
     })();
     return () => {
@@ -126,284 +170,752 @@ export function AiKnowledgeCard({
     };
   }, []);
 
-  function patchEntry(key: string, patch: Partial<EntryState>) {
-    setEntries((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
-  }
-
-  async function saveEntry(item: AiKnowledgeCatalogItem, status: AiKnowledgeStatus) {
-    const current = entries[item.key];
-    if (!current || current.saving) return;
-    patchEntry(item.key, { saving: true, error: null, justSaved: false });
-    // For fact/policy questions, switching to handoff/do-not-answer is a status
-    // decision — the server fills the standard short handoff wording itself.
-    const sendsAnswer =
-      status === "approved" ||
-      status === "needs_review" ||
-      (status === "handoff" && (item.answerKind === "handoff" || item.answerKind === "safety"));
+  async function postSection(
+    section: string,
+    path: string,
+    body: unknown,
+  ): Promise<AiFactsView | null> {
+    setSave(section, { saving: true, error: null, saved: false });
     try {
-      const res = await fetch("/api/account/ai-knowledge", {
+      const res = await fetch(`/api/account/ai-knowledge/${path}`, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          questionKey: item.key,
-          status,
-          answer: sendsAnswer ? current.answer : "",
-          sourceType: "manual",
-        }),
+        body: JSON.stringify(body),
       });
       const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; entry?: FetchedEntry; error?: { message?: string } }
+        | { ok?: boolean; facts?: AiFactsView; error?: { message?: string } }
         | null;
-      if (!res.ok || !json?.ok || !json.entry) {
-        patchEntry(item.key, {
+      if (!res.ok || !json?.ok || !json.facts) {
+        setSave(section, {
           saving: false,
-          error: json?.error?.message ?? "Could not save this answer. Please try again.",
+          error: json?.error?.message ?? "Could not save. Please try again.",
+          saved: false,
         });
-        return;
+        return null;
       }
-      patchEntry(item.key, {
-        saving: false,
-        status: json.entry.status,
-        answer: json.entry.answer,
-        sourceType: json.entry.sourceType,
-        persisted: json.entry.persisted,
-        justSaved: true,
-      });
+      setSave(section, { saving: false, error: null, saved: true });
+      return json.facts;
     } catch {
-      patchEntry(item.key, {
-        saving: false,
-        error: "Could not save this answer. Please try again.",
-      });
+      setSave(section, { saving: false, error: "Could not save. Please try again.", saved: false });
+      return null;
     }
   }
 
-  const allStates = Object.values(entries);
-  const approvedCount = allStates.filter((e) => e.status === "approved").length;
-  const needsReviewCount = allStates.filter(
-    (e) => e.status === "needs_review" || e.status === "not_found",
-  ).length;
-  const handoffCount = allStates.filter(
-    (e) => e.status === "handoff" || e.status === "do_not_answer",
-  ).length;
+  // ------------------------------------------------------------ section saves
 
-  const effectiveWebsite = (load.kind === "ready" ? load.website : website).trim();
+  async function saveHours() {
+    for (const day of hoursDays) {
+      if (!day.closed && (!day.opensAt || !day.closesAt)) {
+        setSave("hours", {
+          saving: false,
+          error: "Add open and close times, or mark the day closed.",
+          saved: false,
+        });
+        return;
+      }
+    }
+    const facts = await postSection("hours", "hours", {
+      timezone,
+      days: hoursDays.map((day) =>
+        day.closed
+          ? { weekday: day.weekday, closed: true, intervals: [] }
+          : {
+              weekday: day.weekday,
+              closed: false,
+              intervals: [{ opensAt: day.opensAt, closesAt: day.closesAt }],
+            },
+      ),
+    });
+    if (facts) {
+      setHoursSuggested(facts.hours.suggested);
+    }
+  }
 
-  if (load.kind === "signin_required") {
+  async function saveSelections(section: "services" | "insurance") {
+    const items = section === "services" ? services : insurance;
+    const facts = await postSection(section, section, {
+      action: "save",
+      selections: items.map((item) => ({ key: item.key, selected: item.selected })),
+    });
+    if (facts) {
+      if (section === "services") setServices(facts.services);
+      else setInsurance(facts.insurancePlans);
+    }
+  }
+
+  async function addCustom(section: "services" | "insurance") {
+    const label = section === "services" ? newServiceLabel : newInsuranceLabel;
+    const facts = await postSection(section, section, { action: "add", label });
+    if (facts) {
+      if (section === "services") {
+        setServices(facts.services);
+        setNewServiceLabel("");
+      } else {
+        setInsurance(facts.insurancePlans);
+        setNewInsuranceLabel("");
+      }
+    }
+  }
+
+  async function saveAppointments() {
+    const facts = await postSection("appointments", "appointments", {
+      acceptingNewPatients: appointments.acceptingNewPatients,
+      cleaningAppointments: appointments.cleaningAppointments,
+      sameDayAppointments: appointments.sameDayAppointments,
+      emergencyAppointments: appointments.emergencyAppointments,
+      rescheduleCancelRequests: appointments.rescheduleCancelRequests,
+      preferredTimeQuestion: appointments.preferredTimeQuestion,
+    });
+    if (facts) setAppointments((prev) => ({ ...prev, suggested: facts.appointments.suggested }));
+  }
+
+  async function savePayment() {
+    const facts = await postSection("payment", "payment", {
+      paymentPlans: payment.paymentPlans,
+      financing: payment.financing,
+      carecredit: payment.carecredit,
+      membershipPlan: payment.membershipPlan,
+      pricingPolicy: payment.pricingPolicy,
+    });
+    if (facts) setPayment((prev) => ({ ...prev, suggested: facts.payment.suggested }));
+  }
+
+  async function savePolicies() {
+    const facts = await postSection("policies", "policies", {
+      newPatientForms: policies.newPatientForms,
+      whatToBring: policies.whatToBring,
+      cancellationPolicy: policies.cancellationPolicy,
+      languages: policies.languagesText
+        .split(",")
+        .map((language) => language.trim())
+        .filter((language) => language.length > 0),
+      parkingNotes: policies.parkingNotes,
+      accessibilityNotes: policies.accessibilityNotes,
+    });
+    if (facts) setPolicies((prev) => ({ ...prev, suggested: facts.policies.suggested }));
+  }
+
+  async function scanWebsite() {
+    setScanning(true);
+    setScanError(null);
+    setScanResult(null);
+    try {
+      const res = await fetch("/api/account/ai-knowledge/scan-website", {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = (await res.json().catch(() => null)) as
+        | {
+            ok?: boolean;
+            facts?: AiFactsView;
+            scan?: { factsFound?: number; reviewNotes?: string | null };
+            error?: { message?: string };
+          }
+        | null;
+      if (!res.ok || !json?.ok || !json.facts) {
+        setScanError(json?.error?.message ?? "We couldn't check your website. Please try again.");
+        return;
+      }
+      applyFacts(json.facts);
+      setScanResult({
+        factsFound: json.scan?.factsFound ?? 0,
+        reviewNotes: json.scan?.reviewNotes ?? null,
+      });
+      setLastScanNote(null);
+    } catch {
+      setScanError("We couldn't check your website. Please try again.");
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  // ------------------------------------------------------------------ render
+
+  if (load === "signin_required") {
     return (
       <div className="alert alert-info" role="status">
-        <span>Please sign in with your owner or admin account to manage AI knowledge.</span>
+        <span>Please sign in with your owner or admin account to manage this section.</span>
       </div>
     );
   }
+  if (load === "error") {
+    return (
+      <div className="alert alert-error" role="alert">
+        <span>We couldn’t load this section. Please refresh and try again.</span>
+      </div>
+    );
+  }
+  if (load === "loading") {
+    return (
+      <p className="t-small" role="status" aria-live="polite">Loading…</p>
+    );
+  }
+
+  const website = businessProfile.website.trim();
+  const hasAddress = businessProfile.streetAddress.trim().length > 0 && businessProfile.city.trim().length > 0;
+  const anyServiceSuggested = services.some((item) => item.suggested);
+  const anyInsuranceSuggested = insurance.some((item) => item.suggested);
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-6)" }}>
-      <div className="alert alert-info" role="status">
-        <span>
-          <strong>AI replies are off.</strong>
-          These answers are saved for future SMS and voice AI. Patients will not receive
-          AI-generated replies from this screen.
-        </span>
+    <div className="aifacts-stack">
+      <div className="acct-callout" role="note">
+        <p className="t-body" style={{ fontWeight: 700, margin: 0 }}>
+          Add what AI can safely say to patients.
+        </p>
+        <p className="t-small" style={{ margin: 0 }}>
+          Questions without an approved answer go to your office. AI never gives medical advice.
+        </p>
       </div>
 
-      <section className="acct-callout" aria-labelledby="aik-website-title">
-        <h3 id="aik-website-title" className="t-h4">Website source</h3>
-        {effectiveWebsite ? (
+      {/* ------------------------------------------------ business profile */}
+      <Accordion title="Business profile facts" defaultOpen>
+        <p className="t-small">Office address from Business profile.</p>
+        <dl style={{ margin: 0 }}>
+          <FactRow label="Clinic name" value={businessProfile.name} />
+          <FactRow label="Main office phone" value={businessProfile.mainPhone} />
+          <FactRow
+            label="Address"
+            value={
+              hasAddress
+                ? [
+                    businessProfile.streetAddress,
+                    businessProfile.addressLine2,
+                    `${businessProfile.city}, ${businessProfile.stateRegion} ${businessProfile.postalCode}`.trim(),
+                  ]
+                    .filter((part) => part && part.trim().length > 0)
+                    .join(", ")
+                : ""
+            }
+          />
+          <FactRow label="Website" value={website} />
+        </dl>
+        {(!hasAddress || !website) && (
+          <p className="t-small">
+            {!hasAddress && !website
+              ? "Add your address and website in Business profile."
+              : !hasAddress
+                ? "Add your address in Business profile."
+                : "Add your website in Business profile."}
+          </p>
+        )}
+        <p style={{ margin: 0 }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onGoToBusinessProfile}>
+            Edit Business profile
+          </button>
+        </p>
+      </Accordion>
+
+      {/* ---------------------------------------------------------- hours */}
+      <Accordion title="Hours & location" badge={hoursSuggested ? "Review" : undefined}>
+        <p className="t-small">Set normal office hours.</p>
+        {hoursSuggested && (
+          <p className="t-small" style={{ fontWeight: 600 }}>
+            We found hours on your website. Review and save them.
+          </p>
+        )}
+        <div style={{ maxWidth: 320 }}>
+          <SelectField
+            label="Time zone"
+            name="aifacts-timezone"
+            value={timezone}
+            onChange={setTimezone}
+            options={HOURS_TIMEZONES.map((tz) => ({ value: tz.value, label: tz.label }))}
+          />
+        </div>
+        <div>
+          {WEEKDAY_ORDER.map((weekday) => {
+            const day = hoursDays.find((d) => d.weekday === weekday);
+            if (!day) return null;
+            return (
+              <div key={weekday} className="aifacts-hours-row">
+                <span className="t-label">{WEEKDAY_LABELS[weekday]}</span>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={day.closed}
+                    onChange={(e) =>
+                      setHoursDays((prev) =>
+                        prev.map((d) =>
+                          d.weekday === weekday
+                            ? {
+                                ...d,
+                                closed: e.target.checked,
+                                opensAt: e.target.checked ? "" : d.opensAt || "08:00",
+                                closesAt: e.target.checked ? "" : d.closesAt || "17:00",
+                              }
+                            : d,
+                        ),
+                      )
+                    }
+                  />
+                  <span>Closed</span>
+                </label>
+                {!day.closed && (
+                  <div className="aifacts-hours-times">
+                    <label className="sr-only" htmlFor={`aifacts-open-${weekday}`}>
+                      {WEEKDAY_LABELS[weekday]} opening time
+                    </label>
+                    <input
+                      id={`aifacts-open-${weekday}`}
+                      type="time"
+                      className="input"
+                      value={day.opensAt}
+                      onChange={(e) =>
+                        setHoursDays((prev) =>
+                          prev.map((d) => (d.weekday === weekday ? { ...d, opensAt: e.target.value } : d)),
+                        )
+                      }
+                    />
+                    <span className="t-small">to</span>
+                    <label className="sr-only" htmlFor={`aifacts-close-${weekday}`}>
+                      {WEEKDAY_LABELS[weekday]} closing time
+                    </label>
+                    <input
+                      id={`aifacts-close-${weekday}`}
+                      type="time"
+                      className="input"
+                      value={day.closesAt}
+                      onChange={(e) =>
+                        setHoursDays((prev) =>
+                          prev.map((d) => (d.weekday === weekday ? { ...d, closesAt: e.target.value } : d)),
+                        )
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <SectionSave section="hours" state={saveState("hours")} onSave={saveHours} />
+      </Accordion>
+
+      {/* --------------------------------------------------- appointments */}
+      <Accordion title="Appointments" badge={appointments.suggested ? "Review" : undefined}>
+        <p className="t-small">Choose appointment requests your office handles.</p>
+        <div className="aifacts-check-grid">
+          <CheckOption
+            label="Accepting new patients"
+            checked={appointments.acceptingNewPatients}
+            onChange={(v) => setAppointments((prev) => ({ ...prev, acceptingNewPatients: v }))}
+          />
+          <CheckOption
+            label="Cleaning appointments"
+            checked={appointments.cleaningAppointments}
+            onChange={(v) => setAppointments((prev) => ({ ...prev, cleaningAppointments: v }))}
+          />
+          <CheckOption
+            label="Same-day appointments"
+            checked={appointments.sameDayAppointments}
+            onChange={(v) => setAppointments((prev) => ({ ...prev, sameDayAppointments: v }))}
+          />
+          <CheckOption
+            label="Emergency appointments"
+            checked={appointments.emergencyAppointments}
+            onChange={(v) => setAppointments((prev) => ({ ...prev, emergencyAppointments: v }))}
+          />
+          <CheckOption
+            label="Reschedule/cancel requests"
+            checked={appointments.rescheduleCancelRequests}
+            onChange={(v) => setAppointments((prev) => ({ ...prev, rescheduleCancelRequests: v }))}
+          />
+        </div>
+        <Field
+          label="Preferred time question"
+          name="aifacts-preferred-time"
+          value={appointments.preferredTimeQuestion}
+          onChange={(v) => {
+            if (v.length <= MAX_PREFERRED_TIME_QUESTION_LENGTH) {
+              setAppointments((prev) => ({ ...prev, preferredTimeQuestion: v }));
+            }
+          }}
+          helper="Asked when a patient wants to book."
+        />
+        <SectionSave section="appointments" state={saveState("appointments")} onSave={saveAppointments} />
+      </Accordion>
+
+      {/* ------------------------------------------------------ insurance */}
+      <Accordion title="Insurance" badge={anyInsuranceSuggested ? "Review" : undefined}>
+        <p className="t-small">Select insurance plans your office accepts.</p>
+        <CatalogChecklist
+          idPrefix="aifacts-ins"
+          items={insurance}
+          onToggle={(key, selected) =>
+            setInsurance((prev) => prev.map((item) => (item.key === key ? { ...item, selected } : item)))
+          }
+        />
+        <AddCustomRow
+          label="Add insurance"
+          inputId="aifacts-add-insurance"
+          value={newInsuranceLabel}
+          onChange={setNewInsuranceLabel}
+          onAdd={() => addCustom("insurance")}
+          disabled={saveState("insurance").saving}
+        />
+        <SectionSave section="insurance" state={saveState("insurance")} onSave={() => saveSelections("insurance")} />
+      </Accordion>
+
+      {/* ------------------------------------------------------- services */}
+      <Accordion title="Services" badge={anyServiceSuggested ? "Review" : undefined}>
+        <p className="t-small">Select services your office offers.</p>
+        <CatalogChecklist
+          idPrefix="aifacts-svc"
+          items={services}
+          onToggle={(key, selected) =>
+            setServices((prev) => prev.map((item) => (item.key === key ? { ...item, selected } : item)))
+          }
+        />
+        <AddCustomRow
+          label="Add service"
+          inputId="aifacts-add-service"
+          value={newServiceLabel}
+          onChange={setNewServiceLabel}
+          onAdd={() => addCustom("services")}
+          disabled={saveState("services").saving}
+        />
+        <SectionSave section="services" state={saveState("services")} onSave={() => saveSelections("services")} />
+      </Accordion>
+
+      {/* -------------------------------------------------------- payment */}
+      <Accordion title="Payment" badge={payment.suggested ? "Review" : undefined}>
+        <p className="t-small">Add payment options patients may ask about.</p>
+        <div className="aifacts-check-grid">
+          <CheckOption
+            label="Payment plans"
+            checked={payment.paymentPlans}
+            onChange={(v) => setPayment((prev) => ({ ...prev, paymentPlans: v }))}
+          />
+          <CheckOption
+            label="Financing"
+            checked={payment.financing}
+            onChange={(v) => setPayment((prev) => ({ ...prev, financing: v }))}
+          />
+          <CheckOption
+            label="CareCredit"
+            checked={payment.carecredit}
+            onChange={(v) => setPayment((prev) => ({ ...prev, carecredit: v }))}
+          />
+          <CheckOption
+            label="Membership plan"
+            checked={payment.membershipPlan}
+            onChange={(v) => setPayment((prev) => ({ ...prev, membershipPlan: v }))}
+          />
+        </div>
+        <LabeledTextarea
+          id="aifacts-pricing-policy"
+          label="Pricing policy"
+          optional
+          value={payment.pricingPolicy}
+          maxLength={MAX_PRICING_POLICY_LENGTH}
+          onChange={(v) => setPayment((prev) => ({ ...prev, pricingPolicy: v }))}
+          helper="Optional. A short note, not exact prices."
+        />
+        <SectionSave section="payment" state={saveState("payment")} onSave={savePayment} />
+      </Accordion>
+
+      {/* ------------------------------------------------ office policies */}
+      <Accordion title="Office policies" badge={policies.suggested ? "Review" : undefined}>
+        <p className="t-small">Add basic office rules patients may ask about.</p>
+        <LabeledTextarea
+          id="aifacts-new-patient-forms"
+          label="New patient forms"
+          optional
+          value={policies.newPatientForms}
+          maxLength={MAX_POLICY_TEXT_LENGTH}
+          onChange={(v) => setPolicies((prev) => ({ ...prev, newPatientForms: v }))}
+        />
+        <LabeledTextarea
+          id="aifacts-what-to-bring"
+          label="What to bring"
+          optional
+          value={policies.whatToBring}
+          maxLength={MAX_POLICY_TEXT_LENGTH}
+          onChange={(v) => setPolicies((prev) => ({ ...prev, whatToBring: v }))}
+        />
+        <LabeledTextarea
+          id="aifacts-cancellation"
+          label="Cancellation policy"
+          optional
+          value={policies.cancellationPolicy}
+          maxLength={MAX_POLICY_TEXT_LENGTH}
+          onChange={(v) => setPolicies((prev) => ({ ...prev, cancellationPolicy: v }))}
+        />
+        <Field
+          label="Languages"
+          name="aifacts-languages"
+          value={policies.languagesText}
+          onChange={(v) => setPolicies((prev) => ({ ...prev, languagesText: v }))}
+          optional
+          placeholder="English, Spanish"
+          helper="Select languages your office supports, separated by commas."
+        />
+        <LabeledTextarea
+          id="aifacts-parking"
+          label="Parking notes"
+          optional
+          value={policies.parkingNotes}
+          maxLength={MAX_POLICY_TEXT_LENGTH}
+          onChange={(v) => setPolicies((prev) => ({ ...prev, parkingNotes: v }))}
+        />
+        <LabeledTextarea
+          id="aifacts-accessibility"
+          label="Accessibility notes"
+          optional
+          value={policies.accessibilityNotes}
+          maxLength={MAX_POLICY_TEXT_LENGTH}
+          onChange={(v) => setPolicies((prev) => ({ ...prev, accessibilityNotes: v }))}
+        />
+        <SectionSave section="policies" state={saveState("policies")} onSave={savePolicies} />
+      </Accordion>
+
+      {/* --------------------------------------------------- website scan */}
+      <Accordion title="Website check">
+        {website ? (
           <>
-            <p className="t-body" style={{ overflowWrap: "anywhere", fontWeight: 600 }}>
-              {effectiveWebsite}
-            </p>
-            <p className="t-small">
-              Future website scan will use this Business profile website to suggest common
-              answers. Website scanning is not live in this step.
-            </p>
-            <p style={{ marginTop: "var(--space-2)" }}>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={onGoToBusinessProfile}>
-                Edit Business profile
+            <p className="t-small">Scan your website to suggest draft facts.</p>
+            <p className="t-small" style={{ overflowWrap: "anywhere", fontWeight: 600 }}>{website}</p>
+            <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center", flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={scanWebsite} disabled={scanning}>
+                {scanning ? "Scanning…" : "Scan website"}
               </button>
-            </p>
+              {scanning && (
+                <span className="t-small" role="status" aria-live="polite">
+                  Checking your website…
+                </span>
+              )}
+            </div>
+            {scanResult && (
+              <div className="alert alert-success" role="status">
+                <span>
+                  <strong>Found draft facts</strong>
+                  {scanResult.factsFound > 0
+                    ? "Review the suggestions marked “Review” above, then save each section to approve."
+                    : "We didn’t find new suggestions this time. You can still fill in each section above."}
+                  {scanResult.reviewNotes ? ` ${scanResult.reviewNotes}` : ""}
+                </span>
+              </div>
+            )}
+            {scanError && (
+              <div className="alert alert-error" role="alert">
+                <span>{scanError}</span>
+              </div>
+            )}
+            {!scanResult && !scanError && lastScanNote && <p className="t-small">{lastScanNote}</p>}
           </>
         ) : (
           <>
-            <p className="t-body" style={{ fontWeight: 600 }}>No website added yet.</p>
-            <p className="t-small">
-              Add your website in Business profile so future AI setup can suggest common
-              answers automatically.
-            </p>
-            <p style={{ marginTop: "var(--space-2)" }}>
+            <p className="t-small">Add a website in Business profile to scan for draft facts.</p>
+            <p style={{ margin: 0 }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={onGoToBusinessProfile}>
                 Go to Business profile
               </button>
             </p>
           </>
         )}
-      </section>
-
-      {load.kind === "error" && (
-        <div className="alert alert-error" role="alert">
-          <span>We couldn’t load your saved answers. Please refresh and try again.</span>
-        </div>
-      )}
-
-      {load.kind === "loading" ? (
-        <p className="t-small" role="status" aria-live="polite">Loading your answer library…</p>
-      ) : (
-        <>
-          <div className="acct-grid-3" role="group" aria-label="Answer library summary">
-            <SummaryStat label="Approved answers" value={approvedCount} />
-            <SummaryStat label="Needs review" value={needsReviewCount} />
-            <SummaryStat label="Handoff / do not answer" value={handoffCount} />
-          </div>
-
-          {AI_KNOWLEDGE_CATEGORIES.map((category) => {
-            const items = aiFrontDeskKnowledgeCatalog.filter((i) => i.category === category);
-            if (items.length === 0) return null;
-            const headingId = `aik-cat-${category.replace(/[^a-z]+/gi, "-").toLowerCase()}`;
-            return (
-              <section key={category} aria-labelledby={headingId} style={{ display: "grid", gap: "var(--space-4)" }}>
-                <h3 id={headingId} className="t-h4">{category}</h3>
-                {items.map((item) => (
-                  <QuestionCard
-                    key={item.key}
-                    item={item}
-                    entry={entries[item.key]}
-                    onAnswerChange={(v) => patchEntry(item.key, { answer: v, justSaved: false })}
-                    onAction={(status) => saveEntry(item, status)}
-                  />
-                ))}
-              </section>
-            );
-          })}
-        </>
-      )}
+      </Accordion>
     </div>
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="acct-number" style={{ display: "grid", gap: "var(--space-1)" }}>
-      <p className="t-metric">{value}</p>
-      <p className="t-small">{label}</p>
-    </div>
-  );
-}
+// ------------------------------------------------------------ small pieces
 
-function QuestionCard({
-  item,
-  entry,
-  onAnswerChange,
-  onAction,
+function Accordion({
+  title,
+  badge,
+  defaultOpen = false,
+  children,
 }: {
-  item: AiKnowledgeCatalogItem;
-  entry: EntryState;
-  onAnswerChange: (value: string) => void;
-  onAction: (status: AiKnowledgeStatus) => void;
+  title: string;
+  badge?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
 }) {
-  const badge = STATUS_BADGE[entry.status];
-  const isSafety = item.answerKind === "safety";
-  const isHandoffKind = item.answerKind === "handoff";
-  const answerId = `aik-answer-${item.key}`;
-  const answerLabel = isHandoffKind ? "Reply AI may use before handing off" : "Answer AI may use";
-
+  // Controlled <details> so React re-renders never snap a section back open.
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <article className="acct-number" aria-labelledby={`aik-q-${item.key}`} style={{ display: "grid", gap: "var(--space-3)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--space-3)", flexWrap: "wrap" }}>
-        <h4 id={`aik-q-${item.key}`} className="t-body" style={{ fontWeight: 700, margin: 0 }}>
-          {item.question}
-        </h4>
-        <span style={{ display: "inline-flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-          {item.recommended && <span className="badge badge-brand">Recommended</span>}
-          <StatusBadge kind={badge.kind} label={badge.label} />
+    <details
+      className="aifacts-acc"
+      open={open}
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+    >
+      <summary>
+        <span className="aifacts-acc-title">
+          <h3 className="t-h4" style={{ font: "inherit", margin: 0 }}>{title}</h3>
+          {badge && <span className="badge badge-info">{badge}</span>}
         </span>
-      </div>
+      </summary>
+      <div className="aifacts-acc-body">{children}</div>
+    </details>
+  );
+}
 
-      <p className="t-helper" style={{ margin: 0 }}>{item.whyRecommended}</p>
+function FactRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="acct-statusrow">
+      <dt className="t-small" style={{ color: "var(--text-secondary)" }}>{label}</dt>
+      <dd className="t-small" style={{ margin: 0, textAlign: "right", overflowWrap: "anywhere" }}>
+        {value.trim().length > 0 ? value : "—"}
+      </dd>
+    </div>
+  );
+}
 
-      {isSafety ? (
-        <div className="field">
-          <label htmlFor={answerId}>Standard reply (not editable)</label>
-          <textarea
-            id={answerId}
-            className="textarea acct-readonly"
-            value={item.defaultHandoffText ?? ""}
-            readOnly
-            aria-readonly="true"
-            rows={2}
-          />
-          <p className="helper">
-            This safety reply always hands the patient to your office and is never changed
-            into medical advice.
-          </p>
-        </div>
-      ) : (
-        <div className="field">
-          <label htmlFor={answerId}>{answerLabel}</label>
-          <textarea
-            id={answerId}
-            className="textarea"
-            value={entry.answer}
-            onChange={(e) => onAnswerChange(e.target.value)}
-            rows={3}
-            maxLength={AI_KNOWLEDGE_ANSWER_MAX_LENGTH}
-            disabled={entry.saving}
-            placeholder="Patients often ask this. Add the answer AI may use, or choose handoff."
-          />
-          <p className="helper">Source: {SOURCE_LABEL[entry.sourceType]}</p>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", alignItems: "center" }}>
-        {!isSafety && (
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            disabled={entry.saving}
-            onClick={() => onAction("needs_review")}
-          >
-            Save draft
-          </button>
+function CheckOption({
+  label,
+  checked,
+  onChange,
+  suggested = false,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  suggested?: boolean;
+}) {
+  return (
+    <label className="check">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>
+        {label}
+        {suggested && (
+          <span className="t-helper" style={{ display: "block" }}>Suggested from your website</span>
         )}
-        {!isSafety && !isHandoffKind && (
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            disabled={entry.saving}
-            onClick={() => onAction("approved")}
-          >
-            Approve answer
-          </button>
-        )}
+      </span>
+    </label>
+  );
+}
+
+function CatalogChecklist({
+  idPrefix,
+  items,
+  onToggle,
+}: {
+  idPrefix: string;
+  items: CatalogItemState[];
+  onToggle: (key: string, selected: boolean) => void;
+}) {
+  return (
+    <div className="aifacts-check-grid" role="group" aria-label="Options">
+      {items.map((item) => (
+        <CheckOption
+          key={`${idPrefix}-${item.key}`}
+          label={item.label}
+          checked={item.selected}
+          onChange={(v) => onToggle(item.key, v)}
+          suggested={item.suggested && item.selected}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AddCustomRow({
+  label,
+  inputId,
+  value,
+  onChange,
+  onAdd,
+  disabled,
+}: {
+  label: string;
+  inputId: string;
+  value: string;
+  onChange: (value: string) => void;
+  onAdd: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={inputId}>{label}</label>
+      <div className="aifacts-addrow">
+        <input
+          id={inputId}
+          className="input"
+          value={value}
+          maxLength={MAX_CUSTOM_LABEL_LENGTH}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (value.trim().length > 0) onAdd();
+            }
+          }}
+        />
         <button
           type="button"
-          className={isSafety || isHandoffKind ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
-          disabled={entry.saving}
-          onClick={() => onAction("handoff")}
+          className="btn btn-secondary btn-sm"
+          onClick={onAdd}
+          disabled={disabled || value.trim().length === 0}
         >
-          Use handoff
+          Add
         </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          disabled={entry.saving}
-          onClick={() => onAction("do_not_answer")}
-        >
-          Do not answer automatically
-        </button>
-        {entry.saving && (
-          <span className="t-small" role="status" aria-live="polite">Saving…</span>
-        )}
-        {!entry.saving && entry.justSaved && (
-          <span className="t-small acct-savebar-status" role="status" aria-live="polite">Saved</span>
-        )}
       </div>
+    </div>
+  );
+}
 
-      {entry.error && (
-        <p className="helper" role="alert" style={{ color: "var(--error-text)", margin: 0 }}>
-          {entry.error}
-        </p>
+function LabeledTextarea({
+  id,
+  label,
+  value,
+  onChange,
+  maxLength,
+  optional = false,
+  helper,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  maxLength: number;
+  optional?: boolean;
+  helper?: string;
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={id}>
+        {label}
+        {optional && <span className="t-helper"> (optional)</span>}
+      </label>
+      <textarea
+        id={id}
+        className="textarea"
+        rows={2}
+        value={value}
+        maxLength={maxLength}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {helper && <p className="helper">{helper}</p>}
+    </div>
+  );
+}
+
+function SectionSave({
+  section,
+  state,
+  onSave,
+}: {
+  section: string;
+  state: SaveState;
+  onSave: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center", flexWrap: "wrap" }}>
+      <button
+        type="button"
+        className="btn btn-primary btn-sm"
+        onClick={onSave}
+        disabled={state.saving}
+        data-section={section}
+      >
+        {state.saving ? "Saving…" : "Save"}
+      </button>
+      {state.saved && !state.error && (
+        <span className="t-small acct-savebar-status" role="status" aria-live="polite">Saved</span>
       )}
-    </article>
+      {state.error && (
+        <span className="t-small" role="alert" style={{ color: "var(--error-text)" }}>{state.error}</span>
+      )}
+    </div>
   );
 }

@@ -335,10 +335,9 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
             <Section
               id="ai-knowledge"
               title="AI Front Desk Knowledge"
-              description="Prepare approved answers for future SMS and voice AI. AI replies are not live yet."
             >
               <AiKnowledgeCard
-                website={biz.website}
+                businessProfile={biz}
                 onGoToBusinessProfile={() => setActiveSection("business")}
               />
             </Section>

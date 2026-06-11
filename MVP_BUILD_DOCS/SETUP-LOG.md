@@ -6119,6 +6119,12 @@ outcome was written during verification.
 
 ## 2026-06-10 — AI Front Desk Knowledge account foundation (non-live)
 
+> **SUPERSEDED (2026-06-10):** this question-answer model (41-question catalog +
+> `clinic_ai_knowledge_entries`) was replaced the same day by the structured
+> clinic-facts model. The table held test-only rows and was dropped by
+> `20260615000100_replace_ai_knowledge_with_structured_facts.sql`. Historical
+> record only.
+
 Built the first account-side foundation for the future AI Front Desk agent:
 a clinic-approved answer library owners review before any AI can ever use it.
 **No AI runtime, no AI provider calls, no website crawler, no Twilio/SMS
@@ -6183,6 +6189,9 @@ changes, no Vercel env changes, `docs/` untouched.
 
 ## 2026-06-10 — Production rollout: AI Front Desk Knowledge foundation
 
+> **SUPERSEDED (2026-06-10):** see the structured clinic-facts replacement
+> entry below. Historical record only.
+
 Deployed and verified the AI Front Desk Knowledge foundation in production.
 
 - Commit `201045ddec69535bed8a65abf2d8f6d342529310`
@@ -6213,3 +6222,82 @@ same commit SHA over the REST API recovers cleanly.
 
 No SMS sent, no calls placed, no Twilio/Stripe mutations, no env or DNS
 changes, no AI provider calls.
+
+---
+
+## 2026-06-10 — AI Front Desk Knowledge replaced with structured clinic facts
+
+Replaced the same-day question-answer AI Knowledge foundation (41-question
+catalog + `clinic_ai_knowledge_entries`) with a structured clinic-facts model
+and an owner-friendly accordion UI. **Old `clinic_ai_knowledge_entries` rows
+were test-only and were dropped with the table** (2 rows, verified pre-drop).
+Still foundation-only: no AI runtime, no AI provider calls, no Twilio/SMS
+behavior changes, no patient-facing changes.
+
+What changed:
+
+- New migration `20260615000100_replace_ai_knowledge_with_structured_facts.sql`:
+  drops `clinic_ai_knowledge_entries`; creates `clinic_ai_hours` (weekday 0–6,
+  interval_index for future split hours, open<close + closed-day checks),
+  `clinic_ai_services` + `clinic_ai_insurance_plans` (checkbox catalogs +
+  custom rows, unique `(clinic_id, key)`), `clinic_ai_appointment_settings`,
+  `clinic_ai_payment_settings`, `clinic_ai_office_policies` (one row per
+  clinic), and `clinic_website_scan_runs` (run log). Shared statuses
+  `not_found|needs_review|approved|do_not_use`, sources
+  `manual|business_profile|website_draft|system_default`, `set_updated_at`
+  triggers, RLS enabled (no policies; service-role only).
+- New committed catalogs/limits `config/ai-front-desk-facts.config.ts`
+  (18 default services, 15 default insurance plans, max 50 entries each
+  including custom, text-length limits, US timezone list). Old
+  `config/ai-front-desk-knowledge.config.ts` deleted.
+- New pure helpers: `lib/ai-knowledge/facts.ts` (validation + server-side
+  custom keys; replaces deleted `lib/ai-knowledge/entries.ts`),
+  `lib/ai-knowledge/scan-url-safety.ts` (SSRF guard: http/https only, no
+  credentials/odd ports, rejects localhost/private/internal hosts and all IP
+  literals, same-origin link sanitizer), `lib/ai-knowledge/website-extract.ts`
+  (deterministic JSON-LD + text extraction; short excerpts only, never raw
+  HTML).
+- New scan runner `lib/ai-knowledge/website-scan.ts`: reads
+  `clinics.website` only, manual re-validated redirects (www/scheme tolerance
+  on the homepage hop), max 8 pages, 1 MB/page, 8s timeout, no cookies/auth.
+  Drafts are saved as `website_draft`/`needs_review`; never auto-approved;
+  never overwrite approved rows or owner-saved hours; never edit Business
+  profile (address/phone mismatch becomes a short review note).
+- Rewrote `lib/db/ai-knowledge.ts` for the structured model (facts view, hours
+  replace-save, selection saves, server-keyed custom adds with 50-cap, scan run
+  log + conservative draft application).
+- Replaced the API: `GET /api/account/ai-knowledge` plus POST `/hours`,
+  `/services`, `/insurance`, `/appointments`, `/payment`, `/policies`,
+  `/scan-website` — all owner/admin-only via new shared
+  `lib/auth/owner-admin.ts` (front_desk rejected), clinic-scoped, validated
+  server-side.
+- Replaced the UI: `AiKnowledgeCard.tsx` is now an accordion (Business profile
+  facts read-only from `clinics`, Hours & location, Appointments, Insurance,
+  Services, Payment, Office policies, Website check) with the single top
+  principle "Add what AI can safely say to patients. Questions without an
+  approved answer go to your office. AI never gives medical advice." No
+  technical/internal wording in owner UI; no owner-editable safety section
+  (safety is a system rule). New `.aifacts-*` styles + `.sr-only` utility in
+  `app/globals.css`.
+- Replaced tests: `tests/ai-knowledge-facts.test.ts` +
+  `tests/ai-knowledge-website-scan.test.ts` (32 tests; old
+  `ai-knowledge-catalog.test.ts` deleted; `test:ai-knowledge` script now runs
+  the new files).
+- Docs: PROJECT-CONTEXT + operations runbook sections rewritten for the
+  structured model; old same-day SETUP-LOG entries marked SUPERSEDED;
+  Knowledge System CH-21 article/README/inventory updated.
+
+Migration status: **APPLIED to production 2026-06-10** (owner-authorized in the
+task prompt) on Supabase project `qfjpvbvfvhbtebwivcdc` via the Supabase
+Management API; history row recorded as version `20260615000100`. Post-apply
+verification: old table gone (`to_regclass` null), all 7 new tables present,
+RLS enabled on all 7, `set_updated_at` triggers on the 6 updated_at tables.
+
+Validation: `npm run typecheck`, `npm run test:ai-knowledge` (32 pass),
+`npm run test:phone-numbers` (32 pass), `npm run test:a2p` (64 pass),
+`npm run test:sms-recovery` (52 pass), `npm run build`, and `git diff --check`
+all pass. No `lint` script exists in `package.json`.
+
+Not done / explicitly out of scope: no SMS sent, no calls placed, no Twilio
+mutations, no AI provider calls or env vars, no Stripe changes, no Vercel env
+changes, no raw website HTML stored, `docs/` untouched.
