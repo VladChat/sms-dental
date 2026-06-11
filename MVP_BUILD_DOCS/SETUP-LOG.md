@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (internal SMS duplicate suppression test bypass added)
+Last updated: 2026-06-11 (production SMS duplicate suppression bypass env enabled)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6916,6 +6916,39 @@ Validation:
 No production env change was made in this code task. No Twilio resource
 mutation, A2P action, Stripe change, number lifecycle action, SMS send, or
 secret printing occurred.
+
+---
+
+## 2026-06-11 — Production SMS duplicate suppression bypass env enabled
+
+Set production `SMS_TEST_BYPASS_DUPLICATE_SUPPRESSION_TO` for the internal
+primary test caller (`+1***9236`) and redeployed production.
+
+Verification:
+
+- Commit `90b30e9` was present locally and on `main`.
+- Production `SMS_TEST_BYPASS_DUPLICATE_SUPPRESSION_TO` pulled back as
+  `+1***9236` after recreating it as a non-sensitive Vercel env var so the
+  operator can verify the masked value.
+- Production `SMS_RECOVERY_MODE=live` remained unchanged.
+- Fairstone Dental Smile remained the only clinic with
+  `sms_recovery_enabled=true`.
+- All other clinics remained `sms_recovery_enabled=false`.
+- Vercel production deployment `dpl_GD5WDofqaC36mBBXCwp6X9QwdKnG` reached
+  `Ready`.
+- Production health returned HTTP 200.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 60 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `git diff --check` clean.
+
+No SMS was sent, no call was placed, and no Twilio resource, Stripe, A2P,
+phone-number lifecycle, `SMS_RECOVERY_MODE`, or clinic enablement change was
+made.
 
 ---
 
