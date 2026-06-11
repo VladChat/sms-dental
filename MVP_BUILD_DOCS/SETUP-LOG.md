@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (SMS safety fix pushed and production deploy verified)
+Last updated: 2026-06-11 (read-only pilot SMS provider readiness check)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6647,3 +6647,42 @@ Verification:
 
 No SMS sent, no Twilio resource mutations, no provider console changes, no env
 changes, and no secrets printed.
+
+---
+
+## 2026-06-11 — Read-only pilot SMS provider readiness check
+
+Verified the current production pilot clinic/number from app DB state and
+read-only Twilio provider APIs. No SMS was sent and no provider/app state was
+changed.
+
+Pilot identity:
+
+- Clinic: Fairstone Dental Smile
+  (`f37f24a1-070f-436b-b803-956f55466093`).
+- Exact active assigned number: toll-free `+1***4944`, PN SID `PN...05a402`.
+- Messaging Service: `MG...8f7d93`.
+
+Findings:
+
+- Twilio IncomingPhoneNumber exists, matches the DB PN SID/phone number, is
+  `in-use`, and has Voice/SMS capability.
+- Twilio Messaging Service exists and the exact PN SID is in its sender pool.
+- Toll-free verification exists for the exact PN SID and is `TWILIO_APPROVED`.
+- Local A2P is not required for this toll-free pilot number. The provider listed
+  no A2P Campaigns for the Messaging Service; one Brand was listed as approved.
+- App DB still blocks live missed-call SMS recovery: the exact number's
+  `clinic_sms_number_readiness.last_synced_at` is stale relative to the
+  24-hour live-send freshness limit, and `clinics.sms_recovery_enabled=false`.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 52 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `git diff --check` clean before this documentation update.
+
+Conclusion: provider state appears ready for the exact toll-free pilot number,
+but the app is **not ready** for live missed-call SMS recovery until readiness
+is refreshed and owner-approved live enablement is performed.
