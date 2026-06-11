@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (pilot toll-free readiness refreshed)
+Last updated: 2026-06-11 (owner-test missed-call SMS E2E passed)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6723,3 +6723,55 @@ Validation:
 No SMS sent, no call placed, no Twilio resource mutations, no A2P submission or
 retry, no number lifecycle action, no Stripe change, no env change, and no
 secrets printed.
+
+---
+
+## 2026-06-11 — Owner-test missed-call SMS E2E passed
+
+Ran one controlled production owner-test missed-call recovery flow for
+Fairstone Dental Smile's active toll-free pilot number (`+1***4944`) from an
+allowlisted test caller (`+1***9236`).
+
+Result: **PASS**.
+
+Observed and verified:
+
+- Twilio inbound call completed: caller `+1***9236` -> pilot `+1***4944`;
+  Twilio Call SID `CA...45b9cd`.
+- App received the voice status webhook and recorded
+  `webhook_events.external_id='voice:status:CA...45b9cd'`.
+- Exactly one missed-call recovery SMS was sent from `+1***4944` to
+  `+1***9236`; Twilio Message SID `SM...4e2954`; final DB delivery status
+  `delivered`.
+- SMS used the fixed recovery template, identified Fairstone Dental Smile,
+  included STOP opt-out language, and contained no medical claims, fake
+  urgency, discounts, or spammy wording.
+- The owner reply was received by Twilio and stored in the app:
+  Twilio Message SID `SM...ef190c`, webhook event `sms.inbound`, body matched
+  the expected owner-test reply, and the message was linked to the existing
+  Fairstone conversation.
+- Workspace-safe conversation query shows the conversation for `+1***9236`
+  with the latest message as the inbound owner reply.
+- Duplicate checks: one outbound recovery SMS, one expected inbound owner reply,
+  and one conversation for the test caller in the test window.
+
+Safety gates after test:
+
+- `SMS_RECOVERY_MODE=owner_test`.
+- `clinics.sms_recovery_enabled=false`.
+- `clinics.sms_status='waiting_for_approval'`.
+- Pilot readiness remained fresh, `production_safe=true`, and Messaging Service
+  sender coverage remained `covered`; toll-free verification remained
+  `TWILIO_APPROVED`.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 52 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `git diff --check` clean before this documentation update.
+
+No live patient SMS was enabled, no STOP test was performed, no Twilio resource
+mutation occurred, no A2P action occurred, no Stripe change occurred, no env
+change occurred, and no secrets were printed.
