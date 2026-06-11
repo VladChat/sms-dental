@@ -6301,3 +6301,33 @@ all pass. No `lint` script exists in `package.json`.
 Not done / explicitly out of scope: no SMS sent, no calls placed, no Twilio
 mutations, no AI provider calls or env vars, no Stripe changes, no Vercel env
 changes, no raw website HTML stored, `docs/` untouched.
+
+---
+
+## 2026-06-10 — Production rollout: structured clinic facts replacement
+
+Deployed and verified the structured clinic-facts replacement in production.
+
+- Commit `604f57376eb77144728ce4ae04e06f3e8b116457`
+  ("account: replace AI knowledge with structured clinic facts") pushed to
+  `origin/main`; GitHub-triggered Vercel deployment
+  `dpl_79nKPJ5Ztvzf7nQ8urfyPo9mubXv` built normally (no INITIALIZING hang this
+  time), reached READY, and is aliased to `https://app.missedcallsdental.com`.
+- Migration `20260615000100_replace_ai_knowledge_with_structured_facts.sql` was
+  applied and verified before the deploy (see previous entry). The brief window
+  between table drop and deploy only affected the non-critical AI knowledge
+  section (test-only data, no real customers).
+
+Production verification (all pass):
+
+- `GET /api/health` -> 200 `ok: true`.
+- `GET /api/account/ai-knowledge` unauthenticated -> 401 JSON.
+- `POST /api/account/ai-knowledge/scan-website` unauthenticated -> 401 JSON
+  (auth gate runs before any website fetch).
+- `/account?section=ai_knowledge` -> 200 (sign-in gate when unauthenticated).
+- `/account?section=business` -> 200; `/workspace` -> 200.
+- DB: `clinic_ai_knowledge_entries` gone; all 7 structured tables present with
+  RLS enabled.
+
+No SMS sent, no calls placed, no Twilio/Stripe mutations, no env or DNS
+changes, no AI provider calls, no raw website HTML stored.
