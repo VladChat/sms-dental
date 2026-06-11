@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (AI Knowledge follow-up: badge follows visible mode, Needs review tooltip, Bank transfer / ACH payment method)
+Last updated: 2026-06-11 (SMS safety fix pushed and production deploy verified)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6627,3 +6627,23 @@ Validation:
 
 No SMS sent, no real Twilio mutations, no provider console/API checks, no
 Supabase/Vercel/env changes, no deploy, and no secrets printed.
+
+---
+
+## 2026-06-11 — SMS safety fix pushed and production deploy verified
+
+Pushed commit `cd66cad0a0713baa96fa3bf12e9ee7c14c57de9f`
+(`fix: harden local sms brand readiness`) to `origin/main`.
+
+Verification:
+
+- `origin/main` and GitHub `main` resolved to
+  `cd66cad0a0713baa96fa3bf12e9ee7c14c57de9f` after fetch.
+- GitHub Pages/check run for `main` completed successfully.
+- Vercel production deployment `dpl_cukGHTQogbFYN3L65kcEohS1TNzz` reached
+  `Ready` and was aliased to `https://app.missedcallsdental.com`.
+- `https://app.missedcallsdental.com/api/health` returned 200 with
+  `{"ok":true,"service":"missed-calls-dental","version":"foundation-v1"}`.
+
+No SMS sent, no Twilio resource mutations, no provider console changes, no env
+changes, and no secrets printed.
