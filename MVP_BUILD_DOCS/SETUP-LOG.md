@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (AI Knowledge review workflow: Needs review → Complete badges, Save→Edit locking, Appointments owner UI removed)
+Last updated: 2026-06-11 (AI Knowledge follow-up: badge follows visible mode, Needs review tooltip, Bank transfer / ACH payment method)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6556,6 +6556,45 @@ Validation: `npm run typecheck` pass; `npm run test:ai-knowledge` 69 pass;
 `npm run test:phone-numbers` 32 pass; `npm run test:a2p` 64 pass;
 `npm run test:sms-recovery` 52 pass; `npm run build` pass; `git diff --check`
 clean. (No lint script exists.)
+
+No SMS, no Twilio mutations, no AI provider calls, no env changes, no secrets
+printed, no patient-facing behavior changed.
+
+---
+
+## 2026-06-11 — AI Knowledge follow-up: badge follows visible mode, Needs review tooltip, Bank transfer / ACH payment method
+
+Follow-up fix on the review workflow (commit on `main`; see git log for
+`account: refine AI knowledge review badges and payment methods`).
+
+What changed:
+
+- Complete + Save can no longer appear together: the header badge is derived
+  from reviewed AND locked (`sectionStatus()` in `AiKnowledgeCard.tsx`). A
+  reviewed section re-opened via `Edit` shows "Needs review" + Save; after a
+  successful Save it returns to "Complete" + Edit. Applied to all seven
+  editable sections; Business profile facts unchanged.
+- The yellow "Needs review" badge now carries an owner help tooltip
+  (`ReviewStatusBadge`, hover `title` + keyboard-focusable wrapper with
+  `aria-label`): "Review this section and click Save to mark it complete."
+  Scoped to AI Knowledge — the shared `StatusBadge` is untouched.
+- Payment methods reordered (cards first, cash later) and a fixed
+  `Bank transfer / ACH` checkbox added: Credit/debit cards, HSA/FSA cards,
+  Personal checks, Cash, Bank transfer / ACH. Fixed-list only — no custom
+  payment methods, no Zelle/Venmo/Cash App defaults.
+- Migration `20260618000100_add_bank_transfer_ach_payment_method.sql` applied
+  to production (`qfjpvbvfvhbtebwivcdc`): adds nullable `bank_transfer_ach`
+  boolean to `clinic_ai_payment_settings`. No backfill; legacy payment
+  columns left in place.
+- Website parser drafts `bank_transfer_ach` only on an explicit "ACH" (word
+  match) or "bank transfer" mention; generic wording ("convenient payment
+  options", "we accept most payment methods") and Zelle mentions are ignored.
+  An ACH draft re-opens the payment_methods review section; financing drafts
+  keep re-opening financing.
+
+Rollout: pushed to `origin/main` (GitHub→Vercel production auto-deploy);
+deployment READY + `/api/health`, `/account?section=ai_knowledge`,
+`/account?section=business`, `/workspace` verified post-deploy.
 
 No SMS, no Twilio mutations, no AI provider calls, no env changes, no secrets
 printed, no patient-facing behavior changed.

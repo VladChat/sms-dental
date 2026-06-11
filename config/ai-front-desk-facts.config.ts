@@ -121,13 +121,16 @@ export const DEFAULT_INSURANCE_PLANS: readonly AiFactCatalogItem[] = [
   { key: "medicare_advantage", label: "Medicare Advantage dental plans", scanKeywords: ["medicare advantage", "medicare"] },
 ];
 
-// Fixed payment methods an office can accept. Keys map 1:1 to boolean columns
-// on clinic_ai_payment_settings. No custom additions here.
+// Fixed payment methods an office can accept, in owner-UI display order
+// (cards first, cash later). Keys map 1:1 to boolean columns on
+// clinic_ai_payment_settings. Fixed-list only: no custom additions, and no
+// peer-to-peer apps (Zelle/Venmo/Cash App) as defaults.
 export const PAYMENT_METHODS: readonly AiFactCatalogItem[] = [
-  { key: "cash", label: "Cash" },
   { key: "credit_debit_cards", label: "Credit/debit cards" },
-  { key: "personal_checks", label: "Personal checks" },
   { key: "hsa_fsa_cards", label: "HSA/FSA cards" },
+  { key: "personal_checks", label: "Personal checks" },
+  { key: "cash", label: "Cash" },
+  { key: "bank_transfer_ach", label: "Bank transfer / ACH" },
 ];
 
 // Default financing options. Keys map 1:1 to boolean columns on

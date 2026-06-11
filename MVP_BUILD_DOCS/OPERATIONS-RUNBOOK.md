@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-11 (AI Knowledge review workflow: per-section Needs review → Complete badges with Save→Edit locking persisted in clinic_ai_knowledge_section_reviews; owner Appointments section removed — appointment request collection is explained in the intro card; no selected counts in accordion headers)
+Last updated: 2026-06-11 (AI Knowledge follow-up: review badge follows the visible mode so Complete and Save never show together; Needs review badge has an owner help tooltip; Payment methods reordered — cards, HSA/FSA, checks, cash — and fixed Bank transfer / ACH added; no Zelle, fixed-list only)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3258,6 +3258,20 @@ What exists:
   delete only the affected sections' review rows so those re-open as "Needs
   review"; untouched sections stay "Complete". The scan no longer writes
   appointment drafts.
+- Badge follows the visible mode (follow-up, 2026-06-11): the header badge is
+  derived from reviewed AND locked, so a reviewed section re-opened via
+  `Edit` shows "Needs review" + Save — "Complete" and a Save button never
+  appear together. The yellow "Needs review" badge carries an owner help
+  tooltip (hover + keyboard-focusable): "Review this section and click Save
+  to mark it complete."
+- Payment methods (follow-up, 2026-06-11): fixed list only, in this UI order —
+  Credit/debit cards, HSA/FSA cards, Personal checks, Cash, Bank transfer /
+  ACH (`bank_transfer_ach` column, migration `20260618000100…`). No custom
+  payment methods and no peer-to-peer apps (Zelle/Venmo/Cash App) as
+  defaults. The website parser drafts `bank_transfer_ach` only on an explicit
+  "ACH"/"bank transfer" mention (an ACH draft re-opens payment_methods
+  review); generic wording like "convenient payment options" and Zelle
+  mentions are ignored.
 - APIs (owner/admin only via `requireOwnerAdminAccess()` in
   `lib/auth/owner-admin.ts`; front-desk rejected):
   `GET /api/account/ai-knowledge` plus POST

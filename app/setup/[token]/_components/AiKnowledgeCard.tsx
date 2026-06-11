@@ -122,6 +122,7 @@ export function AiKnowledgeCard({
     creditDebitCards: false,
     personalChecks: false,
     hsaFsaCards: false,
+    bankTransferAch: false,
   });
 
   const [financingDefaults, setFinancingDefaults] = useState({
@@ -163,6 +164,12 @@ export function AiKnowledgeCard({
   function isLocked(section: AiEditableSection): boolean {
     return reviewed[section] && editing[section] !== true;
   }
+  // Header badge follows the visible mode, never just the stored review flag:
+  // a reviewed section re-opened via Edit shows "Needs review" + Save, so
+  // "Complete" and a Save button can never appear together.
+  function sectionStatus(section: AiEditableSection): "needs_review" | "complete" {
+    return reviewed[section] && isLocked(section) ? "complete" : "needs_review";
+  }
   function startEditing(section: AiEditableSection) {
     setEditing((prev) => ({ ...prev, [section]: true }));
     setSave(section, IDLE_SAVE);
@@ -189,6 +196,7 @@ export function AiKnowledgeCard({
       creditDebitCards: facts.payment.methods.creditDebitCards ?? false,
       personalChecks: facts.payment.methods.personalChecks ?? false,
       hsaFsaCards: facts.payment.methods.hsaFsaCards ?? false,
+      bankTransferAch: facts.payment.methods.bankTransferAch ?? false,
     });
     setFinancingDefaults({
       inOfficePaymentPlans: facts.payment.financing.inOfficePaymentPlans ?? false,
@@ -377,10 +385,11 @@ export function AiKnowledgeCard({
   async function savePaymentMethodsSection() {
     await postSection("payment_methods", "payment", {
       paymentMethods: {
-        cash: paymentMethods.cash,
         creditDebitCards: paymentMethods.creditDebitCards,
-        personalChecks: paymentMethods.personalChecks,
         hsaFsaCards: paymentMethods.hsaFsaCards,
+        personalChecks: paymentMethods.personalChecks,
+        cash: paymentMethods.cash,
+        bankTransferAch: paymentMethods.bankTransferAch,
       },
     });
   }
@@ -684,7 +693,7 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* ---------------------------------------------------------- hours */}
-      <Accordion title="Hours & location" status={reviewed.hours ? "complete" : "needs_review"}>
+      <Accordion title="Hours & location" status={sectionStatus("hours")}>
         <p className="t-small">Set normal office hours.</p>
         {hoursSuggested && (
           <p className="t-small" style={{ fontWeight: 600 }}>
@@ -779,7 +788,7 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* ------------------------------------------------------ insurance */}
-      <Accordion title="Insurance" status={reviewed.insurance ? "complete" : "needs_review"}>
+      <Accordion title="Insurance" status={sectionStatus("insurance")}>
         <p className="t-small">Select insurance plans your office accepts.</p>
         <CatalogChecklist
           idPrefix="aifacts-ins"
@@ -810,7 +819,7 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* ------------------------------------------------------- services */}
-      <Accordion title="Services" status={reviewed.services ? "complete" : "needs_review"}>
+      <Accordion title="Services" status={sectionStatus("services")}>
         <p className="t-small">Select services your office offers.</p>
         <CatalogChecklist
           idPrefix="aifacts-svc"
@@ -841,7 +850,7 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* ------------------------------------------------------ languages */}
-      <Accordion title="Languages" status={reviewed.languages ? "complete" : "needs_review"}>
+      <Accordion title="Languages" status={sectionStatus("languages")}>
         <p className="t-small">Select languages your office supports.</p>
         <CatalogChecklist
           idPrefix="aifacts-lang"
@@ -872,20 +881,21 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* ------------------------------------------------ payment methods */}
-      <Accordion title="Payment methods" status={reviewed.payment_methods ? "complete" : "needs_review"}>
+      <Accordion title="Payment methods" status={sectionStatus("payment_methods")}>
         <p className="t-small">Select payment methods your office accepts.</p>
+        {/* Fixed list in this exact order — no custom payment methods. */}
         <div className="aifacts-check-grid">
-          <CheckOption
-            label="Cash"
-            checked={paymentMethods.cash}
-            disabled={paymentMethodsLocked}
-            onChange={(v) => setPaymentMethods((prev) => ({ ...prev, cash: v }))}
-          />
           <CheckOption
             label="Credit/debit cards"
             checked={paymentMethods.creditDebitCards}
             disabled={paymentMethodsLocked}
             onChange={(v) => setPaymentMethods((prev) => ({ ...prev, creditDebitCards: v }))}
+          />
+          <CheckOption
+            label="HSA/FSA cards"
+            checked={paymentMethods.hsaFsaCards}
+            disabled={paymentMethodsLocked}
+            onChange={(v) => setPaymentMethods((prev) => ({ ...prev, hsaFsaCards: v }))}
           />
           <CheckOption
             label="Personal checks"
@@ -894,10 +904,16 @@ export function AiKnowledgeCard({
             onChange={(v) => setPaymentMethods((prev) => ({ ...prev, personalChecks: v }))}
           />
           <CheckOption
-            label="HSA/FSA cards"
-            checked={paymentMethods.hsaFsaCards}
+            label="Cash"
+            checked={paymentMethods.cash}
             disabled={paymentMethodsLocked}
-            onChange={(v) => setPaymentMethods((prev) => ({ ...prev, hsaFsaCards: v }))}
+            onChange={(v) => setPaymentMethods((prev) => ({ ...prev, cash: v }))}
+          />
+          <CheckOption
+            label="Bank transfer / ACH"
+            checked={paymentMethods.bankTransferAch}
+            disabled={paymentMethodsLocked}
+            onChange={(v) => setPaymentMethods((prev) => ({ ...prev, bankTransferAch: v }))}
           />
         </div>
         <SectionReviewActions
@@ -910,7 +926,7 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* --------------------------------------------------- financing & plans */}
-      <Accordion title="Financing & plans" status={reviewed.financing ? "complete" : "needs_review"}>
+      <Accordion title="Financing & plans" status={sectionStatus("financing")}>
         <p className="t-small">Select financing options your office offers.</p>
         <div className="aifacts-check-grid" role="group" aria-label="Financing options">
           <CheckOption
@@ -982,7 +998,7 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* ------------------------------------------------ office policies */}
-      <Accordion title="Office policies" status={reviewed.office_policies ? "complete" : "needs_review"}>
+      <Accordion title="Office policies" status={sectionStatus("office_policies")}>
         <p className="t-small">Add basic office rules patients may ask about.</p>
         <Field
           label="Form link"
@@ -1071,12 +1087,33 @@ function Accordion({
       <summary>
         <span className="aifacts-acc-title">
           <h3 className="t-h4" style={{ font: "inherit", margin: 0 }}>{title}</h3>
-          {status === "needs_review" && <StatusBadge kind="needs_setup" label="Needs review" />}
-          {status === "complete" && <StatusBadge kind="complete" />}
+          {status && <ReviewStatusBadge status={status} />}
         </span>
       </summary>
       <div className="aifacts-acc-body">{children}</div>
     </details>
+  );
+}
+
+// Review badge with owner help: the yellow "Needs review" badge carries a
+// short tooltip (hover via title, keyboard via tabIndex + aria-label) so the
+// owner knows what to do next. Scoped to AI Knowledge only — the shared
+// StatusBadge stays untouched.
+const NEEDS_REVIEW_HELP = "Review this section and click Save to mark it complete.";
+
+function ReviewStatusBadge({ status }: { status: "needs_review" | "complete" }) {
+  if (status === "complete") {
+    return <StatusBadge kind="complete" />;
+  }
+  return (
+    <span
+      className="aifacts-review-badge-help"
+      title={NEEDS_REVIEW_HELP}
+      aria-label={`Needs review. ${NEEDS_REVIEW_HELP}`}
+      tabIndex={0}
+    >
+      <StatusBadge kind="needs_setup" label="Needs review" />
+    </span>
   );
 }
 

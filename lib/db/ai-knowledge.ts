@@ -73,6 +73,7 @@ type PaymentSettingsRow = {
   credit_debit_cards: boolean | null;
   personal_checks: boolean | null;
   hsa_fsa_cards: boolean | null;
+  bank_transfer_ach: boolean | null;
   in_office_payment_plans: boolean | null;
   carecredit: boolean | null;
   alphaeon_credit: boolean | null;
@@ -154,6 +155,7 @@ export type AiFactsView = {
       creditDebitCards: boolean | null;
       personalChecks: boolean | null;
       hsaFsaCards: boolean | null;
+      bankTransferAch: boolean | null;
     };
     financing: {
       inOfficePaymentPlans: boolean | null;
@@ -323,7 +325,7 @@ export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
         where clinic_id = ${clinicId}
       `,
       sql<PaymentSettingsRow[]>`
-        select cash, credit_debit_cards, personal_checks, hsa_fsa_cards,
+        select cash, credit_debit_cards, personal_checks, hsa_fsa_cards, bank_transfer_ach,
                in_office_payment_plans, carecredit, alphaeon_credit, membership_plan, status
         from public.clinic_ai_payment_settings
         where clinic_id = ${clinicId}
@@ -405,6 +407,7 @@ export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
         creditDebitCards: payment?.credit_debit_cards ?? null,
         personalChecks: payment?.personal_checks ?? null,
         hsaFsaCards: payment?.hsa_fsa_cards ?? null,
+        bankTransferAch: payment?.bank_transfer_ach ?? null,
       },
       financing: {
         inOfficePaymentPlans: payment?.in_office_payment_plans ?? null,
@@ -729,11 +732,11 @@ export async function savePaymentMethods(
   const sql = getDb();
   await sql`
     insert into public.clinic_ai_payment_settings (
-      clinic_id, cash, credit_debit_cards, personal_checks, hsa_fsa_cards, pricing_policy,
-      status, source_type, reviewed_at, reviewed_by_profile_id
+      clinic_id, cash, credit_debit_cards, personal_checks, hsa_fsa_cards, bank_transfer_ach,
+      pricing_policy, status, source_type, reviewed_at, reviewed_by_profile_id
     ) values (
       ${clinicId}, ${value.cash}, ${value.creditDebitCards}, ${value.personalChecks},
-      ${value.hsaFsaCards}, null,
+      ${value.hsaFsaCards}, ${value.bankTransferAch}, null,
       'approved', 'manual', now(), ${reviewedByProfileId}
     )
     on conflict (clinic_id) do update set
@@ -741,6 +744,7 @@ export async function savePaymentMethods(
       credit_debit_cards = excluded.credit_debit_cards,
       personal_checks = excluded.personal_checks,
       hsa_fsa_cards = excluded.hsa_fsa_cards,
+      bank_transfer_ach = excluded.bank_transfer_ach,
       pricing_policy = null,
       status = 'approved',
       source_type = 'manual',
@@ -1032,15 +1036,20 @@ export async function applyScanDrafts(
 
     // Map detected financing facts to the structured columns. Payment-plan
     // text → in_office_payment_plans, CareCredit → carecredit, Alphaeon →
-    // alphaeon_credit, membership → membership_plan. Payment METHODS (cash,
-    // cards, checks, HSA/FSA) are never inferred from generic page text.
+    // alphaeon_credit, membership → membership_plan. Payment METHODS are never
+    // inferred from generic page text — the only exception is an explicit
+    // "ACH"/"bank transfer" mention → bank_transfer_ach (detected upstream in
+    // website-extract; Zelle and other P2P apps are never mapped). A financing
+    // draft re-opens the financing section; an ACH draft re-opens
+    // payment_methods.
     const inOfficePaymentPlans = facts.payment.paymentPlans ? true : null;
     const carecredit = facts.payment.carecredit ? true : null;
     const alphaeonCredit = facts.payment.alphaeonCredit ? true : null;
     const membershipPlan = facts.payment.membershipPlan ? true : null;
-    const paymentFound =
+    const bankTransferAch = facts.payment.bankTransferAch ? true : null;
+    const financingFound =
       inOfficePaymentPlans || carecredit || alphaeonCredit || membershipPlan;
-    if (paymentFound) {
+    if (financingFound || bankTransferAch) {
       const [payment] = await tx<{ status: string }[]>`
         select status from public.clinic_ai_payment_settings where clinic_id = ${clinicId}
       `;
@@ -1048,17 +1057,19 @@ export async function applyScanDrafts(
         await tx`
           insert into public.clinic_ai_payment_settings (
             clinic_id, in_office_payment_plans, carecredit, alphaeon_credit, membership_plan,
-            status, source_type, source_url, source_excerpt
+            bank_transfer_ach, status, source_type, source_url, source_excerpt
           ) values (
             ${clinicId},
             ${inOfficePaymentPlans},
             ${carecredit},
             ${alphaeonCredit},
             ${membershipPlan},
+            ${bankTransferAch},
             'needs_review', 'website_draft', ${urlFor("payment")}, ${facts.payment.excerpt}
           )
         `;
-        draftedSections.add("financing");
+        if (financingFound) draftedSections.add("financing");
+        if (bankTransferAch) draftedSections.add("payment_methods");
       } else if (payment.status !== "approved") {
         const result = await tx`
           update public.clinic_ai_payment_settings set
@@ -1066,13 +1077,17 @@ export async function applyScanDrafts(
             carecredit = coalesce(carecredit, ${carecredit}),
             alphaeon_credit = coalesce(alphaeon_credit, ${alphaeonCredit}),
             membership_plan = coalesce(membership_plan, ${membershipPlan}),
+            bank_transfer_ach = coalesce(bank_transfer_ach, ${bankTransferAch}),
             status = 'needs_review',
             source_type = 'website_draft',
             source_url = ${urlFor("payment")},
             source_excerpt = coalesce(source_excerpt, ${facts.payment.excerpt})
           where clinic_id = ${clinicId}
         `;
-        if (result.count > 0) draftedSections.add("financing");
+        if (result.count > 0) {
+          if (financingFound) draftedSections.add("financing");
+          if (bankTransferAch) draftedSections.add("payment_methods");
+        }
       }
     }
 

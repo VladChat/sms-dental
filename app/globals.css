@@ -434,6 +434,10 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .aifacts-intro-body p {
   margin: 0;
 }
+/* "Needs review" badge help wrapper: hover tooltip via title, keyboard
+   focusable so the hint is reachable without a mouse. */
+.aifacts-review-badge-help { display:inline-flex; border-radius:var(--r-pill); cursor:help; }
+.aifacts-review-badge-help:focus-visible { outline:none; box-shadow:var(--focus-ring); }
 .aifacts-acc { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
 .aifacts-acc > summary {
   display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);

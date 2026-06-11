@@ -9,6 +9,7 @@ import {
   DEFAULT_PREFERRED_TIME_QUESTION,
   DEFAULT_SERVICES,
   FINANCING_DEFAULTS,
+  PAYMENT_METHODS,
   MAX_CUSTOM_LABEL_LENGTH,
   MAX_FINANCING_OPTIONS_PER_CLINIC,
   MAX_INSURANCE_PLANS_PER_CLINIC,
@@ -353,19 +354,41 @@ test("appointment settings default and cap the preferred time question", () => {
 // ----------------------------------------------------------- payment methods
 
 test("payment methods accept booleans and default omitted fields to null", () => {
-  const ok = validatePaymentMethods({ cash: true, hsaFsaCards: true });
+  const ok = validatePaymentMethods({ cash: true, hsaFsaCards: true, bankTransferAch: true });
   assert.ok(ok.ok);
   assert.equal(ok.value.cash, true);
   assert.equal(ok.value.hsaFsaCards, true);
+  assert.equal(ok.value.bankTransferAch, true);
   assert.equal(ok.value.creditDebitCards, null);
   assert.equal(ok.value.personalChecks, null);
   // No pricing field is part of the payment-methods helper anymore.
   assert.ok(!("pricingPolicy" in ok.value));
+
+  const omitted = validatePaymentMethods({ creditDebitCards: true });
+  assert.ok(omitted.ok);
+  assert.equal(omitted.value.bankTransferAch, null);
 });
 
 test("payment methods reject non-boolean values", () => {
   const bad = validatePaymentMethods({ cash: "yes" });
   assert.equal(bad.ok, false);
+  const badAch = validatePaymentMethods({ bankTransferAch: "maybe" });
+  assert.equal(badAch.ok, false);
+});
+
+test("payment methods are a fixed list in display order with Bank transfer / ACH", () => {
+  assert.deepEqual(
+    PAYMENT_METHODS.map((m) => m.key),
+    ["credit_debit_cards", "hsa_fsa_cards", "personal_checks", "cash", "bank_transfer_ach"],
+  );
+  assert.equal(
+    PAYMENT_METHODS.find((m) => m.key === "bank_transfer_ach")?.label,
+    "Bank transfer / ACH",
+  );
+  // No peer-to-peer apps as defaults.
+  for (const banned of [/zelle/i, /venmo/i, /cash app/i, /crypto/i]) {
+    assert.ok(!PAYMENT_METHODS.some((m) => banned.test(m.label)), `no default: ${banned}`);
+  }
 });
 
 // --------------------------------------------------------- financing & plans
@@ -649,6 +672,62 @@ test("saved sections lock and show Edit instead of Save", () => {
   assert.ok(source.includes("{!financingLocked && ("));
   // No permanent "Saved" message remains next to Save.
   assert.ok(!source.includes("Saved</span>"));
+});
+
+test("Complete and Save never appear together: badge follows the visible mode", () => {
+  const source = aiKnowledgeCardSource();
+  // The badge is derived from reviewed AND locked — a section re-opened via
+  // Edit (locked=false, Save visible) drops back to "Needs review", so the
+  // green Complete badge only ever appears alongside the Edit button.
+  assert.ok(source.includes("reviewed[section] && isLocked(section)"));
+  // Every editable section header uses the shared helper…
+  for (const section of [
+    "hours",
+    "insurance",
+    "services",
+    "languages",
+    "payment_methods",
+    "financing",
+    "office_policies",
+  ]) {
+    assert.ok(
+      source.includes(`status={sectionStatus("${section}")}`),
+      `${section} should derive its badge from sectionStatus`,
+    );
+  }
+  // …and no header reads the raw reviewed flag directly anymore.
+  assert.ok(!/reviewed\.\w+ \? "complete"/.test(source));
+});
+
+test("Needs review badge carries the owner help tooltip", () => {
+  const source = aiKnowledgeCardSource();
+  assert.ok(source.includes("ReviewStatusBadge"));
+  assert.ok(source.includes("Review this section and click Save to mark it complete."));
+  // Hover tooltip + keyboard reachability on the wrapper.
+  assert.ok(source.includes("title={NEEDS_REVIEW_HELP}"));
+  assert.ok(source.includes("aria-label={`Needs review. ${NEEDS_REVIEW_HELP}`}"));
+  assert.ok(source.includes("tabIndex={0}"));
+  assert.ok(source.includes("aifacts-review-badge-help"));
+});
+
+test("payment methods UI is a fixed list in display order with no custom add", () => {
+  const source = aiKnowledgeCardSource();
+  // Order: cards, HSA/FSA, checks, cash, Bank transfer / ACH (cash not first).
+  const order = [
+    'label="Credit/debit cards"',
+    'label="HSA/FSA cards"',
+    'label="Personal checks"',
+    'label="Cash"',
+    'label="Bank transfer / ACH"',
+  ].map((needle) => source.indexOf(needle));
+  for (const index of order) assert.ok(index >= 0, "all five fixed methods render");
+  for (let i = 1; i < order.length; i += 1) {
+    assert.ok(order[i - 1] < order[i], "payment methods render in the fixed order");
+  }
+  // Fixed-list only: no payment-method add row and no P2P apps.
+  assert.ok(!source.includes("Add payment method"));
+  assert.equal((source.match(/<AddCustomRow/g) ?? []).length, 4, "add rows only for insurance/services/languages/financing");
+  assert.ok(!/zelle|venmo|cash app|crypto/i.test(source));
 });
 
 test("website scan no longer applies appointment drafts and re-opens only drafted sections", () => {

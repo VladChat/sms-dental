@@ -386,6 +386,7 @@ export type PaymentMethodsValue = {
   creditDebitCards: boolean | null;
   personalChecks: boolean | null;
   hsaFsaCards: boolean | null;
+  bankTransferAch: boolean | null;
 };
 
 export function validatePaymentMethods(
@@ -397,6 +398,7 @@ export function validatePaymentMethods(
     creditDebitCards: optionalBoolean(input.creditDebitCards),
     personalChecks: optionalBoolean(input.personalChecks),
     hsaFsaCards: optionalBoolean(input.hsaFsaCards),
+    bankTransferAch: optionalBoolean(input.bankTransferAch),
   };
   for (const value of Object.values(fields)) {
     if (value === undefined) {
@@ -410,6 +412,7 @@ export function validatePaymentMethods(
       creditDebitCards: fields.creditDebitCards as boolean | null,
       personalChecks: fields.personalChecks as boolean | null,
       hsaFsaCards: fields.hsaFsaCards as boolean | null,
+      bankTransferAch: fields.bankTransferAch as boolean | null,
     },
   };
 }

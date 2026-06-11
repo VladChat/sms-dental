@@ -26,10 +26,12 @@ export const dynamic = "force-dynamic";
 // Saves the Payment methods and/or Financing & plans sections. Each owner Save
 // posts its own section, so either key may be present independently:
 //
-// { paymentMethods: { cash, creditDebitCards, personalChecks, hsaFsaCards },
+// { paymentMethods: { creditDebitCards, hsaFsaCards, personalChecks, cash, bankTransferAch },
 //   financing: { inOfficePaymentPlans, carecredit, alphaeonCredit, membershipPlan,
 //                customToAdd: [{ label, selected }], customToRemove: ["custom_…"],
 //                selections: [{ key, selected }] } }
+//
+// Payment methods are a fixed list (no custom additions, no Zelle/P2P apps).
 //
 // Default financing options are fixed booleans; custom financing options are
 // owner-keyed rows (max 50 per clinic). clinic_id always comes from the

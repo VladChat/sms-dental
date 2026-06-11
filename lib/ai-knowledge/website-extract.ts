@@ -39,6 +39,7 @@ export type PageFacts = {
     carecredit: boolean;
     alphaeonCredit: boolean;
     membershipPlan: boolean;
+    bankTransferAch: boolean;
     excerpt: string | null;
   };
   languages: string[];
@@ -469,12 +470,18 @@ export function extractPageFacts(input: { url: string; html: string }): PageFact
     lowerText.includes("membership program") ||
     lowerText.includes("in-house membership") ||
     lowerText.includes("in-house plan");
+  // Bank transfer / ACH requires an explicit mention ("ACH" as a word, or
+  // "bank transfer" — which also covers "electronic/direct bank transfer").
+  // Never inferred from generic wording like "convenient payment options",
+  // and peer-to-peer apps (Zelle etc.) are never mapped to anything.
+  const bankTransferAch = /\bach\b/.test(lowerText) || lowerText.includes("bank transfer");
   let paymentExcerpt: string | null = null;
-  if (paymentPlans || financing || carecredit || alphaeonCredit || membershipPlan) {
-    const index = ["payment plan", "financing", "carecredit", "care credit", "alphaeon", "membership plan"]
-      .map((term) => lowerText.indexOf(term))
-      .filter((i) => i >= 0)
-      .sort((a, b) => a - b)[0];
+  if (paymentPlans || financing || carecredit || alphaeonCredit || membershipPlan || bankTransferAch) {
+    const indices = ["payment plan", "financing", "carecredit", "care credit", "alphaeon", "membership plan", "bank transfer"]
+      .map((term) => lowerText.indexOf(term));
+    const achMatch = /\bach\b/.exec(lowerText);
+    if (achMatch) indices.push(achMatch.index);
+    const index = indices.filter((i) => i >= 0).sort((a, b) => a - b)[0];
     if (index !== undefined) paymentExcerpt = makeExcerpt(text, index, 12);
   }
 
@@ -492,7 +499,7 @@ export function extractPageFacts(input: { url: string; html: string }): PageFact
     hours,
     services: matchCatalogItems(lowerText, text, DEFAULT_SERVICES),
     insurancePlans: matchCatalogItems(lowerText, text, DEFAULT_INSURANCE_PLANS),
-    payment: { paymentPlans, financing, carecredit, alphaeonCredit, membershipPlan, excerpt: paymentExcerpt },
+    payment: { paymentPlans, financing, carecredit, alphaeonCredit, membershipPlan, bankTransferAch, excerpt: paymentExcerpt },
     languages: languagesFromText(text, lowerText),
     acceptingNewPatients:
       /accepting new patients|welcoming new patients|new patients (?:are )?welcome|now accepting patients/i.test(text),
@@ -517,7 +524,7 @@ export function aggregatePageFacts(pages: PageFacts[]): AggregatedFacts {
     hours: [],
     services: [],
     insurancePlans: [],
-    payment: { paymentPlans: false, financing: false, carecredit: false, alphaeonCredit: false, membershipPlan: false, excerpt: null },
+    payment: { paymentPlans: false, financing: false, carecredit: false, alphaeonCredit: false, membershipPlan: false, bankTransferAch: false, excerpt: null },
     languages: [],
     acceptingNewPatients: false,
     emergencyAppointments: false,
@@ -561,6 +568,7 @@ export function aggregatePageFacts(pages: PageFacts[]): AggregatedFacts {
     if (page.payment.carecredit) result.payment.carecredit = true;
     if (page.payment.alphaeonCredit) result.payment.alphaeonCredit = true;
     if (page.payment.membershipPlan) result.payment.membershipPlan = true;
+    if (page.payment.bankTransferAch) result.payment.bankTransferAch = true;
     if (!result.payment.excerpt && page.payment.excerpt) {
       result.payment.excerpt = page.payment.excerpt;
       sourceUrlByFact.set("payment", page.url);
@@ -601,6 +609,7 @@ export function countAggregatedFacts(facts: AggregatedFacts): number {
   if (facts.payment.carecredit) count += 1;
   if (facts.payment.alphaeonCredit) count += 1;
   if (facts.payment.membershipPlan) count += 1;
+  if (facts.payment.bankTransferAch) count += 1;
   count += facts.languages.length > 0 ? 1 : 0;
   if (facts.acceptingNewPatients) count += 1;
   if (facts.emergencyAppointments) count += 1;

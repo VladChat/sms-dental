@@ -281,6 +281,41 @@ test("financing brands map to the new fields (CareCredit, Alphaeon, payment plan
   assert.equal(aggregated.payment.paymentPlans, true);
 });
 
+test("explicit ACH or bank transfer maps to bank_transfer_ach", () => {
+  for (const html of [
+    "<html><body><p>We accept ACH payments for treatment plans.</p></body></html>",
+    "<html><body><p>You can pay by bank transfer at the front desk.</p></body></html>",
+    "<html><body><p>Electronic bank transfer is accepted.</p></body></html>",
+    "<html><body><p>Direct bank transfer available on request.</p></body></html>",
+  ]) {
+    const facts = extractPageFacts({ url: "https://www.example.com/payments", html });
+    assert.equal(facts.payment.bankTransferAch, true, `should detect in: ${html}`);
+  }
+});
+
+test("generic payment wording never maps to bank_transfer_ach", () => {
+  for (const html of [
+    "<html><body><p>We offer convenient payment options.</p></body></html>",
+    "<html><body><p>We accept most payment methods.</p></body></html>",
+    "<html><body><p>Ask us about payment options at your visit.</p></body></html>",
+    // "each"/"reach" must not trip the ACH word match.
+    "<html><body><p>We reach out to each patient about payment.</p></body></html>",
+  ]) {
+    const facts = extractPageFacts({ url: "https://www.example.com/", html });
+    assert.equal(facts.payment.bankTransferAch, false, `should NOT detect in: ${html}`);
+  }
+});
+
+test("Zelle is ignored and never becomes a payment fact", () => {
+  const facts = extractPageFacts({
+    url: "https://www.example.com/",
+    html: "<html><body><p>We accept Zelle and Venmo.</p></body></html>",
+  });
+  assert.equal(facts.payment.bankTransferAch, false);
+  assert.ok(!("zelle" in facts.payment));
+  assert.ok(!("venmo" in facts.payment));
+});
+
 // --------------------------------------------- new patient form link (strict)
 
 test("new patient form link is extracted from a clear anchor", () => {
