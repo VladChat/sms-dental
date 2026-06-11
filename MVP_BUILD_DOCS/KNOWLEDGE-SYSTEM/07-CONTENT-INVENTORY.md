@@ -73,3 +73,4 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | DO-01 | Source-of-truth map | developer-ops/source-of-truth-map.md | developer_ops | internal | AGENTS.md | dev | Domain → canonical file map |
 | DO-02 | Knowledge System update checklist | developer-ops/update-knowledge-system-checklist.md | developer_ops | internal | AGENTS.md, 02-CONTENT-GOVERNANCE.md | dev | When/how agents must update |
 | DO-03 | Future implementation notes | developer-ops/future-implementation-notes.md | developer_ops | internal | 05-ADMIN-SUPPORT-INTEGRATION-PLAN.md, 06-AI-SUPPORT-BOUNDARIES.md | dev | Search/AI/help-UI build notes |
+| DO-04 | SMS internal test duplicate bypass | developer-ops/sms-internal-test-bypass.md | developer_ops | internal | OPERATIONS-RUNBOOK.md, lib/env.ts, lib/twilio/outbound-sms.ts | dev | Internal test-only env for bypassing duplicate suppression for exact caller numbers; all other SMS guards remain required |

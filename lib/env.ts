@@ -163,18 +163,25 @@ export type SmsRecoveryMode = "disabled" | "owner_test" | "live";
 export function getSmsRecoveryConfig(): {
   mode: SmsRecoveryMode;
   allowedNumbers: string[];
+  duplicateSuppressionBypassNumbers: string[];
 } {
   const raw = process.env.SMS_RECOVERY_MODE ?? "";
   const mode: SmsRecoveryMode =
     raw === "owner_test" ? "owner_test"
     : raw === "live" ? "live"
     : "disabled";
-  const allowedRaw = process.env.SMS_TEST_ALLOWED_TO ?? "";
-  const allowedNumbers = allowedRaw
+  const allowedNumbers = parsePhoneNumberList(process.env.SMS_TEST_ALLOWED_TO);
+  const duplicateSuppressionBypassNumbers = parsePhoneNumberList(
+    process.env.SMS_TEST_BYPASS_DUPLICATE_SUPPRESSION_TO,
+  );
+  return { mode, allowedNumbers, duplicateSuppressionBypassNumbers };
+}
+
+export function parsePhoneNumberList(raw: string | null | undefined): string[] {
+  return (raw ?? "")
     .split(",")
     .map((n) => n.trim())
     .filter((n) => n.length > 0);
-  return { mode, allowedNumbers };
 }
 
 export function getPublicWebhookBaseUrl(): string | undefined {
@@ -403,6 +410,7 @@ export type EnvPresenceReport = {
   publicWebhookBaseUrl: boolean;
   smsRecoveryMode: boolean;
   smsTestAllowedTo: boolean;
+  smsTestBypassDuplicateSuppressionTo: boolean;
   appBaseUrl: boolean;
   publicSiteUrl: boolean;
   resendApiKey: boolean;
@@ -435,6 +443,7 @@ export function getEnvPresenceReport(): EnvPresenceReport {
     publicWebhookBaseUrl: present("PUBLIC_WEBHOOK_BASE_URL"),
     smsRecoveryMode: present("SMS_RECOVERY_MODE"),
     smsTestAllowedTo: present("SMS_TEST_ALLOWED_TO"),
+    smsTestBypassDuplicateSuppressionTo: present("SMS_TEST_BYPASS_DUPLICATE_SUPPRESSION_TO"),
     appBaseUrl: runtimeConfig.app.appBaseUrl.trim().length > 0,
     publicSiteUrl: runtimeConfig.app.publicSiteUrl.trim().length > 0,
     resendApiKey: present("RESEND_API_KEY"),

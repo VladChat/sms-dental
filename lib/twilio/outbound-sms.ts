@@ -7,7 +7,10 @@ import {
 } from "../db/messages";
 import { touchConversation } from "../db/conversations";
 import { evaluateSmsReadinessForLiveSend } from "../db/sms-readiness";
-import { evaluateRecoverySendGate } from "../sms-recovery/live-send-evaluation";
+import {
+  evaluateDuplicateSuppression,
+  evaluateRecoverySendGate,
+} from "../sms-recovery/live-send-evaluation";
 import {
   buildMissedCallRecoverySmsBody,
   getDuplicateSuppressionWindowMs,
@@ -89,9 +92,20 @@ export async function sendRecoverySms(
     input.patientPhone,
     suppressionStart,
   );
-  if (alreadySent) {
+  const duplicateDecision = evaluateDuplicateSuppression({
+    patientPhone: input.patientPhone,
+    alreadySent,
+    bypassNumbers: config.duplicateSuppressionBypassNumbers,
+  });
+  if (!duplicateDecision.ok) {
     logger.info("twilio.sms.skipped_duplicate", { clinicId: input.clinic.id });
     return { sent: false, reason: "duplicate_suppressed" };
+  }
+  if (duplicateDecision.bypassed) {
+    logger.info("twilio.sms.duplicate_suppression_bypassed_for_test_number", {
+      clinicId: input.clinic.id,
+      patientPhoneLast4: input.patientPhone.slice(-4),
+    });
   }
 
   // All guards passed. Build the fixed, compliance-reviewed message body.

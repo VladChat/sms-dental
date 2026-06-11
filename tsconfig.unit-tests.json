@@ -31,6 +31,7 @@
     "lib/sms-recovery/live-send-evaluation.ts",
     "lib/sms-recovery/message-status.ts",
     "lib/sms-recovery/voice-twiml.ts",
+    "lib/env.ts",
     "lib/twilio/keywords.ts",
     "config/texting-status-sync.config.ts",
     "config/sms-recovery.config.ts",

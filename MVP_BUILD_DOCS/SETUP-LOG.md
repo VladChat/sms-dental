@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (Fairstone internal production live mode enabled)
+Last updated: 2026-06-11 (internal SMS duplicate suppression test bypass added)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6881,6 +6881,41 @@ Rollback completed:
 
 No Twilio resource mutation, A2P action, Stripe change, number lifecycle action,
 secret printing, deletion, phone-number release, or patient-data dump occurred.
+
+---
+
+## 2026-06-11 — Internal SMS duplicate suppression test bypass added
+
+Added code support for an internal production test-only duplicate suppression
+bypass using `SMS_TEST_BYPASS_DUPLICATE_SUPPRESSION_TO`.
+
+Behavior:
+
+- The env value is a comma-separated list of full E.164 caller numbers.
+- Empty or missing config preserves existing duplicate suppression behavior.
+- When a caller is configured, only the duplicate-window check is bypassed.
+- All other missed-call recovery guards still run first: `SMS_RECOVERY_MODE`,
+  exact-number readiness, `clinic.sms_recovery_enabled`, local-number
+  `clinic.sms_status` behavior, STOP/opt-out, wrong-clinic/wrong-number
+  protections, and the guarded Twilio send path.
+- Voice greeting prediction uses the same duplicate decision so the greeting
+  matches the send path.
+- Bypass usage logs
+  `twilio.sms.duplicate_suppression_bypassed_for_test_number` with caller last 4
+  only.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 60 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+No production env change was made in this code task. No Twilio resource
+mutation, A2P action, Stripe change, number lifecycle action, SMS send, or
+secret printing occurred.
 
 ---
 

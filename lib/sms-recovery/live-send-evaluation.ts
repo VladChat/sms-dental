@@ -123,6 +123,26 @@ export function evaluateRecoverySendGate(
   return { ok: true };
 }
 
+export type DuplicateSuppressionDecisionInput = {
+  patientPhone: string;
+  alreadySent: boolean;
+  bypassNumbers: readonly string[];
+};
+
+export type DuplicateSuppressionDecision =
+  | { ok: true; bypassed: boolean }
+  | { ok: false; reason: "duplicate_suppressed"; bypassed: false };
+
+export function evaluateDuplicateSuppression(
+  input: DuplicateSuppressionDecisionInput,
+): DuplicateSuppressionDecision {
+  if (!input.alreadySent) return { ok: true, bypassed: false };
+  if (input.bypassNumbers.includes(input.patientPhone)) {
+    return { ok: true, bypassed: true };
+  }
+  return { ok: false, reason: "duplicate_suppressed", bypassed: false };
+}
+
 // Local numbers: Messaging Service sender coverage AND approved-campaign
 // coverage are both required, fresh and error-free.
 export function blockingReasonForLocalNumberReadiness(

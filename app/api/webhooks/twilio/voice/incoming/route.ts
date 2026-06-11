@@ -12,7 +12,10 @@ import { lookupClinicByPhoneIncludingScheduled, type ClinicRow } from "@/lib/db/
 import { upsertCallEvent } from "@/lib/db/call-events";
 import { hasSentRecoverySmsSince } from "@/lib/db/messages";
 import { evaluateSmsReadinessForLiveSend } from "@/lib/db/sms-readiness";
-import { evaluateRecoverySendGate } from "@/lib/sms-recovery/live-send-evaluation";
+import {
+  evaluateDuplicateSuppression,
+  evaluateRecoverySendGate,
+} from "@/lib/sms-recovery/live-send-evaluation";
 import { getDuplicateSuppressionWindowMs } from "@/lib/sms-recovery/templates";
 import {
   buildInactiveNumberVoiceTwiml,
@@ -65,7 +68,12 @@ async function predictGreeting(
   // Duplicate suppression window check (read-only, same window as the sender).
   const suppressionStart = new Date(Date.now() - getDuplicateSuppressionWindowMs());
   const alreadySent = await hasSentRecoverySmsSince(clinic.id, from, suppressionStart);
-  return alreadySent ? "duplicate" : "will_send";
+  const duplicateDecision = evaluateDuplicateSuppression({
+    patientPhone: from,
+    alreadySent,
+    bypassNumbers: config.duplicateSuppressionBypassNumbers,
+  });
+  return duplicateDecision.ok ? "will_send" : "duplicate";
 }
 
 // Greeting for a number scheduled for removal. The number is still held by our
