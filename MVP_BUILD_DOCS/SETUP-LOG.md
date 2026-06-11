@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (Fairstone live activation blocked by existing enabled owner-test clinic)
+Last updated: 2026-06-11 (Fairstone live activation rolled back after uncontrolled test caller)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6818,3 +6818,66 @@ Validation:
 No env change, DB mutation, Twilio resource mutation, A2P action, Stripe
 change, number lifecycle action, SMS, call, live patient SMS enablement, or
 secret printing occurred.
+
+---
+
+## 2026-06-11 — Fairstone live activation rolled back after uncontrolled test caller
+
+Cleared the prior live-activation blocker, attempted controlled LIVE activation
+for Fairstone Dental Smile only, then rolled back because the required
+controlled caller did not complete the live test.
+
+Approved cleanup completed:
+
+- Set only Owner Test Dental Office
+  (`e9f21de4-3a35-4216-bb16-66ea3aeb2e47`, slug `owner-test`)
+  `sms_recovery_enabled=false`.
+- Verified zero clinics had `sms_recovery_enabled=true` before activation.
+
+Activation attempt:
+
+- Verified production `SMS_RECOVERY_MODE=owner_test`.
+- Verified production health returned 200.
+- Verified Fairstone pilot number `+1***4944` was active, toll-free,
+  `removal_status='active'`, `texting_status='active'`.
+- Verified readiness was fresh, `production_safe=true`, no sync error, no launch
+  blocking reason, Messaging Service sender coverage `covered`, and toll-free
+  verification `TWILIO_APPROVED`.
+- Verified prior caller `+1***9236` was still inside the duplicate suppression
+  window, so selected controlled caller `+1***7848`.
+- Validation passed before activation:
+  `npm run typecheck`, `npm run test:sms-recovery` (52 tests),
+  `npm run test:a2p` (65 tests), `npm run test:phone-numbers` (32 tests), and
+  `git diff --check`.
+- Set production `SMS_RECOVERY_MODE=live`.
+- Deployed production config: Vercel deployment
+  `dpl_84GYRwiAou9eJVb8VhJD6hDszHWy` reached `Ready`; health returned 200; mode
+  verified as `live`.
+- Set only Fairstone
+  (`f37f24a1-070f-436b-b803-956f55466093`) `sms_recovery_enabled=true`;
+  `sms_status` remained `waiting_for_approval`.
+
+Live test result: **ROLLED BACK**.
+
+- Required controlled caller `+1***7848` produced no call, message, or
+  conversation records during the watch window.
+- The prior duplicate-window caller `+1***9236` produced additional inbound
+  call/reply activity instead; duplicate suppression prevented a new outbound
+  recovery SMS in that live-test window.
+- Because the requested controlled live test could not be completed, the
+  activation was not left live.
+
+Rollback completed:
+
+- Set Fairstone `sms_recovery_enabled=false`.
+- Set production `SMS_RECOVERY_MODE=owner_test`.
+- Deployed rollback config: Vercel deployment
+  `dpl_HR6h6UP8oBU8GPVJJLLh6VCQDBu9` reached `Ready`; health returned 200; mode
+  verified as `owner_test`.
+- Final verified state: zero clinics have `sms_recovery_enabled=true`; Fairstone
+  `sms_recovery_enabled=false`; Owner Test Dental Office
+  `sms_recovery_enabled=false`; Fairstone `sms_status='waiting_for_approval'`;
+  readiness remained fresh and provider coverage remained ready.
+
+No Twilio resource mutation, A2P action, Stripe change, number lifecycle action,
+secret printing, deletion, phone-number release, or patient-data dump occurred.
