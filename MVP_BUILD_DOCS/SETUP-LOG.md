@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (read-only pilot SMS provider readiness check)
+Last updated: 2026-06-11 (pilot toll-free readiness refreshed)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6686,3 +6686,40 @@ Validation:
 Conclusion: provider state appears ready for the exact toll-free pilot number,
 but the app is **not ready** for live missed-call SMS recovery until readiness
 is refreshed and owner-approved live enablement is performed.
+
+---
+
+## 2026-06-11 — Pilot toll-free readiness refreshed
+
+Refreshed production app readiness state for Fairstone Dental Smile's exact
+active toll-free pilot number (`+1***4944`, PN SID `PN...05a402`) using the
+same toll-free readiness semantics as `lib/texting-status/sync.ts`.
+
+What changed:
+
+- Read Twilio Toll-Free Verification for the exact PN SID: `TWILIO_APPROVED`.
+- Read Messaging Service sender coverage for the exact PN SID: `covered`.
+- Updated only the exact app rows for this phone number:
+  `clinic_phone_numbers` texting sync fields and
+  `clinic_sms_number_readiness`.
+- The refreshed readiness row is fresh, `production_safe=true`, has no sync
+  error, and has no launch blocking reason.
+
+Launch gate after refresh:
+
+- Provider readiness: ready for the exact toll-free number.
+- App number readiness: ready/fresh for the exact toll-free number.
+- Controlled activation is still intentionally gated:
+  `SMS_RECOVERY_MODE=owner_test`, `clinics.sms_recovery_enabled=false`, and
+  `clinics.sms_status='waiting_for_approval'`.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 52 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+
+No SMS sent, no call placed, no Twilio resource mutations, no A2P submission or
+retry, no number lifecycle action, no Stripe change, no env change, and no
+secrets printed.
