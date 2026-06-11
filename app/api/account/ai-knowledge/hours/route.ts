@@ -2,7 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { jsonBadRequest, jsonError, jsonOk } from "../../../../../lib/http/responses";
 import { requireOwnerAdminAccess } from "../../../../../lib/auth/owner-admin";
-import { getClinicAiFacts, saveClinicHours } from "../../../../../lib/db/ai-knowledge";
+import {
+  getClinicAiFacts,
+  markSectionReviewed,
+  saveClinicHours,
+} from "../../../../../lib/db/ai-knowledge";
 import { validateHoursInput } from "../../../../../lib/ai-knowledge/facts";
 
 export const runtime = "nodejs";
@@ -25,6 +29,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     await saveClinicHours(access.clinic.id, validated.value, access.userId);
+    await markSectionReviewed(access.clinic.id, "hours", access.userId);
     const facts = await getClinicAiFacts(access.clinic.id);
     return jsonOk({ ok: true, facts });
   } catch {

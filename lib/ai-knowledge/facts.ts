@@ -22,6 +22,57 @@ export type FactValidationResult<T> =
   | { ok: true; value: T }
   | { ok: false; message: string };
 
+// ----------------------------------------------------------- review sections
+
+// Owner-reviewable AI Knowledge sections. Each gets its own row in
+// public.clinic_ai_knowledge_section_reviews when the owner saves it, so the
+// Needs review → Complete lifecycle survives reloads. Read-only blocks
+// (business profile facts, website loader) and the removed Appointments
+// section are intentionally NOT reviewable.
+export const AI_REVIEW_SECTION_KEYS = [
+  "hours",
+  "insurance",
+  "services",
+  "languages",
+  "payment_methods",
+  "financing",
+  "office_policies",
+] as const;
+
+export type AiReviewSectionKey = (typeof AI_REVIEW_SECTION_KEYS)[number];
+
+export function isAiReviewSectionKey(value: string): value is AiReviewSectionKey {
+  return (AI_REVIEW_SECTION_KEYS as readonly string[]).includes(value);
+}
+
+// Per-section reviewed flags exposed to the client. Each section is
+// independent: marking one reviewed never marks another (the shared payment
+// row backs both payment_methods and financing, and the shared policies row
+// backs both languages and office_policies — review state must not leak
+// between them).
+export type ReviewedSectionsView = {
+  hours: boolean;
+  insurance: boolean;
+  services: boolean;
+  languages: boolean;
+  paymentMethods: boolean;
+  financing: boolean;
+  officePolicies: boolean;
+};
+
+export function reviewedSectionsView(reviewedKeys: readonly string[]): ReviewedSectionsView {
+  const keys = new Set(reviewedKeys);
+  return {
+    hours: keys.has("hours"),
+    insurance: keys.has("insurance"),
+    services: keys.has("services"),
+    languages: keys.has("languages"),
+    paymentMethods: keys.has("payment_methods"),
+    financing: keys.has("financing"),
+    officePolicies: keys.has("office_policies"),
+  };
+}
+
 // Obvious placeholder/demo content that must never be saved as a clinic fact.
 const SAMPLE_DATA_PATTERNS = [/example\.com/i, /lorem ipsum/i, /\{\{\s*\w+\s*\}\}/];
 

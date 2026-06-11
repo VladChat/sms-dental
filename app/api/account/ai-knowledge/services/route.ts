@@ -5,6 +5,7 @@ import { requireOwnerAdminAccess } from "../../../../../lib/auth/owner-admin";
 import {
   getClinicAiFacts,
   listCustomServiceEntries,
+  markSectionReviewed,
   saveServiceSection,
 } from "../../../../../lib/db/ai-knowledge";
 import { validateCatalogSectionUpdate } from "../../../../../lib/ai-knowledge/facts";
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!saved.ok) {
       return jsonBadRequest(`You can list up to ${MAX_SERVICES_PER_CLINIC} services.`);
     }
+    await markSectionReviewed(access.clinic.id, "services", access.userId);
     const facts = await getClinicAiFacts(access.clinic.id);
     return jsonOk({ ok: true, facts });
   } catch {

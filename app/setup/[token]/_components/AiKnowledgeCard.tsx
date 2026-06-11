@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Field, SelectField } from "./AccountUI";
+import { Field, SelectField, StatusBadge } from "./AccountUI";
 import type { BusinessProfileFields } from "./account-types";
 // Type-only import: erased at compile time, so no server/DB code is bundled.
 import type { AiFactsView } from "../../../../lib/db/ai-knowledge";
 import {
-  DEFAULT_PREFERRED_TIME_QUESTION,
   FINANCING_DEFAULTS,
   HOURS_TIMEZONES,
   MAX_CUSTOM_LABEL_LENGTH,
@@ -15,18 +14,62 @@ import {
   MAX_LANGUAGE_LENGTH,
   MAX_LANGUAGES,
   MAX_POLICY_TEXT_LENGTH,
-  MAX_PREFERRED_TIME_QUESTION_LENGTH,
   MAX_SERVICES_PER_CLINIC,
 } from "../../../../config/ai-front-desk-facts.config";
 
 // AI Front Desk Knowledge — structured clinic facts the owner reviews and
-// approves. Facts-first accordion UI: website loader on top, then business
-// profile facts, hours, appointments, insurance, services, payment, policies.
+// approves. Facts-first accordion UI: website loader on top, then read-only
+// business profile facts and the editable sections (hours, insurance,
+// services, languages, payment methods, financing, office policies).
+//
+// Review lifecycle: every editable section shows "Needs review" until its
+// first successful Save, then a green "Complete" badge. A saved section locks
+// (fields read-only, Save replaced by Edit) until the owner clicks Edit —
+// the same lock/edit interaction as the Business profile form. Review state
+// persists server-side (clinic_ai_knowledge_section_reviews) and survives
+// reloads; website-scan drafts re-open only the affected sections.
+//
+// Appointment request collection is explained in the intro card and is not
+// owner-configured — there is no Appointments section here.
 // Address/website stay owned by Business profile; this card only reads them.
-// Owner-facing copy stays short and plain — no technical wording.
 
 const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // show Monday first
+
+// Owner-reviewable sections (matches the server's section_key vocabulary).
+// Business profile facts and the website loader are intentionally absent.
+type AiEditableSection =
+  | "hours"
+  | "insurance"
+  | "services"
+  | "languages"
+  | "payment_methods"
+  | "financing"
+  | "office_policies";
+
+type ReviewedState = Record<AiEditableSection, boolean>;
+
+const NOT_REVIEWED: ReviewedState = {
+  hours: false,
+  insurance: false,
+  services: false,
+  languages: false,
+  payment_methods: false,
+  financing: false,
+  office_policies: false,
+};
+
+function reviewedFromFacts(facts: AiFactsView): ReviewedState {
+  return {
+    hours: facts.reviewedSections.hours,
+    insurance: facts.reviewedSections.insurance,
+    services: facts.reviewedSections.services,
+    languages: facts.reviewedSections.languages,
+    payment_methods: facts.reviewedSections.paymentMethods,
+    financing: facts.reviewedSections.financing,
+    office_policies: facts.reviewedSections.officePolicies,
+  };
+}
 
 type HoursDayState = { weekday: number; closed: boolean; opensAt: string; closesAt: string };
 type CatalogItemState = {
@@ -41,8 +84,8 @@ type CatalogItemState = {
   locked?: boolean;
 };
 
-type SaveState = { saving: boolean; error: string | null; saved: boolean };
-const IDLE_SAVE: SaveState = { saving: false, error: null, saved: false };
+type SaveState = { saving: boolean; error: string | null };
+const IDLE_SAVE: SaveState = { saving: false, error: null };
 
 type LoadState = "loading" | "signin_required" | "error" | "ready";
 
@@ -63,7 +106,6 @@ export function AiKnowledgeCard({
   const [timezone, setTimezone] = useState<string>("America/Chicago");
   const [hoursDays, setHoursDays] = useState<HoursDayState[]>([]);
   const [hoursSuggested, setHoursSuggested] = useState(false);
-  const [hoursPersisted, setHoursPersisted] = useState(false);
 
   const [services, setServices] = useState<CatalogItemState[]>([]);
   const [insurance, setInsurance] = useState<CatalogItemState[]>([]);
@@ -74,16 +116,6 @@ export function AiKnowledgeCard({
 
   const [languages, setLanguages] = useState<CatalogItemState[]>([]);
   const [newLanguageLabel, setNewLanguageLabel] = useState("");
-
-  const [appointments, setAppointments] = useState({
-    acceptingNewPatients: false,
-    cleaningAppointments: false,
-    sameDayAppointments: false,
-    emergencyAppointments: false,
-    rescheduleCancelRequests: false,
-    preferredTimeQuestion: DEFAULT_PREFERRED_TIME_QUESTION,
-    suggested: false,
-  });
 
   const [paymentMethods, setPaymentMethods] = useState({
     cash: false,
@@ -101,7 +133,6 @@ export function AiKnowledgeCard({
   const [financingOptions, setFinancingOptions] = useState<CatalogItemState[]>([]);
   const [removedFinancingKeys, setRemovedFinancingKeys] = useState<string[]>([]);
   const [newFinancingLabel, setNewFinancingLabel] = useState("");
-  const [financingSuggested, setFinancingSuggested] = useState(false);
 
   const [policies, setPolicies] = useState({
     newPatientForms: "",
@@ -109,18 +140,32 @@ export function AiKnowledgeCard({
     cancellationPolicy: "",
     parkingNotes: "",
     accessibilityNotes: "",
-    suggested: false,
   });
+
+  // Review lifecycle: `reviewed` comes from the server and survives reloads;
+  // `editing` is the owner's local "Edit" unlock per section.
+  const [reviewed, setReviewed] = useState<ReviewedState>(NOT_REVIEWED);
+  const [editing, setEditing] = useState<Partial<Record<AiEditableSection, boolean>>>({});
 
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResultState>(null);
 
-  function saveState(section: string): SaveState {
+  function saveState(section: AiEditableSection): SaveState {
     return saveStates[section] ?? IDLE_SAVE;
   }
-  function setSave(section: string, state: SaveState) {
+  function setSave(section: AiEditableSection, state: SaveState) {
     setSaveStates((prev) => ({ ...prev, [section]: state }));
+  }
+
+  // A reviewed section is locked (read-only, Edit shown) until the owner
+  // clicks Edit. An unreviewed section is always editable.
+  function isLocked(section: AiEditableSection): boolean {
+    return reviewed[section] && editing[section] !== true;
+  }
+  function startEditing(section: AiEditableSection) {
+    setEditing((prev) => ({ ...prev, [section]: true }));
+    setSave(section, IDLE_SAVE);
   }
 
   function applyFacts(facts: AiFactsView) {
@@ -134,21 +179,11 @@ export function AiKnowledgeCard({
       })),
     );
     setHoursSuggested(facts.hours.suggested);
-    setHoursPersisted(facts.hours.persisted);
     setServices(facts.services);
     setInsurance(facts.insurancePlans);
     setLanguages(facts.languages.items);
     setRemovedServiceKeys([]);
     setRemovedInsuranceKeys([]);
-    setAppointments({
-      acceptingNewPatients: facts.appointments.acceptingNewPatients ?? false,
-      cleaningAppointments: facts.appointments.cleaningAppointments ?? false,
-      sameDayAppointments: facts.appointments.sameDayAppointments ?? false,
-      emergencyAppointments: facts.appointments.emergencyAppointments ?? false,
-      rescheduleCancelRequests: facts.appointments.rescheduleCancelRequests ?? false,
-      preferredTimeQuestion: facts.appointments.preferredTimeQuestion,
-      suggested: facts.appointments.suggested,
-    });
     setPaymentMethods({
       cash: facts.payment.methods.cash ?? false,
       creditDebitCards: facts.payment.methods.creditDebitCards ?? false,
@@ -163,15 +198,14 @@ export function AiKnowledgeCard({
     });
     setFinancingOptions(facts.payment.financing.customOptions);
     setRemovedFinancingKeys([]);
-    setFinancingSuggested(facts.payment.suggested);
     setPolicies({
       newPatientForms: facts.policies.newPatientForms ?? "",
       whatToBring: facts.policies.whatToBring ?? "",
       cancellationPolicy: facts.policies.cancellationPolicy ?? "",
       parkingNotes: facts.policies.parkingNotes ?? "",
       accessibilityNotes: facts.policies.accessibilityNotes ?? "",
-      suggested: facts.policies.suggested,
     });
+    setReviewed(reviewedFromFacts(facts));
   }
 
   useEffect(() => {
@@ -203,12 +237,14 @@ export function AiKnowledgeCard({
     };
   }, []);
 
+  // POST one section save. On success the server marks the section reviewed,
+  // so the section returns to locked/Complete mode (Save becomes Edit).
   async function postSection(
-    section: string,
+    section: AiEditableSection,
     path: string,
     body: unknown,
   ): Promise<AiFactsView | null> {
-    setSave(section, { saving: true, error: null, saved: false });
+    setSave(section, { saving: true, error: null });
     try {
       const res = await fetch(`/api/account/ai-knowledge/${path}`, {
         method: "POST",
@@ -223,14 +259,15 @@ export function AiKnowledgeCard({
         setSave(section, {
           saving: false,
           error: json?.error?.message ?? "Could not save. Please try again.",
-          saved: false,
         });
         return null;
       }
-      setSave(section, { saving: false, error: null, saved: true });
+      setSave(section, IDLE_SAVE);
+      setReviewed(reviewedFromFacts(json.facts));
+      setEditing((prev) => ({ ...prev, [section]: false }));
       return json.facts;
     } catch {
-      setSave(section, { saving: false, error: "Could not save. Please try again.", saved: false });
+      setSave(section, { saving: false, error: "Could not save. Please try again." });
       return null;
     }
   }
@@ -243,7 +280,6 @@ export function AiKnowledgeCard({
         setSave("hours", {
           saving: false,
           error: "Add open and close times, or mark the day closed.",
-          saved: false,
         });
         return;
       }
@@ -260,10 +296,7 @@ export function AiKnowledgeCard({
             },
       ),
     });
-    if (facts) {
-      setHoursSuggested(facts.hours.suggested);
-      setHoursPersisted(facts.hours.persisted);
-    }
+    if (facts) setHoursSuggested(facts.hours.suggested);
   }
 
   // One Save persists the whole list: checked/unchecked entries, newly added
@@ -299,14 +332,13 @@ export function AiKnowledgeCard({
         : [newInsuranceLabel.trim().replace(/\s+/g, " "), insurance, MAX_INSURANCE_PLANS_PER_CLINIC];
     if (label.length === 0) return;
     if (items.some((item) => item.label.toLowerCase() === label.toLowerCase())) {
-      setSave(section, { saving: false, error: `“${label}” is already in the list.`, saved: false });
+      setSave(section, { saving: false, error: `“${label}” is already in the list.` });
       return;
     }
     if (items.length >= max) {
       setSave(section, {
         saving: false,
         error: `You can list up to ${max} ${section === "services" ? "services" : "insurance plans"}.`,
-        saved: false,
       });
       return;
     }
@@ -342,20 +374,8 @@ export function AiKnowledgeCard({
     setSave(section, IDLE_SAVE);
   }
 
-  async function saveAppointments() {
-    const facts = await postSection("appointments", "appointments", {
-      acceptingNewPatients: appointments.acceptingNewPatients,
-      cleaningAppointments: appointments.cleaningAppointments,
-      sameDayAppointments: appointments.sameDayAppointments,
-      emergencyAppointments: appointments.emergencyAppointments,
-      rescheduleCancelRequests: appointments.rescheduleCancelRequests,
-      preferredTimeQuestion: appointments.preferredTimeQuestion,
-    });
-    if (facts) setAppointments((prev) => ({ ...prev, suggested: facts.appointments.suggested }));
-  }
-
   async function savePaymentMethodsSection() {
-    await postSection("payment-methods", "payment", {
+    await postSection("payment_methods", "payment", {
       paymentMethods: {
         cash: paymentMethods.cash,
         creditDebitCards: paymentMethods.creditDebitCards,
@@ -393,7 +413,6 @@ export function AiKnowledgeCard({
       });
       setFinancingOptions(facts.payment.financing.customOptions);
       setRemovedFinancingKeys([]);
-      setFinancingSuggested(facts.payment.suggested);
     }
   }
 
@@ -406,14 +425,13 @@ export function AiKnowledgeCard({
       ...financingOptions.map((item) => item.label),
     ];
     if (takenLabels.some((existing) => existing.toLowerCase() === label.toLowerCase())) {
-      setSave("financing", { saving: false, error: `“${label}” is already in the list.`, saved: false });
+      setSave("financing", { saving: false, error: `“${label}” is already in the list.` });
       return;
     }
     if (financingOptions.length >= MAX_FINANCING_OPTIONS_PER_CLINIC) {
       setSave("financing", {
         saving: false,
         error: `You can list up to ${MAX_FINANCING_OPTIONS_PER_CLINIC} financing options.`,
-        saved: false,
       });
       return;
     }
@@ -442,14 +460,13 @@ export function AiKnowledgeCard({
   }
 
   async function savePolicies() {
-    const facts = await postSection("policies", "policies", {
+    await postSection("office_policies", "policies", {
       newPatientForms: policies.newPatientForms,
       whatToBring: policies.whatToBring,
       cancellationPolicy: policies.cancellationPolicy,
       parkingNotes: policies.parkingNotes,
       accessibilityNotes: policies.accessibilityNotes,
     });
-    if (facts) setPolicies((prev) => ({ ...prev, suggested: facts.policies.suggested }));
   }
 
   // Languages save the full selected list; the server always re-adds English.
@@ -467,16 +484,15 @@ export function AiKnowledgeCard({
       setSave("languages", {
         saving: false,
         error: `Keep each language under ${MAX_LANGUAGE_LENGTH} characters.`,
-        saved: false,
       });
       return;
     }
     if (languages.some((item) => item.label.toLowerCase() === label.toLowerCase())) {
-      setSave("languages", { saving: false, error: `“${label}” is already in the list.`, saved: false });
+      setSave("languages", { saving: false, error: `“${label}” is already in the list.` });
       return;
     }
     if (languages.length >= MAX_LANGUAGES) {
-      setSave("languages", { saving: false, error: `List up to ${MAX_LANGUAGES} languages.`, saved: false });
+      setSave("languages", { saving: false, error: `List up to ${MAX_LANGUAGES} languages.` });
       return;
     }
     setLanguages((prev) => [
@@ -556,31 +572,23 @@ export function AiKnowledgeCard({
 
   const website = businessProfile.website.trim();
   const hasAddress = businessProfile.streetAddress.trim().length > 0 && businessProfile.city.trim().length > 0;
-  const anyServiceSuggested = services.some((item) => item.suggested);
-  const anyInsuranceSuggested = insurance.some((item) => item.suggested);
-  const selectedServiceCount = services.filter((item) => item.selected).length;
-  const selectedInsuranceCount = insurance.filter((item) => item.selected).length;
-  const selectedPaymentMethodCount = [
-    paymentMethods.cash,
-    paymentMethods.creditDebitCards,
-    paymentMethods.personalChecks,
-    paymentMethods.hsaFsaCards,
-  ].filter(Boolean).length;
-  const selectedFinancingCount =
-    [
-      financingDefaults.inOfficePaymentPlans,
-      financingDefaults.carecredit,
-      financingDefaults.alphaeonCredit,
-      financingDefaults.membershipPlan,
-    ].filter(Boolean).length + financingOptions.filter((item) => item.selected).length;
+  const hoursLocked = isLocked("hours");
+  const insuranceLocked = isLocked("insurance");
+  const servicesLocked = isLocked("services");
+  const languagesLocked = isLocked("languages");
+  const paymentMethodsLocked = isLocked("payment_methods");
+  const financingLocked = isLocked("financing");
+  const policiesLocked = isLocked("office_policies");
 
   return (
     <div className="aifacts-stack">
       <div className="acct-callout aifacts-intro" role="note">
         <p className="aifacts-intro-title">Add what AI can safely say to patients.</p>
-        <p className="aifacts-intro-body">
-          Questions AI cannot answer go to someone in your office. AI never gives medical advice.
-        </p>
+        <div className="aifacts-intro-body">
+          <p>AI collects appointment requests. Your office confirms appointments.</p>
+          <p>Questions AI cannot answer go to someone in your office.</p>
+          <p>AI never gives medical advice.</p>
+        </div>
       </div>
 
       {/* -------------------------------------------------------- website */}
@@ -638,7 +646,7 @@ export function AiKnowledgeCard({
       </section>
 
       {/* ------------------------------------------------ business profile */}
-      <Accordion title="Business profile facts" defaultOpen>
+      <Accordion title="Business profile facts">
         <p className="t-small">Office address from Business profile.</p>
         <dl style={{ margin: 0 }}>
           <FactRow label="Clinic name" value={businessProfile.name} />
@@ -676,11 +684,7 @@ export function AiKnowledgeCard({
       </Accordion>
 
       {/* ---------------------------------------------------------- hours */}
-      <Accordion
-        title="Hours & location"
-        badge={hoursSuggested ? "Review" : undefined}
-        meta={hoursPersisted ? undefined : "Needs setup"}
-      >
+      <Accordion title="Hours & location" status={reviewed.hours ? "complete" : "needs_review"}>
         <p className="t-small">Set normal office hours.</p>
         {hoursSuggested && (
           <p className="t-small" style={{ fontWeight: 600 }}>
@@ -693,6 +697,7 @@ export function AiKnowledgeCard({
             name="aifacts-timezone"
             value={timezone}
             onChange={setTimezone}
+            readOnly={hoursLocked}
             options={HOURS_TIMEZONES.map((tz) => ({ value: tz.value, label: tz.label }))}
           />
         </div>
@@ -707,6 +712,7 @@ export function AiKnowledgeCard({
                   <input
                     type="checkbox"
                     checked={day.closed}
+                    disabled={hoursLocked}
                     onChange={(e) =>
                       setHoursDays((prev) =>
                         prev.map((d) =>
@@ -734,6 +740,7 @@ export function AiKnowledgeCard({
                       type="time"
                       className="input"
                       value={day.opensAt}
+                      disabled={hoursLocked}
                       onChange={(e) =>
                         setHoursDays((prev) =>
                           prev.map((d) => (d.weekday === weekday ? { ...d, opensAt: e.target.value } : d)),
@@ -749,6 +756,7 @@ export function AiKnowledgeCard({
                       type="time"
                       className="input"
                       value={day.closesAt}
+                      disabled={hoursLocked}
                       onChange={(e) =>
                         setHoursDays((prev) =>
                           prev.map((d) => (d.weekday === weekday ? { ...d, closesAt: e.target.value } : d)),
@@ -761,193 +769,172 @@ export function AiKnowledgeCard({
             );
           })}
         </div>
-        <SectionSave section="hours" state={saveState("hours")} onSave={saveHours} />
-      </Accordion>
-
-      {/* --------------------------------------------------- appointments */}
-      <Accordion title="Appointments" badge={appointments.suggested ? "Review" : undefined}>
-        <p className="t-small">Choose appointment requests your office handles.</p>
-        <div className="aifacts-check-grid">
-          <CheckOption
-            label="Accepting new patients"
-            checked={appointments.acceptingNewPatients}
-            onChange={(v) => setAppointments((prev) => ({ ...prev, acceptingNewPatients: v }))}
-          />
-          <CheckOption
-            label="Cleaning appointments"
-            checked={appointments.cleaningAppointments}
-            onChange={(v) => setAppointments((prev) => ({ ...prev, cleaningAppointments: v }))}
-          />
-          <CheckOption
-            label="Same-day appointments"
-            checked={appointments.sameDayAppointments}
-            onChange={(v) => setAppointments((prev) => ({ ...prev, sameDayAppointments: v }))}
-          />
-          <CheckOption
-            label="Emergency appointments"
-            checked={appointments.emergencyAppointments}
-            onChange={(v) => setAppointments((prev) => ({ ...prev, emergencyAppointments: v }))}
-          />
-          <CheckOption
-            label="Reschedule/cancel requests"
-            checked={appointments.rescheduleCancelRequests}
-            onChange={(v) => setAppointments((prev) => ({ ...prev, rescheduleCancelRequests: v }))}
-          />
-        </div>
-        <Field
-          label="Preferred first time question"
-          name="aifacts-preferred-time"
-          value={appointments.preferredTimeQuestion}
-          onChange={(v) => {
-            if (v.length <= MAX_PREFERRED_TIME_QUESTION_LENGTH) {
-              setAppointments((prev) => ({ ...prev, preferredTimeQuestion: v }));
-            }
-          }}
-          helper="Asked when a patient wants to book."
+        <SectionReviewActions
+          section="hours"
+          locked={hoursLocked}
+          state={saveState("hours")}
+          onEdit={() => startEditing("hours")}
+          onSave={saveHours}
         />
-        <SectionSave section="appointments" state={saveState("appointments")} onSave={saveAppointments} />
       </Accordion>
 
       {/* ------------------------------------------------------ insurance */}
-      <Accordion
-        title="Insurance"
-        badge={anyInsuranceSuggested ? "Review" : undefined}
-        meta={`${selectedInsuranceCount} selected`}
-      >
+      <Accordion title="Insurance" status={reviewed.insurance ? "complete" : "needs_review"}>
         <p className="t-small">Select insurance plans your office accepts.</p>
         <CatalogChecklist
           idPrefix="aifacts-ins"
           items={insurance}
+          disabled={insuranceLocked}
           onToggle={(key, selected) =>
             setInsurance((prev) => prev.map((item) => (item.key === key ? { ...item, selected } : item)))
           }
           onRemove={(item) => removeCustomLocally("insurance", item)}
         />
-        <AddCustomRow
-          label="Add insurance"
-          inputId="aifacts-add-insurance"
-          value={newInsuranceLabel}
-          onChange={setNewInsuranceLabel}
-          onAdd={() => addCustomLocally("insurance")}
-          disabled={saveState("insurance").saving}
-        />
-        <SectionSave
+        {!insuranceLocked && (
+          <AddCustomRow
+            label="Add insurance"
+            inputId="aifacts-add-insurance"
+            value={newInsuranceLabel}
+            onChange={setNewInsuranceLabel}
+            onAdd={() => addCustomLocally("insurance")}
+            disabled={saveState("insurance").saving}
+          />
+        )}
+        <SectionReviewActions
           section="insurance"
+          locked={insuranceLocked}
           state={saveState("insurance")}
+          onEdit={() => startEditing("insurance")}
           onSave={() => saveCatalogSection("insurance")}
         />
       </Accordion>
 
       {/* ------------------------------------------------------- services */}
-      <Accordion
-        title="Services"
-        badge={anyServiceSuggested ? "Review" : undefined}
-        meta={`${selectedServiceCount} selected`}
-      >
+      <Accordion title="Services" status={reviewed.services ? "complete" : "needs_review"}>
         <p className="t-small">Select services your office offers.</p>
         <CatalogChecklist
           idPrefix="aifacts-svc"
           items={services}
+          disabled={servicesLocked}
           onToggle={(key, selected) =>
             setServices((prev) => prev.map((item) => (item.key === key ? { ...item, selected } : item)))
           }
           onRemove={(item) => removeCustomLocally("services", item)}
         />
-        <AddCustomRow
-          label="Add service"
-          inputId="aifacts-add-service"
-          value={newServiceLabel}
-          onChange={setNewServiceLabel}
-          onAdd={() => addCustomLocally("services")}
-          disabled={saveState("services").saving}
-        />
-        <SectionSave
+        {!servicesLocked && (
+          <AddCustomRow
+            label="Add service"
+            inputId="aifacts-add-service"
+            value={newServiceLabel}
+            onChange={setNewServiceLabel}
+            onAdd={() => addCustomLocally("services")}
+            disabled={saveState("services").saving}
+          />
+        )}
+        <SectionReviewActions
           section="services"
+          locked={servicesLocked}
           state={saveState("services")}
+          onEdit={() => startEditing("services")}
           onSave={() => saveCatalogSection("services")}
         />
       </Accordion>
 
       {/* ------------------------------------------------------ languages */}
-      <Accordion title="Languages">
+      <Accordion title="Languages" status={reviewed.languages ? "complete" : "needs_review"}>
         <p className="t-small">Select languages your office supports.</p>
         <CatalogChecklist
           idPrefix="aifacts-lang"
           items={languages}
+          disabled={languagesLocked}
           onToggle={(key, selected) =>
             setLanguages((prev) => prev.map((item) => (item.key === key ? { ...item, selected } : item)))
           }
           onRemove={removeLanguageLocally}
         />
-        <AddCustomRow
-          label="Add language"
-          inputId="aifacts-add-language"
-          value={newLanguageLabel}
-          onChange={setNewLanguageLabel}
-          onAdd={addLanguageLocally}
-          disabled={saveState("languages").saving}
+        {!languagesLocked && (
+          <AddCustomRow
+            label="Add language"
+            inputId="aifacts-add-language"
+            value={newLanguageLabel}
+            onChange={setNewLanguageLabel}
+            onAdd={addLanguageLocally}
+            disabled={saveState("languages").saving}
+          />
+        )}
+        <SectionReviewActions
+          section="languages"
+          locked={languagesLocked}
+          state={saveState("languages")}
+          onEdit={() => startEditing("languages")}
+          onSave={saveLanguages}
         />
-        <SectionSave section="languages" state={saveState("languages")} onSave={saveLanguages} />
       </Accordion>
 
       {/* ------------------------------------------------ payment methods */}
-      <Accordion title="Payment methods" meta={`${selectedPaymentMethodCount} selected`}>
+      <Accordion title="Payment methods" status={reviewed.payment_methods ? "complete" : "needs_review"}>
         <p className="t-small">Select payment methods your office accepts.</p>
         <div className="aifacts-check-grid">
           <CheckOption
             label="Cash"
             checked={paymentMethods.cash}
+            disabled={paymentMethodsLocked}
             onChange={(v) => setPaymentMethods((prev) => ({ ...prev, cash: v }))}
           />
           <CheckOption
             label="Credit/debit cards"
             checked={paymentMethods.creditDebitCards}
+            disabled={paymentMethodsLocked}
             onChange={(v) => setPaymentMethods((prev) => ({ ...prev, creditDebitCards: v }))}
           />
           <CheckOption
             label="Personal checks"
             checked={paymentMethods.personalChecks}
+            disabled={paymentMethodsLocked}
             onChange={(v) => setPaymentMethods((prev) => ({ ...prev, personalChecks: v }))}
           />
           <CheckOption
             label="HSA/FSA cards"
             checked={paymentMethods.hsaFsaCards}
+            disabled={paymentMethodsLocked}
             onChange={(v) => setPaymentMethods((prev) => ({ ...prev, hsaFsaCards: v }))}
           />
         </div>
-        <SectionSave
-          section="payment-methods"
-          state={saveState("payment-methods")}
+        <SectionReviewActions
+          section="payment_methods"
+          locked={paymentMethodsLocked}
+          state={saveState("payment_methods")}
+          onEdit={() => startEditing("payment_methods")}
           onSave={savePaymentMethodsSection}
         />
       </Accordion>
 
       {/* --------------------------------------------------- financing & plans */}
-      <Accordion
-        title="Financing & plans"
-        badge={financingSuggested ? "Review" : undefined}
-        meta={`${selectedFinancingCount} selected`}
-      >
+      <Accordion title="Financing & plans" status={reviewed.financing ? "complete" : "needs_review"}>
         <p className="t-small">Select financing options your office offers.</p>
         <div className="aifacts-check-grid" role="group" aria-label="Financing options">
           <CheckOption
             label="In-office payment plans"
             checked={financingDefaults.inOfficePaymentPlans}
+            disabled={financingLocked}
             onChange={(v) => setFinancingDefaults((prev) => ({ ...prev, inOfficePaymentPlans: v }))}
           />
           <CheckOption
             label="CareCredit"
             checked={financingDefaults.carecredit}
+            disabled={financingLocked}
             onChange={(v) => setFinancingDefaults((prev) => ({ ...prev, carecredit: v }))}
           />
           <CheckOption
             label="Alphaeon Credit"
             checked={financingDefaults.alphaeonCredit}
+            disabled={financingLocked}
             onChange={(v) => setFinancingDefaults((prev) => ({ ...prev, alphaeonCredit: v }))}
           />
           <CheckOption
             label="Membership plan"
             checked={financingDefaults.membershipPlan}
+            disabled={financingLocked}
             onChange={(v) => setFinancingDefaults((prev) => ({ ...prev, membershipPlan: v }))}
           />
           {financingOptions.map((item) => (
@@ -955,13 +942,14 @@ export function AiKnowledgeCard({
               <CheckOption
                 label={item.label}
                 checked={item.selected}
+                disabled={financingLocked}
                 onChange={(v) =>
                   setFinancingOptions((prev) =>
                     prev.map((o) => (o.key === item.key ? { ...o, selected: v } : o)),
                   )
                 }
               />
-              {item.isCustom && (
+              {item.isCustom && !financingLocked && (
                 <button
                   type="button"
                   className="aifacts-remove"
@@ -974,19 +962,27 @@ export function AiKnowledgeCard({
             </div>
           ))}
         </div>
-        <AddCustomRow
-          label="Add financing option"
-          inputId="aifacts-add-financing"
-          value={newFinancingLabel}
-          onChange={setNewFinancingLabel}
-          onAdd={addFinancingLocally}
-          disabled={saveState("financing").saving}
+        {!financingLocked && (
+          <AddCustomRow
+            label="Add financing option"
+            inputId="aifacts-add-financing"
+            value={newFinancingLabel}
+            onChange={setNewFinancingLabel}
+            onAdd={addFinancingLocally}
+            disabled={saveState("financing").saving}
+          />
+        )}
+        <SectionReviewActions
+          section="financing"
+          locked={financingLocked}
+          state={saveState("financing")}
+          onEdit={() => startEditing("financing")}
+          onSave={saveFinancing}
         />
-        <SectionSave section="financing" state={saveState("financing")} onSave={saveFinancing} />
       </Accordion>
 
       {/* ------------------------------------------------ office policies */}
-      <Accordion title="Office policies" badge={policies.suggested ? "Review" : undefined}>
+      <Accordion title="Office policies" status={reviewed.office_policies ? "complete" : "needs_review"}>
         <p className="t-small">Add basic office rules patients may ask about.</p>
         <Field
           label="Form link"
@@ -994,6 +990,7 @@ export function AiKnowledgeCard({
           value={policies.newPatientForms}
           onChange={(v) => setPolicies((prev) => ({ ...prev, newPatientForms: v }))}
           optional
+          readOnly={policiesLocked}
           placeholder="https://yourpractice.com/new-patient-forms"
           helper="A link to your new patient forms, if you have one."
         />
@@ -1003,6 +1000,7 @@ export function AiKnowledgeCard({
           optional
           value={policies.whatToBring}
           maxLength={MAX_POLICY_TEXT_LENGTH}
+          readOnly={policiesLocked}
           placeholder="Photo ID, insurance card, list of medications"
           onChange={(v) => setPolicies((prev) => ({ ...prev, whatToBring: v }))}
         />
@@ -1012,6 +1010,7 @@ export function AiKnowledgeCard({
           optional
           value={policies.cancellationPolicy}
           maxLength={MAX_POLICY_TEXT_LENGTH}
+          readOnly={policiesLocked}
           placeholder="Example: Please call our office to cancel or reschedule your appointment."
           onChange={(v) => setPolicies((prev) => ({ ...prev, cancellationPolicy: v }))}
         />
@@ -1021,6 +1020,7 @@ export function AiKnowledgeCard({
           optional
           value={policies.parkingNotes}
           maxLength={MAX_POLICY_TEXT_LENGTH}
+          readOnly={policiesLocked}
           placeholder="Example: Free parking is available behind the building."
           onChange={(v) => setPolicies((prev) => ({ ...prev, parkingNotes: v }))}
         />
@@ -1030,9 +1030,16 @@ export function AiKnowledgeCard({
           optional
           value={policies.accessibilityNotes}
           maxLength={MAX_POLICY_TEXT_LENGTH}
+          readOnly={policiesLocked}
           onChange={(v) => setPolicies((prev) => ({ ...prev, accessibilityNotes: v }))}
         />
-        <SectionSave section="policies" state={saveState("policies")} onSave={savePolicies} />
+        <SectionReviewActions
+          section="office_policies"
+          locked={policiesLocked}
+          state={saveState("office_policies")}
+          onEdit={() => startEditing("office_policies")}
+          onSave={savePolicies}
+        />
       </Accordion>
     </div>
   );
@@ -1042,15 +1049,14 @@ export function AiKnowledgeCard({
 
 function Accordion({
   title,
-  badge,
-  meta,
+  status,
   defaultOpen = false,
   children,
 }: {
   title: string;
-  badge?: string;
-  // Short muted summary shown in the header (e.g. "3 selected").
-  meta?: string;
+  // Review lifecycle badge: yellow "Needs review" before the owner saves the
+  // section, green "Complete" after. Omitted for read-only sections.
+  status?: "needs_review" | "complete";
   defaultOpen?: boolean;
   children: ReactNode;
 }) {
@@ -1065,8 +1071,8 @@ function Accordion({
       <summary>
         <span className="aifacts-acc-title">
           <h3 className="t-h4" style={{ font: "inherit", margin: 0 }}>{title}</h3>
-          {badge && <span className="badge badge-info">{badge}</span>}
-          {meta && <span className="t-small" style={{ fontWeight: 400 }}>· {meta}</span>}
+          {status === "needs_review" && <StatusBadge kind="needs_setup" label="Needs review" />}
+          {status === "complete" && <StatusBadge kind="complete" />}
         </span>
       </summary>
       <div className="aifacts-acc-body">{children}</div>
@@ -1090,19 +1096,23 @@ function CheckOption({
   checked,
   onChange,
   locked = false,
+  disabled = false,
 }: {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   // Always-on, non-editable (e.g. English in Languages).
   locked?: boolean;
+  // Section is in reviewed/locked mode — checkbox is read-only without the
+  // "Locked" tag.
+  disabled?: boolean;
 }) {
   return (
     <label className="check">
       <input
         type="checkbox"
         checked={checked}
-        disabled={locked}
+        disabled={locked || disabled}
         onChange={(e) => onChange(e.target.checked)}
       />
       <span>
@@ -1118,12 +1128,15 @@ function CatalogChecklist({
   items,
   onToggle,
   onRemove,
+  disabled = false,
 }: {
   idPrefix: string;
   items: CatalogItemState[];
   onToggle: (key: string, selected: boolean) => void;
   // Custom items only; default catalog items can only be unchecked.
   onRemove: (item: CatalogItemState) => void;
+  // Reviewed/locked mode: checkboxes read-only, remove buttons hidden.
+  disabled?: boolean;
 }) {
   return (
     <div className="aifacts-check-grid" role="group" aria-label="Options">
@@ -1134,8 +1147,9 @@ function CatalogChecklist({
             checked={item.selected}
             onChange={(v) => onToggle(item.key, v)}
             locked={item.locked}
+            disabled={disabled}
           />
-          {item.isCustom && !item.locked && (
+          {item.isCustom && !item.locked && !disabled && (
             <button
               type="button"
               className="aifacts-remove"
@@ -1204,6 +1218,7 @@ function LabeledTextarea({
   onChange,
   maxLength,
   optional = false,
+  readOnly = false,
   helper,
   placeholder,
 }: {
@@ -1213,6 +1228,8 @@ function LabeledTextarea({
   onChange: (value: string) => void;
   maxLength: number;
   optional?: boolean;
+  // Locked/read-only mode: value stays visible but not editable.
+  readOnly?: boolean;
   helper?: string;
   placeholder?: string;
 }) {
@@ -1224,11 +1241,13 @@ function LabeledTextarea({
       </label>
       <textarea
         id={id}
-        className="textarea"
+        className={readOnly ? "textarea acct-readonly" : "textarea"}
         rows={2}
         value={value}
         maxLength={maxLength}
         placeholder={placeholder}
+        readOnly={readOnly}
+        aria-readonly={readOnly || undefined}
         onChange={(e) => onChange(e.target.value)}
       />
       {helper && <p className="helper">{helper}</p>}
@@ -1236,30 +1255,46 @@ function LabeledTextarea({
   );
 }
 
-function SectionSave({
+// Save/Edit lifecycle actions for one reviewable section. Unreviewed or
+// re-opened sections show Save; a reviewed section locks and shows Edit
+// (mirrors the Business profile lock/edit pattern). No permanent "Saved"
+// text — the Complete badge and the Edit button are the saved state.
+function SectionReviewActions({
   section,
+  locked,
   state,
+  onEdit,
   onSave,
 }: {
-  section: string;
+  section: AiEditableSection;
+  locked: boolean;
   state: SaveState;
+  onEdit: () => void;
   onSave: () => void;
 }) {
   return (
     <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center", flexWrap: "wrap" }}>
-      <button
-        type="button"
-        className="btn btn-primary btn-sm"
-        onClick={onSave}
-        disabled={state.saving}
-        data-section={section}
-      >
-        {state.saving ? "Saving…" : "Save"}
-      </button>
-      {state.saved && !state.error && (
-        <span className="t-small acct-savebar-status" role="status" aria-live="polite">Saved</span>
+      {locked ? (
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={onEdit}
+          data-section={section}
+        >
+          Edit
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={onSave}
+          disabled={state.saving}
+          data-section={section}
+        >
+          {state.saving ? "Saving…" : "Save"}
+        </button>
       )}
-      {state.error && (
+      {!locked && state.error && (
         <span className="t-small" role="alert" style={{ color: "var(--error-text)" }}>{state.error}</span>
       )}
     </div>

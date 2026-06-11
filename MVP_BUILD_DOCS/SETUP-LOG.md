@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-10 (live SMS send hardening deployed)
+Last updated: 2026-06-11 (AI Knowledge review workflow: Needs review → Complete badges, Save→Edit locking, Appointments owner UI removed)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6484,3 +6484,78 @@ Production verification (all pass):
 
 No SMS, no calls, no Twilio/Stripe mutations, no env/DNS changes, no AI
 provider calls, no migration, no raw HTML stored.
+
+---
+
+## 2026-06-11 — AI Knowledge intro + payment facts refactor (deployed)
+
+- Commit `33bf9a56c989d163becc84f0b0fd15d717c626ae` pushed to `origin/main`;
+  Vercel deployment `dpl_9FARK2rjVtQofbkH7ZesRURzYpwA` READY and aliased to
+  `https://app.missedcallsdental.com`.
+- Intro card: removed the inline gap style; real `.aifacts-intro` CSS class.
+- Payment split into Payment methods (cash, credit/debit cards, personal
+  checks, HSA/FSA cards) and Financing & plans (in-office payment plans,
+  CareCredit, Alphaeon Credit, membership plan + custom options, max 50).
+  Pricing policy textarea removed from the owner UI (legacy column cleared on
+  next save).
+- Migration `20260616000100_payment_methods_and_financing.sql` applied to
+  production (`qfjpvbvfvhbtebwivcdc`): new boolean columns on
+  `clinic_ai_payment_settings` (backfilled `in_office_payment_plans` from
+  legacy `payment_plans`) + new `clinic_ai_financing_options` table (RLS, no
+  policies).
+- Website parser maps payment plans / CareCredit / Alphaeon to the new
+  columns; payment methods are never inferred from generic text.
+- Verification: `/api/health` 200; `/account?section=ai_knowledge`,
+  `/account?section=business`, `/workspace` all 200; unauthenticated
+  `/api/account/ai-knowledge` 401. All test suites + build pass.
+
+No SMS, no Twilio mutations, no AI provider calls, no env changes.
+
+---
+
+## 2026-06-11 — AI Knowledge review workflow: Needs review → Complete, Save→Edit locking, Appointments owner UI removed
+
+Owner-workflow simplification of `/account?section=ai_knowledge` (commit on
+`main`; see git log for `account: simplify AI knowledge review workflow`).
+
+What changed:
+
+- Removed the editable Appointments accordion (Accepting new patients,
+  Cleaning/Same-day/Emergency appointments, Reschedule/cancel requests,
+  Preferred first time question). Appointment request collection is now
+  explained in the intro card: "AI collects appointment requests. Your office
+  confirms appointments." The `clinic_ai_appointment_settings` table and the
+  `/appointments` API route remain for compatibility but have no owner UI, and
+  the website scan no longer writes appointment drafts (no owner-review work).
+- Intro card copy now has three scannable body rows (appointments explanation,
+  office fallback, no medical advice); `.aifacts-stack` gained a `margin-top`
+  so the card is clearly separated from the "AI Front Desk Knowledge" title.
+- Business profile facts: collapsed by default, read-only, no badge.
+- Removed all selected-count summaries ("N selected") from accordion headers.
+- Review lifecycle: every editable section (Hours & location, Insurance,
+  Services, Languages, Payment methods, Financing & plans, Office policies)
+  shows a yellow "Needs review" badge until its first successful Save, then a
+  green "Complete" badge. Saved sections lock (fields read-only, add/remove
+  hidden) and show `Edit` instead of `Save` — the Business profile lock/edit
+  pattern. The old blue "Review" badges are replaced by this lifecycle.
+- Persistence: new table `public.clinic_ai_knowledge_section_reviews`
+  (PK `(clinic_id, section_key)`; keys hours/insurance/services/languages/
+  payment_methods/financing/office_policies; RLS, no policies;
+  `set_updated_at` trigger). Saves upsert exactly one section row — saving
+  Payment methods never marks Financing complete (shared payment row), and
+  Languages/Office policies stay independent (shared policies row). Website
+  scan drafts delete only the affected sections' review rows.
+- Migration `20260617000100_ai_knowledge_section_reviews.sql` applied to
+  production (`qfjpvbvfvhbtebwivcdc`); verified table, check constraint,
+  trigger, and RLS. `supabase_migrations.schema_migrations` reconciled to the
+  repo filename version.
+- `GET /api/account/ai-knowledge` now returns `reviewedSections` so the badge
+  state survives reloads.
+
+Validation: `npm run typecheck` pass; `npm run test:ai-knowledge` 69 pass;
+`npm run test:phone-numbers` 32 pass; `npm run test:a2p` 64 pass;
+`npm run test:sms-recovery` 52 pass; `npm run build` pass; `git diff --check`
+clean. (No lint script exists.)
+
+No SMS, no Twilio mutations, no AI provider calls, no env changes, no secrets
+printed, no patient-facing behavior changed.

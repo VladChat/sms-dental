@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-10 (AI Knowledge UI cleanup: Languages is its own section with English always-on; Office policies use a Form link field; website parser no longer writes page-text excerpts into office policy fields)
+Last updated: 2026-06-11 (AI Knowledge review workflow: per-section Needs review → Complete badges with Save→Edit locking persisted in clinic_ai_knowledge_section_reviews; owner Appointments section removed — appointment request collection is explained in the intro card; no selected counts in accordion headers)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3234,12 +3234,30 @@ approval/billing setup path.
 What exists:
 
 - Account section: `/account?section=ai_knowledge` ("AI Front Desk Knowledge",
-  Account nav group after Team access). Accordion sections: Business profile
-  facts (read-only from `clinics`), Hours & location, Appointments, Insurance,
-  Services, Payment, Office policies, Website check. Owner-facing copy is
-  non-technical; the top principle is "Add what AI can safely say to patients.
-  Questions without an approved answer go to your office. AI never gives
-  medical advice."
+  Account nav group after Team access). Website loader block on top, then
+  accordion sections: Business profile facts (read-only from `clinics`,
+  collapsed by default, no review badge), Hours & location, Insurance,
+  Services, Languages, Payment methods, Financing & plans, Office policies.
+  There is NO owner Appointments section (2026-06-11): appointment request
+  collection is explained in the intro card and is not owner-configured. The
+  intro card reads "Add what AI can safely say to patients." + "AI collects
+  appointment requests. Your office confirms appointments." + "Questions AI
+  cannot answer go to someone in your office." + "AI never gives medical
+  advice." Accordion headers show only the title and a review badge — no
+  selected counts.
+- Review lifecycle (2026-06-11): every editable section shows a yellow
+  "Needs review" badge until its first successful Save, then a green
+  "Complete" badge. A saved section locks (fields read-only, add/remove
+  hidden) and shows an `Edit` button instead of `Save` — the Business profile
+  lock/edit pattern. State persists in
+  `public.clinic_ai_knowledge_section_reviews` (one row per
+  `(clinic_id, section_key)`; keys: hours, insurance, services, languages,
+  payment_methods, financing, office_policies). Saving one shared-row section
+  never marks another complete (payment_methods vs financing on the payment
+  row; languages vs office_policies on the policies row). Website-scan drafts
+  delete only the affected sections' review rows so those re-open as "Needs
+  review"; untouched sections stay "Complete". The scan no longer writes
+  appointment drafts.
 - APIs (owner/admin only via `requireOwnerAdminAccess()` in
   `lib/auth/owner-admin.ts`; front-desk rejected):
   `GET /api/account/ai-knowledge` plus POST
@@ -3327,7 +3345,9 @@ select to_regclass('public.clinic_ai_hours'),
        to_regclass('public.clinic_ai_insurance_plans'),
        to_regclass('public.clinic_ai_appointment_settings'),
        to_regclass('public.clinic_ai_payment_settings'),
+       to_regclass('public.clinic_ai_financing_options'),
        to_regclass('public.clinic_ai_office_policies'),
+       to_regclass('public.clinic_ai_knowledge_section_reviews'),
        to_regclass('public.clinic_website_scan_runs');            -- all non-null
 ```
 

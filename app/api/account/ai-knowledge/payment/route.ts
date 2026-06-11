@@ -5,6 +5,7 @@ import { requireOwnerAdminAccess } from "../../../../../lib/auth/owner-admin";
 import {
   getClinicAiFacts,
   listCustomFinancingEntries,
+  markSectionReviewed,
   saveFinancingSection,
   savePaymentMethods,
 } from "../../../../../lib/db/ai-knowledge";
@@ -56,6 +57,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const methods = validatePaymentMethods(input.paymentMethods);
       if (!methods.ok) return jsonBadRequest(methods.message);
       await savePaymentMethods(access.clinic.id, methods.value, access.userId);
+      // payment_methods only — never marks the shared-row financing section.
+      await markSectionReviewed(access.clinic.id, "payment_methods", access.userId);
     }
 
     if (hasFinancing) {
@@ -75,6 +78,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (!saved.ok) {
         return jsonBadRequest(`You can list up to ${MAX_FINANCING_OPTIONS_PER_CLINIC} financing options.`);
       }
+      // financing only — never marks the shared-row payment_methods section.
+      await markSectionReviewed(access.clinic.id, "financing", access.userId);
     }
 
     const facts = await getClinicAiFacts(access.clinic.id);

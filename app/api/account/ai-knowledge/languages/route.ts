@@ -2,7 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { jsonBadRequest, jsonError, jsonOk } from "../../../../../lib/http/responses";
 import { requireOwnerAdminAccess } from "../../../../../lib/auth/owner-admin";
-import { getClinicAiFacts, saveOfficeLanguages } from "../../../../../lib/db/ai-knowledge";
+import {
+  getClinicAiFacts,
+  markSectionReviewed,
+  saveOfficeLanguages,
+} from "../../../../../lib/db/ai-knowledge";
 import { validateLanguagesList } from "../../../../../lib/ai-knowledge/facts";
 
 export const runtime = "nodejs";
@@ -27,6 +31,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     await saveOfficeLanguages(access.clinic.id, validated.value, access.userId);
+    // Languages only — never marks the shared-row office_policies section.
+    await markSectionReviewed(access.clinic.id, "languages", access.userId);
     const facts = await getClinicAiFacts(access.clinic.id);
     return jsonOk({ ok: true, facts });
   } catch {

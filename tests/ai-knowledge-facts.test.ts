@@ -18,9 +18,12 @@ import {
   MAX_SERVICES_PER_CLINIC,
 } from "../config/ai-front-desk-facts.config";
 import {
+  AI_REVIEW_SECTION_KEYS,
   customKeyFromLabel,
   customLimitReached,
+  isAiReviewSectionKey,
   looksLikeFormLink,
+  reviewedSectionsView,
   validateAppointmentSettings,
   validateCatalogSectionUpdate,
   validateCustomLabel,
@@ -483,22 +486,183 @@ test("financing enforces a 50 custom-option cap", () => {
   assert.ok(swap.ok);
 });
 
+// ------------------------------------------------------------ review sections
+
+test("review section keys cover exactly the editable sections", () => {
+  assert.deepEqual(
+    [...AI_REVIEW_SECTION_KEYS],
+    ["hours", "insurance", "services", "languages", "payment_methods", "financing", "office_policies"],
+  );
+  // Read-only blocks and the removed Appointments UI are never reviewable.
+  for (const excluded of ["business_profile", "appointments", "website"]) {
+    assert.equal(isAiReviewSectionKey(excluded), false, `should exclude: ${excluded}`);
+  }
+  for (const key of AI_REVIEW_SECTION_KEYS) {
+    assert.equal(isAiReviewSectionKey(key), true);
+  }
+});
+
+test("sections start unreviewed and flip independently", () => {
+  const none = reviewedSectionsView([]);
+  assert.deepEqual(none, {
+    hours: false,
+    insurance: false,
+    services: false,
+    languages: false,
+    paymentMethods: false,
+    financing: false,
+    officePolicies: false,
+  });
+
+  const all = reviewedSectionsView([...AI_REVIEW_SECTION_KEYS]);
+  assert.deepEqual(all, {
+    hours: true,
+    insurance: true,
+    services: true,
+    languages: true,
+    paymentMethods: true,
+    financing: true,
+    officePolicies: true,
+  });
+
+  // Unknown keys never count as a reviewed section.
+  const bogus = reviewedSectionsView(["appointments", "website", "bogus"]);
+  assert.deepEqual(bogus, none);
+});
+
+test("saving payment methods does not mark financing complete (and vice versa)", () => {
+  const methodsOnly = reviewedSectionsView(["payment_methods"]);
+  assert.equal(methodsOnly.paymentMethods, true);
+  assert.equal(methodsOnly.financing, false);
+
+  const financingOnly = reviewedSectionsView(["financing"]);
+  assert.equal(financingOnly.financing, true);
+  assert.equal(financingOnly.paymentMethods, false);
+});
+
+test("saving languages does not mark office policies complete (and vice versa)", () => {
+  const languagesOnly = reviewedSectionsView(["languages"]);
+  assert.equal(languagesOnly.languages, true);
+  assert.equal(languagesOnly.officePolicies, false);
+
+  const policiesOnly = reviewedSectionsView(["office_policies"]);
+  assert.equal(policiesOnly.officePolicies, true);
+  assert.equal(policiesOnly.languages, false);
+});
+
 // ------------------------------------------------------------------ UI guards
 
-test("AI knowledge intro uses a CSS class, not an inline gap style", () => {
-  const source = readFileSync(
+function aiKnowledgeCardSource(): string {
+  return readFileSync(
     join(process.cwd(), "app", "setup", "[token]", "_components", "AiKnowledgeCard.tsx"),
     "utf8",
   );
-  // The failed inline-spacing attempt must be gone.
-  assert.ok(!/style=\{\{\s*gap:\s*"var\(--space-3\)"\s*\}\}/.test(source));
-  // The real class-based intro must be present.
+}
+
+test("owner UI no longer renders the Appointments section", () => {
+  const source = aiKnowledgeCardSource();
+  assert.ok(!source.includes('title="Appointments"'));
+  for (const removed of [
+    "Accepting new patients",
+    "Cleaning appointments",
+    "Same-day appointments",
+    "Emergency appointments",
+    "Reschedule/cancel requests",
+    "Preferred first time question",
+  ]) {
+    assert.ok(!source.includes(removed), `should not render: ${removed}`);
+  }
+  assert.ok(!source.includes("saveAppointments"));
+});
+
+test("intro card explains appointment requests in class-based rows", () => {
+  const source = aiKnowledgeCardSource();
+  assert.ok(source.includes("Add what AI can safely say to patients."));
+  assert.ok(source.includes("AI collects appointment requests. Your office confirms appointments."));
+  assert.ok(source.includes("Questions AI cannot answer go to someone in your office."));
+  assert.ok(source.includes("AI never gives medical advice."));
   assert.ok(source.includes('className="acct-callout aifacts-intro"'));
   assert.ok(source.includes("aifacts-intro-title"));
   assert.ok(source.includes("aifacts-intro-body"));
+  // The failed inline-spacing attempt must never return.
+  assert.ok(!/style=\{\{\s*gap:/.test(source));
   // The removed Pricing policy textarea must not reappear in the owner UI.
   assert.ok(!source.includes("MAX_PRICING_POLICY_LENGTH"));
   assert.ok(!/Pricing policy/.test(source));
+});
+
+test("business profile facts is collapsed, read-only, and unbadged", () => {
+  const source = aiKnowledgeCardSource();
+  assert.ok(source.includes('<Accordion title="Business profile facts">'));
+  assert.ok(!/Business profile facts"[^>]*defaultOpen/.test(source));
+  assert.ok(!/Business profile facts"[^>]*status=/.test(source));
+});
+
+test("accordion headers show no selected-count summaries", () => {
+  const source = aiKnowledgeCardSource();
+  assert.ok(!source.includes(" selected`"), "no `${n} selected` template remains");
+  assert.ok(!source.includes("meta="), "the Accordion meta slot is gone");
+  assert.ok(!source.includes("selectedServiceCount"));
+  assert.ok(!source.includes("selectedInsuranceCount"));
+  assert.ok(!source.includes("selectedPaymentMethodCount"));
+  assert.ok(!source.includes("selectedFinancingCount"));
+});
+
+test("editable sections use the Needs review → Complete lifecycle", () => {
+  const source = aiKnowledgeCardSource();
+  // Yellow warning badge before review, green check badge after.
+  assert.ok(source.includes('label="Needs review"'));
+  assert.ok(source.includes('kind="needs_setup"'));
+  assert.ok(source.includes('kind="complete"'));
+  // The old blue Review badges are gone from this card.
+  assert.ok(!source.includes("badge-info"));
+  assert.ok(!source.includes('"Review"'));
+  // Every editable section carries a review status; business facts do not.
+  for (const section of [
+    "Hours & location",
+    "Insurance",
+    "Services",
+    "Languages",
+    "Payment methods",
+    "Financing & plans",
+    "Office policies",
+  ]) {
+    assert.ok(
+      new RegExp(`title="${section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" status=`).test(source),
+      `${section} should carry a review status`,
+    );
+  }
+});
+
+test("saved sections lock and show Edit instead of Save", () => {
+  const source = aiKnowledgeCardSource();
+  assert.ok(source.includes("SectionReviewActions"));
+  assert.ok(source.includes("startEditing"));
+  assert.ok(source.includes("isLocked"));
+  assert.ok(source.includes("onClick={onEdit}"));
+  // Locked mode disables fields and hides add/remove affordances.
+  assert.ok(source.includes("readOnly={policiesLocked}"));
+  assert.ok(source.includes("readOnly={hoursLocked}"));
+  assert.ok(source.includes("disabled={hoursLocked}"));
+  assert.ok(source.includes("disabled={insuranceLocked}"));
+  assert.ok(source.includes("{!servicesLocked && ("));
+  assert.ok(source.includes("{!financingLocked && ("));
+  // No permanent "Saved" message remains next to Save.
+  assert.ok(!source.includes("Saved</span>"));
+});
+
+test("website scan no longer applies appointment drafts and re-opens only drafted sections", () => {
+  const source = readFileSync(join(process.cwd(), "lib", "db", "ai-knowledge.ts"), "utf8");
+  const applyStart = source.indexOf("export async function applyScanDrafts");
+  assert.ok(applyStart >= 0);
+  const applyBody = source.slice(applyStart);
+  // No appointment drafts: there is no owner UI left to review them.
+  assert.ok(!applyBody.includes("clinic_ai_appointment_settings"));
+  assert.ok(!applyBody.includes("acceptingNewPatients"));
+  assert.ok(!applyBody.includes("emergencyAppointments"));
+  // New drafts re-open review for affected sections only.
+  assert.ok(applyBody.includes("clinic_ai_knowledge_section_reviews"));
+  assert.ok(applyBody.includes("draftedSections"));
 });
 
 // ------------------------------------------------------------------ policies

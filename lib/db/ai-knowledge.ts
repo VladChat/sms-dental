@@ -17,6 +17,8 @@ import {
   customLimitReached,
   isCustomKey,
   looksLikeFormLink,
+  reviewedSectionsView,
+  type AiReviewSectionKey,
   type AppointmentSettingsValue,
   type CatalogSectionUpdate,
   type FinancingDefaultsValue,
@@ -24,6 +26,7 @@ import {
   type HoursValue,
   type OfficePoliciesValue,
   type PaymentMethodsValue,
+  type ReviewedSectionsView,
 } from "../ai-knowledge/facts";
 import type { AggregatedFacts } from "../ai-knowledge/website-extract";
 
@@ -175,6 +178,8 @@ export type AiFactsView = {
     items: AiFactsCatalogEntryView[];
     persisted: boolean;
   };
+  // Per-section Needs review → Complete state (clinic_ai_knowledge_section_reviews).
+  reviewedSections: ReviewedSectionsView;
   lastScan: {
     status: string;
     pagesScanned: number;
@@ -292,6 +297,7 @@ export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
     paymentRows,
     financingRows,
     policyRows,
+    reviewRows,
     scanRows,
   ] = await Promise.all([
       sql<HoursRow[]>`
@@ -331,6 +337,11 @@ export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
         select new_patient_forms, what_to_bring, cancellation_policy, languages,
                parking_notes, accessibility_notes, status
         from public.clinic_ai_office_policies
+        where clinic_id = ${clinicId}
+      `,
+      sql<{ section_key: string }[]>`
+        select section_key
+        from public.clinic_ai_knowledge_section_reviews
         where clinic_id = ${clinicId}
       `,
       sql<ScanRunRow[]>`
@@ -428,6 +439,7 @@ export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
       items: languagesView(policies?.languages ?? []),
       persisted: (policies?.languages?.length ?? 0) > 0,
     },
+    reviewedSections: reviewedSectionsView(reviewRows.map((row) => row.section_key)),
     lastScan: scan
       ? {
           status: scan.status,
@@ -470,6 +482,30 @@ export async function listCustomFinancingEntries(clinicId: string): Promise<Cust
     where clinic_id = ${clinicId} and is_custom = true
   `;
   return rows.map((r) => ({ key: r.option_key, label: r.label }));
+}
+
+// ----------------------------------------------------------- review lifecycle
+
+// Mark exactly ONE section reviewed after its successful owner save. Sections
+// are independent rows: saving Payment methods never marks Financing & plans
+// complete (and vice versa), and Languages/Office policies stay separate even
+// though they share the clinic_ai_office_policies row.
+export async function markSectionReviewed(
+  clinicId: string,
+  sectionKey: AiReviewSectionKey,
+  reviewedByProfileId: string | null,
+): Promise<void> {
+  const sql = getDb();
+  await sql`
+    insert into public.clinic_ai_knowledge_section_reviews (
+      clinic_id, section_key, reviewed_at, reviewed_by_profile_id
+    ) values (
+      ${clinicId}, ${sectionKey}, now(), ${reviewedByProfileId}
+    )
+    on conflict (clinic_id, section_key) do update set
+      reviewed_at = now(),
+      reviewed_by_profile_id = excluded.reviewed_by_profile_id
+  `;
 }
 
 // ------------------------------------------------------------------- saves
@@ -898,6 +934,10 @@ export async function completeScanRun(params: {
 // Write aggregated scan facts as drafts ('needs_review' / 'website_draft').
 // Conservative rules: never touch rows the owner already approved or turned
 // off, never overwrite owner hours, and only fill blanks in singleton rows.
+// Appointment signals are NOT drafted: there is no owner Appointments UI, so
+// scan results must never create owner-review work there.
+// Sections that actually receive new drafts get their review row removed so
+// the owner sees "Needs review" again; untouched sections stay "Complete".
 // Returns notes for the run log (e.g. kept owner hours).
 export async function applyScanDrafts(
   clinicId: string,
@@ -909,10 +949,12 @@ export async function applyScanDrafts(
   const urlFor = (factKey: string) => facts.sourceUrlByFact.get(factKey) ?? scannedOrigin;
 
   await sql.begin(async (tx) => {
+    const draftedSections = new Set<AiReviewSectionKey>();
+
     for (const match of facts.services) {
       const item = findDefaultService(match.key);
       if (!item) continue;
-      await tx`
+      const result = await tx`
         insert into public.clinic_ai_services (
           clinic_id, service_key, label, selected, is_custom,
           status, source_type, source_url, source_excerpt, confidence, sort_order
@@ -929,12 +971,13 @@ export async function applyScanDrafts(
           confidence = excluded.confidence
         where public.clinic_ai_services.status in ('not_found', 'needs_review')
       `;
+      if (result.count > 0) draftedSections.add("services");
     }
 
     for (const match of facts.insurancePlans) {
       const item = findDefaultInsurancePlan(match.key);
       if (!item) continue;
-      await tx`
+      const result = await tx`
         insert into public.clinic_ai_insurance_plans (
           clinic_id, plan_key, label, selected, is_custom,
           status, source_type, source_url, source_excerpt, confidence, sort_order
@@ -951,6 +994,7 @@ export async function applyScanDrafts(
           confidence = excluded.confidence
         where public.clinic_ai_insurance_plans.status in ('not_found', 'needs_review')
       `;
+      if (result.count > 0) draftedSections.add("insurance");
     }
 
     if (facts.hours.length > 0) {
@@ -970,7 +1014,7 @@ export async function applyScanDrafts(
           const intervalIndex = intervalIndexByWeekday.get(draft.weekday) ?? 0;
           if (intervalIndex > 2) continue;
           intervalIndexByWeekday.set(draft.weekday, intervalIndex + 1);
-          await tx`
+          const result = await tx`
             insert into public.clinic_ai_hours (
               clinic_id, weekday, interval_index, is_closed, opens_at, closes_at, timezone,
               status, source_type, source_url, source_excerpt, confidence
@@ -981,36 +1025,8 @@ export async function applyScanDrafts(
             )
             on conflict (clinic_id, weekday, interval_index) do nothing
           `;
+          if (result.count > 0) draftedSections.add("hours");
         }
-      }
-    }
-
-    if (facts.acceptingNewPatients || facts.emergencyAppointments) {
-      const [appointments] = await tx<{ status: string }[]>`
-        select status from public.clinic_ai_appointment_settings where clinic_id = ${clinicId}
-      `;
-      if (!appointments) {
-        await tx`
-          insert into public.clinic_ai_appointment_settings (
-            clinic_id, accepting_new_patients, emergency_appointments,
-            status, source_type, source_url
-          ) values (
-            ${clinicId},
-            ${facts.acceptingNewPatients ? true : null},
-            ${facts.emergencyAppointments ? true : null},
-            'needs_review', 'website_draft', ${urlFor("accepting_new_patients")}
-          )
-        `;
-      } else if (appointments.status !== "approved") {
-        await tx`
-          update public.clinic_ai_appointment_settings set
-            accepting_new_patients = coalesce(accepting_new_patients, ${facts.acceptingNewPatients ? true : null}),
-            emergency_appointments = coalesce(emergency_appointments, ${facts.emergencyAppointments ? true : null}),
-            status = 'needs_review',
-            source_type = 'website_draft',
-            source_url = ${urlFor("accepting_new_patients")}
-          where clinic_id = ${clinicId}
-        `;
       }
     }
 
@@ -1042,8 +1058,9 @@ export async function applyScanDrafts(
             'needs_review', 'website_draft', ${urlFor("payment")}, ${facts.payment.excerpt}
           )
         `;
+        draftedSections.add("financing");
       } else if (payment.status !== "approved") {
-        await tx`
+        const result = await tx`
           update public.clinic_ai_payment_settings set
             in_office_payment_plans = coalesce(in_office_payment_plans, ${inOfficePaymentPlans}),
             carecredit = coalesce(carecredit, ${carecredit}),
@@ -1055,14 +1072,18 @@ export async function applyScanDrafts(
             source_excerpt = coalesce(source_excerpt, ${facts.payment.excerpt})
           where clinic_id = ${clinicId}
         `;
+        if (result.count > 0) draftedSections.add("financing");
       }
     }
 
     // Office policies: only a clean form LINK is ever drafted (never page text).
-    // Languages drafts go to the same row's languages column.
+    // Languages drafts go to the same row's languages column. Each draft only
+    // re-opens review for its own section: a form-link draft re-opens
+    // office_policies, a languages draft re-opens languages.
     if (facts.languages.length > 0 || facts.newPatientFormLink) {
-      const [policies] = await tx<{ status: string; languages: string[] }[]>`
-        select status, languages from public.clinic_ai_office_policies where clinic_id = ${clinicId}
+      const [policies] = await tx<{ status: string; languages: string[]; new_patient_forms: string | null }[]>`
+        select status, languages, new_patient_forms
+        from public.clinic_ai_office_policies where clinic_id = ${clinicId}
       `;
       if (!policies) {
         await tx`
@@ -1074,8 +1095,10 @@ export async function applyScanDrafts(
             'needs_review', 'website_draft', ${urlFor("new_patient_forms")}
           )
         `;
+        if (facts.newPatientFormLink) draftedSections.add("office_policies");
+        if (facts.languages.length > 0) draftedSections.add("languages");
       } else if (policies.status !== "approved") {
-        await tx`
+        const result = await tx`
           update public.clinic_ai_office_policies set
             new_patient_forms = coalesce(new_patient_forms, ${facts.newPatientFormLink}),
             languages = case when cardinality(languages) = 0 then ${facts.languages} else languages end,
@@ -1084,7 +1107,23 @@ export async function applyScanDrafts(
             source_url = ${urlFor("new_patient_forms")}
           where clinic_id = ${clinicId}
         `;
+        if (result.count > 0) {
+          if (facts.newPatientFormLink && !policies.new_patient_forms) {
+            draftedSections.add("office_policies");
+          }
+          if (facts.languages.length > 0 && policies.languages.length === 0) {
+            draftedSections.add("languages");
+          }
+        }
       }
+    }
+
+    // Re-open review only for sections that actually received new drafts.
+    if (draftedSections.size > 0) {
+      await tx`
+        delete from public.clinic_ai_knowledge_section_reviews
+        where clinic_id = ${clinicId} and section_key in ${tx([...draftedSections])}
+      `;
     }
   });
 

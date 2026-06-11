@@ -205,13 +205,21 @@ and was dropped by migration
 
 - **What it is:** an owner/admin account section (`/account?section=ai_knowledge`,
   "AI Front Desk Knowledge") with accordion sections where the clinic reviews
-  and approves structured facts: weekly hours, services, insurance plans,
-  appointment intake settings, payment options, and office policies. **No AI
+  and approves structured facts: weekly hours, insurance plans, services,
+  languages, payment methods, financing & plans, and office policies. **No AI
   runtime reads this data** — nothing patient-facing depends on it.
+  Appointment request collection is explained in the intro card and is not
+  owner-configured (the editable Appointments section was removed 2026-06-11).
+  Each editable section shows "Needs review" until its first save, then a
+  green "Complete" badge, and locks with an Edit action (Business profile
+  lock/edit pattern). Business profile facts are read-only and collapsed.
 - **Data (source of truth):** structured tables `clinic_ai_hours`,
   `clinic_ai_services`, `clinic_ai_insurance_plans`,
-  `clinic_ai_appointment_settings`, `clinic_ai_payment_settings`,
-  `clinic_ai_office_policies`, plus the `clinic_website_scan_runs` log. All
+  `clinic_ai_appointment_settings` (no owner UI; kept for compatibility),
+  `clinic_ai_payment_settings`, `clinic_ai_financing_options`,
+  `clinic_ai_office_policies`,
+  `clinic_ai_knowledge_section_reviews` (per-section review state), plus the
+  `clinic_website_scan_runs` log. All
   clinic-scoped; statuses `not_found | needs_review | approved | do_not_use`;
   sources `manual | business_profile | website_draft | system_default`. No PHI,
   no patient conversations, no raw website HTML, no AI prompts/responses.
