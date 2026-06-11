@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-10 (AI Front Desk Knowledge UX refinements: website loader tries same-site homepage variants, neutral owner-facing scan outcomes, single-save services/insurance with removable custom entries)
+Last updated: 2026-06-10 (AI Knowledge UI cleanup: Languages is its own section with English always-on; Office policies use a Form link field; website parser no longer writes page-text excerpts into office policy fields)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3281,6 +3281,23 @@ What exists:
   custom rows only — defaults can never be removed). Duplicate labels are
   rejected case-insensitively; the 50-entry cap is checked in validation and
   re-checked inside the save transaction.
+- Languages are their own account section (`POST …/ai-knowledge/languages`),
+  stored in `clinic_ai_office_policies.languages text[]` (no new table).
+  Defaults: English, Spanish, Russian, Polish, Chinese. English is always on —
+  `validateLanguagesList()` re-adds it server-side even if the client omits it.
+  Custom languages add/remove with the same checkbox grid + small `×`; deduped
+  case-insensitively, max 20, each ≤40 chars. `saveOfficeLanguages` writes only
+  the `languages` column (status/text columns untouched) so it never clobbers
+  policy text.
+- Office policies hold only: Form link (`new_patient_forms`, validated as a
+  URL/path via `looksLikeFormLink` — never free text), What to bring,
+  Cancellation / reschedule policy, Parking notes, Accessibility notes. On read,
+  a `new_patient_forms` value that is not a link is hidden (returned blank) so a
+  legacy noisy scan excerpt disappears and is cleared on the next save.
+- Website parser strictness: the scan only drafts a new-patient **form link**
+  from a clear anchor (`extractNewPatientFormLink`, same-origin) — it never
+  writes page-text excerpts into office policy fields. What-to-bring,
+  cancellation, and parking are never parser-filled (owner-entered only).
 
 Operating rules:
 

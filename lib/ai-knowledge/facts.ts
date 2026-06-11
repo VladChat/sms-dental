@@ -9,6 +9,7 @@
 import {
   DEFAULT_PREFERRED_TIME_QUESTION,
   HOURS_TIMEZONES,
+  LOCKED_LANGUAGE,
   MAX_CUSTOM_LABEL_LENGTH,
   MAX_HOURS_INTERVALS_PER_DAY,
   MAX_LANGUAGES,
@@ -381,11 +382,13 @@ export function validatePaymentSettings(
 
 // ----------------------------------------------------------- office policies
 
+// Office policies no longer hold languages (those moved to their own section).
+// `newPatientForms` is now a single Form link, validated as a URL/path — never
+// free text — so the parser can never push a noisy page excerpt into it.
 export type OfficePoliciesValue = {
-  newPatientForms: string | null;
+  newPatientForms: string | null; // a form link (URL or path), or null
   whatToBring: string | null;
   cancellationPolicy: string | null;
-  languages: string[];
   parkingNotes: string | null;
   accessibilityNotes: string | null;
 };
@@ -406,12 +409,44 @@ function optionalPolicyText(value: unknown, label: string): FactValidationResult
   return { ok: true, value: trimmed };
 }
 
+// A Form link is a single http(s) URL, a root-relative/absolute path, or a bare
+// domain. It must have no spaces and look like a link, so page text excerpts
+// ("Downloadable Forms: New Patient Form Medical History …") are rejected.
+export function looksLikeFormLink(value: string): boolean {
+  const v = value.trim();
+  if (v.length === 0 || v.length > MAX_POLICY_TEXT_LENGTH) return false;
+  if (/\s/.test(v)) return false;
+  if (/^https?:\/\/\S+\.\S+/i.test(v)) return true; // absolute URL
+  if (/^\/[^\s]*$/.test(v)) return true; // root-relative path
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(v)) return true; // bare domain (+path)
+  return false;
+}
+
+function optionalFormLink(value: unknown): FactValidationResult<string | null> {
+  if (value === undefined || value === null) return { ok: true, value: null };
+  if (typeof value !== "string") {
+    return { ok: false, message: "Could not save. Please refresh and try again." };
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return { ok: true, value: null };
+  if (containsSampleData(trimmed)) {
+    return { ok: false, message: "Please enter your office’s real form link." };
+  }
+  if (!looksLikeFormLink(trimmed)) {
+    return { ok: false, message: "Enter a form link (for example https://yourpractice.com/new-patient-forms)." };
+  }
+  return { ok: true, value: trimmed };
+}
+
 export function validateOfficePolicies(
   raw: unknown,
 ): FactValidationResult<OfficePoliciesValue> {
   const input = (raw ?? {}) as Record<string, unknown>;
+
+  const formLink = optionalFormLink(input.newPatientForms);
+  if (!formLink.ok) return formLink;
+
   const textFields = [
-    ["newPatientForms", "the new patient forms note"],
     ["whatToBring", "the what-to-bring note"],
     ["cancellationPolicy", "the cancellation policy"],
     ["parkingNotes", "the parking notes"],
@@ -424,42 +459,51 @@ export function validateOfficePolicies(
     values[field] = result.value;
   }
 
-  let languages: string[] = [];
-  if (Array.isArray(input.languages)) {
-    const seen = new Set<string>();
-    for (const rawLanguage of input.languages) {
-      if (typeof rawLanguage !== "string") {
-        return { ok: false, message: "Could not save. Please refresh and try again." };
-      }
-      const language = rawLanguage.trim().replace(/\s+/g, " ");
-      if (language.length === 0) continue;
-      if (language.length > MAX_LANGUAGE_LENGTH) {
-        return { ok: false, message: `Keep each language under ${MAX_LANGUAGE_LENGTH} characters.` };
-      }
-      if (containsSampleData(language)) {
-        return { ok: false, message: "Please enter real language names." };
-      }
-      const dedupeKey = language.toLowerCase();
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
-      languages.push(language);
-    }
-    if (languages.length > MAX_LANGUAGES) {
-      return { ok: false, message: `List up to ${MAX_LANGUAGES} languages.` };
-    }
-  } else if (input.languages !== undefined && input.languages !== null) {
-    return { ok: false, message: "Could not save. Please refresh and try again." };
-  }
-
   return {
     ok: true,
     value: {
-      newPatientForms: values.newPatientForms ?? null,
+      newPatientForms: formLink.value,
       whatToBring: values.whatToBring ?? null,
       cancellationPolicy: values.cancellationPolicy ?? null,
-      languages,
       parkingNotes: values.parkingNotes ?? null,
       accessibilityNotes: values.accessibilityNotes ?? null,
     },
   };
+}
+
+// ----------------------------------------------------------------- languages
+
+// Validate the languages list for the dedicated Languages section. English is
+// always included (re-added server-side even if the client omits it), the list
+// is deduped case-insensitively, and limits are enforced.
+export function validateLanguagesList(raw: unknown): FactValidationResult<string[]> {
+  const list = (raw as { languages?: unknown })?.languages ?? raw;
+  if (list !== undefined && list !== null && !Array.isArray(list)) {
+    return { ok: false, message: "Could not save. Please refresh and try again." };
+  }
+  const seen = new Set<string>();
+  const languages: string[] = [LOCKED_LANGUAGE];
+  seen.add(LOCKED_LANGUAGE.toLowerCase());
+
+  for (const rawLanguage of Array.isArray(list) ? list : []) {
+    if (typeof rawLanguage !== "string") {
+      return { ok: false, message: "Could not save. Please refresh and try again." };
+    }
+    const language = rawLanguage.trim().replace(/\s+/g, " ");
+    if (language.length === 0) continue;
+    if (language.length > MAX_LANGUAGE_LENGTH) {
+      return { ok: false, message: `Keep each language under ${MAX_LANGUAGE_LENGTH} characters.` };
+    }
+    if (containsSampleData(language)) {
+      return { ok: false, message: "Please enter real language names." };
+    }
+    const dedupeKey = language.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    languages.push(language);
+  }
+  if (languages.length > MAX_LANGUAGES) {
+    return { ok: false, message: `List up to ${MAX_LANGUAGES} languages.` };
+  }
+  return { ok: true, value: languages };
 }

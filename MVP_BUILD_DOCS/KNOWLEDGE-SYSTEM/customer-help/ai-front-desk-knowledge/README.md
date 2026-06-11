@@ -27,7 +27,11 @@ office policies) a future AI front desk assistant may use.
   never asks the owner to retype them.
 - **Website check creates suggestions only.** Scanned facts stay marked
   "Review" until the owner saves the section. The scan never changes the
-  Business profile.
+  Business profile, and it only ever suggests a new-patient **form link** (a
+  web link) — never page text — for office policies.
+- **Languages** is its own section; English is always on and cannot be removed.
+- **Office policies → Form link** is a web link to the clinic's new patient
+  forms, not free text.
 - Never describe this as a live AI receptionist, chatbot, or automated patient
   texting feature.
 

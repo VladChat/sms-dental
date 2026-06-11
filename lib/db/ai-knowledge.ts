@@ -2,8 +2,10 @@ import { getDb } from "./client";
 import {
   DEFAULT_HOURS_TIMEZONE,
   DEFAULT_INSURANCE_PLANS,
+  DEFAULT_LANGUAGES,
   DEFAULT_PREFERRED_TIME_QUESTION,
   DEFAULT_SERVICES,
+  LOCKED_LANGUAGE,
   MAX_INSURANCE_PLANS_PER_CLINIC,
   MAX_SERVICES_PER_CLINIC,
   findDefaultInsurancePlan,
@@ -13,6 +15,7 @@ import {
   customKeyFromLabel,
   customLimitReached,
   isCustomKey,
+  looksLikeFormLink,
   type AppointmentSettingsValue,
   type CatalogSectionUpdate,
   type HoursValue,
@@ -97,6 +100,8 @@ export type AiFactsCatalogEntryView = {
   isCustom: boolean;
   // True when the value came from a website scan and was not saved yet.
   suggested: boolean;
+  // True for an always-on, non-removable entry (e.g. English in Languages).
+  locked?: boolean;
 };
 
 export type AiFactsHoursDayView = {
@@ -135,14 +140,17 @@ export type AiFactsView = {
     suggested: boolean;
   };
   policies: {
-    newPatientForms: string | null;
+    newPatientForms: string | null; // a form link
     whatToBring: string | null;
     cancellationPolicy: string | null;
-    languages: string[];
     parkingNotes: string | null;
     accessibilityNotes: string | null;
     persisted: boolean;
     suggested: boolean;
+  };
+  languages: {
+    items: AiFactsCatalogEntryView[];
+    persisted: boolean;
   };
   lastScan: {
     status: string;
@@ -199,6 +207,39 @@ function catalogView(
     });
   }
   return view;
+}
+
+// Build the Languages checkbox view from the stored text[]. The default
+// languages always appear; English is locked on. Stored languages that are not
+// defaults appear as removable custom items (in stored order).
+function languagesView(stored: string[]): AiFactsCatalogEntryView[] {
+  const storedByLower = new Map<string, string>();
+  for (const language of stored) {
+    const lower = language.trim().toLowerCase();
+    if (lower.length > 0 && !storedByLower.has(lower)) storedByLower.set(lower, language.trim());
+  }
+  const defaultLower = new Set(DEFAULT_LANGUAGES.map((name) => name.toLowerCase()));
+
+  const items: AiFactsCatalogEntryView[] = DEFAULT_LANGUAGES.map((name) => ({
+    key: `lang_${name.toLowerCase()}`,
+    label: name,
+    selected: name === LOCKED_LANGUAGE ? true : storedByLower.has(name.toLowerCase()),
+    isCustom: false,
+    suggested: false,
+    locked: name === LOCKED_LANGUAGE,
+  }));
+  for (const [lower, original] of storedByLower) {
+    if (defaultLower.has(lower)) continue;
+    items.push({
+      key: `lang_custom_${lower}`,
+      label: original,
+      selected: true,
+      isCustom: true,
+      suggested: false,
+      locked: false,
+    });
+  }
+  return items;
 }
 
 // ----------------------------------------------------------------- queries
@@ -305,14 +346,25 @@ export async function getClinicAiFacts(clinicId: string): Promise<AiFactsView> {
       suggested: payment?.status === "needs_review",
     },
     policies: {
-      newPatientForms: policies?.new_patient_forms ?? null,
+      // Form link only — drop any legacy/noisy non-link value (e.g. a website
+      // text excerpt) so it never shows in the field and clears on next save.
+      newPatientForms:
+        policies?.new_patient_forms && looksLikeFormLink(policies.new_patient_forms)
+          ? policies.new_patient_forms
+          : null,
       whatToBring: policies?.what_to_bring ?? null,
       cancellationPolicy: policies?.cancellation_policy ?? null,
-      languages: policies?.languages ?? [],
       parkingNotes: policies?.parking_notes ?? null,
       accessibilityNotes: policies?.accessibility_notes ?? null,
       persisted: policies !== null,
-      suggested: policies?.status === "needs_review",
+      // Only flag a policy review when there is a draft form link to review.
+      suggested:
+        policies?.status === "needs_review" &&
+        Boolean(policies?.new_patient_forms && looksLikeFormLink(policies.new_patient_forms)),
+    },
+    languages: {
+      items: languagesView(policies?.languages ?? []),
+      persisted: (policies?.languages?.length ?? 0) > 0,
     },
     lastScan: scan
       ? {
@@ -587,6 +639,9 @@ export async function savePaymentSettings(
   `;
 }
 
+// Save office policy text fields. Languages live in their own column managed by
+// saveOfficeLanguages, so this never touches `languages` (the two saves share
+// the row but not each other's columns).
 export async function saveOfficePolicies(
   clinicId: string,
   value: OfficePoliciesValue,
@@ -595,23 +650,45 @@ export async function saveOfficePolicies(
   const sql = getDb();
   await sql`
     insert into public.clinic_ai_office_policies (
-      clinic_id, new_patient_forms, what_to_bring, cancellation_policy, languages,
+      clinic_id, new_patient_forms, what_to_bring, cancellation_policy,
       parking_notes, accessibility_notes,
       status, source_type, reviewed_at, reviewed_by_profile_id
     ) values (
       ${clinicId}, ${value.newPatientForms}, ${value.whatToBring}, ${value.cancellationPolicy},
-      ${value.languages}, ${value.parkingNotes}, ${value.accessibilityNotes},
+      ${value.parkingNotes}, ${value.accessibilityNotes},
       'approved', 'manual', now(), ${reviewedByProfileId}
     )
     on conflict (clinic_id) do update set
       new_patient_forms = excluded.new_patient_forms,
       what_to_bring = excluded.what_to_bring,
       cancellation_policy = excluded.cancellation_policy,
-      languages = excluded.languages,
       parking_notes = excluded.parking_notes,
       accessibility_notes = excluded.accessibility_notes,
       status = 'approved',
       source_type = 'manual',
+      reviewed_at = excluded.reviewed_at,
+      reviewed_by_profile_id = excluded.reviewed_by_profile_id
+  `;
+}
+
+// Save the languages list (own section). Only touches the `languages` column so
+// it never clobbers policy text; status/source on the shared row are left as-is
+// so a pending policy-text review is not silently approved here. The caller
+// (validateLanguagesList) guarantees English is included.
+export async function saveOfficeLanguages(
+  clinicId: string,
+  languages: string[],
+  reviewedByProfileId: string | null,
+): Promise<void> {
+  const sql = getDb();
+  await sql`
+    insert into public.clinic_ai_office_policies (
+      clinic_id, languages, reviewed_at, reviewed_by_profile_id
+    ) values (
+      ${clinicId}, ${languages}, now(), ${reviewedByProfileId}
+    )
+    on conflict (clinic_id) do update set
+      languages = excluded.languages,
       reviewed_at = excluded.reviewed_at,
       reviewed_by_profile_id = excluded.reviewed_by_profile_id
   `;
@@ -808,7 +885,9 @@ export async function applyScanDrafts(
       }
     }
 
-    if (facts.languages.length > 0 || facts.newPatientFormsNote) {
+    // Office policies: only a clean form LINK is ever drafted (never page text).
+    // Languages drafts go to the same row's languages column.
+    if (facts.languages.length > 0 || facts.newPatientFormLink) {
       const [policies] = await tx<{ status: string; languages: string[] }[]>`
         select status, languages from public.clinic_ai_office_policies where clinic_id = ${clinicId}
       `;
@@ -818,14 +897,14 @@ export async function applyScanDrafts(
             clinic_id, new_patient_forms, languages,
             status, source_type, source_url
           ) values (
-            ${clinicId}, ${facts.newPatientFormsNote}, ${facts.languages},
+            ${clinicId}, ${facts.newPatientFormLink}, ${facts.languages},
             'needs_review', 'website_draft', ${urlFor("new_patient_forms")}
           )
         `;
       } else if (policies.status !== "approved") {
         await tx`
           update public.clinic_ai_office_policies set
-            new_patient_forms = coalesce(new_patient_forms, ${facts.newPatientFormsNote}),
+            new_patient_forms = coalesce(new_patient_forms, ${facts.newPatientFormLink}),
             languages = case when cardinality(languages) = 0 then ${facts.languages} else languages end,
             status = 'needs_review',
             source_type = 'website_draft',

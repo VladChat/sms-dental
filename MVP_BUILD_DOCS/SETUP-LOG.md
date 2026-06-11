@@ -6412,3 +6412,53 @@ actually lives on (e.g. `https://allyexporter.com`).
 
 No SMS, no calls, no Twilio/Stripe mutations, no env/DNS changes, no AI
 provider calls, no raw HTML stored.
+
+---
+
+## 2026-06-10 — AI Knowledge UI cleanup: Languages section, Form link, parser strictness
+
+Focused UI/parser cleanup on the structured-facts AI Knowledge page. No AI
+runtime, no Twilio/SMS changes, no schema changes, no migration.
+
+What changed:
+
+- Top principle card: added vertical spacing between the bold line and the
+  second line (no text change).
+- Removed the repeated "Suggested from your website" text under each
+  Services/Insurance checkbox; the section-header "Review" badge still appears
+  when website suggestions exist.
+- Languages moved out of Office policies into its own accordion section
+  (`POST /api/account/ai-knowledge/languages`, stored in the existing
+  `clinic_ai_office_policies.languages text[]` — no new table). Defaults:
+  English, Spanish, Russian, Polish, Chinese. English is always selected,
+  locked, and re-added server-side by `validateLanguagesList()`. Custom
+  languages add/remove (deduped case-insensitive, max 20, ≤40 chars).
+  `saveOfficeLanguages` writes only the languages column so it never clobbers
+  policy text.
+- Office policies now contain only: Form link, What to bring, Cancellation /
+  reschedule policy, Parking notes, Accessibility notes. "New patient forms"
+  became a one-line **Form link** field validated as a URL/path
+  (`looksLikeFormLink`) — free text is rejected. Added placeholders for what to
+  bring, cancellation/reschedule, and parking; renamed "Cancellation policy" →
+  "Cancellation / reschedule policy".
+- Website parser strictness: the scan only drafts a new-patient **form link**
+  from a clear same-origin anchor (`extractNewPatientFormLink`) and never writes
+  page-text excerpts into office policy fields (the old noisy
+  `new_patient_forms` excerpt source is gone). What-to-bring, cancellation, and
+  parking are never parser-filled.
+- Existing bad draft handling: `getClinicAiFacts` hides any
+  `new_patient_forms` value that is not a link (returns blank), so the legacy
+  test-only noisy excerpt no longer displays and is cleared on the next save.
+  No production SQL was run (out of this task's scope); the read-sanitize +
+  parser fix fully neutralize it.
+- Custom items in Languages/Services/Insurance share one compact design: a
+  checkbox cell with a small accessible `×` (`aria-label="Remove <label>"`);
+  default catalog items have no remove button.
+
+Validation: `npm run typecheck`, `npm run test:ai-knowledge` (51 pass, up from
+39), `npm run test:phone-numbers` (32), `npm run test:a2p` (64),
+`npm run test:sms-recovery` (52), `npm run build`, `git diff --check` — all
+pass. No `lint` script exists in `package.json`.
+
+Not done: no SMS sent, no calls, no Twilio mutations, no AI provider calls, no
+env changes, no migration, no raw website HTML stored, `docs/` untouched.

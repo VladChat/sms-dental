@@ -53,6 +53,11 @@ export const DEFAULT_PREFERRED_TIME_QUESTION =
 
 export const DEFAULT_HOURS_TIMEZONE = "America/Chicago";
 
+// Default language checkboxes. English is always on and cannot be removed or
+// unchecked (enforced in the UI and re-applied server-side).
+export const DEFAULT_LANGUAGES = ["English", "Spanish", "Russian", "Polish", "Chinese"] as const;
+export const LOCKED_LANGUAGE = "English";
+
 // US-first timezone choices for the hours editor.
 export const HOURS_TIMEZONES = [
   { value: "America/New_York", label: "Eastern (ET)" },

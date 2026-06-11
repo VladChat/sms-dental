@@ -60,7 +60,12 @@ simply fill in the sections yourself.
 - Check services and insurance plans, add your own items if something is
   missing (up to 50 each), and remove items you added — changes are saved when
   you click Save.
+- In **Languages**, English is always on; add or remove the other languages
+  your office supports.
 - Choose the appointment requests your office handles.
+- In **Office policies**, add a **Form link** to your new patient forms (a web
+  link), plus optional notes for what to bring, cancellation / reschedule, and
+  parking.
 
 ## What to expect
 

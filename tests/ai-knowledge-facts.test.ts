@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   DEFAULT_INSURANCE_PLANS,
+  DEFAULT_LANGUAGES,
   DEFAULT_PREFERRED_TIME_QUESTION,
   DEFAULT_SERVICES,
   MAX_CUSTOM_LABEL_LENGTH,
@@ -16,10 +17,12 @@ import {
 import {
   customKeyFromLabel,
   customLimitReached,
+  looksLikeFormLink,
   validateAppointmentSettings,
   validateCatalogSectionUpdate,
   validateCustomLabel,
   validateHoursInput,
+  validateLanguagesList,
   validateOfficePolicies,
   validatePaymentSettings,
 } from "../lib/ai-knowledge/facts";
@@ -355,28 +358,96 @@ test("payment settings cap the pricing policy and keep it optional", () => {
 
 // ------------------------------------------------------------------ policies
 
-test("office policies cap text lengths and language counts", () => {
+test("office policies accept a clean form link and short policy text", () => {
   const ok = validateOfficePolicies({
-    newPatientForms: "Please arrive 15 minutes early to complete forms.",
-    languages: ["English", "Spanish", "  ", "spanish"],
+    newPatientForms: "https://yourpractice.com/new-patient-forms",
+    whatToBring: "Photo ID and insurance card",
+    cancellationPolicy: "Please call to cancel or reschedule.",
   });
   assert.ok(ok.ok);
-  assert.deepEqual(ok.value.languages, ["English", "Spanish"]);
-  assert.equal(ok.value.whatToBring, null);
+  assert.equal(ok.value.newPatientForms, "https://yourpractice.com/new-patient-forms");
+  assert.equal(ok.value.parkingNotes, null);
+  // Languages are no longer part of office policies.
+  assert.ok(!("languages" in ok.value));
+});
 
+test("office policies reject a noisy text excerpt in the form link field", () => {
+  const noisy = validateOfficePolicies({
+    newPatientForms:
+      "Michigan Ave Ste 922 E Chicago, IL 60611 Downloadable Forms: New Patient Form Medical History Making an Appointment",
+  });
+  assert.equal(noisy.ok, false);
+
+  const sentence = validateOfficePolicies({
+    newPatientForms: "Please arrive 15 minutes early to complete forms.",
+  });
+  assert.equal(sentence.ok, false);
+});
+
+test("office policies cap text lengths and reject sample data", () => {
   const longText = validateOfficePolicies({
     cancellationPolicy: "x".repeat(MAX_POLICY_TEXT_LENGTH + 1),
   });
   assert.equal(longText.ok, false);
 
-  const tooManyLanguages = validateOfficePolicies({
-    languages: Array.from({ length: MAX_LANGUAGES + 1 }, (_, i) => `Language ${i}`),
-  });
-  assert.equal(tooManyLanguages.ok, false);
-
-  const longLanguage = validateOfficePolicies({ languages: ["x".repeat(41)] });
-  assert.equal(longLanguage.ok, false);
-
   const sample = validateOfficePolicies({ parkingNotes: "lorem ipsum parking" });
+  assert.equal(sample.ok, false);
+});
+
+test("looksLikeFormLink accepts links/paths/domains and rejects free text", () => {
+  for (const good of [
+    "https://yourpractice.com/new-patient-forms",
+    "http://example.org/forms/new-patient.pdf",
+    "/patient-paperwork",
+    "yourpractice.com/forms",
+  ]) {
+    assert.equal(looksLikeFormLink(good), true, `should accept: ${good}`);
+  }
+  for (const bad of [
+    "",
+    "New Patient Form Medical History",
+    "Downloadable Forms: New Patient Form",
+    "call the office",
+    "x".repeat(MAX_POLICY_TEXT_LENGTH + 1),
+  ]) {
+    assert.equal(looksLikeFormLink(bad), false, `should reject: ${bad}`);
+  }
+});
+
+// ----------------------------------------------------------------- languages
+
+test("default languages are English, Spanish, Russian, Polish, Chinese", () => {
+  assert.deepEqual([...DEFAULT_LANGUAGES], ["English", "Spanish", "Russian", "Polish", "Chinese"]);
+});
+
+test("languages always include English even when omitted by the client", () => {
+  const omitted = validateLanguagesList({ languages: ["Spanish", "Polish"] });
+  assert.ok(omitted.ok);
+  assert.equal(omitted.value[0], "English");
+  assert.ok(omitted.value.includes("Spanish"));
+  assert.ok(omitted.value.includes("Polish"));
+
+  const empty = validateLanguagesList({ languages: [] });
+  assert.ok(empty.ok);
+  assert.deepEqual(empty.value, ["English"]);
+});
+
+test("languages add a custom value and dedupe case-insensitively", () => {
+  const custom = validateLanguagesList({ languages: ["Ukrainian", "english", "ENGLISH", "ukrainian"] });
+  assert.ok(custom.ok);
+  // English forced once at the front; Ukrainian kept once.
+  assert.deepEqual(custom.value, ["English", "Ukrainian"]);
+});
+
+test("languages enforce max count and per-item length", () => {
+  const tooMany = validateLanguagesList({
+    languages: Array.from({ length: MAX_LANGUAGES + 2 }, (_, i) => `Language ${i}`),
+  });
+  assert.equal(tooMany.ok, false);
+
+  const tooLong = validateLanguagesList({ languages: ["x".repeat(41)] });
+  assert.equal(tooLong.ok, false);
+
+  const sample = validateLanguagesList({ languages: ["lorem ipsum"] });
   assert.equal(sample.ok, false);
 });

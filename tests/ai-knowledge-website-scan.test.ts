@@ -13,6 +13,7 @@ import {
   aggregatePageFacts,
   extractCandidateLinks,
   extractJsonLdNodes,
+  extractNewPatientFormLink,
   extractPageFacts,
   parseHoursLine,
   stripHtmlToText,
@@ -257,6 +258,57 @@ test("payment options and languages are detected", () => {
   assert.equal(facts.payment.financing, false);
   assert.ok(facts.languages.includes("Spanish"));
   assert.ok(facts.languages.includes("Russian"));
+});
+
+// --------------------------------------------- new patient form link (strict)
+
+test("new patient form link is extracted from a clear anchor", () => {
+  const base = new URL("https://www.example.com/");
+  for (const html of [
+    `<a href="/new-patient-forms">New Patient Forms</a>`,
+    `<a href="/forms/new-patient.pdf">New Patient Form</a>`,
+    `<a href="/patient-paperwork">Patient Paperwork</a>`,
+  ]) {
+    const link = extractNewPatientFormLink(html, base);
+    assert.ok(link, `expected a link from: ${html}`);
+    assert.ok(link.startsWith("https://www.example.com/"));
+    assert.ok(!/\s/.test(link));
+  }
+});
+
+test("new patient form link is NOT filled from a noisy text excerpt", () => {
+  const base = new URL("https://www.example.com/");
+  const noisy = `<html><body><p>123 Michigan Ave Ste 922 E Chicago, IL 60611 Downloadable Forms:
+    New Patient Form Medical History Making an Appointment</p></body></html>`;
+  assert.equal(extractNewPatientFormLink(noisy, base), null);
+
+  const facts = extractPageFacts({ url: "https://www.example.com/", html: noisy });
+  assert.equal(facts.newPatientFormLink, null);
+});
+
+test("a generic non-form anchor does not set the form link", () => {
+  const base = new URL("https://www.example.com/");
+  const html = `<a href="/patient-portal">Patient Portal Login</a><a href="/about">About Us</a>`;
+  assert.equal(extractNewPatientFormLink(html, base), null);
+});
+
+test("cross-origin form links are ignored", () => {
+  const base = new URL("https://www.example.com/");
+  const html = `<a href="https://forms.thirdparty.example.org/new-patient">New Patient Forms</a>`;
+  assert.equal(extractNewPatientFormLink(html, base), null);
+});
+
+test("what-to-bring, cancellation, and parking are never parser-filled", () => {
+  const html = `<html><body>
+    <p>What to bring to your first visit: photo ID and insurance card.</p>
+    <p>Cancellation policy: 24 hours notice required.</p>
+    <p>Free parking is available behind the building.</p>
+  </body></html>`;
+  const facts = extractPageFacts({ url: "https://www.example.com/", html });
+  // The extractor exposes no fields for these — they are owner-entered only.
+  assert.ok(!("whatToBring" in facts));
+  assert.ok(!("cancellationPolicy" in facts));
+  assert.ok(!("parkingNotes" in facts));
 });
 
 // ------------------------------------------------------ excerpts + aggregate

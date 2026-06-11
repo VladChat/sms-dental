@@ -10,6 +10,8 @@ import {
   HOURS_TIMEZONES,
   MAX_CUSTOM_LABEL_LENGTH,
   MAX_INSURANCE_PLANS_PER_CLINIC,
+  MAX_LANGUAGE_LENGTH,
+  MAX_LANGUAGES,
   MAX_POLICY_TEXT_LENGTH,
   MAX_PREFERRED_TIME_QUESTION_LENGTH,
   MAX_PRICING_POLICY_LENGTH,
@@ -34,6 +36,8 @@ type CatalogItemState = {
   suggested: boolean;
   // Added locally and not saved yet (persists on Save, not before).
   pending?: boolean;
+  // Always-on, non-removable (e.g. English in Languages).
+  locked?: boolean;
 };
 
 type SaveState = { saving: boolean; error: string | null; saved: boolean };
@@ -67,6 +71,9 @@ export function AiKnowledgeCard({
   const [newServiceLabel, setNewServiceLabel] = useState("");
   const [newInsuranceLabel, setNewInsuranceLabel] = useState("");
 
+  const [languages, setLanguages] = useState<CatalogItemState[]>([]);
+  const [newLanguageLabel, setNewLanguageLabel] = useState("");
+
   const [appointments, setAppointments] = useState({
     acceptingNewPatients: false,
     cleaningAppointments: false,
@@ -90,7 +97,6 @@ export function AiKnowledgeCard({
     newPatientForms: "",
     whatToBring: "",
     cancellationPolicy: "",
-    languagesText: "",
     parkingNotes: "",
     accessibilityNotes: "",
     suggested: false,
@@ -121,6 +127,7 @@ export function AiKnowledgeCard({
     setHoursPersisted(facts.hours.persisted);
     setServices(facts.services);
     setInsurance(facts.insurancePlans);
+    setLanguages(facts.languages.items);
     setRemovedServiceKeys([]);
     setRemovedInsuranceKeys([]);
     setAppointments({
@@ -144,7 +151,6 @@ export function AiKnowledgeCard({
       newPatientForms: facts.policies.newPatientForms ?? "",
       whatToBring: facts.policies.whatToBring ?? "",
       cancellationPolicy: facts.policies.cancellationPolicy ?? "",
-      languagesText: facts.policies.languages.join(", "),
       parkingNotes: facts.policies.parkingNotes ?? "",
       accessibilityNotes: facts.policies.accessibilityNotes ?? "",
       suggested: facts.policies.suggested,
@@ -347,14 +353,58 @@ export function AiKnowledgeCard({
       newPatientForms: policies.newPatientForms,
       whatToBring: policies.whatToBring,
       cancellationPolicy: policies.cancellationPolicy,
-      languages: policies.languagesText
-        .split(",")
-        .map((language) => language.trim())
-        .filter((language) => language.length > 0),
       parkingNotes: policies.parkingNotes,
       accessibilityNotes: policies.accessibilityNotes,
     });
     if (facts) setPolicies((prev) => ({ ...prev, suggested: facts.policies.suggested }));
+  }
+
+  // Languages save the full selected list; the server always re-adds English.
+  async function saveLanguages() {
+    const facts = await postSection("languages", "languages", {
+      languages: languages.filter((item) => item.selected).map((item) => item.label),
+    });
+    if (facts) setLanguages(facts.languages.items);
+  }
+
+  function addLanguageLocally() {
+    const label = newLanguageLabel.trim().replace(/\s+/g, " ");
+    if (label.length === 0) return;
+    if (label.length > MAX_LANGUAGE_LENGTH) {
+      setSave("languages", {
+        saving: false,
+        error: `Keep each language under ${MAX_LANGUAGE_LENGTH} characters.`,
+        saved: false,
+      });
+      return;
+    }
+    if (languages.some((item) => item.label.toLowerCase() === label.toLowerCase())) {
+      setSave("languages", { saving: false, error: `“${label}” is already in the list.`, saved: false });
+      return;
+    }
+    if (languages.length >= MAX_LANGUAGES) {
+      setSave("languages", { saving: false, error: `List up to ${MAX_LANGUAGES} languages.`, saved: false });
+      return;
+    }
+    setLanguages((prev) => [
+      ...prev,
+      {
+        key: `pending:${label.toLowerCase()}`,
+        label,
+        selected: true,
+        isCustom: true,
+        suggested: false,
+        pending: true,
+      },
+    ]);
+    setNewLanguageLabel("");
+    setSave("languages", IDLE_SAVE);
+  }
+
+  function removeLanguageLocally(item: CatalogItemState) {
+    if (!item.isCustom || item.locked) return;
+    setLanguages((prev) => prev.filter((l) => l.key !== item.key));
+    setSave("languages", IDLE_SAVE);
   }
 
   async function loadWebsiteInformation() {
@@ -420,7 +470,7 @@ export function AiKnowledgeCard({
 
   return (
     <div className="aifacts-stack">
-      <div className="acct-callout" role="note">
+      <div className="acct-callout" role="note" style={{ gap: "var(--space-3)" }}>
         <p className="t-body" style={{ fontWeight: 700, margin: 0 }}>
           Add what AI can safely say to patients.
         </p>
@@ -751,16 +801,39 @@ export function AiKnowledgeCard({
         <SectionSave section="payment" state={saveState("payment")} onSave={savePayment} />
       </Accordion>
 
+      {/* ------------------------------------------------------ languages */}
+      <Accordion title="Languages">
+        <p className="t-small">Select languages your office supports.</p>
+        <CatalogChecklist
+          idPrefix="aifacts-lang"
+          items={languages}
+          onToggle={(key, selected) =>
+            setLanguages((prev) => prev.map((item) => (item.key === key ? { ...item, selected } : item)))
+          }
+          onRemove={removeLanguageLocally}
+        />
+        <AddCustomRow
+          label="Add language"
+          inputId="aifacts-add-language"
+          value={newLanguageLabel}
+          onChange={setNewLanguageLabel}
+          onAdd={addLanguageLocally}
+          disabled={saveState("languages").saving}
+        />
+        <SectionSave section="languages" state={saveState("languages")} onSave={saveLanguages} />
+      </Accordion>
+
       {/* ------------------------------------------------ office policies */}
       <Accordion title="Office policies" badge={policies.suggested ? "Review" : undefined}>
         <p className="t-small">Add basic office rules patients may ask about.</p>
-        <LabeledTextarea
-          id="aifacts-new-patient-forms"
-          label="New patient forms"
-          optional
+        <Field
+          label="Form link"
+          name="aifacts-new-patient-forms"
           value={policies.newPatientForms}
-          maxLength={MAX_POLICY_TEXT_LENGTH}
           onChange={(v) => setPolicies((prev) => ({ ...prev, newPatientForms: v }))}
+          optional
+          placeholder="https://yourpractice.com/new-patient-forms"
+          helper="A link to your new patient forms, if you have one."
         />
         <LabeledTextarea
           id="aifacts-what-to-bring"
@@ -768,24 +841,17 @@ export function AiKnowledgeCard({
           optional
           value={policies.whatToBring}
           maxLength={MAX_POLICY_TEXT_LENGTH}
+          placeholder="Photo ID, insurance card, list of medications"
           onChange={(v) => setPolicies((prev) => ({ ...prev, whatToBring: v }))}
         />
         <LabeledTextarea
           id="aifacts-cancellation"
-          label="Cancellation policy"
+          label="Cancellation / reschedule policy"
           optional
           value={policies.cancellationPolicy}
           maxLength={MAX_POLICY_TEXT_LENGTH}
+          placeholder="Example: Please call our office to cancel or reschedule your appointment."
           onChange={(v) => setPolicies((prev) => ({ ...prev, cancellationPolicy: v }))}
-        />
-        <Field
-          label="Languages"
-          name="aifacts-languages"
-          value={policies.languagesText}
-          onChange={(v) => setPolicies((prev) => ({ ...prev, languagesText: v }))}
-          optional
-          placeholder="English, Spanish"
-          helper="Select languages your office supports, separated by commas."
         />
         <LabeledTextarea
           id="aifacts-parking"
@@ -793,6 +859,7 @@ export function AiKnowledgeCard({
           optional
           value={policies.parkingNotes}
           maxLength={MAX_POLICY_TEXT_LENGTH}
+          placeholder="Example: Free parking is available behind the building."
           onChange={(v) => setPolicies((prev) => ({ ...prev, parkingNotes: v }))}
         />
         <LabeledTextarea
@@ -860,21 +927,25 @@ function CheckOption({
   label,
   checked,
   onChange,
-  suggested = false,
+  locked = false,
 }: {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
-  suggested?: boolean;
+  // Always-on, non-editable (e.g. English in Languages).
+  locked?: boolean;
 }) {
   return (
     <label className="check">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={locked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <span>
         {label}
-        {suggested && (
-          <span className="t-helper" style={{ display: "block" }}>Suggested from your website</span>
-        )}
+        {locked && <span className="aifacts-lock">Locked</span>}
       </span>
     </label>
   );
@@ -895,28 +966,24 @@ function CatalogChecklist({
   return (
     <div className="aifacts-check-grid" role="group" aria-label="Options">
       {items.map((item) => (
-        <span
-          key={`${idPrefix}-${item.key}`}
-          style={{ display: "inline-flex", alignItems: "flex-start", gap: "var(--space-2)" }}
-        >
+        <div key={`${idPrefix}-${item.key}`} className="aifacts-check-cell">
           <CheckOption
             label={item.label}
             checked={item.selected}
             onChange={(v) => onToggle(item.key, v)}
-            suggested={item.suggested && item.selected}
+            locked={item.locked}
           />
-          {item.isCustom && (
+          {item.isCustom && !item.locked && (
             <button
               type="button"
-              className="btn btn-ghost btn-sm"
+              className="aifacts-remove"
               aria-label={`Remove ${item.label}`}
               onClick={() => onRemove(item)}
-              style={{ flex: "0 0 auto" }}
             >
-              Remove
+              ×
             </button>
           )}
-        </span>
+        </div>
       ))}
     </div>
   );
@@ -976,6 +1043,7 @@ function LabeledTextarea({
   maxLength,
   optional = false,
   helper,
+  placeholder,
 }: {
   id: string;
   label: string;
@@ -984,6 +1052,7 @@ function LabeledTextarea({
   maxLength: number;
   optional?: boolean;
   helper?: string;
+  placeholder?: string;
 }) {
   return (
     <div className="field">
@@ -997,6 +1066,7 @@ function LabeledTextarea({
         rows={2}
         value={value}
         maxLength={maxLength}
+        placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
       />
       {helper && <p className="helper">{helper}</p>}

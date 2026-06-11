@@ -43,7 +43,9 @@ export type PageFacts = {
   languages: string[];
   acceptingNewPatients: boolean;
   emergencyAppointments: boolean;
-  newPatientFormsNote: string | null;
+  // A clean new-patient form LINK (absolute, same-origin), or null. Never a
+  // page text excerpt.
+  newPatientFormLink: string | null;
 };
 
 export type AggregatedFacts = Omit<PageFacts, "url"> & { sourceUrlByFact: Map<string, string> };
@@ -387,6 +389,33 @@ const LANGUAGE_NAMES = [
   "Romanian", "Turkish",
 ];
 
+// Extract a new-patient form LINK from anchors only — never page text. The
+// anchor text or the href path must clearly identify a new-patient form, and
+// the link must resolve to a safe same-origin URL. When nothing clean is
+// found, returns null (the field is left blank rather than guessed).
+export function extractNewPatientFormLink(html: string, base: URL): string | null {
+  const anchorRe = /<a\b[^>]*href\s*=\s*("([^"]*)"|'([^']*)')[^>]*>([\s\S]{0,200}?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = anchorRe.exec(html)) !== null) {
+    const href = match[2] ?? match[3] ?? "";
+    const sanitized = sanitizeSameOriginLink(href, base);
+    if (!sanitized) continue;
+    const text = stripHtmlToText(match[4] ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const hrefPath = `${new URL(sanitized).pathname}`.toLowerCase();
+
+    const textIsForm =
+      (/\bnew[\s-]*patient/.test(text) && /\b(form|forms|paperwork|packet|registration|document)\b/.test(text)) ||
+      /\b(patient forms|patient paperwork|new patient registration|new patient packet)\b/.test(text);
+    const hrefIsForm =
+      /new[-_]?patient/.test(hrefPath) && /(form|paperwork|packet|registration|\.pdf)/.test(hrefPath);
+
+    if (textIsForm || hrefIsForm) {
+      return sanitized.slice(0, 300);
+    }
+  }
+  return null;
+}
+
 function languagesFromText(text: string, lowerText: string): string[] {
   const found = new Set<string>();
   if (/se habla espa|hablamos espa/.test(lowerText)) found.add("Spanish");
@@ -447,7 +476,12 @@ export function extractPageFacts(input: { url: string; html: string }): PageFact
     if (index !== undefined) paymentExcerpt = makeExcerpt(text, index, 12);
   }
 
-  const newPatientFormsMatch = /new patient (?:forms?|paperwork)/i.exec(text);
+  let newPatientFormLink: string | null = null;
+  try {
+    newPatientFormLink = extractNewPatientFormLink(input.html, new URL(input.url));
+  } catch {
+    newPatientFormLink = null;
+  }
 
   return {
     url: input.url,
@@ -462,9 +496,7 @@ export function extractPageFacts(input: { url: string; html: string }): PageFact
       /accepting new patients|welcoming new patients|new patients (?:are )?welcome|now accepting patients/i.test(text),
     emergencyAppointments:
       /dental emergenc|emergency (?:dental|dentist|appointment|care|service)/i.test(text),
-    newPatientFormsNote: newPatientFormsMatch
-      ? makeExcerpt(text, newPatientFormsMatch.index, newPatientFormsMatch[0].length)
-      : null,
+    newPatientFormLink,
   };
 }
 
@@ -487,7 +519,7 @@ export function aggregatePageFacts(pages: PageFacts[]): AggregatedFacts {
     languages: [],
     acceptingNewPatients: false,
     emergencyAppointments: false,
-    newPatientFormsNote: null,
+    newPatientFormLink: null,
     sourceUrlByFact,
   };
 
@@ -539,8 +571,8 @@ export function aggregatePageFacts(pages: PageFacts[]): AggregatedFacts {
       result.emergencyAppointments = true;
       sourceUrlByFact.set("emergency_appointments", page.url);
     }
-    if (!result.newPatientFormsNote && page.newPatientFormsNote) {
-      result.newPatientFormsNote = page.newPatientFormsNote;
+    if (!result.newPatientFormLink && page.newPatientFormLink) {
+      result.newPatientFormLink = page.newPatientFormLink;
       sourceUrlByFact.set("new_patient_forms", page.url);
     }
   }
@@ -568,6 +600,6 @@ export function countAggregatedFacts(facts: AggregatedFacts): number {
   count += facts.languages.length > 0 ? 1 : 0;
   if (facts.acceptingNewPatients) count += 1;
   if (facts.emergencyAppointments) count += 1;
-  if (facts.newPatientFormsNote) count += 1;
+  if (facts.newPatientFormLink) count += 1;
   return count;
 }
