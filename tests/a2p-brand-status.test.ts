@@ -8,6 +8,7 @@ import {
   isMockBrandCompleteStatus,
   normalizeBrandStatus,
 } from "../lib/twilio/brand-status-classification";
+import { isSafeBrandStatus as isSafeBrandStatusForSmsReadiness } from "../lib/db/sms-readiness";
 
 // ---------- isBrandApprovedStatus ----------
 
@@ -142,4 +143,11 @@ test("isMockBrandCompleteStatus does NOT treat REGISTERED as approved for live A
   assert.equal(isBrandApprovedStatus("registered"), false);
   // But isMockBrandCompleteStatus should
   assert.equal(isMockBrandCompleteStatus("REGISTERED"), true);
+});
+
+test("SMS live-send readiness does NOT treat REGISTERED as approved for local A2P", () => {
+  assert.equal(isSafeBrandStatusForSmsReadiness("APPROVED"), true);
+  assert.equal(isSafeBrandStatusForSmsReadiness("VERIFIED"), true);
+  assert.equal(isSafeBrandStatusForSmsReadiness("REGISTERED"), false);
+  assert.equal(isSafeBrandStatusForSmsReadiness("registered"), false);
 });

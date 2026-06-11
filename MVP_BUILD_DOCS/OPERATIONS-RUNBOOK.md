@@ -2755,6 +2755,10 @@ removal, not texting-active, or missing fresh Messaging Service coverage sends
 NOTHING — same blocking reasons as live. Tests: `tests/sms-recovery-send-gate.test.ts`
 (`npm run test:sms-recovery`).
 
+Local-number live-send readiness accepts only live Brand statuses that are
+explicitly approved/verified. `registered` is a Mock A2P lifecycle completion
+status only; it must not unlock local patient SMS in `owner_test` or `live`.
+
 ### Confirmed bug fixed: sender-pool matching (2026-06-10)
 
 The readiness sync previously matched Messaging Service sender-pool entries on

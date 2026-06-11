@@ -6560,8 +6560,6 @@ clean. (No lint script exists.)
 No SMS, no Twilio mutations, no AI provider calls, no env changes, no secrets
 printed, no patient-facing behavior changed.
 
----
-
 ## 2026-06-11 — AI Knowledge follow-up: badge follows visible mode, Needs review tooltip, Bank transfer / ACH payment method
 
 Follow-up fix on the review workflow (commit on `main`; see git log for
@@ -6598,3 +6596,34 @@ deployment READY + `/api/health`, `/account?section=ai_knowledge`,
 
 No SMS, no Twilio mutations, no AI provider calls, no env changes, no secrets
 printed, no patient-facing behavior changed.
+
+---
+
+## 2026-06-11 — SMS readiness production audit and local Brand hardening
+
+Production-readiness audit for missed-call recovery SMS live-send safety.
+
+What changed:
+
+- Audited the outbound SMS send path: `sendRecoverySms()` remains the only direct
+  Twilio `messages.create` path, and `tests/sms-single-send-path.test.ts`
+  enforces that it is only invoked from the voice status webhook.
+- Hardened local-number live-send readiness in `lib/db/sms-readiness.ts`:
+  `REGISTERED`/`registered` is no longer treated as a safe live Brand status.
+  Only `APPROVED`/`VERIFIED` unlock local A2P readiness. `registered` remains a
+  Mock A2P lifecycle completion status only.
+- Added a regression test in `tests/a2p-brand-status.test.ts` so SMS live-send
+  readiness cannot regress and accept `REGISTERED` for local A2P.
+- Updated operational and Knowledge System docs to reflect the live-send rule.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 52 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+No SMS sent, no real Twilio mutations, no provider console/API checks, no
+Supabase/Vercel/env changes, no deploy, and no secrets printed.

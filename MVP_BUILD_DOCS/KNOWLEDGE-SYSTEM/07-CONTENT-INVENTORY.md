@@ -1,7 +1,7 @@
 # 07 — Content Inventory
 
 Status: active (customer-help complete and ready; platform-admin + support-runbooks verified internal)
-Last updated: 2026-06-10
+Last updated: 2026-06-11
 
 The working list of current and future Knowledge System articles. Update this
 table whenever an article is added, changed, or its status/visibility changes
@@ -45,7 +45,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 | PA-02 | Clinic console tabs and responsibilities | platform-admin/clinic-console.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §4/§15–22, AUTH-AND-ACCESS-CONTROL.md | /admin | Editable super-admin console; implemented vs blocked/future |
 | PA-03 | Phone number lifecycle: active, suspended, scheduled removal, permanently removed, detached | platform-admin/phone-number-lifecycle.md | platform_admin | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, OPERATIONS-RUNBOOK.md, PLATFORM-ADMIN-CONSOLE-PLAN.md | /admin | All states + operations table; per-number texting status + provider diagnostics/sync; customer-safe vs internal |
 | PA-04 | Suspend vs detach vs remove | platform-admin/phone-number-lifecycle.md | platform_admin | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, PLATFORM-ADMIN-CONSOLE-PLAN.md | /admin | Distinct operations; do not conflate (see lifecycle table) |
-| PA-05 | A2P review and submission safety gates | platform-admin/a2p-review-and-submission.md | platform_admin | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, config/runtime.config.ts, AGENTS.md | /admin | Field split; review package; live submit billable/allowlisted/gated |
+| PA-05 | A2P review and submission safety gates | platform-admin/a2p-review-and-submission.md | platform_admin | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, config/runtime.config.ts, AGENTS.md | /admin | Field split; review package; live submit billable/allowlisted/gated; local live-send Brand must be approved/verified, not mock-only registered |
 | PA-06 | Billing operations and quantity sync | platform-admin/billing-operations.md | platform_admin | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | /admin | Plan/add-on model including regular/AI/SMS usage; no secrets/price IDs |
 | PA-07 | Diagnostics and audit boundaries | platform-admin/diagnostics-and-audit.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §10/§15, OPERATIONS-RUNBOOK.md, AUTH-AND-ACCESS-CONTROL.md | /admin | Redaction; can-see vs must-hide; admin_audit_events |
 | PA-08 | Assign existing Twilio number | platform-admin/phone-number-lifecycle.md | platform_admin | internal | PLATFORM-ADMIN-CONSOLE-PLAN.md §21–22 | /admin | Search → select → confirm → assign; gated; SMS not auto-enabled |
@@ -58,7 +58,7 @@ internal-only knowledge/runbook, `ready` = accurate & reviewed (not surfaced),
 
 | ID | Title | Folder | Visibility | Status | Source of truth | Surface | Notes |
 |---|---|---|---|---|---|---|---|
-| RB-01 | SMS not sending | support-runbooks/sms-not-sending.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, OPERATIONS-RUNBOOK.md, AGENTS.md | support | Gate-by-gate triage including per-number texting status, Messaging Service sender coverage (both number types), read-only sync, provider diagnostics, persisted delivery status; customer-safe summary |
+| RB-01 | SMS not sending | support-runbooks/sms-not-sending.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, OPERATIONS-RUNBOOK.md, AGENTS.md | support | Gate-by-gate triage including per-number texting status, Messaging Service sender coverage (both number types), local approved/verified Brand requirement, read-only sync, provider diagnostics, persisted delivery status; customer-safe summary |
 | RB-02 | Number removal / restore / detach question | support-runbooks/number-removal-restore-detach.md | internal_ops | internal | AGENTS.md, BILLING-AND-USAGE-POLICY.md, OPERATIONS-RUNBOOK.md | support | 12-section; customer vs admin operations; next-cycle billing |
 | RB-03 | Billing question | support-runbooks/billing-question.md | internal_ops | internal | BILLING-AND-USAGE-POLICY.md, config/billing.config.ts, AGENTS.md | support | 12-section; regular/AI/SMS plan terms; current vs next cycle; no refund promise |
 | RB-04 | A2P approval question | support-runbooks/a2p-approval-question.md | internal_ops | internal | A2P-10DLC-COMPLIANCE-READINESS.md, SMS-APPROVAL-FIELD-MAPPING.md, config/runtime.config.ts | support | 12-section; "SMS approval" wording; no exact-date promise |

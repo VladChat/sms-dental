@@ -12,7 +12,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/SMS-APPROVAL-FIELD-MAPPING.md
   - config/runtime.config.ts
   - AGENTS.md
-last_verified: 2026-06-09
+last_verified: 2026-06-11
 related:
   - clinic-console
   - support-boundaries
@@ -114,6 +114,9 @@ A2P submission mode is committed runtime config
 - Real SMS readiness must come from the **live submission only**, never from a mock
   brand. A mock brand can read as "approved" while the live brand failed — treat
   mock and live separately.
+- For local-number live-send readiness, a live Brand must be explicitly
+  `APPROVED`/`VERIFIED`. `REGISTERED` is a Mock A2P lifecycle completion status
+  only and must not unlock patient SMS.
 - A2P approval is **necessary but not sufficient** for live patient SMS. Live send
   still requires `SMS_RECOVERY_MODE=live` (ops) **and** per-clinic
   `clinics.sms_recovery_enabled=true`, plus opt-out enforcement.

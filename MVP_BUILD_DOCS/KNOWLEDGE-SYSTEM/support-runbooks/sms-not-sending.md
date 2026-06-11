@@ -11,7 +11,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md
   - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
   - AGENTS.md
-last_verified: 2026-06-10
+last_verified: 2026-06-11
 related:
   - a2p-approval-question
   - ../platform-admin/a2p-review-and-submission
@@ -48,6 +48,8 @@ Work the gates in order in `/admin` (use the console, not raw SQL):
 1. **SMS approval state** — is the clinic's SMS approval complete, and is readiness
    from the **live** submission (not a mock brand)? See
    [../platform-admin/a2p-review-and-submission.md](../platform-admin/a2p-review-and-submission.md).
+   For local numbers, `Registered` alone is not enough for live-send readiness;
+   the live Brand must be approved/verified.
 2. **Assigned active number** — is a business number assigned and active?
 3. **Per-number texting status** — for the called / assigned business number, is
    `clinic_phone_numbers.texting_status='active'`, and is the number still

@@ -487,7 +487,9 @@ export function normalizeProviderStatus(value: string | null | undefined): strin
 
 export function isSafeBrandStatus(status: string | null | undefined): boolean {
   const normalized = normalizeProviderStatus(status);
-  return normalized === "approved" || normalized === "verified" || normalized === "registered";
+  // `registered` is accepted only for Mock A2P Brand lifecycle checks. A live
+  // local-number send gate must require an explicitly approved/verified Brand.
+  return normalized === "approved" || normalized === "verified";
 }
 
 export function isSafeCampaignStatus(status: string | null | undefined): boolean {
