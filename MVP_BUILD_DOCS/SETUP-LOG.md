@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (production SMS duplicate suppression bypass env enabled)
+Last updated: 2026-06-11 (duplicate suppression bypass live test passed)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6949,6 +6949,55 @@ Validation:
 No SMS was sent, no call was placed, and no Twilio resource, Stripe, A2P,
 phone-number lifecycle, `SMS_RECOVERY_MODE`, or clinic enablement change was
 made.
+
+---
+
+## 2026-06-11 — Duplicate suppression bypass live test passed
+
+Verified the internal production duplicate suppression bypass for the Fairstone
+Dental Smile test clinic.
+
+Operator test:
+
+- Test caller: `+1***9236`.
+- Clinic number: `+1***4944`.
+- Operator placed two missed-call tests and replied after the second recovery
+  SMS with the expected bypass-test reply.
+
+Verification:
+
+- Production `SMS_RECOVERY_MODE=live`.
+- Production `SMS_TEST_BYPASS_DUPLICATE_SUPPRESSION_TO=+1***9236`.
+- Fairstone remained the only clinic with `sms_recovery_enabled=true`; all other
+  clinics remained disabled.
+- Production DB recorded exactly two missed-call events in the test window, both
+  routed to Fairstone.
+- Production DB recorded exactly two outbound recovery SMS messages in the test
+  window, both from `+1***4944` to `+1***9236`, both delivered, and both linked
+  to the same Fairstone conversation.
+- Twilio read-only message/call logs agreed with DB state: the two newest test
+  calls completed and the two newest recovery SMS messages were delivered from
+  `+1***4944`.
+- Vercel production logs contained exactly two
+  `twilio.sms.duplicate_suppression_bypassed_for_test_number` events in the
+  verification window, both for caller last4 `9236`.
+- No duplicate suppression bypass log was found for any other caller.
+- The inbound bypass-test reply was received, stored, linked to the same
+  Fairstone conversation, and visible as the latest workspace conversation
+  message.
+- No duplicate webhook external IDs were found in the test window.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 60 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `git diff --check` clean.
+
+No Twilio resource mutation, Stripe change, A2P action, phone-number lifecycle
+change, production env change, or clinic enablement change was made during this
+verification.
 
 ---
 
