@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (owner-test missed-call SMS E2E passed)
+Last updated: 2026-06-11 (Fairstone live activation blocked by existing enabled owner-test clinic)
 
 This log records what was done, in order, without storing secrets.
 
@@ -6775,3 +6775,46 @@ Validation:
 No live patient SMS was enabled, no STOP test was performed, no Twilio resource
 mutation occurred, no A2P action occurred, no Stripe change occurred, no env
 change occurred, and no secrets were printed.
+
+---
+
+## 2026-06-11 — Fairstone live activation blocked by existing enabled owner-test clinic
+
+Attempted preflight for controlled LIVE activation of missed-call SMS recovery
+for Fairstone Dental Smile only.
+
+Result: **BLOCKED before any production change**.
+
+Blocker:
+
+- Another clinic already had `sms_recovery_enabled=true`: Owner Test Dental
+  Office (`e9f21de4-3a35-4216-bb16-66ea3aeb2e47`, slug `owner-test`).
+- Activation instructions required stopping if any clinic other than Fairstone
+  was enabled before switching global `SMS_RECOVERY_MODE` to `live`.
+- The prior owner-test caller (`+1***9236`) also remained inside the 24-hour
+  duplicate suppression window. Use a different controlled test caller, such as
+  allowlisted `+1***7848`, or wait for the duplicate window to expire.
+
+Preflight confirmed:
+
+- Production `SMS_RECOVERY_MODE=owner_test`.
+- Fairstone `sms_recovery_enabled=false`.
+- Fairstone `sms_status='waiting_for_approval'`.
+- Pilot number `+1***4944` was active with `removal_status='active'` and
+  `texting_status='active'`.
+- Pilot readiness was fresh, `production_safe=true`, with no sync error or
+  blocking reason.
+- Messaging Service sender coverage was `covered`.
+- Toll-free verification was `TWILIO_APPROVED`.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 52 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `git diff --check` clean.
+
+No env change, DB mutation, Twilio resource mutation, A2P action, Stripe
+change, number lifecycle action, SMS, call, live patient SMS enablement, or
+secret printing occurred.
