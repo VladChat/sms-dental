@@ -24,6 +24,8 @@ export type FrontDeskMessage = {
 export type FrontDeskConversation = {
   id: string;
   patientPhone: string;
+  // Safely collected patient display name (volunteered by the patient), if any.
+  patientDisplayName: string | null;
   // Raw conversation lifecycle status from the DB: open | closed | booked | lost.
   dbStatus: string;
   createdAt: Date;
@@ -32,12 +34,25 @@ export type FrontDeskConversation = {
   frontDeskOutcome: FrontDeskOutcome | null;
   frontDeskNote: string | null;
   frontDeskOutcomeAt: Date | null;
+  // Safety / anti-spam signals (front-desk-safe; no SIDs or payloads).
+  smsSafetyNoticeSentAt: Date | null;
+  automationMutedUntil: Date | null;
+  highVolumeFlaggedAt: Date | null;
+  unansweredAfterAutomationCount: number;
+  // Workspace queue state.
+  workspaceArchivedAt: Date | null;
+  workspaceHandledAt: Date | null;
+  // Clinic-scoped PATIENT number block (never the clinic's Twilio number).
+  isBlocked: boolean;
+  blockedAt: Date | null;
   messages: FrontDeskMessage[];
 };
 
 // List a clinic's patient conversations (most recently active first) with their
 // message timelines. Two queries (conversations, then their messages) grouped in
-// memory — fine for MVP volume and avoids per-row round-trips.
+// memory — fine for MVP volume and avoids per-row round-trips. The left join on
+// clinic_blocked_patient_numbers marks conversations whose PATIENT number is
+// blocked for this clinic.
 export async function listClinicConversations(
   clinicId: string,
   limit = 100,
@@ -48,19 +63,35 @@ export async function listClinicConversations(
     {
       id: string;
       patient_phone: string;
+      patient_display_name: string | null;
       status: string;
       created_at: Date;
       last_message_at: Date | null;
       front_desk_outcome: string | null;
       front_desk_note: string | null;
       front_desk_outcome_at: Date | null;
+      sms_safety_notice_sent_at: Date | null;
+      automation_muted_until: Date | null;
+      high_volume_flagged_at: Date | null;
+      unanswered_after_automation_count: number;
+      workspace_archived_at: Date | null;
+      workspace_handled_at: Date | null;
+      blocked_at: Date | null;
     }[]
   >`
-    select id, patient_phone, status, created_at, last_message_at,
-           front_desk_outcome, front_desk_note, front_desk_outcome_at
-    from public.patient_conversations
-    where clinic_id = ${clinicId}
-    order by coalesce(last_message_at, created_at) desc
+    select c.id, c.patient_phone, c.patient_display_name, c.status, c.created_at,
+           c.last_message_at, c.front_desk_outcome, c.front_desk_note,
+           c.front_desk_outcome_at, c.sms_safety_notice_sent_at,
+           c.automation_muted_until, c.high_volume_flagged_at,
+           c.unanswered_after_automation_count,
+           c.workspace_archived_at, c.workspace_handled_at,
+           b.blocked_at
+    from public.patient_conversations c
+    left join public.clinic_blocked_patient_numbers b
+      on b.clinic_id = c.clinic_id
+     and b.phone_number = c.patient_phone
+    where c.clinic_id = ${clinicId}
+    order by coalesce(c.last_message_at, c.created_at) desc
     limit ${limit}
   `;
   if (convos.length === 0) return [];
@@ -100,14 +131,127 @@ export async function listClinicConversations(
   return convos.map((c) => ({
     id: c.id,
     patientPhone: c.patient_phone,
+    patientDisplayName: c.patient_display_name,
     dbStatus: c.status,
     createdAt: c.created_at,
     lastMessageAt: c.last_message_at,
     frontDeskOutcome: (c.front_desk_outcome as FrontDeskOutcome | null) ?? null,
     frontDeskNote: c.front_desk_note,
     frontDeskOutcomeAt: c.front_desk_outcome_at,
+    smsSafetyNoticeSentAt: c.sms_safety_notice_sent_at,
+    automationMutedUntil: c.automation_muted_until,
+    highVolumeFlaggedAt: c.high_volume_flagged_at,
+    unansweredAfterAutomationCount: c.unanswered_after_automation_count ?? 0,
+    workspaceArchivedAt: c.workspace_archived_at,
+    workspaceHandledAt: c.workspace_handled_at,
+    isBlocked: c.blocked_at !== null,
+    blockedAt: c.blocked_at,
     messages: byConvo.get(c.id) ?? [],
   }));
+}
+
+export type WorkspaceActor = {
+  profileId: string | null;
+  email: string | null;
+};
+
+// Find one conversation's id + patient phone, clinic-scoped. Returns null when
+// the conversation does not belong to the clinic (callers treat as not found —
+// never reveal cross-clinic existence).
+export async function findClinicConversationPhone(
+  clinicId: string,
+  conversationId: string,
+): Promise<{ id: string; patientPhone: string } | null> {
+  const sql = getDb();
+  const rows = await sql<{ id: string; patient_phone: string }[]>`
+    select id, patient_phone
+    from public.patient_conversations
+    where id = ${conversationId}
+      and clinic_id = ${clinicId}
+    limit 1
+  `;
+  const row = rows[0];
+  return row ? { id: row.id, patientPhone: row.patient_phone } : null;
+}
+
+// Save ONLY the internal staff note (no outcome required). Empty note clears it.
+export async function saveFrontDeskNote(params: {
+  clinicId: string;
+  conversationId: string;
+  note: string | null;
+}): Promise<{ note: string | null } | null> {
+  const sql = getDb();
+  const rows = await sql<{ front_desk_note: string | null }[]>`
+    update public.patient_conversations
+    set front_desk_note = ${params.note},
+        updated_at = now()
+    where id = ${params.conversationId}
+      and clinic_id = ${params.clinicId}
+    returning front_desk_note
+  `;
+  const row = rows[0];
+  return row ? { note: row.front_desk_note } : null;
+}
+
+// Archive = hide from the active workspace queue. Reversible; deletes nothing.
+export async function archiveConversation(params: {
+  clinicId: string;
+  conversationId: string;
+  actor: WorkspaceActor;
+}): Promise<{ archivedAt: Date } | null> {
+  const sql = getDb();
+  const rows = await sql<{ workspace_archived_at: Date }[]>`
+    update public.patient_conversations
+    set workspace_archived_at = coalesce(workspace_archived_at, now()),
+        workspace_archived_by_profile_id = coalesce(workspace_archived_by_profile_id, ${params.actor.profileId}),
+        workspace_archived_by_email = coalesce(workspace_archived_by_email, ${params.actor.email}),
+        updated_at = now()
+    where id = ${params.conversationId}
+      and clinic_id = ${params.clinicId}
+    returning workspace_archived_at
+  `;
+  const row = rows[0];
+  return row ? { archivedAt: row.workspace_archived_at } : null;
+}
+
+// Reopen = put an archived conversation back in the active queue.
+export async function reopenConversation(params: {
+  clinicId: string;
+  conversationId: string;
+}): Promise<{ reopened: true } | null> {
+  const sql = getDb();
+  const rows = await sql<{ id: string }[]>`
+    update public.patient_conversations
+    set workspace_archived_at = null,
+        workspace_archived_by_profile_id = null,
+        workspace_archived_by_email = null,
+        updated_at = now()
+    where id = ${params.conversationId}
+      and clinic_id = ${params.clinicId}
+    returning id
+  `;
+  return rows[0] ? { reopened: true } : null;
+}
+
+// Mark handled (does NOT set booked/no-booked outcomes and does not archive).
+export async function markConversationHandled(params: {
+  clinicId: string;
+  conversationId: string;
+  actor: WorkspaceActor;
+}): Promise<{ handledAt: Date } | null> {
+  const sql = getDb();
+  const rows = await sql<{ workspace_handled_at: Date }[]>`
+    update public.patient_conversations
+    set workspace_handled_at = coalesce(workspace_handled_at, now()),
+        workspace_handled_by_profile_id = coalesce(workspace_handled_by_profile_id, ${params.actor.profileId}),
+        workspace_handled_by_email = coalesce(workspace_handled_by_email, ${params.actor.email}),
+        updated_at = now()
+    where id = ${params.conversationId}
+      and clinic_id = ${params.clinicId}
+    returning workspace_handled_at
+  `;
+  const row = rows[0];
+  return row ? { handledAt: row.workspace_handled_at } : null;
 }
 
 export type SavedFrontDeskOutcome = {

@@ -10,6 +10,7 @@ import {
   touchConversation,
 } from "../db/conversations";
 import { isPhoneOptedOut } from "../db/opt-outs";
+import { isPatientNumberBlocked } from "../db/patient-blocks";
 import { getClinicConversationConfig } from "../db/sms-conversation-settings";
 import { evaluateSmsReadinessForLiveSend } from "../db/sms-readiness";
 import { evaluateRecoverySendGate } from "../sms-recovery/live-send-evaluation";
@@ -102,11 +103,18 @@ export async function maybeSendConversationAutoReply(
   }
 
   // Gather the remaining (DB-backed) inputs for the shared decision.
-  const [hasPrior, optedOut, readiness] = await Promise.all([
+  const [hasPrior, optedOut, readiness, patientBlocked] = await Promise.all([
     hasPriorRecoveryOutbound(input.conversationId),
     isPhoneOptedOut(input.clinic.id, input.patientPhone),
     evaluateSmsReadinessForLiveSend(input.clinic.id, input.twilioPhone),
+    isPatientNumberBlocked(input.clinic.id, input.patientPhone),
   ]);
+
+  // Clinic-scoped PATIENT number block (front-desk "Block number"): no
+  // follow-ups, no thanks courtesy, no safety prefix. Inbound messages were
+  // already recorded by the webhook; STOP/START/HELP handling is untouched.
+  if (patientBlocked) return skipAutoReply(input, "patient_number_blocked");
+
   const gate = evaluateRecoverySendGate({
     mode: smsConfig.mode,
     allowedTestNumbers: smsConfig.allowedNumbers,

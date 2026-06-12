@@ -11,7 +11,10 @@ export type WorkspaceStatus =
   | "booked"
   | "closed"
   | "no_appointment_booked"
-  | "could_not_reach_patient";
+  | "could_not_reach_patient"
+  | "handled"
+  | "archived"
+  | "blocked";
 
 export type WorkspaceTimelineItem = {
   id: string;
@@ -20,9 +23,22 @@ export type WorkspaceTimelineItem = {
   at: string; // ISO timestamp
 };
 
-// The front-desk-safe view of a patient request. Fields that have no source in
-// the current schema (name, request type, preferred time, summary) are null and
-// never invented or AI-generated.
+// Secondary flags shown alongside the primary status. Derived only — never
+// guessed: safety from classification/state, the rest from real columns.
+export type WorkspaceCardFlags = {
+  safetyConcern: boolean;
+  automationPaused: boolean;
+  highVolume: boolean;
+  blocked: boolean;
+  archived: boolean;
+  handled: boolean;
+};
+
+export type WorkspaceFilter = "active" | "archived" | "blocked";
+
+// The front-desk-safe view of a patient request. Structured fields (request
+// type, preferred time, safety/payment labels) are derived deterministically
+// from inbound text and conversation state — never invented or AI-generated.
 export type PatientRequestCard = {
   // Opaque key for React/selection only. Not an internal ID shown to the user.
   id: string;
@@ -30,10 +46,17 @@ export type PatientRequestCard = {
   patientName: string | null;
   requestType: string | null;
   preferredTime: string | null;
+  // Deterministic display labels (see lib/workspace/request-summary.ts).
+  safetyConcern: string | null;
+  paymentInsurance: string | null;
   summary: string | null;
   latestMessage: string | null;
   latestMessageDirection: "inbound" | "outbound" | null;
   status: WorkspaceStatus;
+  // Status without block/archive/handled precedence — used by the client to
+  // recompute `status` after queue actions without re-deriving from the DB.
+  baseStatus: WorkspaceStatus;
+  flags: WorkspaceCardFlags;
   createdAt: string; // ISO
   lastActivityAt: string; // ISO
   timeline: WorkspaceTimelineItem[];
@@ -47,6 +70,50 @@ export type PatientRequestCard = {
   frontDeskNote?: string | null;
   frontDeskOutcomeAt?: string | null; // ISO
 };
+
+export const NO_FLAGS: WorkspaceCardFlags = {
+  safetyConcern: false,
+  automationPaused: false,
+  highVolume: false,
+  blocked: false,
+  archived: false,
+  handled: false,
+};
+
+// Primary status precedence: Blocked > Archived > Handled > saved outcome >
+// timeline-derived needs-follow-up / waiting-for-patient.
+export function applyFlagsToStatus(
+  flags: Pick<WorkspaceCardFlags, "blocked" | "archived" | "handled">,
+  baseStatus: WorkspaceStatus,
+): WorkspaceStatus {
+  if (flags.blocked) return "blocked";
+  if (flags.archived) return "archived";
+  if (flags.handled) return "handled";
+  return baseStatus;
+}
+
+export function derivePrimaryWorkspaceStatus(input: {
+  flags: Pick<WorkspaceCardFlags, "blocked" | "archived" | "handled">;
+  outcome: FrontDeskOutcome | null | undefined;
+  dbStatus: string;
+  timeline: { direction: "inbound" | "outbound" }[];
+}): WorkspaceStatus {
+  return applyFlagsToStatus(
+    input.flags,
+    workspaceStatusForOutcome(input.outcome) ??
+      deriveWorkspaceStatus(input.dbStatus, input.timeline),
+  );
+}
+
+// Queue filter membership: blocked wins over archived; everything else is
+// active. Handled conversations stay in Active until archived.
+export function workspaceFilterForCard(
+  flags: Pick<WorkspaceCardFlags, "blocked" | "archived">,
+): WorkspaceFilter {
+  if (flags.blocked) return "blocked";
+  if (flags.archived) return "archived";
+  return "active";
+}
 
 // Conservative status derivation from existing data only. We never guess beyond
 // what the messages/lifecycle clearly support. `ready_to_call` is part of the
@@ -104,7 +171,17 @@ export const WORKSPACE_STATUS_META: Record<
   closed: { label: "Closed", badge: "badge-neutral" },
   no_appointment_booked: { label: "No appointment booked", badge: "badge-neutral" },
   could_not_reach_patient: { label: "Could not reach patient", badge: "badge-neutral" },
+  handled: { label: "Handled", badge: "badge-success" },
+  archived: { label: "Archived", badge: "badge-neutral" },
+  blocked: { label: "Blocked", badge: "badge-warning" },
 };
+
+// Secondary flag chips (safety/automation/volume) shown next to the status.
+export const WORKSPACE_FLAG_META = {
+  safetyConcern: { label: "Safety concern", badge: "badge-warning" },
+  automationPaused: { label: "Automation paused", badge: "badge-neutral" },
+  highVolume: { label: "High volume", badge: "badge-warning" },
+} as const;
 
 export const NOT_PROVIDED = "Not provided yet";
 

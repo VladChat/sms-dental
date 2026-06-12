@@ -20,6 +20,7 @@ import {
 } from "../sms-recovery/templates";
 import { buildRecoverySmsBodyFromConversationConfig } from "../sms-recovery/send-body";
 import { getClinicConversationConfig } from "../db/sms-conversation-settings";
+import { isPatientNumberBlocked } from "../db/patient-blocks";
 import { normalizePhone } from "../phone/normalize";
 import { logger } from "../logging/logger";
 
@@ -88,6 +89,18 @@ export async function sendRecoverySms(
   const isOptedOut = await isPhoneOptedOut(input.clinic.id, input.patientPhone);
   if (isOptedOut) {
     return { sent: false, reason: "opted_out" };
+  }
+
+  // Guard 4b: clinic-scoped PATIENT number block (front-desk "Block number").
+  // This blocks the caller's number for this clinic only — it never touches
+  // the clinic's Twilio business number and is separate from carrier opt-outs.
+  const patientBlocked = await isPatientNumberBlocked(input.clinic.id, input.patientPhone);
+  if (patientBlocked) {
+    logger.info("twilio.sms.patient_number_blocked", {
+      clinicId: input.clinic.id,
+      patientPhoneLast4: input.patientPhone.slice(-4),
+    });
+    return { sent: false, reason: "patient_number_blocked" };
   }
 
   // Guard 5: duplicate suppression — no repeat SMS within the configured window.

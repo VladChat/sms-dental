@@ -7,8 +7,10 @@ import {
   type FrontDeskConversation,
 } from "../../lib/db/front-desk";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
+import { buildRequestSummary, UNKNOWN_VALUE } from "../../lib/workspace/request-summary";
 import { Workspace } from "./_components/Workspace";
 import {
+  applyFlagsToStatus,
   deriveWorkspaceStatus,
   workspaceStatusForOutcome,
   type PatientRequestCard,
@@ -23,10 +25,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-// Map a front-desk-safe conversation into a UI card. A saved front-desk outcome
-// is the primary source of the card's status; otherwise we fall back to the
-// conservative timeline/lifecycle derivation. Name/request-type/preferred-time/
-// summary have no source columns yet, so they stay null and are never inferred.
+// Map a front-desk-safe conversation into a UI card. The structured fields
+// (request type, preferred time, safety/payment labels) come from deterministic
+// keyword derivation over INBOUND text only — never invented, never AI. Name
+// comes from the safely collected patient_display_name; missing values render
+// as Unknown / None detected in the UI.
 function toCard(c: FrontDeskConversation): PatientRequestCard {
   const timeline = c.messages.map((m) => ({
     id: m.id,
@@ -35,18 +38,38 @@ function toCard(c: FrontDeskConversation): PatientRequestCard {
     at: m.createdAt.toISOString(),
   }));
   const latest = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+  const summary = buildRequestSummary({
+    inboundTexts: c.messages.filter((m) => m.direction === "inbound").map((m) => m.body),
+    safetyNoticeSent: c.smsSafetyNoticeSentAt !== null,
+  });
+  const now = Date.now();
+  const flags = {
+    safetyConcern: summary.safetyConcern !== "None detected",
+    automationPaused:
+      c.automationMutedUntil !== null && c.automationMutedUntil.getTime() > now,
+    highVolume: c.highVolumeFlaggedAt !== null,
+    blocked: c.isBlocked,
+    archived: c.workspaceArchivedAt !== null,
+    handled: c.workspaceHandledAt !== null,
+  };
+  const baseStatus =
+    workspaceStatusForOutcome(c.frontDeskOutcome) ??
+    deriveWorkspaceStatus(c.dbStatus, timeline);
   return {
     id: c.id,
     callerPhone: c.patientPhone,
-    patientName: null,
-    requestType: null,
-    preferredTime: null,
+    patientName: (c.patientDisplayName ?? "").trim().length > 0 ? c.patientDisplayName : null,
+    requestType: summary.request === UNKNOWN_VALUE ? null : summary.request,
+    preferredTime: summary.preferredTime === UNKNOWN_VALUE ? null : summary.preferredTime,
+    safetyConcern: summary.safetyConcern,
+    paymentInsurance:
+      summary.paymentInsurance === UNKNOWN_VALUE ? null : summary.paymentInsurance,
     summary: null,
     latestMessage: latest?.body ?? null,
     latestMessageDirection: latest?.direction ?? null,
-    status:
-      workspaceStatusForOutcome(c.frontDeskOutcome) ??
-      deriveWorkspaceStatus(c.dbStatus, timeline),
+    status: applyFlagsToStatus(flags, baseStatus),
+    baseStatus,
+    flags,
     createdAt: c.createdAt.toISOString(),
     lastActivityAt: (c.lastMessageAt ?? c.createdAt).toISOString(),
     timeline,

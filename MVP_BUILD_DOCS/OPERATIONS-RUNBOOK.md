@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-12 (SMS settings split into Voice greeting / SMS texts / Limits & anti-spam admin panels; editable safety-notice and thanks-courtesy texts via template_role='special_reply'; anti-spam automation pause: 6 unanswered -> 24h mute, 10 unanswered -> high-volume flag)
+Last updated: 2026-06-12 (front-desk Workspace redesigned into an operational queue with Active/Archived/Blocked filters, deterministic request details, clinic-scoped PATIENT-number blocks that suppress automation while keeping inbound records, and archive/handled/internal-note actions)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3605,6 +3605,48 @@ unchanged. No AI runtime — everything is deterministic.
   saved default-like values from `clinic_sms_message_templates`. It deletes
   default-like initial and voice rows, sets default-like follow-up `body_text`
   to NULL, preserves follow-up `enabled`, and leaves true custom text untouched.
+
+### Front-desk Workspace queue + patient-number blocks (2026-06-12)
+
+- `/workspace` is an operational front-desk queue: Active / Archived / Blocked
+  filter pills, patient header (name-or-Unknown, phone once, Call patient
+  `tel:` link, Mark handled / Archive / Block number / Reopen / Unblock),
+  always-rendered deterministic request details (Name, Phone, Request,
+  Preferred appointment time, Safety concern, Payment / insurance, First seen,
+  Last activity — `lib/workspace/request-summary.ts`, inbound text only, no
+  AI, fail-closed `Unknown` / `None detected`), a conversation preview showing
+  the last 2 messages with a full-timeline toggle, and a staff-only Internal
+  note saved independently (`save_note`). The old "Latest patient reply" block
+  and the big Outcome radio form are removed; `/api/workspace/outcome` remains
+  for compatibility only.
+- **Block number = the PATIENT/CALLER number for one clinic.** Never the
+  clinic's Twilio business number, never a Twilio mutation, never deletes
+  history, never stored in `opt_outs`. Table
+  `public.clinic_blocked_patient_numbers` (unique clinic+phone, RLS enabled,
+  service-role only). `sendRecoverySms` and `maybeSendConversationAutoReply`
+  both fail closed with reason `patient_number_blocked` (no initial SMS, no
+  follow-ups, no thanks courtesy, no safety prefix). Inbound messages from
+  blocked numbers are still recorded by the webhook and STOP/START/HELP is
+  unchanged. Blocking archives the conversation; unblocking sends nothing and
+  leaves it archived until reopened.
+- **Archive / Mark handled** are reversible queue states on
+  `patient_conversations` (`workspace_archived_at`, `workspace_handled_at` +
+  actor columns) — nothing is deleted. Primary status precedence:
+  Blocked > Archived > Handled > saved outcome > Needs follow-up / Waiting.
+  Secondary flags: Safety concern (classification/state), Automation paused
+  (`automation_muted_until` in the future), High volume
+  (`high_volume_flagged_at`).
+- Actions API: `POST /api/workspace/conversation-action`
+  (`save_note|archive|reopen|mark_handled|block_number|unblock_number`),
+  guarded by `resolveAuthClinicAccess`, clinic-scoped updates only, sample IDs
+  rejected, UUIDs validated, 300-char note cap, cross-clinic conversations
+  indistinguishable from missing. The UI requires an inline confirmation
+  before blocking and labels it as the patient's number, not the office's.
+- Migration `20260625000100_workspace_queue_and_patient_blocks.sql`
+  (additive/idempotent: block table + workspace state columns; no deletes).
+- Workspace data reads stay minimum-necessary: `lib/db/front-desk.ts` adds
+  `patient_display_name`, safety/anti-spam signals, workspace state, and the
+  block join — never Twilio SIDs, raw payloads, billing, or compliance fields.
 
 ### Default-safe / verify
 

@@ -7576,3 +7576,75 @@ Production migration:
 No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
 Stripe change, no phone-number lifecycle change, no production env change, no
 secret printing, no template body dump, and `.qwen/` remained untouched.
+
+---
+
+## 2026-06-12 — Front-desk Workspace operational queue redesign
+
+Rebuilt `/workspace` into a real front-desk patient-request queue with archive/
+handled/block actions and deterministic request details — without sending SMS
+or placing calls.
+
+What changed:
+
+- Queue with Active / Archived / Blocked filter pills; cards show name (or
+  phone), status badge, flags (Safety concern, Automation paused, High volume),
+  last-message snippet with direction, and last activity.
+- Patient header card: name or Unknown, phone shown once, status + flags,
+  primary Call patient (`tel:` link), and Mark handled / Archive / Block
+  number (Reopen when archived, Unblock number when blocked).
+- Request details card always renders Name, Phone, Request, Preferred
+  appointment time, Safety concern, Payment / insurance, First seen, and Last
+  activity. Fields derive deterministically from INBOUND text and conversation
+  state via `lib/workspace/request-summary.ts` (no AI; fail-closed Unknown /
+  None detected).
+- Conversation preview shows the last 2 messages immediately with Patient /
+  Your office labels; Show full conversation toggles the full timeline. The
+  old "Latest patient reply" block and the big Outcome radio form are removed;
+  `/api/workspace/outcome` remains for backward compatibility only.
+- Internal note (renamed from Note) saves independently via the new
+  `POST /api/workspace/conversation-action` route
+  (`save_note|archive|reopen|mark_handled|block_number|unblock_number`):
+  clinic-scoped, sample IDs rejected, UUID + 300-char note validation,
+  cross-clinic conversations indistinguishable from missing.
+- "Block number" blocks the PATIENT/CALLER number for this clinic only via
+  `public.clinic_blocked_patient_numbers` (unique clinic+phone, RLS enabled,
+  no policies). It never touches the clinic's Twilio business number, never
+  mutates Twilio, never deletes history, and is separate from carrier
+  opt-outs. `sendRecoverySms` and `maybeSendConversationAutoReply` now fail
+  closed with reason `patient_number_blocked`; inbound messages from blocked
+  numbers are still recorded and STOP/START/HELP is unchanged. Blocking
+  archives the conversation; unblocking sends nothing and keeps it archived.
+  The UI requires inline confirmation naming the patient number explicitly.
+- `lib/db/front-desk.ts` now also returns patient_display_name, safety and
+  anti-spam signals, workspace archive/handled state, and the block join —
+  still no Twilio SIDs, raw payloads, billing, or compliance fields.
+- Samples rebuilt to the new structure (appointment, pain/urgent, insurance,
+  handled/archived) and collapse by default when real conversations exist.
+- Added migration
+  `supabase/migrations/20260625000100_workspace_queue_and_patient_blocks.sql`.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 211 tests.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+Production migration:
+
+- Supabase project verified: `qfjpvbvfvhbtebwivcdc`.
+- Applied `20260625000100_workspace_queue_and_patient_blocks.sql` via the
+  Supabase management apply-migration path and recorded migration history
+  version `20260625000100` (name `workspace_queue_and_patient_blocks`).
+- Post-migration verification: `public.clinic_blocked_patient_numbers` exists
+  with RLS enabled and zero policies (service-role only), and all six
+  workspace archive/handled columns exist on `patient_conversations`. No
+  patient data was printed.
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no production env change, no
+secret printing, no patient data printed, and `.qwen/` remained untouched.

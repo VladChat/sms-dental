@@ -1,7 +1,59 @@
 # Front Desk Workspace
 
-Status: Active (reply review + outcome recording MVP)
-Last updated: 2026-06-10
+Status: Active (operational patient-request queue)
+Last updated: 2026-06-12
+
+## 0. 2026-06-12 — Operational queue redesign
+
+`/workspace` is now a real front-desk queue that answers: who is this patient,
+what do they want, what did they say, and what should staff do next.
+
+- **Queue (left column).** Filter pills: Active / Archived / Blocked. Each card
+  shows the patient name (or phone when unknown), the phone as secondary when a
+  name exists, the primary status badge, secondary flags (Safety concern,
+  Automation paused, High volume), the last message snippet with direction, and
+  last activity.
+- **Patient header (right panel).** Name or `Unknown`, the phone once,
+  status + flags, primary **Call patient** (a normal `tel:` link), and
+  secondary actions: **Mark handled**, **Archive**, **Block number** (or
+  **Reopen** when archived / **Unblock number** when blocked).
+- **Request details.** The same deterministic fields always render: Name,
+  Phone, Request, Preferred appointment time, Safety concern,
+  Payment / insurance, First seen, Last activity. Values come from
+  `lib/workspace/request-summary.ts` — simple keyword matches over INBOUND
+  text plus conversation state. No AI, no invented facts; missing values show
+  `Unknown` (or `None detected` for safety).
+- **Conversation preview.** The last 2 messages render immediately with
+  Patient / Your office labels and timestamps; **Show full conversation**
+  toggles the full timeline. The old "Latest patient reply" block is gone.
+- **Internal note.** Staff-only note saved independently via
+  `/api/workspace/conversation-action` (`save_note`) — no outcome required.
+  The big Outcome radio form was removed from the layout; the legacy
+  `/api/workspace/outcome` route remains for compatibility only.
+- **Statuses.** Primary precedence: Blocked > Archived > Handled > saved
+  outcome > Needs follow-up / Waiting for patient. Secondary flags: Safety
+  concern, Automation paused, High volume.
+
+### Block number vs Archive (terminology)
+
+- **Block number** blocks the PATIENT/CALLER phone number for THIS clinic. It
+  never releases or changes the clinic's own Twilio business number, never
+  mutates Twilio, and never deletes history. A block suppresses future
+  automation (initial recovery SMS, follow-ups, thanks courtesy, safety
+  prefix — skip/return reason `patient_number_blocked`) while inbound messages
+  keep being recorded for audit. Blocks live in
+  `public.clinic_blocked_patient_numbers` (unique per clinic + phone,
+  RLS-enabled, service-role only) and are an operator action separate from
+  carrier opt-outs. STOP/START/HELP handling is unchanged. Blocking archives
+  the conversation; **Unblock number** clears the block, sends nothing, and
+  leaves the conversation archived until reopened. The UI requires an inline
+  confirmation that names the patient number explicitly.
+- **Archive** hides a conversation from the active queue
+  (`workspace_archived_at`). It deletes nothing and is reversible with
+  **Reopen**. **Mark handled** stamps `workspace_handled_at` without implying
+  booked/no-booked.
+- Samples show only when no real conversations exist; with real conversations
+  they collapse behind a "Show samples" strip.
 
 The front-desk workspace (`/workspace`) is the operational view where clinic
 staff review the results of missed-call SMS recovery — patient replies and

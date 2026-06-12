@@ -21,6 +21,8 @@
     "tests/sms-recovery-send-gate.test.ts",
     "tests/voice-greeting-config.test.ts",
     "tests/workspace-patient-replies.test.ts",
+    "tests/workspace-request-summary.test.ts",
+    "tests/workspace-queue.test.ts",
     "tests/ai-knowledge-facts.test.ts",
     "tests/ai-knowledge-website-scan.test.ts",
     "tests/sms-conversation-templates.test.ts",
