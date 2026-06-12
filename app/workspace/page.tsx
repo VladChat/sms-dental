@@ -7,13 +7,15 @@ import {
   type FrontDeskConversation,
 } from "../../lib/db/front-desk";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
-import { buildRequestSummary, UNKNOWN_VALUE } from "../../lib/workspace/request-summary";
+import { buildWorkspaceRequestSummary } from "../../lib/workspace/request-summary";
+import { normalizeWorkspaceDisplayName } from "../../lib/workspace/display-name";
 import { Workspace } from "./_components/Workspace";
 import {
   applyFlagsToStatus,
   deriveWorkspaceStatus,
   workspaceStatusForOutcome,
   type PatientRequestCard,
+  type WorkspaceCardChip,
 } from "./_components/workspace-types";
 
 export const dynamic = "force-dynamic";
@@ -25,11 +27,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-// Map a front-desk-safe conversation into a UI card. The structured fields
-// (request type, preferred time, safety/payment labels) come from deterministic
-// keyword derivation over INBOUND text only — never invented, never AI. Name
-// comes from the safely collected patient_display_name; missing values render
-// as Unknown / None detected in the UI.
+// Map a front-desk-safe conversation into a UI card. The summary headline and
+// chips come from deterministic keyword derivation over INBOUND text only —
+// never invented, never AI (a future stored AI summary could replace the
+// headline via buildWorkspaceRequestSummary's aiSummary hook). The name is
+// sanitized: request-like phrases stored as a display name render as
+// "Not provided" instead of a fake name.
 function toCard(c: FrontDeskConversation): PatientRequestCard {
   const timeline = c.messages.map((m) => ({
     id: m.id,
@@ -38,13 +41,13 @@ function toCard(c: FrontDeskConversation): PatientRequestCard {
     at: m.createdAt.toISOString(),
   }));
   const latest = timeline.length > 0 ? timeline[timeline.length - 1] : null;
-  const summary = buildRequestSummary({
+  const summary = buildWorkspaceRequestSummary({
     inboundTexts: c.messages.filter((m) => m.direction === "inbound").map((m) => m.body),
     safetyNoticeSent: c.smsSafetyNoticeSentAt !== null,
   });
   const now = Date.now();
   const flags = {
-    safetyConcern: summary.safetyConcern !== "None detected",
+    safetyConcern: summary.chips.some((chip) => chip.id === "pain_urgent"),
     automationPaused:
       c.automationMutedUntil !== null && c.automationMutedUntil.getTime() > now,
     highVolume: c.highVolumeFlaggedAt !== null,
@@ -52,19 +55,26 @@ function toCard(c: FrontDeskConversation): PatientRequestCard {
     archived: c.workspaceArchivedAt !== null,
     handled: c.workspaceHandledAt !== null,
   };
+  // Signal chips only — no empty placeholders. Automation chips join the
+  // text-derived ones so staff see everything useful in one row.
+  const summaryChips: WorkspaceCardChip[] = [
+    ...summary.chips.map((chip) => ({ id: chip.id, label: chip.label }) as WorkspaceCardChip),
+    ...(flags.automationPaused
+      ? [{ id: "automation_paused", label: "Automation paused" } as WorkspaceCardChip]
+      : []),
+    ...(flags.highVolume
+      ? [{ id: "high_volume", label: "High volume" } as WorkspaceCardChip]
+      : []),
+  ];
   const baseStatus =
     workspaceStatusForOutcome(c.frontDeskOutcome) ??
     deriveWorkspaceStatus(c.dbStatus, timeline);
   return {
     id: c.id,
     callerPhone: c.patientPhone,
-    patientName: (c.patientDisplayName ?? "").trim().length > 0 ? c.patientDisplayName : null,
-    requestType: summary.request === UNKNOWN_VALUE ? null : summary.request,
-    preferredTime: summary.preferredTime === UNKNOWN_VALUE ? null : summary.preferredTime,
-    safetyConcern: summary.safetyConcern,
-    paymentInsurance:
-      summary.paymentInsurance === UNKNOWN_VALUE ? null : summary.paymentInsurance,
-    summary: null,
+    patientName: normalizeWorkspaceDisplayName(c.patientDisplayName),
+    summaryHeadline: summary.headline,
+    summaryChips,
     latestMessage: latest?.body ?? null,
     latestMessageDirection: latest?.direction ?? null,
     status: applyFlagsToStatus(flags, baseStatus),

@@ -214,7 +214,10 @@ export async function archiveConversation(params: {
   return row ? { archivedAt: row.workspace_archived_at } : null;
 }
 
-// Reopen = put an archived conversation back in the active queue.
+// Reopen = put a handled/archived conversation back in the active queue.
+// Clears BOTH workspace states plus the saved appointment outcome (and resets
+// the lifecycle status to open) so a reopened request never shows a stale
+// booked / no-appointment state in Active. Nothing is deleted.
 export async function reopenConversation(params: {
   clinicId: string;
   conversationId: string;
@@ -225,6 +228,12 @@ export async function reopenConversation(params: {
     set workspace_archived_at = null,
         workspace_archived_by_profile_id = null,
         workspace_archived_by_email = null,
+        workspace_handled_at = null,
+        workspace_handled_by_profile_id = null,
+        workspace_handled_by_email = null,
+        front_desk_outcome = null,
+        front_desk_outcome_at = null,
+        status = 'open',
         updated_at = now()
     where id = ${params.conversationId}
       and clinic_id = ${params.clinicId}
@@ -233,25 +242,60 @@ export async function reopenConversation(params: {
   return rows[0] ? { reopened: true } : null;
 }
 
-// Mark handled (does NOT set booked/no-booked outcomes and does not archive).
+// Mark handled: stamps the workspace handled state AND records whether an
+// appointment was booked (front_desk_outcome + lifecycle status). Handled is
+// its own queue section — this does not archive.
 export async function markConversationHandled(params: {
   clinicId: string;
   conversationId: string;
+  appointmentBooked: boolean;
   actor: WorkspaceActor;
-}): Promise<{ handledAt: Date } | null> {
+}): Promise<{ handledAt: Date; outcome: FrontDeskOutcome } | null> {
   const sql = getDb();
-  const rows = await sql<{ workspace_handled_at: Date }[]>`
+  const outcome: FrontDeskOutcome = params.appointmentBooked
+    ? "appointment_booked"
+    : "no_appointment_booked";
+  const status = FRONT_DESK_OUTCOME_TO_STATUS[outcome];
+  const rows = await sql<{ workspace_handled_at: Date; front_desk_outcome: string }[]>`
     update public.patient_conversations
     set workspace_handled_at = coalesce(workspace_handled_at, now()),
         workspace_handled_by_profile_id = coalesce(workspace_handled_by_profile_id, ${params.actor.profileId}),
         workspace_handled_by_email = coalesce(workspace_handled_by_email, ${params.actor.email}),
+        front_desk_outcome = ${outcome},
+        front_desk_outcome_at = now(),
+        status = ${status},
         updated_at = now()
     where id = ${params.conversationId}
       and clinic_id = ${params.clinicId}
-    returning workspace_handled_at
+    returning workspace_handled_at, front_desk_outcome
   `;
   const row = rows[0];
-  return row ? { handledAt: row.workspace_handled_at } : null;
+  if (!row) return null;
+  return {
+    handledAt: row.workspace_handled_at,
+    outcome: row.front_desk_outcome as FrontDeskOutcome,
+  };
+}
+
+// Save a staff-edited patient display name. Pass null to clear the name back
+// to "Not provided". The caller validates the name (conservative fail-closed
+// rules) before this write; this helper only persists clinic-scoped.
+export async function saveWorkspacePatientName(params: {
+  clinicId: string;
+  conversationId: string;
+  name: string | null;
+}): Promise<{ name: string | null } | null> {
+  const sql = getDb();
+  const rows = await sql<{ patient_display_name: string | null }[]>`
+    update public.patient_conversations
+    set patient_display_name = ${params.name},
+        updated_at = now()
+    where id = ${params.conversationId}
+      and clinic_id = ${params.clinicId}
+    returning patient_display_name
+  `;
+  const row = rows[0];
+  return row ? { name: row.patient_display_name } : null;
 }
 
 export type SavedFrontDeskOutcome = {

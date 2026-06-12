@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-12 (front-desk Workspace redesigned into an operational queue with Active/Archived/Blocked filters, deterministic request details, clinic-scoped PATIENT-number blocks that suppress automation while keeping inbound records, and archive/handled/internal-note actions)
+Last updated: 2026-06-12 (Workspace polish: Active queue + collapsed Handled/Archived/Blocked sections; Handled asks "Was appointment booked?"; inline name edit with Not provided placeholder and fail-closed sanitizing; one-line deterministic request summary with signal chips; exact action tooltips)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3637,11 +3637,31 @@ unchanged. No AI runtime — everything is deterministic.
   (`automation_muted_until` in the future), High volume
   (`high_volume_flagged_at`).
 - Actions API: `POST /api/workspace/conversation-action`
-  (`save_note|archive|reopen|mark_handled|block_number|unblock_number`),
+  (`save_note|save_name|archive|reopen|mark_handled|block_number|unblock_number`),
   guarded by `resolveAuthClinicAccess`, clinic-scoped updates only, sample IDs
   rejected, UUIDs validated, 300-char note cap, cross-clinic conversations
   indistinguishable from missing. The UI requires an inline confirmation
-  before blocking and labels it as the patient's number, not the office's.
+  before blocking; all block/unblock copy describes only the phone number.
+- **Workspace polish (2026-06-12):** Active queue renders first; Handled
+  (success), Archived (info), and Blocked (danger) are collapsed sections with
+  counts and client-side Load more (25/10 page sizes). Section priority:
+  blocked > archived > handled > active; Handled never appears in Active.
+  `mark_handled` now REQUIRES `appointmentBooked: boolean` (inline
+  "Was appointment booked?" Yes/No panel) and records
+  `front_desk_outcome(_at)` + lifecycle status with the handled stamp.
+  `reopen` clears handled + archived + outcome and resets status to `open` —
+  no stale booked state after reopen, nothing deleted. Names: missing/unsafe
+  stored display names render as `Not provided`
+  (`lib/workspace/display-name.ts` reuses the conservative extractor; request
+  text like "I Need Appointment" never displays as a name); staff edit names
+  inline via `save_name` (empty clears; digits/URLs/emails/phones/keywords
+  rejected). The request-details table was replaced by a one-line
+  deterministic summary (`buildWorkspaceRequestSummary`:
+  "Cleaning appointment · Tomorrow", fallback "Review conversation") plus
+  signal-only chips — no "None detected" placeholders, future `aiSummary`
+  hook present but nothing produces AI. Exact tooltips on all actions; block
+  confirm copy: "Block this phone number? Automated texts to this number will
+  stop, but messages stay saved."
 - Migration `20260625000100_workspace_queue_and_patient_blocks.sql`
   (additive/idempotent: block table + workspace state columns; no deletes).
 - Workspace data reads stay minimum-necessary: `lib/db/front-desk.ts` adds

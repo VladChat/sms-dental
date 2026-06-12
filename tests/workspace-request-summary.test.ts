@@ -3,14 +3,21 @@ import test from "node:test";
 
 import {
   buildRequestSummary,
+  buildWorkspaceRequestSummary,
   deriveRequestCategory,
   derivePaymentInsurance,
   derivePreferredTime,
   deriveSafetyConcern,
   NO_SAFETY_SIGNAL,
+  REVIEW_CONVERSATION,
   SAFETY_SIGNAL,
   UNKNOWN_VALUE,
 } from "../lib/workspace/request-summary";
+import {
+  NAME_NOT_PROVIDED,
+  normalizeWorkspaceDisplayName,
+  validateWorkspaceDisplayNameInput,
+} from "../lib/workspace/display-name";
 
 // ------------------------------------------------------------- categories
 
@@ -136,4 +143,121 @@ test("outbound office text is never used as the patient's request", () => {
   const summary = buildRequestSummary({ inboundTexts: [], safetyNoticeSent: false });
   assert.equal(summary.request, "Unknown");
   assert.equal(summary.preferredTime, UNKNOWN_VALUE);
+});
+
+// --------------------------------------------- workspace summary headline
+
+test("summary headline: category · time, deterministic only", () => {
+  assert.equal(
+    buildWorkspaceRequestSummary({ inboundTexts: ["I need a cleaning appointment tomorrow"] }).headline,
+    "Cleaning appointment · Tomorrow",
+  );
+  assert.equal(
+    buildWorkspaceRequestSummary({ inboundTexts: ["Can I book an appointment Tuesday morning?"] }).headline,
+    "Appointment request · Tuesday morning",
+  );
+  assert.equal(
+    buildWorkspaceRequestSummary({ inboundTexts: ["How much does a crown cost?"] }).headline,
+    "Payment question",
+  );
+  assert.equal(
+    buildWorkspaceRequestSummary({ inboundTexts: ["Do you take Delta Dental?"] }).headline,
+    "Insurance question",
+  );
+  assert.equal(
+    buildWorkspaceRequestSummary({
+      inboundTexts: ["I have bad tooth pain, can someone see me today? Need an appointment"],
+    }).headline,
+    "Mentions pain/urgent concern · Wants appointment",
+  );
+});
+
+test("summary headline falls back to Review conversation with no signal", () => {
+  assert.equal(buildWorkspaceRequestSummary({ inboundTexts: [] }).headline, REVIEW_CONVERSATION);
+  assert.equal(buildWorkspaceRequestSummary({ inboundTexts: [] }).source, "fallback");
+  assert.equal(
+    buildWorkspaceRequestSummary({ inboundTexts: ["Hello there"] }).headline,
+    REVIEW_CONVERSATION,
+  );
+  assert.equal(
+    buildWorkspaceRequestSummary({ inboundTexts: ["I need a cleaning"] }).source,
+    "deterministic",
+  );
+});
+
+test("summary chips appear only on real signals — never empty placeholders", () => {
+  assert.deepEqual(buildWorkspaceRequestSummary({ inboundTexts: ["Hello"] }).chips, []);
+  assert.deepEqual(
+    buildWorkspaceRequestSummary({ inboundTexts: ["I have tooth pain"] }).chips,
+    [{ id: "pain_urgent", label: "Pain/urgent" }],
+  );
+  assert.deepEqual(
+    buildWorkspaceRequestSummary({ inboundTexts: ["Do you take Aetna?"] }).chips,
+    [{ id: "insurance", label: "Insurance" }],
+  );
+  assert.deepEqual(
+    buildWorkspaceRequestSummary({ inboundTexts: ["can I pay cash"] }).chips,
+    [{ id: "payment", label: "Payment" }],
+  );
+  // Safety-notice state contributes the pain/urgent chip even without words.
+  assert.deepEqual(
+    buildWorkspaceRequestSummary({ inboundTexts: ["call me"], safetyNoticeSent: true }).chips,
+    [{ id: "pain_urgent", label: "Pain/urgent" }],
+  );
+});
+
+test("future AI summary hook wins over the deterministic line but nothing produces it", () => {
+  const ai = buildWorkspaceRequestSummary({
+    inboundTexts: ["I need a cleaning"],
+    aiSummary: "Wants a cleaning next week, prefers mornings.",
+  });
+  assert.equal(ai.headline, "Wants a cleaning next week, prefers mornings.");
+  assert.equal(ai.source, "ai");
+  // Blank AI summary falls straight through to the deterministic line.
+  assert.equal(
+    buildWorkspaceRequestSummary({ inboundTexts: ["I need a cleaning"], aiSummary: "  " }).source,
+    "deterministic",
+  );
+});
+
+// ------------------------------------------------- display name sanitizing
+
+test("missing or request-like stored names render as Not provided", () => {
+  assert.equal(NAME_NOT_PROVIDED, "Not provided");
+  assert.equal(normalizeWorkspaceDisplayName(null), null);
+  assert.equal(normalizeWorkspaceDisplayName("   "), null);
+  // Request text must never display as a name.
+  assert.equal(normalizeWorkspaceDisplayName("I Need Appointment"), null);
+  assert.equal(normalizeWorkspaceDisplayName("Need Cleaning"), null);
+  assert.equal(normalizeWorkspaceDisplayName("Appointment Tomorrow"), null);
+  assert.equal(normalizeWorkspaceDisplayName("Tooth Pain"), null);
+  // Safe names still display (title-cased).
+  assert.equal(normalizeWorkspaceDisplayName("Alex Sikorsky"), "Alex Sikorsky");
+  assert.equal(normalizeWorkspaceDisplayName("vlad"), "Vlad");
+  assert.equal(normalizeWorkspaceDisplayName("o'brien"), "O'Brien");
+});
+
+test("save_name validation: clear on empty, reject unsafe, normalize safe", () => {
+  assert.deepEqual(validateWorkspaceDisplayNameInput(""), { ok: true, value: null });
+  assert.deepEqual(validateWorkspaceDisplayNameInput("   "), { ok: true, value: null });
+  assert.deepEqual(validateWorkspaceDisplayNameInput(undefined), { ok: true, value: null });
+  assert.deepEqual(validateWorkspaceDisplayNameInput("alex sikorsky"), {
+    ok: true,
+    value: "Alex Sikorsky",
+  });
+
+  for (const bad of [
+    "I Need Appointment",
+    "call me at 2245329236",
+    "john@example.com",
+    "https://example.com",
+    "STOP",
+    "help",
+    "Need Cleaning Tomorrow",
+    "John Smith Williams Junior",
+    123 as unknown as string,
+  ]) {
+    const result = validateWorkspaceDisplayNameInput(bad);
+    assert.equal(result.ok, false, `must reject: ${String(bad)}`);
+  }
 });

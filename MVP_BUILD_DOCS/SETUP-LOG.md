@@ -7648,3 +7648,69 @@ Production migration:
 No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
 Stripe change, no phone-number lifecycle change, no production env change, no
 secret printing, no patient data printed, and `.qwen/` remained untouched.
+
+---
+
+## 2026-06-12 — Front-desk Workspace polish (sections, handled flow, name edit)
+
+Polished `/workspace` into a cleaner, faster front-desk screen — no migration
+needed (existing columns cover everything), no SMS sent, no calls placed.
+
+What changed:
+
+- Layout: Active queue first; Handled (success tone), Archived (info tone),
+  and Blocked (danger tone) are collapsed sections below with counts and
+  quick actions (Reopen / Unblock number). Section priority:
+  blocked > archived > handled > active; Handled never appears in Active.
+  Client-side Load more: Active pages 25, sections 10.
+- Handled flow: clicking `Handled` opens an inline "Was appointment booked?"
+  Yes/No panel; choosing either saves immediately. `mark_handled` now
+  REQUIRES `appointmentBooked: boolean` and records
+  `front_desk_outcome` (`appointment_booked` / `no_appointment_booked`) +
+  `front_desk_outcome_at` + lifecycle status alongside `workspace_handled_at`.
+- Reopen (from Handled or Archived) fully returns the request to Active:
+  clears handled + archived state, clears `front_desk_outcome(_at)`, and
+  resets status to `open` so no stale booked state shows. Nothing is deleted.
+- Name handling: placeholder is now `Not provided` (never `Unknown`).
+  `lib/workspace/display-name.ts` sanitizes stored display names through the
+  conservative fail-closed extractor — request text like "I Need Appointment"
+  never displays as a name. Staff can inline-edit the name via the new
+  `save_name` action (empty clears; digits/URLs/emails/phones/keywords/request
+  words rejected server-side; clinic-scoped).
+- Request summary: replaced the field table with one compact card — a
+  deterministic one-line headline ("Cleaning appointment · Tomorrow",
+  "Mentions pain/urgent concern · Wants appointment", fallback
+  "Review conversation") plus signal-only chips (Pain/urgent, Payment,
+  Insurance, Automation paused, High volume). No "None detected" rows.
+  `buildWorkspaceRequestSummary` keeps a future `aiSummary` hook; nothing
+  produces AI (no provider, no env, no calls).
+- Tooltips (exact strings) on Call / Handled / Archive / Block / Reopen /
+  Unblock; block/unblock copy describes only the phone number. Block stays a
+  confirmed, visually separated danger action.
+- Visual polish via token-based `.ws-*` classes in `app/globals.css`: toned
+  collapsed sections, clearer selected states, primary-accent summary card,
+  distinct patient (info tone + accent) vs office bubbles, mobile-wrapping
+  action rows. Inline styles reduced.
+- Samples rebuilt to the five demo layouts (active with name+time, active
+  with `Not provided`, handled booked-yes, archived, blocked); still collapsed
+  whenever real conversations exist.
+- Unchanged: patient-number block suppression of initial SMS/auto-replies,
+  inbound recording for blocked numbers, STOP/START/HELP, opt-out, readiness,
+  clinic gate, sender pinning, `/api/workspace/outcome` compatibility route.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 221 tests.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+Production migration: none needed (existing columns and tables cover the
+feature; no schema change).
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no production env change, no
+secret printing, no patient data printed, and `.qwen/` remained untouched.

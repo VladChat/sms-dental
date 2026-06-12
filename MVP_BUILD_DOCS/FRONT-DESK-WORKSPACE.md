@@ -3,6 +3,47 @@
 Status: Active (operational patient-request queue)
 Last updated: 2026-06-12
 
+## 0.1 2026-06-12 — Queue polish (sections, handled flow, name edit, summary)
+
+- **Layout order.** Active queue first; Handled (success tone), Archived
+  (info tone), and Blocked (danger tone) render as collapsed sections below
+  with counts (e.g. `Handled (4)`). Handled never shows in Active. Section
+  priority: blocked > archived > handled > active. The old top filter pills
+  are gone. Active pages 25 at a time, sections 10, with client-side
+  `Load more`.
+- **Handled flow.** Clicking `Handled` opens a small inline panel
+  (`Was appointment booked?`) with Yes / No. Choosing either saves
+  immediately: `mark_handled` now REQUIRES `appointmentBooked: boolean` and
+  records `front_desk_outcome` (`appointment_booked` / `no_appointment_booked`)
+  + `front_desk_outcome_at` + lifecycle status alongside
+  `workspace_handled_at`. The card moves to the Handled section, which shows
+  the booked/no-appointment badge.
+- **Reopen** (from Handled or Archived) returns the request fully to Active:
+  it clears `workspace_handled_at`, `workspace_archived_at`,
+  `front_desk_outcome(_at)`, and resets the lifecycle status to `open`, so no
+  stale booked state shows after reopen. Nothing is deleted.
+- **Name handling.** Missing names display as `Not provided` (never
+  `Unknown`). Stored display names are sanitized through the conservative
+  fail-closed extractor (`normalizeWorkspaceDisplayName`): request-like text
+  such as "I Need Appointment" is never shown as a name. Staff can inline-edit
+  the name (Edit -> input -> Save/Cancel) via the `save_name` action; empty
+  clears the name; digits/URLs/emails/phones/keywords/request words are
+  rejected server-side.
+- **Request summary.** The field table was replaced by one compact card: a
+  deterministic one-line headline (`Cleaning appointment · Tomorrow`,
+  `Mentions pain/urgent concern · Wants appointment`, `Payment question`,
+  fallback `Review conversation`) plus signal chips ONLY when present
+  (Pain/urgent, Payment, Insurance, Automation paused, High volume). No empty
+  "None detected" rows. `buildWorkspaceRequestSummary` keeps a future
+  `aiSummary` input hook, but nothing produces AI today — no provider, no env.
+- **Action copy.** Exact tooltips on all actions (Call/Handled/Archive/Block/
+  Reopen/Unblock). Block copy describes only the phone number: confirmation
+  reads `Block this phone number? Automated texts to this number will stop,
+  but messages stay saved.` Block is a visually separated danger action.
+- **Visual polish.** Token-based `.ws-*` classes: toned collapsed sections,
+  clearer selected card, primary-accent summary card, distinct patient (info
+  tone, left accent) vs office bubbles, mobile-wrapping action rows.
+
 ## 0. 2026-06-12 — Operational queue redesign
 
 `/workspace` is now a real front-desk queue that answers: who is this patient,

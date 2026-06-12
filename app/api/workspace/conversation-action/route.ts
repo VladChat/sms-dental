@@ -15,12 +15,14 @@ import {
   markConversationHandled,
   reopenConversation,
   saveFrontDeskNote,
+  saveWorkspacePatientName,
 } from "../../../../lib/db/front-desk";
 import {
   blockPatientNumberForClinic,
   unblockPatientNumberForClinic,
 } from "../../../../lib/db/patient-blocks";
 import { FRONT_DESK_NOTE_MAX } from "../../../../lib/workspace/outcome";
+import { validateWorkspaceDisplayNameInput } from "../../../../lib/workspace/display-name";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +32,7 @@ const UUID_RE =
 
 const WORKSPACE_ACTIONS = [
   "save_note",
+  "save_name",
   "archive",
   "reopen",
   "mark_handled",
@@ -41,17 +44,23 @@ type WorkspaceAction = (typeof WORKSPACE_ACTIONS)[number];
 const ActionBodySchema = z.object({
   conversationId: z.string().trim().min(1).max(100),
   action: z.string().trim(),
-  // Hard cap to bound payload size; the precise limit is enforced below.
+  // Hard caps to bound payload size; precise limits are enforced below.
   note: z.union([z.string(), z.null()]).optional(),
+  name: z.union([z.string().max(200), z.null()]).optional(),
+  appointmentBooked: z.boolean().optional(),
 });
 
 // POST /api/workspace/conversation-action
 //
 // Front-desk queue actions for ONE clinic-scoped conversation:
 //   save_note      — saves the internal staff note only (no outcome required)
+//   save_name      — saves/clears the staff-edited patient display name
 //   archive        — hides from the active queue (reversible, deletes nothing)
-//   reopen         — returns an archived conversation to the active queue
-//   mark_handled   — stamps handled (no booked/no-booked outcome implied)
+//   reopen         — returns a handled/archived conversation to Active and
+//                    clears the saved appointment outcome (no stale booked
+//                    state after reopen)
+//   mark_handled   — stamps handled AND records "Was appointment booked?"
+//                    (required boolean -> appointment_booked / no_appointment_booked)
 //   block_number   — blocks the PATIENT/CALLER number for this clinic and
 //                    archives the conversation. Never touches the clinic's
 //                    Twilio business number, never deletes history, and is
@@ -112,6 +121,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return jsonOk({ ok: true, action, note: saved.note ?? "" });
     }
 
+    // save_name: staff-edited patient display name. Empty clears the name
+    // ("Not provided"); anything else must pass the conservative fail-closed
+    // name rules (no digits/URLs/emails/phones/keywords/request words).
+    if (action === "save_name") {
+      const validated = validateWorkspaceDisplayNameInput(parsed.data.name);
+      if (!validated.ok) return jsonBadRequest(validated.message);
+      const saved = await saveWorkspacePatientName({
+        clinicId,
+        conversationId,
+        name: validated.value,
+      });
+      if (!saved) return jsonError(404, "not_found", "This request was not found.");
+      return jsonOk({ ok: true, action, name: saved.name ?? "" });
+    }
+
     if (action === "archive") {
       const archived = await archiveConversation({ clinicId, conversationId, actor });
       if (!archived) return jsonError(404, "not_found", "This request was not found.");
@@ -124,10 +148,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return jsonOk({ ok: true, action });
     }
 
+    // mark_handled requires the appointment answer (Was appointment booked?)
+    // and records it as the front-desk outcome alongside the handled stamp.
     if (action === "mark_handled") {
-      const handled = await markConversationHandled({ clinicId, conversationId, actor });
+      if (typeof parsed.data.appointmentBooked !== "boolean") {
+        return jsonBadRequest("Please choose whether an appointment was booked.");
+      }
+      const handled = await markConversationHandled({
+        clinicId,
+        conversationId,
+        appointmentBooked: parsed.data.appointmentBooked,
+        actor,
+      });
       if (!handled) return jsonError(404, "not_found", "This request was not found.");
-      return jsonOk({ ok: true, action, handledAt: handled.handledAt.toISOString() });
+      return jsonOk({
+        ok: true,
+        action,
+        handledAt: handled.handledAt.toISOString(),
+        outcome: handled.outcome,
+      });
     }
 
     // block_number / unblock_number need the conversation's patient phone,

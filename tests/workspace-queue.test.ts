@@ -49,11 +49,31 @@ test("primary status precedence: Blocked > Archived > Handled > base", () => {
   );
 });
 
-test("queue filters: blocked wins over archived; handled stays active", () => {
-  assert.equal(workspaceFilterForCard({ blocked: false, archived: false }), "active");
-  assert.equal(workspaceFilterForCard({ blocked: false, archived: true }), "archived");
-  assert.equal(workspaceFilterForCard({ blocked: true, archived: true }), "blocked");
-  assert.equal(workspaceFilterForCard({ blocked: true, archived: false }), "blocked");
+test("queue sections: blocked > archived > handled > active; handled leaves Active", () => {
+  assert.equal(
+    workspaceFilterForCard({ blocked: false, archived: false, handled: false }),
+    "active",
+  );
+  assert.equal(
+    workspaceFilterForCard({ blocked: false, archived: false, handled: true }),
+    "handled",
+  );
+  assert.equal(
+    workspaceFilterForCard({ blocked: false, archived: true, handled: false }),
+    "archived",
+  );
+  assert.equal(
+    workspaceFilterForCard({ blocked: false, archived: true, handled: true }),
+    "archived",
+  );
+  assert.equal(
+    workspaceFilterForCard({ blocked: true, archived: true, handled: true }),
+    "blocked",
+  );
+  assert.equal(
+    workspaceFilterForCard({ blocked: true, archived: false, handled: false }),
+    "blocked",
+  );
 });
 
 test("status and flag meta cover the new vocabulary", () => {
@@ -109,6 +129,28 @@ test("workspace queue actions are clinic-scoped and reversible", () => {
   assert.ok(src.includes("workspace_archived_at = null"));
   assert.ok(!src.toLowerCase().includes("delete from public.messages"));
   assert.ok(!src.toLowerCase().includes("delete from public.patient_conversations"));
+
+  // Reopen returns the request fully to Active: handled + outcome cleared and
+  // the lifecycle status reset so no stale booked state shows.
+  const reopenStart = src.indexOf("export async function reopenConversation");
+  const reopenEnd = src.indexOf("export async function markConversationHandled");
+  const reopen = src.slice(reopenStart, reopenEnd);
+  assert.ok(reopen.includes("workspace_handled_at = null"));
+  assert.ok(reopen.includes("front_desk_outcome = null"));
+  assert.ok(reopen.includes("front_desk_outcome_at = null"));
+  assert.ok(reopen.includes("status = 'open'"));
+
+  // mark_handled records the appointment answer as the front-desk outcome.
+  const handledStart = src.indexOf("export async function markConversationHandled");
+  const handled = src.slice(handledStart, handledStart + 2000);
+  assert.ok(handled.includes("appointmentBooked: boolean"));
+  assert.ok(handled.includes('"appointment_booked"'));
+  assert.ok(handled.includes('"no_appointment_booked"'));
+  assert.ok(handled.includes("front_desk_outcome = ${outcome}"));
+
+  // Staff-edited names persist through the clinic-scoped helper.
+  assert.ok(src.includes("export async function saveWorkspacePatientName"));
+  assert.ok(src.includes("patient_display_name = ${params.name}"));
 });
 
 test("patient number blocks are clinic-scoped and never touch Twilio numbers", () => {
@@ -171,33 +213,90 @@ test("workspace detail header carries the call button and actions; phone shown o
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
   assert.ok(src.includes("Call patient"));
   assert.ok(src.includes('href={`tel:${card.callerPhone}`}'));
-  assert.ok(src.includes("Mark handled"));
+  assert.ok(src.includes("Handled"));
   assert.ok(src.includes("Archive"));
   assert.ok(src.includes("Block number"));
   assert.ok(src.includes("Reopen"));
   assert.ok(src.includes("Unblock number"));
-  // Header title is name-or-Unknown with the phone once beneath it; the list
-  // shows the phone as secondary only when a name exists.
-  assert.ok(src.includes("{card.patientName ?? UNKNOWN}"));
-  assert.ok(src.includes("{c.patientName && ("));
+  // Header title is name-or-Not-provided with the phone once beneath it; the
+  // queue list shows the phone as secondary only when a name exists.
+  assert.ok(src.includes("{card.patientName ?? NOT_PROVIDED}"));
+  assert.ok(src.includes('const NOT_PROVIDED = "Not provided"'));
+  assert.ok(src.includes("{card.patientName && <span"));
+  assert.ok(!src.includes('"Unknown"'), "Unknown placeholder fully replaced");
 });
 
-test("request details card always renders the full field set", () => {
+test("request summary card shows one headline + signal chips, no empty rows", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
-  for (const label of [
-    '"Name"',
-    '"Phone"',
-    '"Request"',
-    '"Preferred appointment time"',
-    '"Safety concern"',
-    '"Payment / insurance"',
-    '"First seen"',
-    '"Last activity"',
-  ]) {
-    assert.ok(src.includes(`label=${label}`), `request details row ${label}`);
+  assert.ok(src.includes("Request summary"));
+  assert.ok(src.includes("{card.summaryHeadline}"));
+  assert.ok(src.includes("SummaryChips"));
+  // Chips render nothing when no signal exists; no "None detected" clutter.
+  assert.ok(src.includes("if (chips.length === 0) return null"));
+  assert.ok(!src.includes("None detected"));
+  // The old field table is gone.
+  assert.ok(!src.includes("Preferred appointment time"));
+  assert.ok(!src.includes("Payment / insurance"));
+});
+
+test("name is inline-editable and saved via save_name", () => {
+  const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
+  assert.ok(src.includes("function NameEditor"));
+  assert.ok(src.includes('"save_name"'));
+  assert.ok(src.includes("Patient name (leave empty to clear)"));
+  assert.ok(src.includes("setEditing(true)"));
+  assert.ok(src.includes("savedName.length > 0 ? savedName : null"));
+  // Sample cards never save.
+  assert.ok(src.includes("if (isSample) return;"));
+});
+
+test("handled flow asks Was appointment booked? and saves on Yes/No", () => {
+  const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
+  assert.ok(src.includes("Was appointment booked?"));
+  assert.ok(src.includes('runAction("mark_handled", { appointmentBooked: true })'));
+  assert.ok(src.includes('runAction("mark_handled", { appointmentBooked: false })'));
+  // Saving closes the mini panel and stamps the local outcome + handled flag.
+  assert.ok(src.includes("setAskingHandled(false)"));
+  assert.ok(src.includes('extra?.appointmentBooked ? "appointment_booked" : "no_appointment_booked"'));
+  // No note field inside the mini panel and no radio inputs.
+  assert.ok(!src.includes('type="radio"'));
+  // Reopen clears handled+archived and the stale outcome locally.
+  assert.ok(src.includes("archived: false, handled: false"));
+  assert.ok(src.includes("frontDeskOutcome: null"));
+});
+
+test("action tooltips use the exact agreed strings", () => {
+  const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
+  assert.ok(src.includes('"Call this phone number."'));
+  assert.ok(
+    src.includes('"Close this request and record whether an appointment was booked."'),
+  );
+  assert.ok(
+    src.includes(
+      '"Move this request out of Active. Messages stay saved and it can be reopened later."',
+    ),
+  );
+  assert.ok(
+    src.includes(
+      '"Block this phone number. Automated texts to this number will stop, but messages stay saved."',
+    ),
+  );
+  assert.ok(src.includes('"Move this request back to Active."'));
+  assert.ok(
+    src.includes(
+      '"Unblock this phone number. Automated texts may resume if normal sending rules allow."',
+    ),
+  );
+  // The block tooltip/confirm copy never says patient/clinic/business/Twilio.
+  const blockCopyStart = src.indexOf("const TOOLTIP_BLOCK");
+  const blockCopyEnd = src.indexOf("const TOOLTIP_REOPEN");
+  const blockCopy = src.slice(blockCopyStart, blockCopyEnd).toLowerCase();
+  for (const word of ["patient", "clinic", "business", "twilio"]) {
+    assert.ok(!blockCopy.includes(word), `block tooltip avoids "${word}"`);
   }
-  assert.ok(src.includes("card.requestType ?? UNKNOWN"));
-  assert.ok(src.includes("card.safetyConcern ?? NONE_DETECTED"));
+  // Danger action is visually separated from the normal actions.
+  assert.ok(src.includes("ws-actions-divider"));
+  assert.ok(src.includes("btn-danger"));
 });
 
 test("conversation preview shows the last 2 messages with a full toggle", () => {
@@ -213,15 +312,14 @@ test("conversation preview shows the last 2 messages with a full toggle", () => 
   assert.ok(!src.includes('type="radio"'));
 });
 
-test("block number requires inline confirmation with the agreed wording", () => {
+test("block number requires inline confirmation with short safe wording", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
   assert.ok(
     src.includes(
-      "Block this patient number for this clinic? Automated replies will stop for this number. Messages will be kept.",
+      "Block this phone number? Automated texts to this number will stop, but messages stay saved.",
     ),
   );
   assert.ok(src.includes("confirmingBlock"));
-  assert.ok(src.includes("does not change or"));
   assert.ok(src.includes("Cancel"));
 });
 
@@ -234,20 +332,41 @@ test("internal note saves independently without an outcome", () => {
   assert.ok(!src.includes("Please choose an outcome"));
 });
 
-test("queue filters exist and samples no longer dominate a live workspace", () => {
+test("Active queue is first with collapsed toned sections below, counts, and Load more", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
-  assert.ok(src.includes('{ id: "active", label: "Active" }'));
-  assert.ok(src.includes('{ id: "archived", label: "Archived" }'));
-  assert.ok(src.includes('{ id: "blocked", label: "Blocked" }'));
+  // Sections replace the old top filter buttons.
+  assert.ok(src.includes('{ id: "handled", label: "Handled", tone: "success" }'));
+  assert.ok(src.includes('{ id: "archived", label: "Archived", tone: "info" }'));
+  assert.ok(src.includes('{ id: "blocked", label: "Blocked", tone: "danger" }'));
+  assert.ok(!src.includes('aria-pressed={filter === f.id}'), "old filter pills removed");
+  // Collapsed by default (<details> without open) with a count in the summary.
+  assert.ok(src.includes("<details key={section.id}"));
+  assert.ok(!src.includes("<details open"));
+  assert.ok(src.includes("{section.label} ({sectionCards.length})"));
+  // Section quick actions: Reopen (handled/archived) and Unblock (blocked).
+  const sectionRow = src.slice(src.indexOf("function SectionRow"), src.indexOf("async function postConversationAction"));
+  assert.ok(sectionRow.includes('section === "blocked" ? "unblock_number" : "reopen"'));
+  // Load more: Active pages by 25, sections by 10 — client-side only.
+  assert.ok(src.includes("const ACTIVE_PAGE_SIZE = 25"));
+  assert.ok(src.includes("const SECTION_PAGE_SIZE = 10"));
+  assert.ok(src.includes("Load more"));
+});
+
+test("samples demonstrate the five new layouts and never dominate a live workspace", () => {
+  const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
   // Samples collapse by default when real conversations exist.
   assert.ok(src.includes("useState(hasReal)"));
-  // Sample set demonstrates appointment, safety, insurance, and handled cards.
   assert.ok(src.includes('"sample-appointment"'));
-  assert.ok(src.includes('"sample-safety"'));
-  assert.ok(src.includes('"sample-insurance"'));
+  assert.ok(src.includes('"sample-no-name"'));
   assert.ok(src.includes('"sample-handled"'));
-  assert.ok(src.includes("Mentioned pain/urgent concern"));
-  assert.ok(src.includes("Insurance mentioned"));
+  assert.ok(src.includes('"sample-archived"'));
+  assert.ok(src.includes('"sample-blocked"'));
+  // Sample headlines use the compact summary format.
+  assert.ok(src.includes('"Cleaning appointment · Tuesday morning"'));
+  assert.ok(src.includes('"Mentions pain/urgent concern · Wants appointment"'));
+  assert.ok(src.includes('"Review conversation"'));
+  // The handled sample records a booked appointment.
+  assert.ok(src.includes('frontDeskOutcome: "appointment_booked"'));
 });
 
 // -------------------------------------------------------------- API layer
@@ -260,6 +379,7 @@ test("conversation-action route validates input and scopes by clinic", () => {
   assert.ok(src.includes("FRONT_DESK_NOTE_MAX"));
   for (const action of [
     '"save_note"',
+    '"save_name"',
     '"archive"',
     '"reopen"',
     '"mark_handled"',
@@ -268,6 +388,12 @@ test("conversation-action route validates input and scopes by clinic", () => {
   ]) {
     assert.ok(src.includes(action), `route supports ${action}`);
   }
+  // save_name validates through the conservative fail-closed name rules.
+  assert.ok(src.includes("validateWorkspaceDisplayNameInput(parsed.data.name)"));
+  assert.ok(src.includes("saveWorkspacePatientName"));
+  // mark_handled requires the Was-appointment-booked boolean.
+  assert.ok(src.includes('typeof parsed.data.appointmentBooked !== "boolean"'));
+  assert.ok(src.includes("Please choose whether an appointment was booked."));
   // Cross-clinic conversations are indistinguishable from missing ones.
   assert.ok(src.includes('"This request was not found."'));
   assert.ok(src.includes("findClinicConversationPhone(clinicId, conversationId)"));

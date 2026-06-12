@@ -34,22 +34,30 @@ export type WorkspaceCardFlags = {
   handled: boolean;
 };
 
-export type WorkspaceFilter = "active" | "archived" | "blocked";
+// Queue sections: Active is the working list; Handled/Archived/Blocked render
+// as collapsed sections below it.
+export type WorkspaceFilter = "active" | "handled" | "archived" | "blocked";
 
-// The front-desk-safe view of a patient request. Structured fields (request
-// type, preferred time, safety/payment labels) are derived deterministically
-// from inbound text and conversation state — never invented or AI-generated.
+export type WorkspaceCardChip = {
+  id: "pain_urgent" | "payment" | "insurance" | "automation_paused" | "high_volume";
+  label: string;
+};
+
+// The front-desk-safe view of a patient request. The summary headline and
+// chips are derived deterministically from inbound text and conversation
+// state (lib/workspace/request-summary.ts) — never invented or AI-generated.
 export type PatientRequestCard = {
   // Opaque key for React/selection only. Not an internal ID shown to the user.
   id: string;
   callerPhone: string;
+  // Sanitized display name (normalizeWorkspaceDisplayName); null renders as
+  // "Not provided" — request-like phrases are never shown as a name.
   patientName: string | null;
-  requestType: string | null;
-  preferredTime: string | null;
-  // Deterministic display labels (see lib/workspace/request-summary.ts).
-  safetyConcern: string | null;
-  paymentInsurance: string | null;
-  summary: string | null;
+  // One short scannable line ("Cleaning appointment · Tomorrow" or
+  // "Review conversation").
+  summaryHeadline: string;
+  // Signal chips only — never empty "None detected"-style placeholders.
+  summaryChips: WorkspaceCardChip[];
   latestMessage: string | null;
   latestMessageDirection: "inbound" | "outbound" | null;
   status: WorkspaceStatus;
@@ -105,13 +113,15 @@ export function derivePrimaryWorkspaceStatus(input: {
   );
 }
 
-// Queue filter membership: blocked wins over archived; everything else is
-// active. Handled conversations stay in Active until archived.
+// Queue section membership. Priority mirrors the status precedence:
+// blocked wins over archived/handled, archived over handled, and everything
+// else stays in the Active working list. Handled never shows in Active.
 export function workspaceFilterForCard(
-  flags: Pick<WorkspaceCardFlags, "blocked" | "archived">,
+  flags: Pick<WorkspaceCardFlags, "blocked" | "archived" | "handled">,
 ): WorkspaceFilter {
   if (flags.blocked) return "blocked";
   if (flags.archived) return "archived";
+  if (flags.handled) return "handled";
   return "active";
 }
 

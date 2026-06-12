@@ -123,6 +123,91 @@ export function buildRequestSummary(input: RequestSummaryInput): RequestSummary 
   };
 }
 
+// ------------------------------------------------ workspace summary headline
+
+export const REVIEW_CONVERSATION = "Review conversation";
+
+export type WorkspaceSummaryChip = {
+  id: "pain_urgent" | "payment" | "insurance";
+  label: string;
+};
+
+export type WorkspaceRequestSummaryInput = RequestSummaryInput & {
+  // Future hook ONLY: if an AI-written summary is ever stored upstream it can
+  // be passed here and wins over the deterministic fallback. Nothing produces
+  // or calls AI today — no provider, no env, no generation in this codebase.
+  aiSummary?: string | null;
+};
+
+export type WorkspaceRequestSummary = {
+  // One short scannable line for the front desk, e.g.
+  // "Cleaning appointment · Tomorrow" or "Review conversation".
+  headline: string;
+  // Small chips shown only when a real signal exists (never "None detected").
+  chips: WorkspaceSummaryChip[];
+  preferredTime: string | null;
+  requestCategory: RequestCategory | null;
+  source: "ai" | "deterministic" | "fallback";
+};
+
+// Compose the compact one-line request summary. Deterministic fallback only:
+// category + explicit time phrase, joined with " · ". When nothing observable
+// exists the headline is "Review conversation" (source "fallback").
+export function buildWorkspaceRequestSummary(
+  input: WorkspaceRequestSummaryInput,
+): WorkspaceRequestSummary {
+  const category = deriveRequestCategory(input.inboundTexts);
+  const time = derivePreferredTime(input.inboundTexts);
+  const preferredTime = time === UNKNOWN_VALUE ? null : time;
+  const safety = deriveSafetyConcern(input) === SAFETY_SIGNAL;
+  const paymentInsurance = derivePaymentInsurance(input.inboundTexts);
+
+  const chips: WorkspaceSummaryChip[] = [];
+  if (safety) chips.push({ id: "pain_urgent", label: "Pain/urgent" });
+  if (paymentInsurance === "Insurance mentioned") chips.push({ id: "insurance", label: "Insurance" });
+  if (paymentInsurance === "Payment mentioned") chips.push({ id: "payment", label: "Payment" });
+
+  const aiSummary = (input.aiSummary ?? "").trim();
+  if (aiSummary.length > 0) {
+    return { headline: aiSummary, chips, preferredTime, requestCategory: category, source: "ai" };
+  }
+
+  if (category === "Pain / urgent concern") {
+    const text = input.inboundTexts.map((t) => (t ?? "").trim()).join("\n");
+    const wantsAppointment = APPOINTMENT_RE.test(text) || CLEANING_RE.test(text);
+    const parts = ["Mentions pain/urgent concern"];
+    if (wantsAppointment) parts.push("Wants appointment");
+    else if (preferredTime) parts.push(preferredTime);
+    return {
+      headline: parts.join(" · "),
+      chips,
+      preferredTime,
+      requestCategory: category,
+      source: "deterministic",
+    };
+  }
+
+  if (category === "Unknown" || category === "General message") {
+    return {
+      headline: REVIEW_CONVERSATION,
+      chips,
+      preferredTime,
+      requestCategory: category === "Unknown" ? null : category,
+      source: "fallback",
+    };
+  }
+
+  const parts = [category as string];
+  if (preferredTime) parts.push(preferredTime);
+  return {
+    headline: parts.join(" · "),
+    chips,
+    preferredTime,
+    requestCategory: category,
+    source: "deterministic",
+  };
+}
+
 function joinNonEmpty(texts: string[]): string {
   return texts
     .map((t) => (t ?? "").trim())

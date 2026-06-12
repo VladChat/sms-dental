@@ -509,9 +509,14 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .ws-row dt { color:var(--text-muted); font:var(--body-sm); }
 .ws-row dd { margin:0; color:var(--text-body); font:var(--body-sm); font-weight:600; text-align:right; max-width:62%; overflow-wrap:anywhere; }
 .ws-timeline { display:flex; flex-direction:column; gap:var(--space-3); }
-.ws-bubble { padding:var(--space-3) var(--space-4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); }
-.ws-bubble.is-inbound { background:var(--surface); }
+/* Patient vs office bubbles are visually distinct: patient messages carry the
+   info tone + accent bar; office messages stay neutral and slightly inset. */
+.ws-bubble { padding:var(--space-3) var(--space-4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); margin-left:var(--space-5); }
+.ws-bubble.is-inbound { background:var(--info-bg); border-color:var(--info-border); border-left:3px solid var(--info); margin-left:0; margin-right:var(--space-5); }
 .ws-bubble-head { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); margin-bottom:var(--space-1); }
+.ws-bubble-author { font:var(--body-sm); font-weight:700; color:var(--text-secondary); }
+.ws-bubble.is-inbound .ws-bubble-author { color:var(--info-text); }
+.ws-bubble-body { margin:0; font:var(--body-sm); color:var(--text-body); overflow-wrap:anywhere; }
 .ws-notes { padding:var(--space-4); border:1px dashed var(--border-strong); border-radius:var(--r-md); background:var(--surface-sunken); color:var(--text-muted); font:var(--body-sm); }
 .ws-empty {
   display:grid; gap:var(--space-3); place-items:center; text-align:center;
@@ -561,6 +566,77 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 }
 .ws-sample-strip-dot { color:var(--text-muted); }
 
+/* queue column: Active list on top, collapsed sections below */
+.ws-queue-col { display:flex; flex-direction:column; gap:var(--space-4); min-width:0; }
+.ws-list-badges { display:inline-flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; justify-content:flex-end; }
+.ws-list-summary { font:var(--body-sm); font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ws-load-more { align-self:center; }
+
+/* signal chips — shown only when a real signal exists */
+.ws-chips { display:inline-flex; gap:var(--space-1); flex-wrap:wrap; }
+.ws-chip {
+  display:inline-flex; align-items:center; padding:1px var(--space-2);
+  border-radius:var(--r-sm); font:var(--body-xs, var(--body-sm)); font-weight:700;
+  border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text-secondary);
+}
+.ws-chip.is-pain_urgent { border-color:var(--warning-border); background:var(--warning-bg); color:var(--warning-text); }
+.ws-chip.is-payment,
+.ws-chip.is-insurance { border-color:var(--info-border); background:var(--info-bg); color:var(--info-text); }
+.ws-chip.is-automation_paused { border-color:var(--border-strong); background:var(--surface-sunken); color:var(--text-muted); }
+.ws-chip.is-high_volume { border-color:var(--warning-border); background:var(--warning-bg); color:var(--warning-text); }
+
+/* collapsed lower sections: Handled (success) / Archived (info) / Blocked (danger) */
+.ws-section { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); overflow:hidden; }
+.ws-section-summary {
+  cursor:pointer; list-style:none; display:flex; align-items:center; gap:var(--space-2);
+  padding:var(--space-3) var(--space-4); font:var(--body-sm); font-weight:700;
+}
+.ws-section-summary::before { content:"▸"; font-size:0.7em; transition:transform .15s ease; }
+.ws-section[open] .ws-section-summary::before { transform:rotate(90deg); }
+.ws-section.tone-success { border-color:var(--success-border); }
+.ws-section.tone-success .ws-section-summary { background:var(--success-bg); color:var(--success-text); }
+.ws-section.tone-info { border-color:var(--info-border); }
+.ws-section.tone-info .ws-section-summary { background:var(--info-bg); color:var(--info-text); }
+.ws-section.tone-danger { border-color:var(--error-border); }
+.ws-section.tone-danger .ws-section-summary { background:var(--error-bg); color:var(--error-text); }
+.ws-section-body { display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-3); border-top:1px solid var(--border); }
+.ws-section-row { display:flex; align-items:center; gap:var(--space-3); }
+.ws-section-row-main {
+  display:grid; gap:2px; flex:1; min-width:0; text-align:left; padding:var(--space-2) var(--space-3);
+  border:1px solid transparent; border-radius:var(--r-sm); background:transparent; cursor:pointer; font:inherit;
+}
+.ws-section-row-main:hover { background:var(--surface-2); }
+.ws-section-row.is-selected .ws-section-row-main { border-color:var(--primary); background:var(--primary-soft); }
+
+/* detail panel */
+.ws-head-card { display:grid; gap:var(--space-3); }
+.ws-head-id { display:grid; gap:var(--space-1); min-width:0; }
+.ws-head-phone { margin:0; color:var(--text-secondary); overflow-wrap:anywhere; }
+.ws-name-row { display:flex; align-items:baseline; gap:var(--space-3); flex-wrap:wrap; }
+.ws-name-missing { color:var(--text-muted); font-weight:500; }
+.ws-name-edit { font:var(--body-sm); }
+.ws-name-editor { display:grid; gap:var(--space-2); }
+.ws-name-editor-row { display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center; }
+.ws-name-editor-row .input { flex:1; min-width:180px; }
+
+/* action row: primary call, normal handled/archive, danger block separated */
+.ws-actions { display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center; }
+.ws-actions-divider { width:1px; align-self:stretch; background:var(--border-strong); margin:0 var(--space-1); }
+
+/* inline mini panels (handled question / block confirmation) */
+.ws-mini-panel {
+  display:grid; gap:var(--space-2); padding:var(--space-3) var(--space-4);
+  border:1px solid var(--border-strong); border-radius:var(--r-md); background:var(--surface-2);
+}
+.ws-mini-panel.is-danger { border-color:var(--error-border); background:var(--error-bg); }
+.ws-mini-panel.is-danger .ws-mini-title { color:var(--error-text); }
+.ws-mini-title { font:var(--body-sm); font-weight:700; color:var(--text); }
+.ws-mini-options { display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center; }
+
+/* request summary card */
+.ws-summary-card { display:grid; gap:var(--space-2); border-left:3px solid var(--primary); }
+.ws-summary-headline { margin:0; font:var(--body-lg, inherit); font-weight:700; color:var(--text); overflow-wrap:anywhere; }
+
 @media (max-width: 600px) {
   .ws-page { padding:var(--space-7) var(--space-4) var(--space-14); }
   .ws-list-top,
@@ -571,6 +647,12 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
   .ws-call-action { width:100%; justify-content:center; }
   .ws-row { flex-direction:column; gap:var(--space-1); }
   .ws-row dd { max-width:100%; text-align:left; }
+  .ws-actions { flex-direction:column; align-items:stretch; }
+  .ws-actions .btn { width:100%; justify-content:center; }
+  .ws-actions-divider { width:auto; height:1px; margin:var(--space-1) 0; }
+  .ws-section-row { flex-direction:column; align-items:stretch; }
+  .ws-bubble { margin-left:var(--space-3); }
+  .ws-bubble.is-inbound { margin-right:var(--space-3); }
 }
 
 /* billing payment-method modal (Stripe-ready shell — no card fields) */
