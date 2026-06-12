@@ -40,10 +40,12 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
   `Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.`
   Resetting to the default does not save that literal default text as an
   override.
-- **Up to three deterministic follow-ups.** After a patient replies, the office
-  may send follow-up #1, then #2, then #3. Each has its own enabled toggle and
-  body. The **Maximum automated replies** setting (0–3) caps how many may send;
-  it cannot exceed the enabled follow-ups in order. **0 disables follow-ups.**
+- **Up to ten deterministic follow-ups.** After a patient replies, the office
+  may send follow-up #1 through #10 in order. Each has its own enabled toggle
+  and body. The **Maximum automated replies** setting (0–10) caps how many may
+  send; it cannot exceed the enabled/usable follow-ups in order. **0 disables
+  follow-ups.** Slots #1-#3 keep the canonical defaults; slots #4-#10 have no
+  default and require custom text before they can be enabled.
 - **Variables.** `{{clinic_name}}` (always from the clinic profile) and
   `{{patient_name}}` (only when safely collected). When no name was collected,
   `{{patient_name}}` is removed cleanly so the sentence stays natural.
@@ -54,19 +56,25 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
   current default missed-call SMS sends. Follow-ups are inactive until an admin
   saves and enables them for that specific clinic.
 - Code defaults are the source of truth. `clinic_sms_message_templates.body_text
-  = NULL` means "use the current code default." The database stores real custom
-  overrides and real follow-up enablement, not copies of the default text.
+  = NULL` means "use the current code default" only for templates that have a
+  code default. For follow-ups, that means slots #1-#3 only. Slots #4-#10 must
+  store custom text before they are usable.
 - Saving text equal to the canonical default stores NULL or removes the
-  unnecessary override. Enabled follow-ups can have `body_text=NULL`; those send
-  the current default for that slot. Disabled default-backed follow-ups are not
-  kept as junk rows.
+  unnecessary override. Enabled follow-ups #1-#3 can have `body_text=NULL`;
+  those send the current default for that slot. Disabled default-backed
+  follow-ups are not kept as junk rows.
 - With no saved voice greeting rows, each scenario uses the system default
   wording from `lib/sms-recovery/voice-greeting-templates.ts`.
 - Migration `20260621000100_clean_sms_template_default_overrides.sql` cleans old
   saved default-like template bodies while preserving true custom text and
   follow-up enabled flags.
-- The 4th and later patient replies are **saved to the workspace only** — never
-  auto-replied.
+- Migration `20260622000100_expand_sms_conversation_followups.sql` widens
+  `max_auto_replies` and auto-reply template sequence constraints to 10, keeps
+  voice greetings at sequence 1-3, and adds
+  `patient_conversations.sms_thanks_courtesy_sent_at`.
+- The 11th and later patient replies, and any reply beyond the configured max,
+  are **saved to the workspace only** unless they qualify for the one-time
+  thanks courtesy reply.
 
 ## Guards (all enforced on every auto-reply)
 
@@ -75,22 +83,33 @@ called number passes readiness; the clinic recovery gate passes (clinic enabled,
 or owner-test allowlist); the patient is not opted out; the conversation already
 has a missed-call recovery message; the next slot is within `max_auto_replies`
 and its template is enabled (with either custom text or a NULL default-backed
-body). STOP/START/HELP and duplicate webhook deliveries never trigger an
-auto-reply, and slots are claimed atomically so retries never double-send.
+body). Slots #4-#10 require custom text. STOP/START/HELP and duplicate webhook
+deliveries never trigger an auto-reply, and slots are claimed atomically so
+retries never double-send.
 STOP/START/HELP compliance is still handled by Twilio (the webhook returns empty
 TwiML).
 
 Simple replies classified as thanks, acknowledgements, negative replies, or
 unclear short replies are saved but do not trigger a normal follow-up and do not
-consume an auto-reply slot. Informative replies and safe name-provided replies
-may continue through the normal guarded flow.
+consume an auto-reply slot. A thanks reply can send exactly one deterministic
+courtesy reply per recovery cycle: `You're welcome. Our team will follow up.`
+It requires `max_auto_replies > 0`, a prior recovery outbound, all normal
+mode/readiness/recovery/opt-out gates, sender pinning, no STOP/START/HELP, and
+no duplicate inbound. It is recorded as a conversation auto-reply with
+`auto_reply_type='thanks_courtesy'`, does not use a numbered slot, and does not
+increment `sms_auto_reply_count`. Acknowledgements, negative replies, and
+unclear short replies never trigger a courtesy reply. Informative replies and
+safe name-provided replies may continue through the normal guarded flow.
 
 When a new missed-call recovery SMS is successfully sent and its outbound
 `missed_call_recovery` message row is recorded, the conversation starts a fresh
 auto-reply cycle: `sms_auto_reply_count` resets to 0 and
-`sms_auto_reply_last_sent_at` clears. The safely stored patient display name is
-kept. This reset does not happen before the Twilio send or before the outbound
-message record succeeds.
+`sms_auto_reply_last_sent_at` and `sms_thanks_courtesy_sent_at` clear. The
+safely stored patient display name is kept for real callers. For configured
+internal duplicate-suppression bypass callers only, the stored display name is
+reset after the new recovery SMS is accepted and recorded so repeat live-test
+cycles start clean. This reset does not happen before the Twilio send or before
+the outbound message record succeeds.
 
 ## Patient name collection
 

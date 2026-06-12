@@ -107,7 +107,7 @@ test("recovery send path resets the auto-reply cycle only after recording the re
   const recordIdx = src.indexOf("await recordOutboundMessage({");
   const recoveryKindIdx = src.indexOf('messageKind: "missed_call_recovery"', recordIdx);
   const recordedFlagIdx = src.indexOf("recoveryMessageRecorded = true", recoveryKindIdx);
-  const resetIdx = src.indexOf("await resetConversationAutoReplyCycle(input.conversationId)", recordedFlagIdx);
+  const resetIdx = src.indexOf("await resetConversationAutoReplyCycle(", recordedFlagIdx);
 
   assert.ok(importIdx >= 0, "send path imports resetConversationAutoReplyCycle");
   assert.ok(recordIdx >= 0, "send path records the outbound message");
@@ -116,7 +116,7 @@ test("recovery send path resets the auto-reply cycle only after recording the re
   assert.ok(resetIdx > recordedFlagIdx, "auto-reply cycle resets after the recovery record succeeds");
 });
 
-test("resetConversationAutoReplyCycle clears only reply-cycle state and retains patient name", () => {
+test("resetConversationAutoReplyCycle clears reply-cycle state and conditionally resets test names", () => {
   const src = fs.readFileSync(path.join(REPO_ROOT, "lib", "db", "conversations.ts"), "utf8");
   const start = src.indexOf("export async function resetConversationAutoReplyCycle");
   const end = src.indexOf("export type ConversationAutoReplyState", start);
@@ -125,5 +125,17 @@ test("resetConversationAutoReplyCycle clears only reply-cycle state and retains 
   assert.ok(start >= 0, "reset helper exists");
   assert.ok(helper.includes("sms_auto_reply_count = 0"));
   assert.ok(helper.includes("sms_auto_reply_last_sent_at = null"));
-  assert.ok(!helper.includes("patient_display_name ="));
+  assert.ok(helper.includes("sms_thanks_courtesy_sent_at = null"));
+  assert.ok(helper.includes("patient_display_name = case"));
+  assert.ok(helper.includes("when ${resetPatientDisplayName} then null"));
+  assert.ok(helper.includes("else patient_display_name"));
+});
+
+test("recovery send path resets patient name only for duplicate-bypass test callers", () => {
+  const src = fs.readFileSync(path.join(REPO_ROOT, "lib", "twilio", "outbound-sms.ts"), "utf8");
+
+  assert.ok(src.includes("isDuplicateSuppressionBypassCaller"));
+  assert.ok(src.includes("smsConfig.duplicateSuppressionBypassNumbers"));
+  assert.ok(src.includes("resetPatientDisplayNameForTest"));
+  assert.ok(src.includes("auto_reply_cycle_test_name_reset"));
 });

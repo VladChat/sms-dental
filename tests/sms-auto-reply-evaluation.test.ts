@@ -3,7 +3,10 @@ import test from "node:test";
 
 import {
   evaluateAutoReplyDecision,
+  evaluateThanksCourtesyDecision,
+  THANKS_COURTESY_REPLY_BODY,
   type AutoReplyDecisionInput,
+  type ThanksCourtesyDecisionInput,
 } from "../lib/sms-recovery/auto-reply-evaluation";
 import {
   DEFAULT_FOLLOW_UP_TEMPLATES,
@@ -21,22 +24,41 @@ function base(overrides: Partial<AutoReplyDecisionInput> = {}): AutoReplyDecisio
     gateOk: true,
     optedOut: false,
     hasPriorRecoveryOutbound: true,
-    maxAutoReplies: 3,
+    maxAutoReplies: 10,
     currentAutoReplyCount: 0,
     patientNameKnown: false,
-    enabledSequences: [1, 2, 3],
+    enabledSequences: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     ...overrides,
   };
 }
 
-test("first/second/third ordinary replies send follow-up 1/2/3 when enabled", () => {
+function thanksBase(
+  overrides: Partial<ThanksCourtesyDecisionInput> = {},
+): ThanksCourtesyDecisionInput {
+  return {
+    keyword: null,
+    isDuplicateInbound: false,
+    replyClassification: "thanks",
+    modeAllowsSend: true,
+    gateOk: true,
+    optedOut: false,
+    hasPriorRecoveryOutbound: true,
+    maxAutoReplies: 10,
+    thanksCourtesyAlreadySent: false,
+    ...overrides,
+  };
+}
+
+test("ordinary replies send follow-up 1 through 10 when enabled", () => {
   assert.deepEqual(evaluateAutoReplyDecision(base({ currentAutoReplyCount: 0 })), { send: true, sequence: 1 });
   assert.deepEqual(evaluateAutoReplyDecision(base({ currentAutoReplyCount: 1 })), { send: true, sequence: 2 });
   assert.deepEqual(evaluateAutoReplyDecision(base({ currentAutoReplyCount: 2 })), { send: true, sequence: 3 });
+  assert.deepEqual(evaluateAutoReplyDecision(base({ currentAutoReplyCount: 3 })), { send: true, sequence: 4 });
+  assert.deepEqual(evaluateAutoReplyDecision(base({ currentAutoReplyCount: 9 })), { send: true, sequence: 10 });
 });
 
-test("fourth+ reply sends nothing (max reached)", () => {
-  const d = evaluateAutoReplyDecision(base({ currentAutoReplyCount: 3 }));
+test("eleventh reply sends nothing (max reached)", () => {
+  const d = evaluateAutoReplyDecision(base({ currentAutoReplyCount: 10 }));
   assert.equal(d.send, false);
 });
 
@@ -75,6 +97,51 @@ test("thanks, acknowledgements, negative replies, and unclear short replies do n
   assert.deepEqual(evaluateAutoReplyDecision(base({ replyClassification: "unclear_short" })), {
     send: false,
     reason: "reply_unclear_short",
+  });
+});
+
+test("thanks courtesy sends once through its own deterministic decision", () => {
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase()), {
+    send: true,
+    body: THANKS_COURTESY_REPLY_BODY,
+  });
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase({ thanksCourtesyAlreadySent: true })), {
+    send: false,
+    reason: "thanks_courtesy_already_sent",
+  });
+});
+
+test("thanks courtesy requires normal send gates but no enabled numbered slot", () => {
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase({ maxAutoReplies: 0 })), {
+    send: false,
+    reason: "auto_replies_disabled",
+  });
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase({ hasPriorRecoveryOutbound: false })), {
+    send: false,
+    reason: "no_prior_recovery",
+  });
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase({ optedOut: true })), {
+    send: false,
+    reason: "opted_out",
+  });
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase({ gateOk: false })), {
+    send: false,
+    reason: "send_gate_blocked",
+  });
+});
+
+test("thanks courtesy never sends for keywords, duplicate inbounds, or non-thanks replies", () => {
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase({ keyword: "stop" })), {
+    send: false,
+    reason: "keyword_stop",
+  });
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase({ isDuplicateInbound: true })), {
+    send: false,
+    reason: "duplicate_inbound",
+  });
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase({ replyClassification: "acknowledgement" })), {
+    send: false,
+    reason: "not_thanks",
   });
 });
 
@@ -138,7 +205,7 @@ test("max below the next slot caps replies", () => {
 
 test("new missed-call recovery cycle reset restores follow-up eligibility", () => {
   assert.deepEqual(
-    evaluateAutoReplyDecision(base({ currentAutoReplyCount: 3 })),
+    evaluateAutoReplyDecision(base({ currentAutoReplyCount: 10 })),
     { send: false, reason: "max_auto_replies_reached" },
   );
 
@@ -207,6 +274,13 @@ test("live manual +12245329236 cleaning/name sequence sends two expected follow-
       patientNameKnown: true,
     })),
     { send: false, reason: "reply_thanks" },
+  );
+  assert.deepEqual(
+    evaluateThanksCourtesyDecision(thanksBase({
+      replyClassification: thanksInbound.kind,
+      maxAutoReplies: 3,
+    })),
+    { send: true, body: THANKS_COURTESY_REPLY_BODY },
   );
 
   const okInbound = classifyInboundReply("ok");

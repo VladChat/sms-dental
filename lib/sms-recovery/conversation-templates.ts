@@ -16,7 +16,14 @@ import type { VoiceGreetingTemplateConfig } from "./voice-greeting-templates";
 // No saved initial template still sends the existing fixed production message.
 export const DEFAULT_INITIAL_TEMPLATE = smsRecoveryConfig.missedCallTemplate;
 
-export const DEFAULT_FOLLOW_UP_TEMPLATES: Record<1 | 2 | 3, string> = {
+export const MAX_AUTO_REPLIES = 10;
+export const AUTO_REPLY_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+export type FollowUpSlot = (typeof AUTO_REPLY_SLOTS)[number];
+
+export const DEFAULT_FOLLOW_UP_SLOTS = [1, 2, 3] as const;
+export type DefaultFollowUpSlot = (typeof DEFAULT_FOLLOW_UP_SLOTS)[number];
+
+export const DEFAULT_FOLLOW_UP_TEMPLATES: Record<DefaultFollowUpSlot, string> = {
   1: "Thanks for the info. What name should we use when our office follows up?",
   2: "Thanks, {{patient_name}}. I'll pass this to our team so they can follow up.",
   3: "Got it. We'll pass that along to our team.",
@@ -112,36 +119,35 @@ export function buildInitialSmsBody(
   return body;
 }
 
-// The four template slots the admin builder manages.
-export type FollowUpSlot = 1 | 2 | 3;
-
 export type ConversationTemplateConfig = {
   initialTemplate: string | null; // null => current code default initial template
-  maxAutoReplies: number; // 0..3
-  // body null means "use the current code default for this follow-up slot".
+  maxAutoReplies: number; // 0..10
+  // Slots 1-3 are default-backed when body is null. Slots 4-10 require custom
+  // text before they are usable.
   followUps: Record<FollowUpSlot, { body: string | null; enabled: boolean }>;
   voiceGreetings: VoiceGreetingTemplateConfig;
 };
 
-// The enabled follow-up sequences, capped by maxAutoReplies. A null body is
-// default-backed and still sendable when the slot is enabled.
+// The enabled follow-up sequences, capped by maxAutoReplies. Slots 1-3 can be
+// default-backed; slots 4-10 are included only when custom text exists.
 export function enabledFollowUpSequences(config: ConversationTemplateConfig): FollowUpSlot[] {
   const slots: FollowUpSlot[] = [];
-  for (const slot of [1, 2, 3] as FollowUpSlot[]) {
+  for (const slot of AUTO_REPLY_SLOTS) {
     if (slot > config.maxAutoReplies) continue;
     const fu = config.followUps[slot];
-    if (fu.enabled) slots.push(slot);
+    if (fu.enabled && followUpBodyForSlot(config, slot)) slots.push(slot);
   }
   return slots;
 }
 
-// Resolve the body for a given follow-up slot (custom body, else code default).
+// Resolve the body for a given follow-up slot (custom body, else code default
+// for slots 1-3). Returns null when the slot has no usable body.
 export function followUpBodyForSlot(
   config: ConversationTemplateConfig,
   slot: FollowUpSlot,
 ): string | null {
   const saved = (config.followUps[slot]?.body ?? "").trim();
-  return saved.length > 0 ? saved : DEFAULT_FOLLOW_UP_TEMPLATES[slot];
+  return saved.length > 0 ? saved : defaultFollowUpTemplateForSlot(slot);
 }
 
 export function effectiveInitialTemplate(customBody: string | null | undefined): string {
@@ -154,7 +160,7 @@ export function effectiveFollowUpTemplate(
   customBody: string | null | undefined,
 ): string {
   const saved = normalizeTemplateBody(customBody);
-  return saved ?? DEFAULT_FOLLOW_UP_TEMPLATES[slot];
+  return saved ?? defaultFollowUpTemplateForSlot(slot) ?? "";
 }
 
 export function isDefaultInitialTemplate(text: string | null | undefined): boolean {
@@ -165,7 +171,19 @@ export function isDefaultFollowUpTemplate(
   slot: FollowUpSlot,
   text: string | null | undefined,
 ): boolean {
-  return sameTemplateText(text, DEFAULT_FOLLOW_UP_TEMPLATES[slot]);
+  const defaultText = defaultFollowUpTemplateForSlot(slot);
+  return defaultText ? sameTemplateText(text, defaultText) : false;
+}
+
+export function hasDefaultFollowUpTemplate(slot: FollowUpSlot): boolean {
+  return defaultFollowUpTemplateForSlot(slot) !== null;
+}
+
+export function defaultFollowUpTemplateForSlot(slot: FollowUpSlot): string | null {
+  if ((DEFAULT_FOLLOW_UP_SLOTS as readonly number[]).includes(slot)) {
+    return DEFAULT_FOLLOW_UP_TEMPLATES[slot as DefaultFollowUpSlot];
+  }
+  return null;
 }
 
 export function normalizeTemplateBody(body: string | null | undefined): string | null {

@@ -49,9 +49,9 @@ export async function sendRecoverySms(
 ): Promise<SendRecoverySmsResult> {
   // Guard 1: SMS_RECOVERY_MODE must be owner_test or live.
   // Default is "disabled" — no SMS is ever sent unless explicitly configured.
-  const config = getSmsRecoveryConfig();
-  if (config.mode !== "owner_test" && config.mode !== "live") {
-    return { sent: false, reason: `sms_mode_${config.mode}` };
+  const smsConfig = getSmsRecoveryConfig();
+  if (smsConfig.mode !== "owner_test" && smsConfig.mode !== "live") {
+    return { sent: false, reason: `sms_mode_${smsConfig.mode}` };
   }
 
   // Guard 2: exact-number readiness — enforced in BOTH owner_test and live.
@@ -68,8 +68,8 @@ export async function sendRecoverySms(
   // live: clinic.sms_recovery_enabled + (local) clinic.sms_status active;
   // owner_test: caller must be in the SMS_TEST_ALLOWED_TO allowlist.
   const gate = evaluateRecoverySendGate({
-    mode: config.mode,
-    allowedTestNumbers: config.allowedNumbers,
+    mode: smsConfig.mode,
+    allowedTestNumbers: smsConfig.allowedNumbers,
     patientPhone: input.patientPhone,
     clinicSmsRecoveryEnabled: input.clinic.sms_recovery_enabled,
     clinicSmsStatus: input.clinic.sms_status,
@@ -78,7 +78,7 @@ export async function sendRecoverySms(
   if (!gate.ok) {
     logger.info("twilio.sms.send_blocked", {
       clinicId: input.clinic.id,
-      mode: config.mode,
+      mode: smsConfig.mode,
       reason: gate.reason,
     });
     return { sent: false, reason: gate.reason };
@@ -100,7 +100,7 @@ export async function sendRecoverySms(
   const duplicateDecision = evaluateDuplicateSuppression({
     patientPhone: input.patientPhone,
     alreadySent,
-    bypassNumbers: config.duplicateSuppressionBypassNumbers,
+    bypassNumbers: smsConfig.duplicateSuppressionBypassNumbers,
   });
   if (!duplicateDecision.ok) {
     logger.info("twilio.sms.skipped_duplicate", { clinicId: input.clinic.id });
@@ -112,6 +112,10 @@ export async function sendRecoverySms(
       patientPhoneLast4: input.patientPhone.slice(-4),
     });
   }
+  const resetPatientDisplayNameForTest = isDuplicateSuppressionBypassCaller(
+    input.patientPhone,
+    smsConfig.duplicateSuppressionBypassNumbers,
+  );
 
   // All guards passed. Build the message body. With no admin-configured initial
   // template this is byte-for-byte the fixed, compliance-reviewed default. Saved
@@ -217,7 +221,15 @@ export async function sendRecoverySms(
   // and the missed_call_recovery outbound row was recorded.
   if (recoveryMessageRecorded && input.conversationId) {
     try {
-      await resetConversationAutoReplyCycle(input.conversationId);
+      await resetConversationAutoReplyCycle(input.conversationId, {
+        resetPatientDisplayNameForTest,
+      });
+      if (resetPatientDisplayNameForTest) {
+        logger.info("twilio.sms.auto_reply_cycle_test_name_reset", {
+          clinicId: input.clinic.id,
+          patientPhoneLast4: input.patientPhone.slice(-4),
+        });
+      }
     } catch (err) {
       logger.error("twilio.sms.auto_reply_cycle_reset_failed", {
         clinicId: input.clinic.id,
@@ -241,6 +253,14 @@ export async function sendRecoverySms(
   });
 
   return { sent: true, messageSid };
+}
+
+function isDuplicateSuppressionBypassCaller(
+  patientPhone: string,
+  bypassNumbers: readonly string[],
+): boolean {
+  const normalizedPatient = normalizePhone(patientPhone);
+  return bypassNumbers.some((number) => normalizePhone(number) === normalizedPatient);
 }
 
 async function isPhoneOptedOut(

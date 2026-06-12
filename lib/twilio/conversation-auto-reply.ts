@@ -3,6 +3,7 @@ import { getTwilioMessagingEnv, getSmsRecoveryConfig, getAppDomainsSafe } from "
 import { recordOutboundMessage, hasPriorRecoveryOutbound } from "../db/messages";
 import {
   claimAutoReplySequence,
+  claimThanksCourtesyReply,
   getConversationAutoReplyState,
   touchConversation,
 } from "../db/conversations";
@@ -10,7 +11,10 @@ import { isPhoneOptedOut } from "../db/opt-outs";
 import { getClinicConversationConfig } from "../db/sms-conversation-settings";
 import { evaluateSmsReadinessForLiveSend } from "../db/sms-readiness";
 import { evaluateRecoverySendGate } from "../sms-recovery/live-send-evaluation";
-import { evaluateAutoReplyDecision } from "../sms-recovery/auto-reply-evaluation";
+import {
+  evaluateAutoReplyDecision,
+  evaluateThanksCourtesyDecision,
+} from "../sms-recovery/auto-reply-evaluation";
 import {
   replyClassificationBlocksAutoReply,
   type ReplyClassificationKind,
@@ -19,6 +23,7 @@ import {
   enabledFollowUpSequences,
   followUpBodyForSlot,
   renderConversationTemplate,
+  type FollowUpSlot,
 } from "../sms-recovery/conversation-templates";
 import { normalizePhone } from "../phone/normalize";
 import { logger } from "../logging/logger";
@@ -41,7 +46,8 @@ export type AutoReplyInput = {
 };
 
 export type AutoReplyResult =
-  | { sent: true; messageSid: string; sequence: 1 | 2 | 3 }
+  | { sent: true; messageSid: string; sequence: FollowUpSlot; replyType: "follow_up" }
+  | { sent: true; messageSid: string; replyType: "thanks_courtesy" }
   | { sent: false; reason: string };
 
 // Deterministically send (at most) one configured conversation auto-reply after
@@ -57,7 +63,9 @@ export async function maybeSendConversationAutoReply(
   if (input.keyword) return skipAutoReply(input, `keyword_${input.keyword}`);
   if (input.isDuplicateInbound) return skipAutoReply(input, "duplicate_inbound");
   const classificationBlock = replyClassificationBlocksAutoReply(input.replyClassification);
-  if (classificationBlock) return skipAutoReply(input, classificationBlock);
+  if (classificationBlock && input.replyClassification !== "thanks") {
+    return skipAutoReply(input, classificationBlock);
+  }
 
   const smsConfig = getSmsRecoveryConfig();
   const modeAllowsSend = smsConfig.mode === "owner_test" || smsConfig.mode === "live";
@@ -65,8 +73,6 @@ export async function maybeSendConversationAutoReply(
 
   const config = await getClinicConversationConfig(input.clinic.id);
   if (config.maxAutoReplies <= 0) return skipAutoReply(input, "auto_replies_disabled");
-  const enabledSequences = enabledFollowUpSequences(config);
-  if (enabledSequences.length === 0) return skipAutoReply(input, "template_disabled");
 
   const state = await getConversationAutoReplyState(input.conversationId);
   if (!state) return skipAutoReply(input, "conversation_missing");
@@ -85,6 +91,33 @@ export async function maybeSendConversationAutoReply(
     clinicSmsStatus: input.clinic.sms_status,
     numberReadiness: readiness,
   });
+
+  if (input.replyClassification === "thanks") {
+    const thanksDecision = evaluateThanksCourtesyDecision({
+      keyword: input.keyword,
+      isDuplicateInbound: input.isDuplicateInbound,
+      replyClassification: input.replyClassification,
+      modeAllowsSend,
+      gateOk: gate.ok,
+      optedOut,
+      hasPriorRecoveryOutbound: hasPrior,
+      maxAutoReplies: config.maxAutoReplies,
+      thanksCourtesyAlreadySent: state.smsThanksCourtesySentAt !== null,
+    });
+    if (!thanksDecision.send) return skipAutoReply(input, thanksDecision.reason);
+
+    const claimed = await claimThanksCourtesyReply(input.conversationId);
+    if (!claimed) return skipAutoReply(input, "thanks_courtesy_already_sent");
+
+    const sent = await sendConversationAutoReplySms(input, thanksDecision.body, {
+      auto_reply_type: "thanks_courtesy",
+    });
+    if (!sent.sent) return sent;
+    return { sent: true, messageSid: sent.messageSid, replyType: "thanks_courtesy" };
+  }
+
+  const enabledSequences = enabledFollowUpSequences(config);
+  if (enabledSequences.length === 0) return skipAutoReply(input, "template_disabled");
 
   const decision = evaluateAutoReplyDecision({
     keyword: input.keyword,
@@ -122,6 +155,23 @@ export async function maybeSendConversationAutoReply(
     return skipAutoReply(input, "slot_already_claimed");
   }
 
+  const sent = await sendConversationAutoReplySms(input, body, {
+    auto_reply_sequence: decision.sequence,
+  });
+  if (!sent.sent) return sent;
+  return {
+    sent: true,
+    messageSid: sent.messageSid,
+    sequence: decision.sequence,
+    replyType: "follow_up",
+  };
+}
+
+async function sendConversationAutoReplySms(
+  input: AutoReplyInput,
+  body: string,
+  metadata: Record<string, unknown>,
+): Promise<{ sent: true; messageSid: string } | { sent: false; reason: string }> {
   const { TWILIO_MESSAGING_SERVICE_SID } = getTwilioMessagingEnv();
   const client = getTwilioClient();
   const appBaseUrl = getAppDomainsSafe()?.appBaseUrl;
@@ -148,8 +198,8 @@ export async function maybeSendConversationAutoReply(
       clinicId: input.clinic.id,
       message: err instanceof Error ? err.message : "unknown",
     });
-    // Slot already claimed; we intentionally do not roll back so a Twilio retry
-    // of the inbound never produces a second send attempt for the same slot.
+    // The slot/courtesy marker is already claimed; we intentionally do not roll
+    // back so a Twilio retry never produces a second send attempt.
     return { sent: false, reason: "twilio_send_error" };
   }
 
@@ -180,7 +230,7 @@ export async function maybeSendConversationAutoReply(
         from: messageFrom,
         expected_from: input.twilioPhone,
         sender_mismatch: senderMismatch,
-        auto_reply_sequence: decision.sequence,
+        ...metadata,
       },
     });
     await touchConversation(input.conversationId);
@@ -194,9 +244,9 @@ export async function maybeSendConversationAutoReply(
   logger.info("twilio.sms.auto_reply_sent", {
     clinicId: input.clinic.id,
     messageSid,
-    sequence: decision.sequence,
+    ...metadata,
   });
-  return { sent: true, messageSid, sequence: decision.sequence };
+  return { sent: true, messageSid };
 }
 
 function skipAutoReply(input: AutoReplyInput, reason: string): AutoReplyResult {

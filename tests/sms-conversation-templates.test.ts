@@ -6,14 +6,19 @@ import path from "node:path";
 import { smsRecoveryConfig } from "../config/sms-recovery.config";
 import { buildMissedCallRecoverySmsBody } from "../lib/sms-recovery/templates";
 import {
+  AUTO_REPLY_SLOTS,
   DEFAULT_FOLLOW_UP_TEMPLATES,
   DEFAULT_INITIAL_TEMPLATE,
+  MAX_AUTO_REPLIES,
   buildInitialSmsBody,
+  defaultFollowUpTemplateForSlot,
   effectiveFollowUpTemplate,
   effectiveInitialTemplate,
   enabledFollowUpSequences,
   followUpBodyForSlot,
+  hasDefaultFollowUpTemplate,
   renderConversationTemplate,
+  type FollowUpSlot,
 } from "../lib/sms-recovery/conversation-templates";
 import { prepareConversationTemplateStorage } from "../lib/db/sms-conversation-settings";
 import { buildRecoverySmsBodyFromConversationConfig } from "../lib/sms-recovery/send-body";
@@ -31,6 +36,17 @@ const CLINIC = "Fairstone Dental Smile";
 
 function count(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1;
+}
+
+function followUpConfig(
+  overrides: Partial<Record<FollowUpSlot, { body: string | null; enabled: boolean }>> = {},
+): Record<FollowUpSlot, { body: string | null; enabled: boolean }> {
+  return Object.fromEntries(
+    AUTO_REPLY_SLOTS.map((slot) => [
+      slot,
+      overrides[slot] ?? { body: null, enabled: false },
+    ]),
+  ) as Record<FollowUpSlot, { body: string | null; enabled: boolean }>;
 }
 
 // ----------------------------------------------------------- initial SMS body
@@ -113,6 +129,10 @@ test("default-backed templates expose effective code defaults", () => {
   assert.equal(effectiveInitialTemplate(null), DEFAULT_INITIAL_TEMPLATE);
   assert.equal(effectiveFollowUpTemplate(1, null), DEFAULT_FOLLOW_UP_TEMPLATES[1]);
   assert.equal(effectiveFollowUpTemplate(2, "Custom text"), "Custom text");
+  assert.equal(effectiveFollowUpTemplate(4, null), "");
+  assert.equal(defaultFollowUpTemplateForSlot(4), null);
+  assert.equal(hasDefaultFollowUpTemplate(3), true);
+  assert.equal(hasDefaultFollowUpTemplate(4), false);
 });
 
 test("initial full-template validation preserves identity and STOP requirements", () => {
@@ -163,6 +183,9 @@ test("canonical default copy is current", () => {
     DEFAULT_FOLLOW_UP_TEMPLATES[3],
     "Got it. We'll pass that along to our team.",
   );
+  assert.equal(MAX_AUTO_REPLIES, 10);
+  assert.deepEqual(AUTO_REPLY_SLOTS, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.equal(defaultFollowUpTemplateForSlot(4), null);
 });
 
 test("default SMS and voice copy uses ASCII punctuation only", () => {
@@ -219,11 +242,11 @@ test("enabled follow-up with null body uses the current code default", () => {
   const config = {
     initialTemplate: null,
     maxAutoReplies: 3,
-    followUps: {
+    followUps: followUpConfig({
       1: { body: null, enabled: true },
       2: { body: "Custom second reply.", enabled: true },
       3: { body: null, enabled: false },
-    },
+    }),
     voiceGreetings: {
       will_send: { body: null },
       duplicate: { body: null },
@@ -236,15 +259,40 @@ test("enabled follow-up with null body uses the current code default", () => {
   assert.equal(followUpBodyForSlot(config, 2), "Custom second reply.");
 });
 
+test("additional follow-up slots have no default and require custom text to be usable", () => {
+  const config = {
+    initialTemplate: null,
+    maxAutoReplies: 10,
+    followUps: followUpConfig({
+      1: { body: null, enabled: true },
+      2: { body: null, enabled: true },
+      3: { body: null, enabled: true },
+      4: { body: null, enabled: true },
+      5: { body: "Custom fifth reply.", enabled: true },
+      10: { body: "Custom tenth reply.", enabled: true },
+    }),
+    voiceGreetings: {
+      will_send: { body: null },
+      duplicate: { body: null },
+      none: { body: null },
+    },
+  };
+
+  assert.deepEqual(enabledFollowUpSequences(config), [1, 2, 3, 5, 10]);
+  assert.equal(followUpBodyForSlot(config, 4), null);
+  assert.equal(followUpBodyForSlot(config, 5), "Custom fifth reply.");
+  assert.equal(effectiveFollowUpTemplate(10, null), "");
+});
+
 test("saving default text prepares null/delete storage instead of literal defaults", () => {
   const prepared = prepareConversationTemplateStorage({
     initialTemplate: DEFAULT_INITIAL_TEMPLATE,
     maxAutoReplies: 2,
-    followUps: {
+    followUps: followUpConfig({
       1: { body: DEFAULT_FOLLOW_UP_TEMPLATES[1], enabled: true },
       2: { body: "Custom second reply.", enabled: true },
       3: { body: DEFAULT_FOLLOW_UP_TEMPLATES[3], enabled: false },
-    },
+    }),
     voiceGreetings: {
       will_send: { body: DEFAULT_VOICE_GREETING_TEMPLATES.will_send },
       duplicate: { body: DEFAULT_VOICE_GREETING_TEMPLATES.duplicate },
@@ -271,11 +319,11 @@ test("disabled custom follow-up draft is preserved, disabled default follow-up i
   const prepared = prepareConversationTemplateStorage({
     initialTemplate: null,
     maxAutoReplies: 0,
-    followUps: {
+    followUps: followUpConfig({
       1: { body: "Custom draft reply.", enabled: false },
       2: { body: DEFAULT_FOLLOW_UP_TEMPLATES[2], enabled: false },
       3: { body: null, enabled: false },
-    },
+    }),
     voiceGreetings: {
       will_send: { body: null },
       duplicate: { body: null },
@@ -297,6 +345,44 @@ test("disabled custom follow-up draft is preserved, disabled default follow-up i
   assert.ok(prepared.deleteRows.some((row) => row.role === "auto_reply" && row.sequence === 3));
 });
 
+test("saving additional empty follow-up slots fails closed while preserving custom drafts", () => {
+  const prepared = prepareConversationTemplateStorage({
+    initialTemplate: null,
+    maxAutoReplies: 10,
+    followUps: followUpConfig({
+      4: { body: null, enabled: true },
+      5: { body: "Custom fifth reply.", enabled: false },
+      10: { body: "Custom tenth reply.", enabled: true },
+    }),
+    voiceGreetings: {
+      will_send: { body: null },
+      duplicate: { body: null },
+      none: { body: null },
+    },
+  });
+
+  assert.equal(prepared.maxAutoReplies, 10);
+  assert.ok(prepared.deleteRows.some((row) => row.role === "auto_reply" && row.sequence === 4));
+  assert.ok(
+    prepared.upsertRows.some(
+      (row) =>
+        row.role === "auto_reply" &&
+        row.sequence === 5 &&
+        row.body === "Custom fifth reply." &&
+        row.enabled === false,
+    ),
+  );
+  assert.ok(
+    prepared.upsertRows.some(
+      (row) =>
+        row.role === "auto_reply" &&
+        row.sequence === 10 &&
+        row.body === "Custom tenth reply." &&
+        row.enabled === true,
+    ),
+  );
+});
+
 test("default-cleanup migration is data-only and preserves follow-up enabled rows", () => {
   const sql = fs.readFileSync(
     path.join(process.cwd(), "supabase", "migrations", "20260621000100_clean_sms_template_default_overrides.sql"),
@@ -312,6 +398,18 @@ test("default-cleanup migration is data-only and preserves follow-up enabled row
   assert.ok(sql.includes("Thanks. What name should we use when our office follows up?"));
   assert.ok(sql.includes("Got it. We''ll include that note for the office."));
   assert.ok(sql.includes("We''ll send you a text now, so our team can follow up."));
+});
+
+test("follow-up expansion migration widens SMS slots and adds thanks courtesy state", () => {
+  const sql = fs.readFileSync(
+    path.join(process.cwd(), "supabase", "migrations", "20260622000100_expand_sms_conversation_followups.sql"),
+    "utf8",
+  );
+
+  assert.match(sql, /max_auto_replies\s+between\s+0\s+and\s+10/i);
+  assert.match(sql, /template_role\s+=\s+'auto_reply'\s+and\s+sequence\s+between\s+1\s+and\s+10/i);
+  assert.match(sql, /template_role\s+=\s+'voice_greeting'\s+and\s+sequence\s+between\s+1\s+and\s+3/i);
+  assert.match(sql, /add column if not exists sms_thanks_courtesy_sent_at timestamptz/i);
 });
 
 test("voice greeting defaults render with clinic identity", () => {

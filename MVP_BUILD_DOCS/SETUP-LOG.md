@@ -7365,3 +7365,60 @@ Validation:
 No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
 Stripe change, no phone-number lifecycle change, no production env change, no
 secret printing, and `.qwen/` remained untouched.
+
+---
+
+## 2026-06-12 — SMS Conversation Builder 10 follow-ups and thanks courtesy reply
+
+Expanded the deterministic SMS Conversation Builder follow-up model and applied
+the production schema update without sending SMS or placing calls.
+
+What changed:
+
+- Follow-up slots are now centralized as #1-#10 with
+  `max_auto_replies` allowed from 0 to 10.
+- Slots #1-#3 keep their canonical code defaults and may be stored as enabled
+  default-backed rows with `body_text=NULL`.
+- Slots #4-#10 have no code default; admin save and storage logic require
+  custom text before they are usable or included in the configured maximum.
+- The platform-admin builder exposes slots #4-#10 under an additional
+  follow-ups disclosure, keeps read-only/Edit/Save behavior, and disables
+  custom-only slots when their text is cleared.
+- Thanks replies still do not trigger a normal numbered follow-up or increment
+  `sms_auto_reply_count`. They may send exactly one deterministic courtesy
+  reply per recovery cycle: `You're welcome. Our team will follow up.`
+- Added `patient_conversations.sms_thanks_courtesy_sent_at` as the courtesy
+  idempotency marker. A new successfully recorded recovery SMS clears the
+  normal auto-reply counter, last-sent timestamp, and courtesy marker.
+- Real callers keep `patient_display_name` across recovery cycles. Configured
+  duplicate-suppression bypass test callers only have `patient_display_name`
+  reset after the new recovery SMS is accepted by Twilio and recorded.
+- Added migration
+  `supabase/migrations/20260622000100_expand_sms_conversation_followups.sql`.
+
+Production migration:
+
+- Supabase project verified: `qfjpvbvfvhbtebwivcdc`.
+- Applied migration `20260622000100_expand_sms_conversation_followups.sql`
+  over the documented direct/admin DB connection and recorded migration history
+  version `20260622000100`.
+- Post-migration verification: migration history count = 1;
+  `clinic_sms_conversation_settings_max_check` allows 10;
+  `clinic_sms_message_templates_sequence_check` allows `auto_reply` sequence
+  1-10 while keeping `voice_greeting` sequence 1-3; and
+  `patient_conversations.sms_thanks_courtesy_sent_at` exists.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 143 tests.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean, with only Git's CRLF normalization warning for
+  `app/admin/(console)/clinics/[clinicId]/_components/AdminSmsConversationBuilder.tsx`.
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no production env change, no
+secret printing, no template body dump, and `.qwen/` remained untouched.

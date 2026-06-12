@@ -7,13 +7,16 @@ import {
   saveClinicConversationConfig,
 } from "../../../../../../lib/db/sms-conversation-settings";
 import {
+  AUTO_REPLY_SLOTS,
   buildInitialSmsBody,
-  DEFAULT_FOLLOW_UP_TEMPLATES,
   DEFAULT_INITIAL_TEMPLATE,
+  defaultFollowUpTemplateForSlot,
   effectiveFollowUpTemplate,
   effectiveInitialTemplate,
+  hasDefaultFollowUpTemplate,
   isDefaultFollowUpTemplate,
   isDefaultInitialTemplate,
+  MAX_AUTO_REPLIES,
   MAX_INITIAL_TEMPLATE_LENGTH,
   MAX_TEMPLATE_BODY_LENGTH,
   renderConversationTemplate,
@@ -41,7 +44,7 @@ import { recordAdminAuditEvent } from "../../../../../../lib/db/admin/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SLOTS: FollowUpSlot[] = [1, 2, 3];
+const SLOTS: readonly FollowUpSlot[] = AUTO_REPLY_SLOTS;
 // Sample name used only for follow-up previews ({{patient_name}}).
 const PREVIEW_PATIENT_NAME = "Alex";
 
@@ -53,7 +56,7 @@ function buildConversationResponse(
     SLOTS.map((slot) => {
       const body = config.followUps[slot]?.body ?? null;
       const enabled = config.followUps[slot]?.enabled ?? false;
-      const defaultText = DEFAULT_FOLLOW_UP_TEMPLATES[slot];
+      const defaultText = defaultFollowUpTemplateForSlot(slot);
       const effectiveText = effectiveFollowUpTemplate(slot, body);
       return [
         slot,
@@ -131,7 +134,7 @@ function buildConversationResponse(
       ),
     },
     limits: {
-      maxAutoReplies: 3,
+      maxAutoReplies: MAX_AUTO_REPLIES,
       maxInitialTemplateLength: MAX_INITIAL_TEMPLATE_LENGTH,
       maxTemplateBodyLength: MAX_TEMPLATE_BODY_LENGTH,
       maxVoiceGreetingTemplateLength: MAX_VOICE_GREETING_TEMPLATE_LENGTH,
@@ -190,10 +193,15 @@ export async function POST(
   }
   const input = (body ?? {}) as Record<string, unknown>;
 
-  // Max auto-replies (0..3).
+  // Max auto-replies (0..10).
   const maxRaw = input.maxAutoReplies;
-  if (typeof maxRaw !== "number" || !Number.isInteger(maxRaw) || maxRaw < 0 || maxRaw > 3) {
-    return jsonBadRequest("Choose between 0 and 3 automated replies.");
+  if (
+    typeof maxRaw !== "number" ||
+    !Number.isInteger(maxRaw) ||
+    maxRaw < 0 ||
+    maxRaw > MAX_AUTO_REPLIES
+  ) {
+    return jsonBadRequest(`Choose between 0 and ${MAX_AUTO_REPLIES} automated replies.`);
   }
   const maxAutoReplies = maxRaw;
 
@@ -204,27 +212,32 @@ export async function POST(
 
   // Follow-ups.
   const rawFollowUps = (input.followUps ?? {}) as Record<string, FollowUpInput>;
-  const followUps: Record<FollowUpSlot, { body: string | null; enabled: boolean }> = {
-    1: { body: null, enabled: false },
-    2: { body: null, enabled: false },
-    3: { body: null, enabled: false },
-  };
+  const followUps = emptyFollowUps();
   for (const slot of SLOTS) {
     const raw = rawFollowUps[String(slot)] ?? rawFollowUps[slot as unknown as string] ?? {};
     const enabled = raw.enabled === true;
     const validated = validateFollowUpBody(pickTemplateText(raw as Record<string, unknown>, "body"));
     if (!validated.ok) return jsonBadRequest(`Follow-up #${slot}: ${validated.message}`);
-    followUps[slot] = { body: validated.value.length > 0 ? validated.value : null, enabled };
+    const normalizedBody = validated.value.length > 0 ? validated.value : null;
+    if (enabled && !normalizedBody && !hasDefaultFollowUpTemplate(slot)) {
+      return jsonBadRequest(`Follow-up #${slot} needs custom text before it can be enabled.`);
+    }
+    followUps[slot] = { body: normalizedBody, enabled };
   }
 
   // max_auto_replies cannot exceed the configured, enabled follow-up slots. A
-  // null/empty body is default-backed and still usable when enabled.
+  // null/empty body is default-backed only for slots 1-3.
   for (const slot of SLOTS) {
     if (slot > maxAutoReplies) break;
     const fu = followUps[slot];
     if (!fu.enabled) {
       return jsonBadRequest(
         `Enable follow-up #${slot} before allowing ${maxAutoReplies} automated replies.`,
+      );
+    }
+    if (!fu.body && !hasDefaultFollowUpTemplate(slot)) {
+      return jsonBadRequest(
+        `Add custom text to follow-up #${slot} before allowing ${maxAutoReplies} automated replies.`,
       );
     }
   }
@@ -312,6 +325,12 @@ function emptyVoiceGreetings(): Record<VoiceGreetingScenario, { body: string | n
     duplicate: { body: null },
     none: { body: null },
   };
+}
+
+function emptyFollowUps(): Record<FollowUpSlot, { body: string | null; enabled: boolean }> {
+  return Object.fromEntries(
+    SLOTS.map((slot) => [slot, { body: null, enabled: false }]),
+  ) as Record<FollowUpSlot, { body: string | null; enabled: boolean }>;
 }
 
 function pickTemplateText(

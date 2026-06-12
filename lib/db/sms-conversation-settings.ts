@@ -4,8 +4,11 @@ import type {
   FollowUpSlot,
 } from "../sms-recovery/conversation-templates";
 import {
+  AUTO_REPLY_SLOTS,
+  defaultFollowUpTemplateForSlot,
   isDefaultFollowUpTemplate,
   isDefaultInitialTemplate,
+  MAX_AUTO_REPLIES,
   normalizeTemplateBody,
   sameTemplateText,
 } from "../sms-recovery/conversation-templates";
@@ -53,17 +56,13 @@ export async function getClinicConversationConfig(
 
   const maxAutoReplies = clampMax(settingsRows[0]?.max_auto_replies ?? 0);
   let initialTemplate: string | null = null;
-  const followUps: ConversationTemplateConfig["followUps"] = {
-    1: { body: null, enabled: false },
-    2: { body: null, enabled: false },
-    3: { body: null, enabled: false },
-  };
+  const followUps = emptyFollowUps();
   const voiceGreetings = defaultVoiceGreetingTemplateConfig();
 
   for (const row of templateRows) {
     if (row.template_role === "initial" && row.sequence === 0) {
       initialTemplate = normalizeTemplateBody(row.body_text);
-    } else if (row.template_role === "auto_reply" && row.sequence >= 1 && row.sequence <= 3) {
+    } else if (row.template_role === "auto_reply" && isAutoReplySlot(row.sequence)) {
       followUps[row.sequence as FollowUpSlot] = {
         body: normalizeTemplateBody(row.body_text),
         enabled: row.enabled,
@@ -81,7 +80,7 @@ export async function getClinicConversationConfig(
 
 export type SaveConversationConfigInput = {
   initialTemplate: string | null; // null/empty/default => current code default
-  maxAutoReplies: number; // 0..3 (clamped)
+  maxAutoReplies: number; // 0..10 (clamped)
   followUps: Record<FollowUpSlot, { body: string | null; enabled: boolean }>;
   voiceGreetings: Record<VoiceGreetingScenario, { body: string | null }>;
 };
@@ -122,18 +121,20 @@ export function prepareConversationTemplateStorage(
     deleteRows.push({ role: "initial", sequence: 0 });
   }
 
-  for (const slot of [1, 2, 3] as FollowUpSlot[]) {
-    const incoming = input.followUps[slot];
+  for (const slot of AUTO_REPLY_SLOTS) {
+    const incoming = input.followUps[slot] ?? { body: null, enabled: false };
     const customBody = customOrNull(
       normalizeTemplateBody(incoming.body),
       (body) => isDefaultFollowUpTemplate(slot, body),
     );
-    if (incoming.enabled || customBody) {
+    const hasUsableBody = customBody !== null || defaultFollowUpTemplateForSlot(slot) !== null;
+    const enabled = incoming.enabled && hasUsableBody;
+    if (enabled || customBody) {
       upsertRows.push({
         role: "auto_reply",
         sequence: slot,
         body: customBody,
-        enabled: incoming.enabled,
+        enabled,
       });
     } else {
       deleteRows.push({ role: "auto_reply", sequence: slot });
@@ -224,5 +225,15 @@ function customOrNull(
 
 function clampMax(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(3, Math.trunc(value)));
+  return Math.max(0, Math.min(MAX_AUTO_REPLIES, Math.trunc(value)));
+}
+
+function emptyFollowUps(): ConversationTemplateConfig["followUps"] {
+  return Object.fromEntries(
+    AUTO_REPLY_SLOTS.map((slot) => [slot, { body: null, enabled: false }]),
+  ) as ConversationTemplateConfig["followUps"];
+}
+
+function isAutoReplySlot(value: number): value is FollowUpSlot {
+  return (AUTO_REPLY_SLOTS as readonly number[]).includes(value);
 }

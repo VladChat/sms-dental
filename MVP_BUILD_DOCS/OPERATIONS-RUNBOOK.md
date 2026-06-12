@@ -3405,14 +3405,16 @@ unchanged. No AI runtime — everything is deterministic.
   `GET|POST /api/admin/clinics/[clinicId]/sms-conversation`
   (`clinic.sms_conversation.update` audit).
 - Tables (migration `20260619000100_sms_conversation_builder.sql`):
-  `clinic_sms_conversation_settings` (`max_auto_replies` 0–3) and
+  `clinic_sms_conversation_settings` (`max_auto_replies` 0–10) and
   `clinic_sms_message_templates` (`initial` seq 0 = full initial template;
-  `auto_reply` seq 1–3 = full follow-up body, ≤240 chars). In
+  `auto_reply` seq 1–10 = full follow-up body, ≤240 chars). In
   `clinic_sms_message_templates`, `body_text=NULL` means use the current code
-  default for that template; the database stores only real custom overrides and
-  real follow-up enablement. Conversation state added to `patient_conversations` (`patient_display_name`,
-  `sms_auto_reply_count`, `sms_auto_reply_last_sent_at`) and a `message_kind`
-  classifier on `messages`.
+  default for default-backed templates; for auto-replies this applies only to
+  slots #1-#3. Slots #4-#10 have no default and require custom text before they
+  are usable. Conversation state added to `patient_conversations`
+  (`patient_display_name`, `sms_auto_reply_count`,
+  `sms_auto_reply_last_sent_at`, `sms_thanks_courtesy_sent_at`) and a
+  `message_kind` classifier on `messages`.
 - Voice template storage (migration
   `20260620000100_voice_greeting_templates.sql`): the same
   `clinic_sms_message_templates` table also allows
@@ -3437,11 +3439,16 @@ unchanged. No AI runtime — everything is deterministic.
   missed-call recovery SMS and `recordOutboundMessage` successfully stores the
   outbound `message_kind='missed_call_recovery'` row, `sendRecoverySms` calls
   `resetConversationAutoReplyCycle(conversationId)`. This sets
-  `sms_auto_reply_count=0` and `sms_auto_reply_last_sent_at=null` for the
-  conversation, keeps `patient_display_name` unchanged, and then touches the
-  conversation timestamp. Do not reset before the Twilio send or before the
-  recovery message row is recorded; otherwise a failed/retried send could make
-  the next inbound reply eligible incorrectly.
+  `sms_auto_reply_count=0`, `sms_auto_reply_last_sent_at=null`, and
+  `sms_thanks_courtesy_sent_at=null` for the conversation, and then touches the
+  conversation timestamp. For real callers, `patient_display_name` is kept. For
+  configured internal duplicate-suppression bypass callers only
+  (`SMS_TEST_BYPASS_DUPLICATE_SUPPRESSION_TO` /
+  `duplicateSuppressionBypassNumbers`), `patient_display_name` is reset after
+  the new recovery SMS is accepted and recorded so repeat live-test cycles start
+  clean. Do not reset before the Twilio send or before the recovery message row
+  is recorded; otherwise a failed/retried send could make the next inbound reply
+  eligible incorrectly.
 - **Auto-replies:** after an ordinary patient reply, `maybeSendConversationAutoReply`
   may send one deterministic follow-up. It enforces every guard itself: mode
   (live/owner_test), exact-number readiness, recovery send gate
@@ -3449,18 +3456,25 @@ unchanged. No AI runtime — everything is deterministic.
   `max_auto_replies`, enabled template slot (custom body or NULL default-backed
   body), and never on
   STOP/START/HELP or a duplicate webhook. Slots are claimed with an atomic
-  compare on `sms_auto_reply_count` so retries/races never double-send. The 4th+
-  reply is stored only (no send). Auto-replies are recorded with
+  compare on `sms_auto_reply_count` so retries/races never double-send. The 11th+
+  reply, or any reply beyond the configured max, is stored only (no normal
+  follow-up). Auto-replies are recorded with
   `message_kind='conversation_auto_reply'` and are excluded from recovery
   duplicate suppression (`hasSentRecoverySmsSince` counts only
   recovery/legacy-null rows).
 - **Reply classification (2026-06-12):** ordinary first-seen inbound replies
   are classified in `lib/sms-recovery/reply-classification.ts`. Thanks,
-  acknowledgements, negative replies, and unclear short replies are saved but
-  produce no normal follow-up, consume no auto-reply slot, and send no courtesy
-  reply. Informative replies and safe name-provided replies may continue through
-  the guarded auto-reply flow. Compliance keywords are still owned by
-  `detectSmsKeyword` before classification.
+  acknowledgements, negative replies, and unclear short replies are saved and
+  do not consume an auto-reply slot. A thanks reply does not trigger a normal
+  follow-up; instead, if `max_auto_replies > 0`, the conversation has a prior
+  recovery outbound, the normal mode/readiness/recovery/opt-out gates pass, the
+  inbound is not a duplicate, and no thanks courtesy reply has been sent in the
+  current recovery cycle, the system sends exactly one deterministic courtesy
+  reply: `You're welcome. Our team will follow up.` It is recorded as
+  `message_kind='conversation_auto_reply'` with `auto_reply_type='thanks_courtesy'`
+  and does not increment `sms_auto_reply_count`. Acknowledgements, negative
+  replies, and unclear short replies never trigger a courtesy reply. Compliance
+  keywords are still owned by `detectSmsKeyword` before classification.
 - **Patient name:** `extractPatientName` is conservative and fail-closed (1–3
   letter words, known lead-ins like "my name is", rejects digits/links/emails/
   keywords/ambiguous appointment words; simple messages ≤40 chars, clear
@@ -3489,8 +3503,16 @@ unchanged. No AI runtime — everything is deterministic.
   truth. Admin API GET returns `defaultText`, `effectiveText`, `customBody`, and
   `isCustom` for each editable template. Save compares submitted text to the
   canonical defaults; matching default text is stored as NULL or the row is
-  deleted. Enabled follow-up rows may intentionally have `body_text=NULL`, which
-  means send the current code default for that slot.
+  deleted. Enabled follow-up rows #1-#3 may intentionally have
+  `body_text=NULL`, which means send the current code default for that slot.
+  Follow-up rows #4-#10 have no code default and require custom text before they
+  can be enabled or included in `max_auto_replies`.
+- **Follow-up expansion (2026-06-12):** migration
+  `20260622000100_expand_sms_conversation_followups.sql` widens
+  `clinic_sms_conversation_settings_max_check` to 0–10, widens
+  `clinic_sms_message_templates_sequence_check` so `auto_reply` allows
+  sequence 1–10 while `voice_greeting` remains 1–3, and adds
+  `patient_conversations.sms_thanks_courtesy_sent_at`.
 - **Default cleanup migration (2026-06-12):** data-only migration
   `20260621000100_clean_sms_template_default_overrides.sql` cleans known stale
   saved default-like values from `clinic_sms_message_templates`. It deletes
@@ -3504,8 +3526,9 @@ unchanged. No AI runtime — everything is deterministic.
   and enables them for a specific clinic.
 - With no saved voice greeting rows, each scenario uses the system default voice
   greeting text.
-- With an enabled follow-up row whose `body_text` is NULL, the current code
-  default follow-up for that slot is sent. Disabled follow-ups do not send.
+- With an enabled follow-up row #1-#3 whose `body_text` is NULL, the current
+  code default follow-up for that slot is sent. Follow-up #4-#10 rows require
+  custom text; disabled follow-ups do not send.
 - Verify after deploy: `GET /api/admin/clinics/{id}/ai-knowledge` and
   `…/sms-conversation` return 401 unauthenticated; `/admin/clinics/{id}` shows
   the **AI knowledge** and **SMS messages** tabs; `/account?section=ai_knowledge`
@@ -3514,7 +3537,10 @@ unchanged. No AI runtime — everything is deterministic.
   to_regclass('public.clinic_sms_message_templates');` (both non-null);
   `select count(*) from public.clinic_sms_conversation_settings;` (0 until an
   admin saves with non-default `max_auto_replies`). Confirm
-  `clinic_sms_message_templates_role_check` allows `voice_greeting`.
+  `clinic_sms_message_templates_role_check` allows `voice_greeting`,
+  `clinic_sms_message_templates_sequence_check` allows `auto_reply` 1-10 while
+  keeping `voice_greeting` 1-3, and
+  `patient_conversations.sms_thanks_courtesy_sent_at` exists.
   After applying `20260621000100_clean_sms_template_default_overrides.sql`,
   default-like strings should no longer appear in
   `clinic_sms_message_templates.body_text`; do not print template bodies in

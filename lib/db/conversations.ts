@@ -37,15 +37,29 @@ export async function touchConversation(conversationId: string): Promise<void> {
   `;
 }
 
+export type ResetConversationAutoReplyCycleOptions = {
+  resetPatientDisplayNameForTest?: boolean;
+};
+
 // Start a fresh deterministic auto-reply cycle after a new missed-call
 // recovery SMS is accepted and recorded. Keep the safely collected display name
-// so future follow-ups can still address the patient naturally.
-export async function resetConversationAutoReplyCycle(conversationId: string): Promise<void> {
+// for real callers; configured internal duplicate-bypass test callers can opt
+// into a clean name state for repeat live-test cycles.
+export async function resetConversationAutoReplyCycle(
+  conversationId: string,
+  options: ResetConversationAutoReplyCycleOptions = {},
+): Promise<void> {
   const sql = getDb();
+  const resetPatientDisplayName = options.resetPatientDisplayNameForTest === true;
   await sql`
     update public.patient_conversations
     set sms_auto_reply_count = 0,
         sms_auto_reply_last_sent_at = null,
+        sms_thanks_courtesy_sent_at = null,
+        patient_display_name = case
+          when ${resetPatientDisplayName} then null
+          else patient_display_name
+        end,
         updated_at = now()
     where id = ${conversationId}
   `;
@@ -54,6 +68,7 @@ export async function resetConversationAutoReplyCycle(conversationId: string): P
 export type ConversationAutoReplyState = {
   patientDisplayName: string | null;
   smsAutoReplyCount: number;
+  smsThanksCourtesySentAt: string | null;
 };
 
 // Read the conversation state the auto-reply decision needs.
@@ -61,8 +76,12 @@ export async function getConversationAutoReplyState(
   conversationId: string,
 ): Promise<ConversationAutoReplyState | null> {
   const sql = getDb();
-  const rows = await sql<{ patient_display_name: string | null; sms_auto_reply_count: number }[]>`
-    select patient_display_name, sms_auto_reply_count
+  const rows = await sql<{
+    patient_display_name: string | null;
+    sms_auto_reply_count: number;
+    sms_thanks_courtesy_sent_at: string | null;
+  }[]>`
+    select patient_display_name, sms_auto_reply_count, sms_thanks_courtesy_sent_at
     from public.patient_conversations
     where id = ${conversationId}
     limit 1
@@ -72,6 +91,7 @@ export async function getConversationAutoReplyState(
   return {
     patientDisplayName: row.patient_display_name,
     smsAutoReplyCount: row.sms_auto_reply_count ?? 0,
+    smsThanksCourtesySentAt: row.sms_thanks_courtesy_sent_at,
   };
 }
 
@@ -127,4 +147,19 @@ export async function claimAutoReplySequence(
     returning sms_auto_reply_count
   `;
   return rows[0]?.sms_auto_reply_count ?? null;
+}
+
+// Atomically claim the one allowed thanks-courtesy reply for the current
+// recovery cycle. Returns false when another webhook/retry already claimed it.
+export async function claimThanksCourtesyReply(conversationId: string): Promise<boolean> {
+  const sql = getDb();
+  const rows = await sql<{ id: string }[]>`
+    update public.patient_conversations
+    set sms_thanks_courtesy_sent_at = now(),
+        updated_at = now()
+    where id = ${conversationId}
+      and sms_thanks_courtesy_sent_at is null
+    returning id
+  `;
+  return rows.length > 0;
 }

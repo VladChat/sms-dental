@@ -89,11 +89,25 @@ test("admin SMS builder shows compact variables, SMS block labels, and active pr
   assert.ok(src.includes("{{patient_name}}"));
   assert.ok(src.includes("Initial SMS"));
   assert.ok(src.includes("Follow-up #{slot}"));
+  assert.ok(src.includes("Additional follow-ups"));
+  assert.ok(src.includes("Follow-ups #4-#10 require custom text before they can be enabled."));
   assert.ok(src.includes("Maximum automated replies"));
   assert.ok(src.includes("setInitialTemplate(data.config.initial.effectiveText)"));
   assert.ok(src.includes("body: fu?.effectiveText ?? defaultText"));
   assert.ok(src.includes("body: vg?.effectiveText ?? defaultText"));
   assert.ok(src.includes("initialTemplate,"));
+});
+
+test("admin SMS builder exposes 10 follow-up slots with custom-only additional slots", () => {
+  const src = read(
+    path.join("app", "admin", "(console)", "clinics", "[clinicId]", "_components", "AdminSmsConversationBuilder.tsx"),
+  );
+  assert.ok(src.includes("const SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const"));
+  assert.ok(src.includes("const ADDITIONAL_SLOTS = [4, 5, 6, 7, 8, 9, 10] as const"));
+  assert.ok(src.includes("const SLOTS_WITH_ZERO = [0, ...SLOTS] as const"));
+  assert.ok(src.includes("body.trim().length > 0 || followUps[slot].hasCodeTemplate"));
+  assert.ok(src.includes("!state.hasCodeTemplate && body.trim().length === 0 ? { enabled: false } : {}"));
+  assert.ok(src.includes("state.hasCodeTemplate ? \"Reset to default\" : \"Clear\""));
 });
 
 test("admin SMS conversation route is platform-admin guarded and validates full initial template", () => {
@@ -128,6 +142,16 @@ test("admin SMS conversation route validates and audits voice greetings without 
   assert.ok(!src.includes("suggestion"));
   assert.ok(!src.includes("initial_body"));
   assert.ok(!src.includes("voice_body"));
+});
+
+test("admin SMS conversation route allows 10 follow-ups but requires custom text after slot 3", () => {
+  const src = read(path.join("app", "api", "admin", "clinics", "[clinicId]", "sms-conversation", "route.ts"));
+  assert.ok(src.includes("AUTO_REPLY_SLOTS"));
+  assert.ok(src.includes("MAX_AUTO_REPLIES"));
+  assert.ok(src.includes("Choose between 0 and ${MAX_AUTO_REPLIES} automated replies."));
+  assert.ok(src.includes("Follow-up #${slot} needs custom text before it can be enabled."));
+  assert.ok(src.includes("Add custom text to follow-up #${slot} before allowing"));
+  assert.ok(src.includes("defaultFollowUpTemplateForSlot(slot)"));
 });
 
 test("clinic owner account does not expose SMS template editing", () => {

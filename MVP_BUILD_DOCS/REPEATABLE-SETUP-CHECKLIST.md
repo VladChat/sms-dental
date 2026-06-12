@@ -852,6 +852,13 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 - [ ] Treat patient-name extraction as fail-closed. Never overwrite an existing
       name; when a safe name is already known, skip the name-question slot and
       atomically claim the actual sequence sent.
+- [ ] When expanding deterministic follow-up slots, define one shared slot
+      constant and one shared max. Make default-backed slots explicit, and fail
+      closed for later custom-only slots with no body.
+- [ ] Keep courtesy/acknowledgement replies out of numbered follow-up counters.
+      If a courtesy response is needed, give it its own per-cycle idempotency
+      marker and reset that marker only after a new recovery outbound is
+      successfully recorded.
 - [ ] For voice greetings, escape XML at the final TwiML boundary and validate
       scenario-specific copy (for example, no "we'll send a text now" promise in
       duplicate/no-text scenarios).
