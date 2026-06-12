@@ -5,6 +5,11 @@ import {
   evaluateAutoReplyDecision,
   type AutoReplyDecisionInput,
 } from "../lib/sms-recovery/auto-reply-evaluation";
+import {
+  DEFAULT_FOLLOW_UP_SUGGESTIONS,
+  renderConversationTemplate,
+} from "../lib/sms-recovery/conversation-templates";
+import { classifyInboundReply } from "../lib/sms-recovery/reply-classification";
 
 // A baseline where an auto-reply WOULD send (first follow-up).
 function base(overrides: Partial<AutoReplyDecisionInput> = {}): AutoReplyDecisionInput {
@@ -129,4 +134,89 @@ test("max below the next slot caps replies", () => {
   // max=1: after one reply, no second auto-reply even if templates enabled.
   const d = evaluateAutoReplyDecision(base({ maxAutoReplies: 1, currentAutoReplyCount: 1, enabledSequences: [1] }));
   assert.deepEqual(d, { send: false, reason: "max_auto_replies_reached" });
+});
+
+test("new missed-call recovery cycle reset restores follow-up eligibility", () => {
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({ currentAutoReplyCount: 3 })),
+    { send: false, reason: "max_auto_replies_reached" },
+  );
+
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({ currentAutoReplyCount: 0 })),
+    { send: true, sequence: 1 },
+  );
+});
+
+test("live manual +12245329236 cleaning/name sequence sends two expected follow-ups, then stops on thanks", () => {
+  const recordedRecoverySms = {
+    toNumber: "+12245329236",
+    messageKind: "missed_call_recovery",
+    smsAutoReplyCountAfterReset: 0,
+  };
+  assert.deepEqual(recordedRecoverySms, {
+    toNumber: "+12245329236",
+    messageKind: "missed_call_recovery",
+    smsAutoReplyCountAfterReset: 0,
+  });
+
+  const firstInbound = classifyInboundReply("I need cleaning appointment");
+  assert.equal(firstInbound.kind, "informative");
+  assert.equal(firstInbound.patientName, null);
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({
+      replyClassification: firstInbound.kind,
+      currentAutoReplyCount: 0,
+      patientNameKnown: false,
+    })),
+    { send: true, sequence: 1 },
+  );
+  assert.equal(
+    renderConversationTemplate(DEFAULT_FOLLOW_UP_SUGGESTIONS[1], {
+      clinicName: "Fairstone Dental Smile",
+      patientName: null,
+    }),
+    "Thanks for the info. What name should we use when our office follows up?",
+  );
+
+  const secondInbound = classifyInboundReply("I'm Vlad");
+  assert.equal(secondInbound.kind, "name_provided");
+  assert.equal(secondInbound.patientName, "Vlad");
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({
+      replyClassification: secondInbound.kind,
+      currentAutoReplyCount: 1,
+      patientNameKnown: true,
+    })),
+    { send: true, sequence: 2 },
+  );
+  assert.equal(
+    renderConversationTemplate(DEFAULT_FOLLOW_UP_SUGGESTIONS[2], {
+      clinicName: "Fairstone Dental Smile",
+      patientName: secondInbound.patientName,
+    }),
+    "Thanks, Vlad. I'll pass this to our team so they can follow up.",
+  );
+
+  const thanksInbound = classifyInboundReply("thanks");
+  assert.equal(thanksInbound.kind, "thanks");
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({
+      replyClassification: thanksInbound.kind,
+      currentAutoReplyCount: 2,
+      patientNameKnown: true,
+    })),
+    { send: false, reason: "reply_thanks" },
+  );
+
+  const okInbound = classifyInboundReply("ok");
+  assert.equal(okInbound.kind, "acknowledgement");
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({
+      replyClassification: okInbound.kind,
+      currentAutoReplyCount: 2,
+      patientNameKnown: true,
+    })),
+    { send: false, reason: "reply_acknowledgement" },
+  );
 });

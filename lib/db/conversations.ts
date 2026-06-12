@@ -37,6 +37,20 @@ export async function touchConversation(conversationId: string): Promise<void> {
   `;
 }
 
+// Start a fresh deterministic auto-reply cycle after a new missed-call
+// recovery SMS is accepted and recorded. Keep the safely collected display name
+// so future follow-ups can still address the patient naturally.
+export async function resetConversationAutoReplyCycle(conversationId: string): Promise<void> {
+  const sql = getDb();
+  await sql`
+    update public.patient_conversations
+    set sms_auto_reply_count = 0,
+        sms_auto_reply_last_sent_at = null,
+        updated_at = now()
+    where id = ${conversationId}
+  `;
+}
+
 export type ConversationAutoReplyState = {
   patientDisplayName: string | null;
   smsAutoReplyCount: number;

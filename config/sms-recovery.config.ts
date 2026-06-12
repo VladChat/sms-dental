@@ -6,10 +6,10 @@
 // no fake urgency, no discounts or aggressive sales language, no unnecessary PHI.
 
 export const smsRecoveryConfig = {
-  // {{clinic_name}} is the only supported placeholder. Built exclusively by
-  // lib/sms-recovery/templates.ts — do not interpolate this string anywhere else.
+  // {{clinic_name}} is the only supported placeholder for the default initial
+  // recovery SMS. Runtime rendering must go through the guarded SMS helpers.
   missedCallTemplate:
-    "Hi, this is {{clinic_name}}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.",
+    "Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.",
 
   // Used when a clinic row has a missing/blank name. Keeps the message honest
   // and non-spammy without exposing template syntax to the patient.

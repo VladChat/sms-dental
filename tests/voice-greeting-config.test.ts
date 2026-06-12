@@ -45,7 +45,7 @@ test("missed-call TwiML uses configured voice and language", () => {
   assert.ok(twiml.includes(`language="${voiceGreetingConfig.defaultLanguage}"`));
   assert.ok(twiml.includes(`voice="${option.twilioVoice}"`));
   assert.ok(!twiml.includes('voice="alice"'));
-  assert.ok(twiml.includes("We&apos;ll send you a text now, so our team can follow up."));
+  assert.ok(twiml.includes("We&apos;ll send you a text now so our team can follow up."));
 });
 
 test("missed-call TwiML escapes clinic names", () => {

@@ -25,19 +25,26 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
 
 ## What it controls
 
+- **Edit mode.** The tab is read-only by default. Click **Edit** to make the
+  Voice greeting and SMS message fields editable, then **Save**. A successful
+  save returns the tab to read-only and shows the saved status. Reset-to-default
+  controls appear only while editing and place the default text directly in the
+  field.
+- **Voice greeting.** This block appears first. The admin can edit three fixed
+  scenarios: `will_send`, `duplicate`, and `none`. The system still chooses the
+  scenario and owns TwiML/Say/Hangup behavior; the admin edits only safe text
+  that may use `{{clinic_name}}`.
 - **Initial missed-call SMS.** The admin edits one full initial SMS template.
-  There are no locked start/end blocks. With no saved template, the message is
-  byte-for-byte the existing fixed production message. Rows saved by the first
-  implementation as middle-only text are wrapped safely when rendered; rows that
-  already contain a full initial SMS are not wrapped again.
+  There are no locked start/end blocks. With no saved template, the message
+  uses the current approved default:
+  `Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.`
+  Rows saved by the first implementation as middle-only text are wrapped safely
+  when rendered; rows that already contain a full initial SMS are not wrapped
+  again.
 - **Up to three deterministic follow-ups.** After a patient replies, the office
   may send follow-up #1, then #2, then #3. Each has its own enabled toggle and
   body. The **Maximum automated replies** setting (0–3) caps how many may send;
   it cannot exceed the enabled follow-ups in order. **0 disables follow-ups.**
-- **Voice greeting.** The admin can edit one grouped voice greeting block with
-  three fixed scenarios: `will_send`, `duplicate`, and `none`. The system still
-  chooses the scenario and owns TwiML/Say/Hangup behavior; the admin edits only
-  safe text that may use `{{clinic_name}}`.
 - **Variables.** `{{clinic_name}}` (always from the clinic profile) and
   `{{patient_name}}` (only when safely collected). When no name was collected,
   `{{patient_name}}` is removed cleanly so the sentence stays natural.
@@ -45,8 +52,8 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
 ## Default-safe behavior
 
 - With no saved settings, `max_auto_replies` = 0: **no follow-ups send** and the
-  missed-call SMS is unchanged. Follow-ups are inactive until an admin saves and
-  enables them for that specific clinic.
+  current default missed-call SMS sends. Follow-ups are inactive until an admin
+  saves and enables them for that specific clinic.
 - With no saved voice greeting rows, each scenario uses the system default
   wording from `lib/sms-recovery/voice-greeting-templates.ts`.
 - The 4th and later patient replies are **saved to the workspace only** — never
@@ -67,6 +74,13 @@ Simple replies classified as thanks, acknowledgements, negative replies, or
 unclear short replies are saved but do not trigger a normal follow-up and do not
 consume an auto-reply slot. Informative replies and safe name-provided replies
 may continue through the normal guarded flow.
+
+When a new missed-call recovery SMS is successfully sent and its outbound
+`missed_call_recovery` message row is recorded, the conversation starts a fresh
+auto-reply cycle: `sms_auto_reply_count` resets to 0 and
+`sms_auto_reply_last_sent_at` clears. The safely stored patient display name is
+kept. This reset does not happen before the Twilio send or before the outbound
+message record succeeds.
 
 ## Patient name collection
 

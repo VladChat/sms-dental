@@ -19,7 +19,7 @@ export const INITIAL_SUFFIX = "Reply STOP to opt out.";
 // Legacy editable middle from the first builder implementation. Kept so
 // middle-only rows can be rendered safely as full templates without a migration.
 export const DEFAULT_INITIAL_MIDDLE =
-  "We missed your call. Reply here and our team will follow up.";
+  "We missed your call. How can we help?";
 
 // No saved initial template still sends the existing fixed production message.
 export const DEFAULT_INITIAL_TEMPLATE = smsRecoveryConfig.missedCallTemplate;
@@ -30,9 +30,9 @@ export const SUGGESTED_INITIAL_TEMPLATE =
 
 // Suggested (inactive until saved/enabled) follow-up bodies.
 export const DEFAULT_FOLLOW_UP_SUGGESTIONS: Record<1 | 2 | 3, string> = {
-  1: "Thanks. What name should we use when our office follows up?",
-  2: "Thanks, {{patient_name}}. I’ll pass this to the office so they can follow up.",
-  3: "Got it. We’ll include that note for the office.",
+  1: "Thanks for the info. What name should we use when our office follows up?",
+  2: "Thanks, {{patient_name}}. I'll pass this to our team so they can follow up.",
+  3: "Got it. We'll pass that along to our team.",
 };
 
 export const MAX_TEMPLATE_BODY_LENGTH = 240;

@@ -100,3 +100,30 @@ test("recovery send path renders the initial SMS from saved conversation setting
   assert.ok(src.includes("buildRecoverySmsBodyFromConversationConfig(input.clinic.name, config)"));
   assert.ok(!src.includes("buildMissedCallRecoverySmsBody(input.clinic.name);") || src.includes("initial_template_fallback"));
 });
+
+test("recovery send path resets the auto-reply cycle only after recording the recovery message", () => {
+  const src = fs.readFileSync(path.join(REPO_ROOT, "lib", "twilio", "outbound-sms.ts"), "utf8");
+  const importIdx = src.indexOf("resetConversationAutoReplyCycle");
+  const recordIdx = src.indexOf("await recordOutboundMessage({");
+  const recoveryKindIdx = src.indexOf('messageKind: "missed_call_recovery"', recordIdx);
+  const recordedFlagIdx = src.indexOf("recoveryMessageRecorded = true", recoveryKindIdx);
+  const resetIdx = src.indexOf("await resetConversationAutoReplyCycle(input.conversationId)", recordedFlagIdx);
+
+  assert.ok(importIdx >= 0, "send path imports resetConversationAutoReplyCycle");
+  assert.ok(recordIdx >= 0, "send path records the outbound message");
+  assert.ok(recoveryKindIdx > recordIdx, "recorded outbound is a missed_call_recovery");
+  assert.ok(recordedFlagIdx > recoveryKindIdx, "record flag is set after missed_call_recovery record");
+  assert.ok(resetIdx > recordedFlagIdx, "auto-reply cycle resets after the recovery record succeeds");
+});
+
+test("resetConversationAutoReplyCycle clears only reply-cycle state and retains patient name", () => {
+  const src = fs.readFileSync(path.join(REPO_ROOT, "lib", "db", "conversations.ts"), "utf8");
+  const start = src.indexOf("export async function resetConversationAutoReplyCycle");
+  const end = src.indexOf("export type ConversationAutoReplyState", start);
+  const helper = src.slice(start, end);
+
+  assert.ok(start >= 0, "reset helper exists");
+  assert.ok(helper.includes("sms_auto_reply_count = 0"));
+  assert.ok(helper.includes("sms_auto_reply_last_sent_at = null"));
+  assert.ok(!helper.includes("patient_display_name ="));
+});

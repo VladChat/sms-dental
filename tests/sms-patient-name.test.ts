@@ -10,6 +10,7 @@ test("extracts simple names", () => {
   assert.equal(extractPatientName("My name is John Smith"), "John Smith");
   assert.equal(extractPatientName("This is John"), "John");
   assert.equal(extractPatientName("I'm John"), "John");
+  assert.equal(extractPatientName("I'm Vlad"), "Vlad");
   assert.equal(extractPatientName("I am John"), "John");
   assert.equal(
     extractPatientName("My name is Jon Svillow. I need an appointment"),

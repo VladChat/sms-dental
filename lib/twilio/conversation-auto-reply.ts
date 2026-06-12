@@ -54,22 +54,22 @@ export async function maybeSendConversationAutoReply(
 ): Promise<AutoReplyResult> {
   // Cheap pre-checks first — avoid readiness/Twilio work on the common path
   // where auto-replies are disabled.
-  if (input.keyword) return { sent: false, reason: `keyword_${input.keyword}` };
-  if (input.isDuplicateInbound) return { sent: false, reason: "duplicate_inbound" };
+  if (input.keyword) return skipAutoReply(input, `keyword_${input.keyword}`);
+  if (input.isDuplicateInbound) return skipAutoReply(input, "duplicate_inbound");
   const classificationBlock = replyClassificationBlocksAutoReply(input.replyClassification);
-  if (classificationBlock) return { sent: false, reason: classificationBlock };
+  if (classificationBlock) return skipAutoReply(input, classificationBlock);
 
   const smsConfig = getSmsRecoveryConfig();
   const modeAllowsSend = smsConfig.mode === "owner_test" || smsConfig.mode === "live";
-  if (!modeAllowsSend) return { sent: false, reason: "mode_disabled" };
+  if (!modeAllowsSend) return skipAutoReply(input, "mode_disabled");
 
   const config = await getClinicConversationConfig(input.clinic.id);
-  if (config.maxAutoReplies <= 0) return { sent: false, reason: "auto_replies_disabled" };
+  if (config.maxAutoReplies <= 0) return skipAutoReply(input, "auto_replies_disabled");
   const enabledSequences = enabledFollowUpSequences(config);
-  if (enabledSequences.length === 0) return { sent: false, reason: "template_disabled" };
+  if (enabledSequences.length === 0) return skipAutoReply(input, "template_disabled");
 
   const state = await getConversationAutoReplyState(input.conversationId);
-  if (!state) return { sent: false, reason: "conversation_missing" };
+  if (!state) return skipAutoReply(input, "conversation_missing");
 
   // Gather the remaining (DB-backed) inputs for the shared decision.
   const [hasPrior, optedOut, readiness] = await Promise.all([
@@ -100,20 +100,16 @@ export async function maybeSendConversationAutoReply(
     enabledSequences,
   });
   if (!decision.send) {
-    logger.info("twilio.sms.auto_reply_skipped", {
-      clinicId: input.clinic.id,
-      reason: decision.reason,
-    });
-    return { sent: false, reason: decision.reason };
+    return skipAutoReply(input, decision.reason);
   }
 
   const rawBody = followUpBodyForSlot(config, decision.sequence);
-  if (!rawBody) return { sent: false, reason: "template_disabled" };
+  if (!rawBody) return skipAutoReply(input, "template_disabled");
   const body = renderConversationTemplate(rawBody, {
     clinicName: input.clinic.name,
     patientName: state.patientDisplayName,
   });
-  if (body.trim().length === 0) return { sent: false, reason: "empty_body" };
+  if (body.trim().length === 0) return skipAutoReply(input, "empty_body");
 
   // Atomically claim the slot. A concurrent delivery/retry that already advanced
   // the count loses the compare and we abort — no duplicate auto-reply.
@@ -123,7 +119,7 @@ export async function maybeSendConversationAutoReply(
     decision.sequence,
   );
   if (claimed === null) {
-    return { sent: false, reason: "slot_already_claimed" };
+    return skipAutoReply(input, "slot_already_claimed");
   }
 
   const { TWILIO_MESSAGING_SERVICE_SID } = getTwilioMessagingEnv();
@@ -201,4 +197,12 @@ export async function maybeSendConversationAutoReply(
     sequence: decision.sequence,
   });
   return { sent: true, messageSid, sequence: decision.sequence };
+}
+
+function skipAutoReply(input: AutoReplyInput, reason: string): AutoReplyResult {
+  logger.info("twilio.sms.auto_reply_skipped", {
+    clinicId: input.clinic.id,
+    reason,
+  });
+  return { sent: false, reason };
 }

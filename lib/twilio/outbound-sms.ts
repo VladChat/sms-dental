@@ -5,7 +5,10 @@ import {
   hasSentRecoverySmsSince,
   recordOutboundMessage,
 } from "../db/messages";
-import { touchConversation } from "../db/conversations";
+import {
+  resetConversationAutoReplyCycle,
+  touchConversation,
+} from "../db/conversations";
 import { evaluateSmsReadinessForLiveSend } from "../db/sms-readiness";
 import {
   evaluateDuplicateSuppression,
@@ -181,6 +184,7 @@ export async function sendRecoverySms(
   }
 
   // Record send in messages table (non-fatal on failure).
+  let recoveryMessageRecorded = false;
   try {
     await recordOutboundMessage({
       clinicId: input.clinic.id,
@@ -200,15 +204,35 @@ export async function sendRecoverySms(
         sender_mismatch: senderMismatch,
       },
     });
-    if (input.conversationId) {
-      await touchConversation(input.conversationId);
-    }
+    recoveryMessageRecorded = true;
   } catch (err) {
     logger.error("twilio.sms.record_failed", {
       clinicId: input.clinic.id,
       message: err instanceof Error ? err.message : "unknown",
     });
     // SMS was sent. Recording failure is non-fatal — log and continue.
+  }
+
+  // Start a fresh auto-reply cycle only after Twilio accepted the recovery SMS
+  // and the missed_call_recovery outbound row was recorded.
+  if (recoveryMessageRecorded && input.conversationId) {
+    try {
+      await resetConversationAutoReplyCycle(input.conversationId);
+    } catch (err) {
+      logger.error("twilio.sms.auto_reply_cycle_reset_failed", {
+        clinicId: input.clinic.id,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+    }
+
+    try {
+      await touchConversation(input.conversationId);
+    } catch (err) {
+      logger.error("twilio.sms.conversation_touch_failed", {
+        clinicId: input.clinic.id,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+    }
   }
 
   logger.info("twilio.sms.sent", {

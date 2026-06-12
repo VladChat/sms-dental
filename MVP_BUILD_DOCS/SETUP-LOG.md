@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-11 (duplicate suppression bypass live test passed)
+Last updated: 2026-06-12 (SMS Conversation Builder auto-reply reset and UI simplification)
 
 This log records what was done, in order, without storing secrets.
 
@@ -7270,3 +7270,48 @@ Production verification:
 No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
 Stripe change, no phone-number lifecycle change, no env change, no secret
 printing, no template body dump, and `.qwen/` remained untouched.
+
+---
+
+## 2026-06-12 — SMS Conversation Builder auto-reply reset and UI simplification
+
+Fixed the missed follow-up observed during internal live testing, without
+sending SMS or placing calls.
+
+What changed:
+
+- Added `resetConversationAutoReplyCycle(conversationId)` in
+  `lib/db/conversations.ts`. It clears `sms_auto_reply_count` to 0 and
+  `sms_auto_reply_last_sent_at` to null while leaving `patient_display_name`
+  unchanged.
+- `sendRecoverySms()` now resets the deterministic auto-reply cycle only after
+  Twilio accepts a new recovery SMS and `recordOutboundMessage` successfully
+  stores the outbound `message_kind='missed_call_recovery'` row. Failed sends or
+  failed message records do not reset the cycle.
+- The regression sequence for internal caller `+1***9236` is covered in tests:
+  recorded recovery row, count reset to 0, `"I need cleaning appointment"`
+  eligible for follow-up #1, `"I'm Vlad"` extracts `Vlad` and is eligible for
+  follow-up #2, and thanks/ok replies do not consume or send follow-up slots.
+- Refreshed deterministic default copy for the Initial SMS, follow-ups, and the
+  `will_send` voice greeting using ASCII apostrophes only.
+- Simplified the platform-admin SMS Conversation Builder: read-only by default,
+  Edit -> Save -> read-only flow, Voice greeting block first, SMS messages
+  second, no visible Suggestion/Default helper lines, compact variable helper,
+  and reset buttons only while editing.
+- Updated operational and platform-admin Knowledge System docs for the new
+  reset behavior and UI flow.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 130 tests.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+No migration was added or applied. No SMS sent, no calls placed, no Twilio
+resource mutation, no A2P mutation, no Stripe change, no phone-number lifecycle
+change, no production env change, no secret printing, and `.qwen/` remained
+untouched.

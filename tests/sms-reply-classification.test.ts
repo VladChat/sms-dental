@@ -53,6 +53,32 @@ test("keeps request content informative when no safe name is present", () => {
   assert.equal(classified.hasRequestContent, true);
 });
 
+test("classifies the live cleaning appointment reply as informative", () => {
+  const classified = classifyInboundReply("I need cleaning appointment");
+  assert.equal(classified.kind, "informative");
+  assert.equal(classified.patientName, null);
+  assert.equal(classified.hasRequestContent, true);
+  assert.equal(replyClassificationBlocksAutoReply(classified.kind), null);
+});
+
+test("classifies the live name reply and extracts Vlad", () => {
+  const classified = classifyInboundReply("I'm Vlad");
+  assert.equal(classified.kind, "name_provided");
+  assert.equal(classified.patientName, "Vlad");
+  assert.equal(classified.hasRequestContent, false);
+  assert.equal(replyClassificationBlocksAutoReply(classified.kind), null);
+});
+
+test("thanks and ok are saved but block automated follow-up slots", () => {
+  for (const [body, reason] of [
+    ["thanks", "reply_thanks"],
+    ["ok", "reply_acknowledgement"],
+  ] as const) {
+    const classified = classifyInboundReply(body);
+    assert.equal(replyClassificationBlocksAutoReply(classified.kind), reason);
+  }
+});
+
 test("compliance keywords are outside the normal follow-up flow", () => {
   for (const body of ["STOP", "START", "HELP"]) {
     const classified = classifyInboundReply(body);

@@ -32,7 +32,7 @@ function count(haystack: string, needle: string): number {
 
 test("default initial message equals the current production message exactly", () => {
   const expected =
-    "Hi, this is Fairstone Dental Smile. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.";
+    "Hi, this is Fairstone Dental Smile. We missed your call. How can we help? Reply STOP to opt out.";
   assert.equal(buildInitialSmsBody(CLINIC, null), expected);
   assert.equal(buildInitialSmsBody(CLINIC, ""), expected);
   assert.equal(buildInitialSmsBody(CLINIC, "   "), expected);
@@ -161,16 +161,32 @@ test("suggested English copy is current", () => {
   );
   assert.equal(
     DEFAULT_FOLLOW_UP_SUGGESTIONS[1],
-    "Thanks. What name should we use when our office follows up?",
+    "Thanks for the info. What name should we use when our office follows up?",
   );
   assert.equal(
     DEFAULT_FOLLOW_UP_SUGGESTIONS[2],
-    "Thanks, {{patient_name}}. I’ll pass this to the office so they can follow up.",
+    "Thanks, {{patient_name}}. I'll pass this to our team so they can follow up.",
   );
   assert.equal(
     DEFAULT_FOLLOW_UP_SUGGESTIONS[3],
-    "Got it. We’ll include that note for the office.",
+    "Got it. We'll pass that along to our team.",
   );
+});
+
+test("default SMS and voice copy uses ASCII punctuation only", () => {
+  const defaults = [
+    SUGGESTED_INITIAL_TEMPLATE,
+    DEFAULT_FOLLOW_UP_SUGGESTIONS[1],
+    DEFAULT_FOLLOW_UP_SUGGESTIONS[2],
+    DEFAULT_FOLLOW_UP_SUGGESTIONS[3],
+    DEFAULT_VOICE_GREETING_TEMPLATES.will_send,
+    DEFAULT_VOICE_GREETING_TEMPLATES.duplicate,
+    DEFAULT_VOICE_GREETING_TEMPLATES.none,
+  ];
+
+  for (const text of defaults) {
+    assert.equal(/[’“”]/.test(text), false, `non-ASCII punctuation in: ${text}`);
+  }
 });
 
 test("missing clinic name falls back to a neutral identity, never broken text", () => {
@@ -194,7 +210,7 @@ test("missing patient name produces natural text, not broken placeholders", () =
     clinicName: CLINIC,
     patientName: null,
   });
-  assert.equal(out, "Thanks. I’ll pass this to the office so they can follow up.");
+  assert.equal(out, "Thanks. I'll pass this to our team so they can follow up.");
   assert.ok(!out.includes("{{"));
   assert.ok(!out.includes(",  "));
 });
@@ -210,7 +226,7 @@ test("unknown placeholders are rejected in follow-up validation", () => {
 test("voice greeting defaults render with clinic identity", () => {
   assert.equal(
     renderVoiceGreetingTemplate(DEFAULT_VOICE_GREETING_TEMPLATES.will_send, { clinicName: CLINIC }),
-    "Hi, thanks for calling Fairstone Dental Smile. We're sorry we missed you. We'll send you a text now, so our team can follow up.",
+    "Hi, thanks for calling Fairstone Dental Smile. We're sorry we missed you. We'll send you a text now so our team can follow up.",
   );
   assert.equal(
     renderVoiceGreetingTemplate(DEFAULT_VOICE_GREETING_TEMPLATES.duplicate, { clinicName: CLINIC }),
@@ -258,7 +274,7 @@ test("safety validation allows normal dental-office-neutral language", () => {
     SUGGESTED_INITIAL_TEMPLATE,
     "Thanks. The office will follow up.",
     "What name should we use?",
-    "We’ll pass this to the office.",
+    "We'll pass this to the office.",
   ]) {
     assert.ok(validateFollowUpBody(ok).ok, `should allow: ${ok}`);
   }

@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-12 (System-admin SMS Conversation Builder correction: platform admin edits the full Initial SMS template; no locked start/end blocks; server still requires clinic identity and STOP opt-out language)
+Last updated: 2026-06-12 (SMS Conversation Builder: recovery SMS starts a fresh auto-reply cycle after the outbound recovery row is recorded; admin UI is read-only until Edit; default copy refreshed)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -290,7 +290,7 @@ Current behavior:
 
 Voice greeting logic (read-only prediction in voice/incoming):
 
-- `will_send` (first call, SMS eligible): "Hi, thanks for calling {{clinic_name}}. We're sorry we missed you. We'll send you a text now, so our team can follow up."
+- `will_send` (first call, SMS eligible): "Hi, thanks for calling {{clinic_name}}. We're sorry we missed you. We'll send you a text now so our team can follow up."
 - `duplicate` (24h window, SMS suppressed): "Hi, thanks for calling {{clinic_name}}. We're sorry we missed you. We already sent a text, and our team will follow up shortly."
 - `none` (no clinic / gated / error): "Hi, thanks for calling us. We're sorry we missed you. Our team will follow up shortly."
 
@@ -423,15 +423,19 @@ Default behavior (`SMS_RECOVERY_MODE` unset or `disabled`): **no SMS is ever sen
 
 ### SMS message template
 
-Fixed template (single source: `config/sms-recovery.config.ts`, built only by
-`lib/sms-recovery/templates.ts` — updated 2026-06-10):
+Default template (single source: `config/sms-recovery.config.ts`, built by
+`lib/sms-recovery/templates.ts` and the conversation-builder helpers — updated
+2026-06-12):
 
 ```
-Hi, this is {{clinic_name}}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.
+Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.
 ```
 
 No AI mention. No urgency. No medical advice. No appointment promise. Includes
-explicit STOP opt-out language. Clinics cannot edit SMS copy in the MVP.
+explicit STOP opt-out language. Clinic owners cannot edit SMS copy; platform
+admins may edit the full initial template from the admin SMS Conversation
+Builder, and server validation still requires clinic identity and STOP opt-out
+language.
 
 ### Owner test setup
 
@@ -2713,7 +2717,7 @@ more observable.
   (`buildMissedCallRecoverySmsBody`). Do not format recovery SMS bodies anywhere
   else.
 - Approved MVP text:
-  `Hi, this is {{clinic_name}}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.`
+  `Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.`
 - The builder sanitizes/truncates the clinic name, falls back to a neutral
   identity when the name is blank, and enforces a max body length. Tests:
   `npm run test:sms-recovery`.
@@ -3427,7 +3431,16 @@ unchanged. No AI runtime — everything is deterministic.
   `buildRecoverySmsBodyFromConversationConfig`, which delegates to
   `buildInitialSmsBody`. With no saved initial template, the default remains
   exactly:
-  `Hi, this is {{clinic_name}}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.`
+  `Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.`
+- **Auto-reply cycle reset (2026-06-12):** after Twilio accepts a new
+  missed-call recovery SMS and `recordOutboundMessage` successfully stores the
+  outbound `message_kind='missed_call_recovery'` row, `sendRecoverySms` calls
+  `resetConversationAutoReplyCycle(conversationId)`. This sets
+  `sms_auto_reply_count=0` and `sms_auto_reply_last_sent_at=null` for the
+  conversation, keeps `patient_display_name` unchanged, and then touches the
+  conversation timestamp. Do not reset before the Twilio send or before the
+  recovery message row is recorded; otherwise a failed/retried send could make
+  the next inbound reply eligible incorrectly.
 - **Auto-replies:** after an ordinary patient reply, `maybeSendConversationAutoReply`
   may send one deterministic follow-up. It enforces every guard itself: mode
   (live/owner_test), exact-number readiness, recovery send gate
@@ -3465,6 +3478,11 @@ unchanged. No AI runtime — everything is deterministic.
   `voice-greeting-templates.ts`. Voice templates allow only `{{clinic_name}}`,
   use XML escaping in the final TwiML, and duplicate/no-text scenarios reject
   future SMS promises such as "we'll send you a text now".
+- **Builder UI (2026-06-12):** the admin tab is read-only by default. The admin
+  clicks **Edit**, changes the Voice greeting block first and SMS messages
+  block second, then clicks **Save**. A successful save returns to read-only and
+  shows the saved status. Reset-to-default buttons appear only while editing and
+  write the default text directly into the textarea.
 
 ### Default-safe / verify
 

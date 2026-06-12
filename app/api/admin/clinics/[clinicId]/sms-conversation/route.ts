@@ -13,7 +13,6 @@ import {
   initialTemplateForEditor,
   MAX_INITIAL_TEMPLATE_LENGTH,
   MAX_TEMPLATE_BODY_LENGTH,
-  SUGGESTED_INITIAL_TEMPLATE,
   renderConversationTemplate,
   SUPPORTED_TEMPLATE_VARIABLES,
   type ConversationTemplateConfig,
@@ -92,7 +91,6 @@ function buildConversationResponse(
     config: {
       initialTemplate: initialTemplateForEditor(config.initialTemplate, clinicName),
       defaultInitialTemplate: DEFAULT_INITIAL_TEMPLATE,
-      initialSuggestion: SUGGESTED_INITIAL_TEMPLATE,
       maxAutoReplies: config.maxAutoReplies,
       followUps,
       voiceGreetings,

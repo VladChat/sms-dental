@@ -16,7 +16,7 @@ export const VOICE_GREETING_SCENARIO_BY_SEQUENCE: Record<1 | 2 | 3, VoiceGreetin
 
 export const DEFAULT_VOICE_GREETING_TEMPLATES: Record<VoiceGreetingScenario, string> = {
   will_send:
-    "Hi, thanks for calling {{clinic_name}}. We're sorry we missed you. We'll send you a text now, so our team can follow up.",
+    "Hi, thanks for calling {{clinic_name}}. We're sorry we missed you. We'll send you a text now so our team can follow up.",
   duplicate:
     "Hi, thanks for calling {{clinic_name}}. We're sorry we missed you. We already sent a text, and our team will follow up shortly.",
   none:
@@ -24,9 +24,9 @@ export const DEFAULT_VOICE_GREETING_TEMPLATES: Record<VoiceGreetingScenario, str
 };
 
 export const VOICE_GREETING_LABELS: Record<VoiceGreetingScenario, string> = {
-  will_send: "Will send text",
-  duplicate: "Duplicate text",
-  none: "No text",
+  will_send: "When a new SMS will be sent",
+  duplicate: "When this caller was already texted recently",
+  none: "When no SMS will be sent",
 };
 
 export const VOICE_GREETING_HELPERS: Record<VoiceGreetingScenario, string> = {
