@@ -7145,3 +7145,43 @@ Production verification (all pass):
 
 No SMS sent, no calls, no Twilio/Stripe/A2P/phone-lifecycle mutations, no env
 changes. No follow-up templates enabled in production data.
+
+---
+
+## 2026-06-12 — Production rollout: admin SMS builder initial-template correction
+
+- Commit `31d37b256b13ea1865534a63bfbf7503bae55f2d`
+  (`fix: improve admin sms message builder`) pushed to `origin/main`.
+- GitHub-triggered Vercel production deployment
+  `dpl_26bXPhmgXE197fcShcAQPovkR5yM` reached **Ready** and was aliased to
+  `https://app.missedcallsdental.com`.
+- Production health check passed:
+  `GET https://app.missedcallsdental.com/api/health` -> HTTP 200,
+  `ok:true`.
+
+What changed:
+
+- Platform-admin **SMS messages** now edits the full Initial missed-call SMS
+  template in one textarea. The locked start/end UI was removed.
+- Server validation still requires clinic identity and `Reply STOP to opt out`,
+  rejects unsafe wording, and strips unresolved placeholders before send.
+- Existing `clinic_sms_message_templates` schema was reused; no migration was
+  added or applied. Old middle-only initial rows render safely as full
+  templates, and rows that already contain the full initial SMS are not wrapped
+  again, preventing duplicate clinic identity / STOP language.
+- Follow-up suggestions were refreshed to the current copy.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 102 tests.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean (only Git's line-ending warning for this markdown
+  file).
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no env change, no migration,
+and no secrets printed.
