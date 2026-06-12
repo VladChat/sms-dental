@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-11 (System-admin AI Knowledge + SMS Conversation Builder v1: platform admin manages AI Knowledge for a clinic from /admin/clinics/[clinicId]; deterministic admin-configured SMS conversation flow with up to 3 auto-replies, conservative patient-name extraction, no AI)
+Last updated: 2026-06-12 (System-admin SMS Conversation Builder correction: platform admin edits the full Initial SMS template; no locked start/end blocks; server still requires clinic identity and STOP opt-out language)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3402,15 +3402,21 @@ unchanged. No AI runtime — everything is deterministic.
   (`clinic.sms_conversation.update` audit).
 - Tables (migration `20260619000100_sms_conversation_builder.sql`):
   `clinic_sms_conversation_settings` (`max_auto_replies` 0–3) and
-  `clinic_sms_message_templates` (`initial` seq 0 = editable middle only;
+  `clinic_sms_message_templates` (`initial` seq 0 = full initial template;
   `auto_reply` seq 1–3 = full follow-up body, ≤240 chars). Conversation state
   added to `patient_conversations` (`patient_display_name`,
   `sms_auto_reply_count`, `sms_auto_reply_last_sent_at`) and a `message_kind`
   classifier on `messages`.
-- **Initial SMS:** locked prefix `Hi, this is {{clinic_name}}.` + editable
-  middle + locked suffix `Reply STOP to opt out.` With no saved middle the
-  built body is byte-for-byte the existing fixed production message
-  (`buildInitialSmsBody` delegates to `buildMissedCallRecoverySmsBody`).
+- **Initial SMS (corrected 2026-06-12):** platform admins edit one full
+  template textarea. There is no locked start/end UI. Server-side validation
+  still requires clinic identity (`{{clinic_name}}` or the rendered clinic name)
+  and `Reply STOP to opt out`, rejects unsafe wording, and strips unresolved
+  placeholders before send. With no saved initial template the built body is
+  byte-for-byte the existing fixed production message
+  (`buildInitialSmsBody` delegates to `buildMissedCallRecoverySmsBody`). Old
+  middle-only rows from the first implementation are wrapped safely at render
+  time; rows that already contain the full initial SMS are not wrapped again, so
+  previews/sends do not duplicate the clinic identity or STOP language.
 - **Auto-replies:** after an ordinary patient reply, `maybeSendConversationAutoReply`
   may send one deterministic follow-up. It enforces every guard itself: mode
   (live/owner_test), exact-number readiness, recovery send gate

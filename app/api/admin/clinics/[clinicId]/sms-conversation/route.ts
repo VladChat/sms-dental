@@ -8,20 +8,20 @@ import {
 } from "../../../../../../lib/db/sms-conversation-settings";
 import {
   buildInitialSmsBody,
+  DEFAULT_INITIAL_TEMPLATE,
   DEFAULT_FOLLOW_UP_SUGGESTIONS,
-  DEFAULT_INITIAL_MIDDLE,
   followUpBodyForSlot,
-  INITIAL_PREFIX_TEMPLATE,
-  INITIAL_SUFFIX,
-  MAX_INITIAL_MIDDLE_LENGTH,
+  initialTemplateForEditor,
+  MAX_INITIAL_TEMPLATE_LENGTH,
   MAX_TEMPLATE_BODY_LENGTH,
+  SUGGESTED_INITIAL_TEMPLATE,
   renderConversationTemplate,
   SUPPORTED_TEMPLATE_VARIABLES,
   type FollowUpSlot,
 } from "../../../../../../lib/sms-recovery/conversation-templates";
 import {
   validateFollowUpBody,
-  validateInitialMiddle,
+  validateInitialTemplate,
 } from "../../../../../../lib/sms-recovery/template-safety";
 import { recordAdminAuditEvent } from "../../../../../../lib/db/admin/audit";
 
@@ -71,19 +71,18 @@ export async function GET(
       ok: true,
       clinicName,
       config: {
-        initialMiddle: config.initialMiddle,
-        defaultInitialMiddle: DEFAULT_INITIAL_MIDDLE,
+        initialTemplate: initialTemplateForEditor(config.initialTemplate, clinicName),
+        defaultInitialTemplate: DEFAULT_INITIAL_TEMPLATE,
+        initialSuggestion: SUGGESTED_INITIAL_TEMPLATE,
         maxAutoReplies: config.maxAutoReplies,
         followUps,
       },
       preview: {
-        initialPrefix: renderConversationTemplate(INITIAL_PREFIX_TEMPLATE, { clinicName }),
-        initialSuffix: INITIAL_SUFFIX,
-        initial: buildInitialSmsBody(clinicName, config.initialMiddle),
+        initial: buildInitialSmsBody(clinicName, config.initialTemplate),
       },
       limits: {
         maxAutoReplies: 3,
-        maxInitialMiddleLength: MAX_INITIAL_MIDDLE_LENGTH,
+        maxInitialTemplateLength: MAX_INITIAL_TEMPLATE_LENGTH,
         maxTemplateBodyLength: MAX_TEMPLATE_BODY_LENGTH,
       },
       variables: SUPPORTED_TEMPLATE_VARIABLES,
@@ -96,7 +95,7 @@ export async function GET(
 type FollowUpInput = { body?: unknown; enabled?: unknown };
 
 // POST /api/admin/clinics/[clinicId]/sms-conversation
-// Saves the initial middle, follow-up bodies + enabled flags, and max replies.
+// Saves the full initial template, follow-up bodies + enabled flags, and max replies.
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ clinicId: string }> },
@@ -120,8 +119,13 @@ export async function POST(
   }
   const maxAutoReplies = maxRaw;
 
-  // Initial middle (empty => default).
-  const initial = validateInitialMiddle(input.initialMiddle);
+  // Initial full template (empty => fixed default). `initialMiddle` is accepted
+  // only for compatibility with the first builder implementation.
+  const rawInitial =
+    Object.prototype.hasOwnProperty.call(input, "initialTemplate")
+      ? input.initialTemplate
+      : legacyMiddleToFullTemplate(input.initialMiddle);
+  const initial = validateInitialTemplate(rawInitial, guard.clinic.name);
   if (!initial.ok) return jsonBadRequest(initial.message);
 
   // Follow-ups.
@@ -155,7 +159,7 @@ export async function POST(
     await saveClinicConversationConfig(
       clinicId,
       {
-        initialMiddle: initial.value.length > 0 ? initial.value : null,
+        initialTemplate: initial.value.length > 0 ? initial.value : null,
         maxAutoReplies,
         followUps,
       },
@@ -176,7 +180,8 @@ export async function POST(
         metadata: {
           max_auto_replies: maxAutoReplies,
           enabled_slot_count: enabledSlotCount,
-          initial_customized: initial.value.length > 0,
+          initial_customized:
+            initial.value.length > 0 && initial.value !== DEFAULT_INITIAL_TEMPLATE,
           authSource: guard.admin.source,
         },
       });
@@ -191,8 +196,9 @@ export async function POST(
       ok: true,
       clinicName,
       config: {
-        initialMiddle: config.initialMiddle,
-        defaultInitialMiddle: DEFAULT_INITIAL_MIDDLE,
+        initialTemplate: initialTemplateForEditor(config.initialTemplate, clinicName),
+        defaultInitialTemplate: DEFAULT_INITIAL_TEMPLATE,
+        initialSuggestion: SUGGESTED_INITIAL_TEMPLATE,
         maxAutoReplies: config.maxAutoReplies,
         followUps: Object.fromEntries(
           SLOTS.map((slot) => [
@@ -210,12 +216,17 @@ export async function POST(
         ),
       },
       preview: {
-        initialPrefix: renderConversationTemplate(INITIAL_PREFIX_TEMPLATE, { clinicName }),
-        initialSuffix: INITIAL_SUFFIX,
-        initial: buildInitialSmsBody(clinicName, config.initialMiddle),
+        initial: buildInitialSmsBody(clinicName, config.initialTemplate),
       },
     });
   } catch {
     return jsonError(500, "save_failed", "We couldn't save the SMS settings. Please try again.");
   }
+}
+
+function legacyMiddleToFullTemplate(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  const middle = raw.replace(/\s+/g, " ").trim();
+  if (!middle) return "";
+  return `Hi, this is {{clinic_name}}. ${middle} Reply STOP to opt out.`;
 }

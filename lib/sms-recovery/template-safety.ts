@@ -6,8 +6,11 @@
 // Builder API.
 
 import {
-  MAX_INITIAL_MIDDLE_LENGTH,
+  MAX_INITIAL_TEMPLATE_LENGTH,
   MAX_TEMPLATE_BODY_LENGTH,
+  hasClinicIdentity,
+  hasRequiredStopOptOut,
+  normalizeInitialTemplateForStorage,
 } from "./conversation-templates";
 
 export type TemplateTextResult =
@@ -41,7 +44,7 @@ const PHONE_RE = /(\+?\d[\d\s().-]{6,}\d)/;
 const PLACEHOLDER_RE = /\{\{\s*([a-z0-9_]+)\s*\}\}/gi;
 
 // Validate one template body. `allowPatientName` controls whether
-// {{patient_name}} is permitted (initial middle: no; follow-ups: yes). Empty
+// {{patient_name}} is permitted (initial SMS: no; follow-ups: yes). Empty
 // input is allowed and returned as "" — callers decide what empty means
 // (default middle / disabled follow-up).
 export function validateTemplateText(
@@ -112,7 +115,34 @@ export function validateTemplateText(
 }
 
 export function validateInitialMiddle(raw: unknown): TemplateTextResult {
-  return validateTemplateText(raw, { allowPatientName: false, maxLength: MAX_INITIAL_MIDDLE_LENGTH });
+  return validateTemplateText(raw, { allowPatientName: false, maxLength: MAX_INITIAL_TEMPLATE_LENGTH });
+}
+
+export function validateInitialTemplate(
+  raw: unknown,
+  clinicName: string | null | undefined,
+): TemplateTextResult {
+  const base = validateTemplateText(raw, {
+    allowPatientName: false,
+    maxLength: MAX_INITIAL_TEMPLATE_LENGTH,
+  });
+  if (!base.ok) return base;
+  if (base.value.length === 0) return base;
+
+  const value = normalizeInitialTemplateForStorage(base.value, clinicName) ?? "";
+  if (!hasClinicIdentity(value, clinicName)) {
+    return {
+      ok: false,
+      message: "Include the clinic identity with {{clinic_name}}.",
+    };
+  }
+  if (!hasRequiredStopOptOut(value)) {
+    return {
+      ok: false,
+      message: "Include “Reply STOP to opt out.”",
+    };
+  }
+  return { ok: true, value };
 }
 
 export function validateFollowUpBody(raw: unknown): TemplateTextResult {

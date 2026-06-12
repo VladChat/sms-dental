@@ -111,15 +111,15 @@ export async function sendRecoverySms(
   }
 
   // All guards passed. Build the message body. With no admin-configured initial
-  // middle this is byte-for-byte the fixed, compliance-reviewed default. A saved
-  // custom middle composes "Hi, this is {name}. {middle} Reply STOP to opt out."
-  // Settings/build failure falls back to the approved default — the safer path.
+  // template this is byte-for-byte the fixed, compliance-reviewed default. Saved
+  // full templates are rendered directly, and legacy middle-only rows are
+  // wrapped safely. Settings/build failure falls back to the approved default.
   let body: string;
   try {
     const config = await getClinicConversationConfig(input.clinic.id);
-    body = buildInitialSmsBody(input.clinic.name, config.initialMiddle);
+    body = buildInitialSmsBody(input.clinic.name, config.initialTemplate);
   } catch (err) {
-    logger.warn("twilio.sms.initial_middle_fallback", {
+    logger.warn("twilio.sms.initial_template_fallback", {
       clinicId: input.clinic.id,
       message: err instanceof Error ? err.message : "unknown",
     });

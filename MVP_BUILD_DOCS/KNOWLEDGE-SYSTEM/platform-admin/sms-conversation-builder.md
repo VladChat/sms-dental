@@ -11,7 +11,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
   - config/sms-recovery.config.ts
   - lib/sms-recovery/conversation-templates.ts
-last_verified: 2026-06-11
+last_verified: 2026-06-12
 ---
 
 # SMS Conversation Builder v1
@@ -23,11 +23,11 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
 
 ## What it controls
 
-- **Initial missed-call SMS.** A locked clinic-identity prefix
-  (`Hi, this is {{clinic_name}}.`) and a locked suffix
-  (`Reply STOP to opt out.`) are always added in code. The admin can edit only
-  the **middle** text. With no saved middle, the message is byte-for-byte the
-  existing fixed production message.
+- **Initial missed-call SMS.** The admin edits one full initial SMS template.
+  There are no locked start/end blocks. With no saved template, the message is
+  byte-for-byte the existing fixed production message. Rows saved by the first
+  implementation as middle-only text are wrapped safely when rendered; rows that
+  already contain a full initial SMS are not wrapped again.
 - **Up to three deterministic follow-ups.** After a patient replies, the office
   may send follow-up #1, then #2, then #3. Each has its own enabled toggle and
   body. The **Maximum automated replies** setting (0–3) caps how many may send;
@@ -70,10 +70,15 @@ phrasing (e.g. "urgent", "guarantee", "discount", "diagnosis", "appointment
 confirmed", "we can book you"), URLs, emails, phone numbers, unknown variables,
 excessive punctuation, or all-caps shouting.
 
+The initial SMS has two extra requirements: it must include clinic identity
+(`{{clinic_name}}` or the rendered clinic name) and it must include
+`Reply STOP to opt out`. The preview renders `{{clinic_name}}` to the real
+clinic name and does not leave unresolved placeholders.
+
 ## Audit
 
 Saving the builder writes `clinic.sms_conversation.update` with redacted
-metadata only (max replies, enabled slot count, whether the initial middle is
+metadata only (max replies, enabled slot count, whether the initial template is
 customized) — never the message bodies.
 
 ## Source of truth

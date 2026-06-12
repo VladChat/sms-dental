@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 // Platform-admin-only SMS Conversation Builder. Configures the deterministic
 // missed-call recovery SMS flow for ONE clinic. Clinic owners cannot edit this.
-// No AI: fixed clinic-identity prefix + "Reply STOP to opt out." suffix are
-// always added in code; only the middle text and follow-up bodies are editable.
+// No AI: the admin can edit the full initial template, while the server still
+// requires clinic identity and "Reply STOP to opt out." language.
 
 const SLOTS = [1, 2, 3] as const;
 type Slot = (typeof SLOTS)[number];
@@ -20,13 +20,14 @@ type FollowUpView = {
 type ConfigPayload = {
   clinicName: string;
   config: {
-    initialMiddle: string | null;
-    defaultInitialMiddle: string;
+    initialTemplate: string | null;
+    defaultInitialTemplate: string;
+    initialSuggestion: string;
     maxAutoReplies: number;
     followUps: Record<string, FollowUpView>;
   };
-  preview: { initialPrefix: string; initialSuffix: string; initial: string };
-  limits?: { maxAutoReplies: number; maxInitialMiddleLength: number; maxTemplateBodyLength: number };
+  preview: { initial: string };
+  limits?: { maxAutoReplies: number; maxInitialTemplateLength: number; maxTemplateBodyLength: number };
   variables?: string[];
 };
 
@@ -37,8 +38,9 @@ type LoadState = "loading" | "error" | "ready";
 export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) {
   const [load, setLoad] = useState<LoadState>("loading");
   const [clinicName, setClinicName] = useState("");
-  const [defaultMiddle, setDefaultMiddle] = useState("");
-  const [initialMiddle, setInitialMiddle] = useState("");
+  const [defaultInitialTemplate, setDefaultInitialTemplate] = useState("");
+  const [initialSuggestion, setInitialSuggestion] = useState("");
+  const [initialTemplate, setInitialTemplate] = useState("");
   const [maxAutoReplies, setMaxAutoReplies] = useState(0);
   const [followUps, setFollowUps] = useState<Record<Slot, FollowUpState>>({
     1: { body: "", enabled: false, suggestion: "" },
@@ -46,9 +48,7 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     3: { body: "", enabled: false, suggestion: "" },
   });
   const [initialPreview, setInitialPreview] = useState("");
-  const [prefix, setPrefix] = useState("");
-  const [suffix, setSuffix] = useState("Reply STOP to opt out.");
-  const [maxMiddleLen, setMaxMiddleLen] = useState(240);
+  const [maxInitialLen, setMaxInitialLen] = useState(240);
   const [maxBodyLen, setMaxBodyLen] = useState(240);
 
   const [saving, setSaving] = useState(false);
@@ -57,8 +57,9 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
 
   function apply(data: ConfigPayload) {
     setClinicName(data.clinicName);
-    setDefaultMiddle(data.config.defaultInitialMiddle);
-    setInitialMiddle(data.config.initialMiddle ?? "");
+    setDefaultInitialTemplate(data.config.defaultInitialTemplate);
+    setInitialSuggestion(data.config.initialSuggestion);
+    setInitialTemplate(data.config.initialTemplate ?? data.config.defaultInitialTemplate);
     setMaxAutoReplies(data.config.maxAutoReplies);
     const next = { ...followUps };
     for (const slot of SLOTS) {
@@ -71,10 +72,8 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     }
     setFollowUps(next);
     setInitialPreview(data.preview.initial);
-    setPrefix(data.preview.initialPrefix);
-    setSuffix(data.preview.initialSuffix);
     if (data.limits) {
-      setMaxMiddleLen(data.limits.maxInitialMiddleLength);
+      setMaxInitialLen(data.limits.maxInitialTemplateLength);
       setMaxBodyLen(data.limits.maxTemplateBodyLength);
     }
   }
@@ -104,13 +103,27 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clinicId]);
 
-  // Client-side preview of the initial SMS (prefix + middle + suffix). The
-  // server is the source of truth on save; this is just immediate feedback.
+  // Client-side preview of the full initial SMS. The server is the source of
+  // truth on save; this is just immediate feedback.
   const localInitialPreview = useMemo(() => {
-    const middle = initialMiddle.trim().length > 0 ? initialMiddle.trim() : defaultMiddle;
-    const resolvedPrefix = prefix || `Hi, this is ${clinicName || "your dental office"}.`;
-    return `${resolvedPrefix} ${middle} ${suffix}`.replace(/\s+/g, " ").trim();
-  }, [initialMiddle, defaultMiddle, prefix, suffix, clinicName]);
+    const source = initialTemplate.trim().length > 0 ? initialTemplate : defaultInitialTemplate;
+    return renderLocalPreview(source, clinicName);
+  }, [initialTemplate, defaultInitialTemplate, clinicName]);
+
+  const initialInlineError = useMemo(() => {
+    const source = initialTemplate.trim();
+    if (!source) return null;
+    if (!hasClinicIdentity(source, clinicName)) {
+      return "Include the clinic identity with {{clinic_name}}.";
+    }
+    if (!hasStopOptOut(source)) {
+      return "Include “Reply STOP to opt out.”";
+    }
+    if (/\{\{\s*patient_name\s*\}\}/i.test(source)) {
+      return "{{patient_name}} can only be used in follow-up messages.";
+    }
+    return null;
+  }, [initialTemplate, clinicName]);
 
   function setFollowUp(slot: Slot, patch: Partial<FollowUpState>) {
     setFollowUps((prev) => ({ ...prev, [slot]: { ...prev[slot], ...patch } }));
@@ -118,7 +131,7 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
   }
 
   function resetInitial() {
-    setInitialMiddle("");
+    setInitialTemplate(defaultInitialTemplate);
     setSaved(false);
   }
 
@@ -132,7 +145,7 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          initialMiddle,
+          initialTemplate,
           maxAutoReplies,
           followUps: {
             1: { body: followUps[1].body, enabled: followUps[1].enabled },
@@ -195,29 +208,40 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
       {/* Initial missed-call SMS */}
       <section style={{ display: "grid", gap: "var(--space-3)" }}>
         <h3 className="adm-subhead">Initial missed-call SMS</h3>
-        <div className="adm-locked-line t-small">
-          <span style={{ color: "var(--text-muted)" }}>Locked start:</span>{" "}
-          <span style={{ fontWeight: 600 }}>{prefix || `Hi, this is ${clinicName}.`}</span>
-        </div>
         <div className="field">
-          <label htmlFor="aisms-middle">Editable middle text</label>
+          <label htmlFor="aisms-initial-template">Initial SMS template</label>
           <textarea
-            id="aisms-middle"
+            id="aisms-initial-template"
             className="textarea"
-            rows={2}
-            value={initialMiddle}
-            maxLength={maxMiddleLen}
-            placeholder={defaultMiddle}
-            onChange={(e) => { setInitialMiddle(e.target.value); setSaved(false); }}
+            rows={3}
+            value={initialTemplate}
+            maxLength={maxInitialLen}
+            placeholder={defaultInitialTemplate}
+            onChange={(e) => { setInitialTemplate(e.target.value); setSaved(false); }}
+            aria-invalid={initialInlineError ? "true" : "false"}
+            aria-describedby="aisms-initial-helper"
           />
-          <p className="helper">
-            {initialMiddle.length}/{maxMiddleLen} · Leave blank to use the default:{" "}
-            <span style={{ fontStyle: "italic" }}>{defaultMiddle}</span>
+          <p id="aisms-initial-helper" className="helper">
+            {initialTemplate.length}/{maxInitialLen}
+            {initialSuggestion ? (
+              <>
+                {" "}· Suggestion:{" "}
+                <button
+                  type="button"
+                  className="link"
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                  onClick={() => { setInitialTemplate(initialSuggestion); setSaved(false); }}
+                >
+                  use “{initialSuggestion}”
+                </button>
+              </>
+            ) : null}
           </p>
-        </div>
-        <div className="adm-locked-line t-small">
-          <span style={{ color: "var(--text-muted)" }}>Locked end:</span>{" "}
-          <span style={{ fontWeight: 600 }}>{suffix}</span>
+          {initialInlineError && (
+            <p className="helper" style={{ color: "var(--error-text)" }}>
+              {initialInlineError}
+            </p>
+          )}
         </div>
         <PreviewBox label="Preview" text={localInitialPreview || initialPreview} />
         <div>
@@ -348,4 +372,25 @@ function PreviewBox({ label, text }: { label: string; text: string }) {
       </div>
     </div>
   );
+}
+
+function renderLocalPreview(template: string, clinicName: string): string {
+  const identity = clinicName.trim() || "your dental office";
+  return template
+    .replace(/\{\{\s*clinic_name\s*\}\}/gi, identity)
+    .replace(/,?\s*\{\{\s*patient_name\s*\}\}/gi, "")
+    .replace(/\{\{[^}]*\}\}/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .trim();
+}
+
+function hasClinicIdentity(template: string, clinicName: string): boolean {
+  if (/\{\{\s*clinic_name\s*\}\}/i.test(template)) return true;
+  const identity = clinicName.trim().toLowerCase();
+  return identity.length > 0 && template.toLowerCase().includes(identity);
+}
+
+function hasStopOptOut(template: string): boolean {
+  return /\bReply\s+STOP\s+to\s+opt\s+out\.?/i.test(template);
 }

@@ -5,8 +5,8 @@ import type {
 } from "../sms-recovery/conversation-templates";
 
 // Clinic SMS conversation settings + message templates (admin-configured).
-// No row -> safe defaults (max_auto_replies 0, no custom middle, follow-ups
-// disabled). All reads/writes are clinic-scoped and service-role only.
+// No row -> safe defaults (max_auto_replies 0, no custom initial template,
+// follow-ups disabled). All reads/writes are clinic-scoped and service-role only.
 
 type SettingsRow = { max_auto_replies: number };
 type TemplateRow = {
@@ -37,7 +37,7 @@ export async function getClinicConversationConfig(
   ]);
 
   const maxAutoReplies = clampMax(settingsRows[0]?.max_auto_replies ?? 0);
-  let initialMiddle: string | null = null;
+  let initialTemplate: string | null = null;
   const followUps: ConversationTemplateConfig["followUps"] = {
     1: { body: null, enabled: false },
     2: { body: null, enabled: false },
@@ -47,7 +47,7 @@ export async function getClinicConversationConfig(
   for (const row of templateRows) {
     if (row.template_role === "initial" && row.sequence === 0) {
       const body = (row.body_text ?? "").trim();
-      initialMiddle = body.length > 0 ? body : null;
+      initialTemplate = body.length > 0 ? body : null;
     } else if (row.template_role === "auto_reply" && row.sequence >= 1 && row.sequence <= 3) {
       followUps[row.sequence as FollowUpSlot] = {
         body: row.body_text ?? null,
@@ -56,11 +56,11 @@ export async function getClinicConversationConfig(
     }
   }
 
-  return { initialMiddle, maxAutoReplies, followUps };
+  return { initialTemplate, maxAutoReplies, followUps };
 }
 
 export type SaveConversationConfigInput = {
-  initialMiddle: string | null; // null/empty => default middle
+  initialTemplate: string | null; // null/empty => fixed default initial template
   maxAutoReplies: number; // 0..3 (clamped)
   followUps: Record<FollowUpSlot, { body: string | null; enabled: boolean }>;
 };
@@ -75,7 +75,7 @@ export async function saveClinicConversationConfig(
   const sql = getDb();
   const maxAutoReplies = clampMax(input.maxAutoReplies);
   const rows: { role: "initial" | "auto_reply"; sequence: number; body: string | null; enabled: boolean }[] = [
-    { role: "initial", sequence: 0, body: normalizeBody(input.initialMiddle), enabled: true },
+    { role: "initial", sequence: 0, body: normalizeBody(input.initialTemplate), enabled: true },
     { role: "auto_reply", sequence: 1, body: normalizeBody(input.followUps[1].body), enabled: input.followUps[1].enabled },
     { role: "auto_reply", sequence: 2, body: normalizeBody(input.followUps[2].body), enabled: input.followUps[2].enabled },
     { role: "auto_reply", sequence: 3, body: normalizeBody(input.followUps[3].body), enabled: input.followUps[3].enabled },
