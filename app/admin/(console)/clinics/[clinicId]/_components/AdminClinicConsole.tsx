@@ -64,17 +64,24 @@ type SectionId =
   | "sms"
   | "a2p"
   | "ai_knowledge"
-  | "sms_messages"
+  | "sms_voice"
+  | "sms_texts"
+  | "sms_limits"
   | "billing"
   | "admin";
 
-const SECTIONS: { id: SectionId; label: string }[] = [
+// The three SMS settings items render as adjacent nav buttons visually grouped
+// under one "SMS settings" label (keyboard navigation stays a flat roving-tab
+// list). The old single "SMS messages" section was split into these panels.
+const SECTIONS: { id: SectionId; label: string; group?: string }[] = [
   { id: "phone", label: "Phone number" },
   { id: "business", label: "Business profile" },
   { id: "sms", label: "SMS approval" },
   { id: "a2p", label: "A2P review" },
   { id: "ai_knowledge", label: "AI knowledge" },
-  { id: "sms_messages", label: "SMS messages" },
+  { id: "sms_voice", label: "Voice greeting", group: "SMS settings" },
+  { id: "sms_texts", label: "SMS texts", group: "SMS settings" },
+  { id: "sms_limits", label: "Limits & anti-spam", group: "SMS settings" },
   { id: "billing", label: "Billing" },
   { id: "admin", label: "Admin tools" },
 ];
@@ -239,23 +246,45 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             {SECTIONS.map((s, i) => {
               const st = navStatus[s.id];
               const isActive = active === s.id;
+              // Render the group label once, above the first item of the group.
+              const isGroupStart = !!s.group && SECTIONS[i - 1]?.group !== s.group;
               return (
-                <button
-                  key={s.id}
-                  ref={(el) => { tabRefs.current[i] = el; }}
-                  type="button"
-                  role="tab"
-                  id={`adm-tab-${s.id}`}
-                  aria-selected={isActive}
-                  aria-controls={`adm-panel-${s.id}`}
-                  tabIndex={isActive ? 0 : -1}
-                  className="acct-nav-item"
-                  onClick={() => setActive(s.id)}
-                  onKeyDown={(e) => onTabKeyDown(e, i)}
-                >
-                  <span className="acct-nav-main"><span className="acct-nav-text">{s.label}</span></span>
-                  {st && <span className={`adm-nav-status tone-${st.tone}`}>{st.text}</span>}
-                </button>
+                <div key={s.id} style={{ display: "contents" }}>
+                  {isGroupStart && (
+                    <span
+                      className="t-helper"
+                      aria-hidden="true"
+                      style={{
+                        display: "block",
+                        padding: "var(--space-2) var(--space-3) var(--space-1)",
+                        color: "var(--text-muted)",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        fontSize: "0.7rem",
+                      }}
+                    >
+                      {s.group}
+                    </span>
+                  )}
+                  <button
+                    ref={(el) => { tabRefs.current[i] = el; }}
+                    type="button"
+                    role="tab"
+                    id={`adm-tab-${s.id}`}
+                    aria-selected={isActive}
+                    aria-controls={`adm-panel-${s.id}`}
+                    aria-label={s.group ? `${s.group}: ${s.label}` : undefined}
+                    tabIndex={isActive ? 0 : -1}
+                    className="acct-nav-item"
+                    style={s.group ? { paddingLeft: "var(--space-5)" } : undefined}
+                    onClick={() => setActive(s.id)}
+                    onKeyDown={(e) => onTabKeyDown(e, i)}
+                  >
+                    <span className="acct-nav-main"><span className="acct-nav-text">{s.label}</span></span>
+                    {st && <span className={`adm-nav-status tone-${st.tone}`}>{st.text}</span>}
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -559,12 +588,28 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             />
           </Panel>
 
-          {/* SMS messages — deterministic conversation builder (admin only) */}
-          <Panel id="sms_messages" active={active}>
+          {/* SMS settings — deterministic conversation builder (admin only),
+              split into three focused panels: Voice greeting, SMS texts, and
+              Limits & anti-spam. Each saves only its own section. */}
+          <Panel id="sms_voice" active={active}>
             <div className="adm-section-head">
-              <h2 className="t-h3">SMS messages</h2>
+              <h2 className="t-h3">Voice greeting</h2>
             </div>
-            <AdminSmsConversationBuilder clinicId={d.id} />
+            <AdminSmsConversationBuilder clinicId={d.id} view="voice" />
+          </Panel>
+
+          <Panel id="sms_texts" active={active}>
+            <div className="adm-section-head">
+              <h2 className="t-h3">SMS texts</h2>
+            </div>
+            <AdminSmsConversationBuilder clinicId={d.id} view="texts" />
+          </Panel>
+
+          <Panel id="sms_limits" active={active}>
+            <div className="adm-section-head">
+              <h2 className="t-h3">Limits &amp; anti-spam</h2>
+            </div>
+            <AdminSmsConversationBuilder clinicId={d.id} view="limits" />
           </Panel>
 
           {/* Billing (compact) */}
@@ -745,7 +790,6 @@ function sectionStatuses(
     sms,
     a2p: a2pNavStatus(review),
     ai_knowledge: { text: "Manage", tone: "neutral" },
-    sms_messages: { text: "Manage", tone: "neutral" },
     billing: d.stripeCustomerPresent ? { text: "Connected", tone: "success" } : { text: "Not connected", tone: "neutral" },
   };
 }

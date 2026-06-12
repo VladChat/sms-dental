@@ -1,4 +1,5 @@
 import { getDb } from "./client";
+import type { AutomationVolumeSettings } from "../sms-recovery/automation-volume-limits";
 
 // Find or create the conversation thread for a (clinic, patient) pair.
 // Uses the unique index on (clinic_id, patient_phone) for idempotency.
@@ -45,6 +46,10 @@ export type ResetConversationAutoReplyCycleOptions = {
 // recovery SMS is accepted and recorded. Keep the safely collected display name
 // for real callers; configured internal duplicate-bypass test callers can opt
 // into a clean name state for repeat live-test cycles.
+//
+// Anti-spam volume state: the per-cycle unanswered count, high-volume flag,
+// and an EXPIRED mute are cleared — but an ACTIVE mute is never cleared or
+// shortened here, so a new recovery SMS cannot re-enable automation early.
 export async function resetConversationAutoReplyCycle(
   conversationId: string,
   options: ResetConversationAutoReplyCycleOptions = {},
@@ -57,6 +62,21 @@ export async function resetConversationAutoReplyCycle(
         sms_auto_reply_last_sent_at = null,
         sms_thanks_courtesy_sent_at = null,
         sms_safety_notice_sent_at = null,
+        unanswered_after_automation_count = case
+          when automation_muted_until is not null and automation_muted_until > now()
+            then unanswered_after_automation_count
+          else 0
+        end,
+        high_volume_flagged_at = case
+          when automation_muted_until is not null and automation_muted_until > now()
+            then high_volume_flagged_at
+          else null
+        end,
+        automation_muted_until = case
+          when automation_muted_until is not null and automation_muted_until > now()
+            then automation_muted_until
+          else null
+        end,
         patient_display_name = case
           when ${resetPatientDisplayName} then null
           else patient_display_name
@@ -71,6 +91,9 @@ export type ConversationAutoReplyState = {
   smsAutoReplyCount: number;
   smsThanksCourtesySentAt: string | null;
   smsSafetyNoticeSentAt: string | null;
+  unansweredAfterAutomationCount: number;
+  automationMutedUntil: string | null;
+  highVolumeFlaggedAt: string | null;
 };
 
 // Read the conversation state the auto-reply decision needs.
@@ -83,9 +106,13 @@ export async function getConversationAutoReplyState(
     sms_auto_reply_count: number;
     sms_thanks_courtesy_sent_at: string | null;
     sms_safety_notice_sent_at: string | null;
+    unanswered_after_automation_count: number;
+    automation_muted_until: string | null;
+    high_volume_flagged_at: string | null;
   }[]>`
     select patient_display_name, sms_auto_reply_count, sms_thanks_courtesy_sent_at,
-           sms_safety_notice_sent_at
+           sms_safety_notice_sent_at, unanswered_after_automation_count,
+           automation_muted_until, high_volume_flagged_at
     from public.patient_conversations
     where id = ${conversationId}
     limit 1
@@ -97,6 +124,9 @@ export async function getConversationAutoReplyState(
     smsAutoReplyCount: row.sms_auto_reply_count ?? 0,
     smsThanksCourtesySentAt: row.sms_thanks_courtesy_sent_at,
     smsSafetyNoticeSentAt: row.sms_safety_notice_sent_at,
+    unansweredAfterAutomationCount: row.unanswered_after_automation_count ?? 0,
+    automationMutedUntil: row.automation_muted_until,
+    highVolumeFlaggedAt: row.high_volume_flagged_at,
   };
 }
 
@@ -184,4 +214,58 @@ export async function claimSafetyNotice(conversationId: string): Promise<boolean
     returning id
   `;
   return rows.length > 0;
+}
+
+export type UnansweredInboundRecordResult = {
+  unansweredAfterAutomationCount: number;
+  automationMutedUntil: string | null;
+  highVolumeFlaggedAt: string | null;
+};
+
+// Count one ordinary inbound SMS that received no automated response because
+// automation has ended for this recovery cycle (or is muted). Atomically:
+//   - increments unanswered_after_automation_count;
+//   - arms automation_muted_until = now() + mute hours when the count reaches
+//     the mute threshold and no mute is currently active (an active mute is
+//     never extended or shortened mid-window; an expired one re-arms);
+//   - stamps high_volume_flagged_at once when the count reaches the
+//     high-volume threshold.
+// Inbound messages themselves are always recorded elsewhere — this never
+// blocks the webhook or the phone number.
+export async function recordUnansweredInboundAfterAutomation(
+  conversationId: string,
+  settings: AutomationVolumeSettings,
+): Promise<UnansweredInboundRecordResult | null> {
+  const sql = getDb();
+  const muteInterval = `${settings.automationMuteHours} hours`;
+  const rows = await sql<{
+    unanswered_after_automation_count: number;
+    automation_muted_until: string | null;
+    high_volume_flagged_at: string | null;
+  }[]>`
+    update public.patient_conversations
+    set unanswered_after_automation_count = unanswered_after_automation_count + 1,
+        automation_muted_until = case
+          when unanswered_after_automation_count + 1 >= ${settings.unansweredMuteAfter}
+               and (automation_muted_until is null or automation_muted_until <= now())
+            then now() + ${muteInterval}::interval
+          else automation_muted_until
+        end,
+        high_volume_flagged_at = case
+          when unanswered_after_automation_count + 1 >= ${settings.unansweredHighVolumeAfter}
+               and high_volume_flagged_at is null
+            then now()
+          else high_volume_flagged_at
+        end,
+        updated_at = now()
+    where id = ${conversationId}
+    returning unanswered_after_automation_count, automation_muted_until, high_volume_flagged_at
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    unansweredAfterAutomationCount: row.unanswered_after_automation_count,
+    automationMutedUntil: row.automation_muted_until,
+    highVolumeFlaggedAt: row.high_volume_flagged_at,
+  };
 }

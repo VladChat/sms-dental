@@ -132,6 +132,61 @@ test("resetConversationAutoReplyCycle clears reply-cycle state and conditionally
   assert.ok(helper.includes("else patient_display_name"));
 });
 
+test("new recovery cycle resets volume state but never clears an ACTIVE mute early", () => {
+  const src = fs.readFileSync(path.join(REPO_ROOT, "lib", "db", "conversations.ts"), "utf8");
+  const start = src.indexOf("export async function resetConversationAutoReplyCycle");
+  const end = src.indexOf("export type ConversationAutoReplyState", start);
+  const helper = src.slice(start, end);
+
+  // Count + high-volume flag reset only when no mute is active; an active
+  // automation_muted_until is preserved verbatim (never re-enabled early).
+  assert.ok(helper.includes("unanswered_after_automation_count = case"));
+  assert.ok(helper.includes("high_volume_flagged_at = case"));
+  assert.ok(helper.includes("automation_muted_until = case"));
+  const activeMuteGuards = helper.match(
+    /automation_muted_until is not null and automation_muted_until > now\(\)/g,
+  );
+  assert.ok((activeMuteGuards?.length ?? 0) >= 3, "every volume column checks the active mute");
+  assert.ok(helper.includes("then unanswered_after_automation_count"));
+  assert.ok(helper.includes("then high_volume_flagged_at"));
+  assert.ok(helper.includes("then automation_muted_until"));
+});
+
+test("auto-reply path skips ALL automation while muted and counts unanswered inbound", () => {
+  const src = stripCommentLines(
+    fs.readFileSync(path.join(REPO_ROOT, "lib", "twilio", "conversation-auto-reply.ts"), "utf8"),
+  );
+
+  const stateIdx = src.indexOf("await getConversationAutoReplyState(");
+  const muteIdx = src.indexOf("isAutomationMuted(state, new Date())");
+  const thanksIdx = src.indexOf("evaluateThanksCourtesyDecision({");
+  const followUpIdx = src.indexOf("evaluateAutoReplyDecision({");
+  assert.ok(stateIdx >= 0 && muteIdx > stateIdx, "mute check runs after state load");
+  assert.ok(muteIdx < thanksIdx, "mute check runs before the thanks courtesy path");
+  assert.ok(muteIdx < followUpIdx, "mute check runs before the follow-up decision");
+  assert.ok(src.includes('skipAutoReply(input, "automation_muted")'));
+
+  // Unanswered counting: while muted, and when automation ended normally.
+  assert.ok(src.includes("reasonCountsAsUnanswered(decision.reason)"));
+  assert.ok(src.includes("await recordUnansweredInboundAfterAutomation("));
+
+  const dbSrc = stripCommentLines(
+    fs.readFileSync(path.join(REPO_ROOT, "lib", "db", "conversations.ts"), "utf8"),
+  );
+  const recordStart = dbSrc.indexOf("export async function recordUnansweredInboundAfterAutomation");
+  assert.ok(recordStart >= 0, "unanswered counter helper exists");
+  const record = dbSrc.slice(recordStart, recordStart + 2200);
+  assert.ok(record.includes("unanswered_after_automation_count + 1"));
+  assert.ok(record.includes("automation_muted_until is null or automation_muted_until <= now()"));
+  assert.ok(record.includes("high_volume_flagged_at is null"));
+});
+
+test("thanks courtesy and safety prefix use admin special-reply overrides", () => {
+  const src = fs.readFileSync(path.join(REPO_ROOT, "lib", "twilio", "conversation-auto-reply.ts"), "utf8");
+  assert.ok(src.includes("customBody: config.specialReplies?.thanks_courtesy?.body ?? null"));
+  assert.ok(src.includes("specialReplyTextForKey(config.specialReplies, \"safety_notice\")"));
+});
+
 test("safety notice prefix is claimed atomically after the slot claim, never standalone", () => {
   const src = stripCommentLines(
     fs.readFileSync(path.join(REPO_ROOT, "lib", "twilio", "conversation-auto-reply.ts"), "utf8"),
@@ -142,7 +197,10 @@ test("safety notice prefix is claimed atomically after the slot claim, never sta
   assert.ok(slotClaimIdx >= 0, "slot claim exists");
   assert.ok(safetyClaimIdx > slotClaimIdx, "safety notice claim happens after the slot claim");
   assert.ok(src.includes("shouldAttemptSafetyNoticePrefix"));
-  assert.ok(src.includes("safetyNoticeApplied ? prefixSafetyNotice(body) : body"));
+  // The prefix stays an add-on to the normal follow-up body and uses the
+  // admin-configurable special reply text (default fallback inside).
+  assert.ok(src.includes("? prefixSafetyNotice(body, specialReplyTextForKey(config.specialReplies, \"safety_notice\"))"));
+  assert.ok(src.includes(": body,"));
   assert.ok(src.includes("safety_notice: true"));
 
   const dbSrc = stripCommentLines(

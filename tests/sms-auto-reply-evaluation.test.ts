@@ -218,6 +218,40 @@ test("new missed-call recovery cycle reset restores follow-up eligibility", () =
   );
 });
 
+test("thanks courtesy uses the admin override body and falls back to the default", () => {
+  // No override -> code default.
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase()), {
+    send: true,
+    body: THANKS_COURTESY_REPLY_BODY,
+  });
+  // Blank override -> code default.
+  assert.deepEqual(evaluateThanksCourtesyDecision(thanksBase({ customBody: "   " })), {
+    send: true,
+    body: THANKS_COURTESY_REPLY_BODY,
+  });
+  // Custom override -> custom body, still once per cycle.
+  assert.deepEqual(
+    evaluateThanksCourtesyDecision(thanksBase({ customBody: "Happy to help. Our office will reach out." })),
+    { send: true, body: "Happy to help. Our office will reach out." },
+  );
+  assert.deepEqual(
+    evaluateThanksCourtesyDecision(
+      thanksBase({ customBody: "Happy to help. Our office will reach out.", thanksCourtesyAlreadySent: true }),
+    ),
+    { send: false, reason: "thanks_courtesy_already_sent" },
+  );
+});
+
+test("safety prefix uses the admin override text and falls back to the default", () => {
+  assert.equal(prefixSafetyNotice("Body."), `${SAFETY_NOTICE_PREFIX} Body.`);
+  assert.equal(prefixSafetyNotice("Body.", null), `${SAFETY_NOTICE_PREFIX} Body.`);
+  assert.equal(prefixSafetyNotice("Body.", "   "), `${SAFETY_NOTICE_PREFIX} Body.`);
+  assert.equal(
+    prefixSafetyNotice("Body.", "If this is a medical emergency, please call 911 right away."),
+    "If this is a medical emergency, please call 911 right away. Body.",
+  );
+});
+
 test("safety concern sends the next eligible follow-up and consumes its normal slot", () => {
   assert.deepEqual(
     evaluateAutoReplyDecision(base({ replyClassification: "safety_concern" })),

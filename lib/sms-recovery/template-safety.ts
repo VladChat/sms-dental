@@ -16,6 +16,7 @@ import {
   MAX_VOICE_GREETING_TEMPLATE_LENGTH,
   type VoiceGreetingScenario,
 } from "./voice-greeting-templates";
+import { MAX_SPECIAL_REPLY_LENGTH } from "./special-reply-templates";
 
 export type TemplateTextResult =
   | { ok: true; value: string }
@@ -147,6 +148,55 @@ export function validateInitialTemplate(
 
 export function validateFollowUpBody(raw: unknown): TemplateTextResult {
   return validateTemplateText(raw, { allowPatientName: true, maxLength: MAX_TEMPLATE_BODY_LENGTH });
+}
+
+// Safety notice text — the conditional prefix added before the next eligible
+// follow-up on a safety-concern reply. Must stay conditional 911 wording: it
+// must clearly reference a medical emergency and calling 911, with no
+// diagnosis/treatment language (banned phrases) and no contact details. The
+// digits "911" are the ONLY digits allowed.
+export function validateSafetyNoticeText(raw: unknown): TemplateTextResult {
+  const base = validateTemplateText(raw, {
+    allowPatientName: false,
+    maxLength: MAX_SPECIAL_REPLY_LENGTH,
+  });
+  if (!base.ok) return base;
+  if (base.value.length === 0) return base;
+
+  const lower = base.value.toLowerCase();
+  if (!lower.includes("medical emergency")) {
+    return { ok: false, message: "Include the phrase “medical emergency”." };
+  }
+  if (!/\bcall\s+911\b/.test(lower)) {
+    return { ok: false, message: "Include “call 911”." };
+  }
+  if (/\d/.test(base.value.replace(/911/g, ""))) {
+    return { ok: false, message: "911 is the only number allowed in the safety notice." };
+  }
+  if (/\{\{/.test(base.value)) {
+    return { ok: false, message: "Variables aren’t allowed in the safety notice." };
+  }
+  return base;
+}
+
+// Thanks courtesy reply text. Short, neutral, no variables, no digits, and the
+// shared banned-phrase/contact-detail rules (no medical advice, no appointment
+// guarantees, no marketing).
+export function validateThanksReplyText(raw: unknown): TemplateTextResult {
+  const base = validateTemplateText(raw, {
+    allowPatientName: false,
+    maxLength: MAX_SPECIAL_REPLY_LENGTH,
+  });
+  if (!base.ok) return base;
+  if (base.value.length === 0) return base;
+
+  if (/\d/.test(base.value)) {
+    return { ok: false, message: "Numbers aren’t allowed in the thanks reply." };
+  }
+  if (/\{\{/.test(base.value)) {
+    return { ok: false, message: "Variables aren’t allowed in the thanks reply." };
+  }
+  return base;
 }
 
 export function validateVoiceGreetingTemplate(

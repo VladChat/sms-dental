@@ -165,3 +165,131 @@ test("clinic owner account does not expose SMS template editing", () => {
 
   assert.deepEqual(offenders, []);
 });
+
+// ---------------------------------------------------- SMS settings nav split
+
+test("admin left nav groups Voice greeting / SMS texts / Limits & anti-spam under SMS settings", () => {
+  const src = read(
+    path.join("app", "admin", "(console)", "clinics", "[clinicId]", "_components", "AdminClinicConsole.tsx"),
+  );
+
+  // Grouped child items replace the old single section.
+  assert.ok(src.includes('{ id: "sms_voice", label: "Voice greeting", group: "SMS settings" }'));
+  assert.ok(src.includes('{ id: "sms_texts", label: "SMS texts", group: "SMS settings" }'));
+  assert.ok(src.includes('{ id: "sms_limits", label: "Limits & anti-spam", group: "SMS settings" }'));
+  assert.ok(!src.includes("sms_messages"), "old single SMS messages section is gone");
+
+  // Group label renders once above the first child; keyboard nav stays a flat
+  // roving-tab list over SECTIONS.
+  assert.ok(src.includes("const isGroupStart = !!s.group && SECTIONS[i - 1]?.group !== s.group"));
+  assert.ok(src.includes("onTabKeyDown(e, i)"));
+  assert.ok(src.includes('role="tablist"'));
+
+  // Existing main sections stay in order around the group.
+  const order = ["\"phone\"", "\"business\"", "\"sms\"", "\"a2p\"", "\"ai_knowledge\"", "\"sms_voice\"", "\"sms_texts\"", "\"sms_limits\"", "\"billing\"", "\"admin\""]
+    .map((id) => src.indexOf(`{ id: ${id},`));
+  for (let i = 1; i < order.length; i += 1) {
+    assert.ok(order[i] > order[i - 1], `nav order broken at index ${i}`);
+  }
+
+  // Three focused panels render the builder with a view prop each.
+  assert.ok(src.includes('<AdminSmsConversationBuilder clinicId={d.id} view="voice" />'));
+  assert.ok(src.includes('<AdminSmsConversationBuilder clinicId={d.id} view="texts" />'));
+  assert.ok(src.includes('<AdminSmsConversationBuilder clinicId={d.id} view="limits" />'));
+  assert.ok(!src.includes("<AdminSmsConversationBuilder clinicId={d.id} />"));
+});
+
+test("builder subviews render only their own settings and save only their own section", () => {
+  const src = read(
+    path.join("app", "admin", "(console)", "clinics", "[clinicId]", "_components", "AdminSmsConversationBuilder.tsx"),
+  );
+
+  assert.ok(src.includes('view: SmsBuilderView'));
+  assert.ok(src.includes('export type SmsBuilderView = "voice" | "texts" | "limits"'));
+  assert.ok(src.includes('{view === "voice" && ('));
+  assert.ok(src.includes('{view === "texts" && ('));
+  assert.ok(src.includes('{view === "limits" && ('));
+
+  // Partial save payloads: voice -> voiceGreetings only; texts -> initial +
+  // follow-ups + special replies; limits -> maxAutoReplies + antiSpam.
+  const payloadStart = src.indexOf("function buildSavePayload()");
+  const payload = src.slice(payloadStart, src.indexOf("async function save()"));
+  const voiceBranch = payload.slice(payload.indexOf('view === "voice"'), payload.indexOf('view === "texts"'));
+  assert.ok(voiceBranch.includes("voiceGreetings:"));
+  assert.ok(!voiceBranch.includes("initialTemplate"));
+  assert.ok(!voiceBranch.includes("maxAutoReplies"));
+  const limitsBranchIdx = payload.lastIndexOf("return {");
+  const textsBranch = payload.slice(payload.indexOf('view === "texts"'), limitsBranchIdx);
+  assert.ok(textsBranch.includes("initialTemplate,"));
+  assert.ok(textsBranch.includes("followUps:"));
+  assert.ok(textsBranch.includes("specialReplies:"));
+  assert.ok(!textsBranch.includes("voiceGreetings"));
+  const limitsBranch = payload.slice(limitsBranchIdx);
+  assert.ok(limitsBranch.includes("maxAutoReplies,"));
+  assert.ok(limitsBranch.includes("antiSpam:"));
+});
+
+test("SMS texts panel exposes editable Safety notice and Thanks reply blocks", () => {
+  const src = read(
+    path.join("app", "admin", "(console)", "clinics", "[clinicId]", "_components", "AdminSmsConversationBuilder.tsx"),
+  );
+
+  assert.ok(src.includes('label: "Safety notice"'));
+  assert.ok(src.includes('label: "Thanks reply"'));
+  assert.ok(src.includes("resetSpecialReply"));
+  assert.ok(src.includes("body: specialReplies[key].defaultText"));
+  // The safety notice is visually a prefix/add-on: the preview shows it glued
+  // to the next follow-up as ONE SMS, never a separate message.
+  assert.ok(src.includes("Example (prefix + next follow-up, one SMS)"));
+  assert.ok(src.includes("${state.body.trim() || state.defaultText} ${localFollowUpPreviews[1]}"));
+});
+
+test("Limits & anti-spam panel exposes max replies and pause settings with helper copy", () => {
+  const src = read(
+    path.join("app", "admin", "(console)", "clinics", "[clinicId]", "_components", "AdminSmsConversationBuilder.tsx"),
+  );
+
+  assert.ok(src.includes("Maximum automated replies"));
+  assert.ok(src.includes("Pause automation after"));
+  assert.ok(src.includes("Pause duration"));
+  assert.ok(src.includes("High-volume flag after"));
+  assert.ok(src.includes("unansweredMuteAfter: 6"));
+  assert.ok(src.includes("unansweredHighVolumeAfter: 10"));
+  assert.ok(src.includes("automationMuteHours: 24"));
+  assert.ok(
+    src.includes(
+      "After automated replies are finished, additional patient messages are still saved.",
+    ),
+  );
+  assert.ok(src.includes("automation can pause temporarily to"));
+  assert.ok(src.includes("number is never blocked"));
+});
+
+test("admin SMS conversation route supports partial saves and validates special replies + anti-spam", () => {
+  const src = read(path.join("app", "api", "admin", "clinics", "[clinicId]", "sms-conversation", "route.ts"));
+
+  // Partial-save merge: each section falls back to the saved config.
+  assert.ok(src.includes("const has = (key: string) => Object.prototype.hasOwnProperty.call(input, key)"));
+  assert.ok(src.includes('if (has("maxAutoReplies"))'));
+  assert.ok(src.includes('if (has("followUps"))'));
+  assert.ok(src.includes('if (has("voiceGreetings"))'));
+  assert.ok(src.includes('if (has("specialReplies"))'));
+  assert.ok(src.includes('if (has("antiSpam"))'));
+
+  // Special reply validation routes to the dedicated validators.
+  assert.ok(src.includes("validateSafetyNoticeText"));
+  assert.ok(src.includes("validateThanksReplyText"));
+
+  // Anti-spam validation enforces bounds + cross-field rule server-side.
+  assert.ok(src.includes("validateAutomationVolumeSettings"));
+
+  // Audit stays compact and body-free with the new metadata.
+  assert.ok(src.includes("changed_section: changedSection(has)"));
+  assert.ok(src.includes("special_reply_customized_count"));
+  assert.ok(src.includes("anti_spam_customized"));
+
+  // GET/POST responses expose the new sections.
+  assert.ok(src.includes("specialReplies,"));
+  assert.ok(src.includes("antiSpamBounds: AUTOMATION_VOLUME_BOUNDS"));
+  assert.ok(src.includes("maxSpecialReplyLength: MAX_SPECIAL_REPLY_LENGTH"));
+});

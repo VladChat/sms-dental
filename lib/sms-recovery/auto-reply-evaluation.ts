@@ -8,14 +8,17 @@ import {
   type ReplyClassificationKind,
 } from "./reply-classification";
 import { MAX_AUTO_REPLIES, type FollowUpSlot } from "./conversation-templates";
+import { DEFAULT_SPECIAL_REPLY_TEMPLATES } from "./special-reply-templates";
 
-export const THANKS_COURTESY_REPLY_BODY = "You're welcome. Our team will follow up.";
+// Canonical default texts live in special-reply-templates.ts; these constants
+// remain the stable names the send path and tests use.
+export const THANKS_COURTESY_REPLY_BODY = DEFAULT_SPECIAL_REPLY_TEMPLATES.thanks_courtesy;
 
 // Conditional safety wording for potential emergency/pain replies. This is
 // deliberately NOT medical advice: no diagnosis, no severity inference, no
 // treatment guidance — only a conditional 911 line prepended ONCE per recovery
 // cycle to an otherwise-eligible normal follow-up. It is never sent standalone.
-export const SAFETY_NOTICE_PREFIX = "If this is a medical emergency, call 911.";
+export const SAFETY_NOTICE_PREFIX = DEFAULT_SPECIAL_REPLY_TEMPLATES.safety_notice;
 
 export type SafetyNoticePrefixInput = {
   replyClassification: ReplyClassificationKind | null;
@@ -29,8 +32,12 @@ export function shouldAttemptSafetyNoticePrefix(input: SafetyNoticePrefixInput):
   return input.replyClassification === "safety_concern" && !input.safetyNoticeAlreadySent;
 }
 
-export function prefixSafetyNotice(body: string): string {
-  return `${SAFETY_NOTICE_PREFIX} ${body}`;
+// Prepend the (admin-configurable) safety notice. Blank/missing custom text
+// falls back to the code default. The notice is always a prefix on a normal
+// follow-up body — never a standalone message.
+export function prefixSafetyNotice(body: string, noticeText?: string | null): string {
+  const notice = (noticeText ?? "").trim() || SAFETY_NOTICE_PREFIX;
+  return `${notice} ${body}`;
 }
 
 export type AutoReplyDecisionInput = {
@@ -109,11 +116,13 @@ export type ThanksCourtesyDecisionInput = {
   hasPriorRecoveryOutbound: boolean;
   maxAutoReplies: number;
   thanksCourtesyAlreadySent: boolean;
+  // Admin-saved override; blank/missing means the code default body.
+  customBody?: string | null;
 };
 
 export type ThanksCourtesyDecision =
   | { send: false; reason: string }
-  | { send: true; body: typeof THANKS_COURTESY_REPLY_BODY };
+  | { send: true; body: string };
 
 export function evaluateThanksCourtesyDecision(
   input: ThanksCourtesyDecisionInput,
@@ -132,5 +141,6 @@ export function evaluateThanksCourtesyDecision(
   }
   if (!input.gateOk) return { send: false, reason: "send_gate_blocked" };
 
-  return { send: true, body: THANKS_COURTESY_REPLY_BODY };
+  const body = (input.customBody ?? "").trim() || THANKS_COURTESY_REPLY_BODY;
+  return { send: true, body };
 }

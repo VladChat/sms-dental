@@ -25,8 +25,18 @@ import { buildRecoverySmsBodyFromConversationConfig } from "../lib/sms-recovery/
 import {
   validateFollowUpBody,
   validateInitialTemplate,
+  validateSafetyNoticeText,
+  validateThanksReplyText,
   validateVoiceGreetingTemplate,
 } from "../lib/sms-recovery/template-safety";
+import {
+  DEFAULT_SPECIAL_REPLY_TEMPLATES,
+  specialReplyTextForKey,
+} from "../lib/sms-recovery/special-reply-templates";
+import {
+  SAFETY_NOTICE_PREFIX,
+  THANKS_COURTESY_REPLY_BODY,
+} from "../lib/sms-recovery/auto-reply-evaluation";
 import {
   DEFAULT_VOICE_GREETING_TEMPLATES,
   renderVoiceGreetingTemplate,
@@ -453,6 +463,190 @@ test("follow-up #1 default asks for name and preferred time; custom text is pres
     prepared.upsertRows.filter((row) => row.role === "auto_reply"),
     [{ role: "auto_reply", sequence: 1, body: null, enabled: true }],
   );
+});
+
+// ------------------------------------------------------------ special replies
+
+test("special reply code defaults stay the canonical safety/thanks texts", () => {
+  assert.equal(
+    DEFAULT_SPECIAL_REPLY_TEMPLATES.safety_notice,
+    "If this is a medical emergency, call 911.",
+  );
+  assert.equal(
+    DEFAULT_SPECIAL_REPLY_TEMPLATES.thanks_courtesy,
+    "You're welcome. Our team will follow up.",
+  );
+  // The send-path constants are the same source of truth.
+  assert.equal(SAFETY_NOTICE_PREFIX, DEFAULT_SPECIAL_REPLY_TEMPLATES.safety_notice);
+  assert.equal(THANKS_COURTESY_REPLY_BODY, DEFAULT_SPECIAL_REPLY_TEMPLATES.thanks_courtesy);
+});
+
+test("special reply effective text uses custom override else code default", () => {
+  assert.equal(
+    specialReplyTextForKey(undefined, "safety_notice"),
+    DEFAULT_SPECIAL_REPLY_TEMPLATES.safety_notice,
+  );
+  assert.equal(
+    specialReplyTextForKey(
+      { safety_notice: { body: null }, thanks_courtesy: { body: null } },
+      "thanks_courtesy",
+    ),
+    DEFAULT_SPECIAL_REPLY_TEMPLATES.thanks_courtesy,
+  );
+  assert.equal(
+    specialReplyTextForKey(
+      {
+        safety_notice: { body: "If this is a medical emergency, please call 911 now." },
+        thanks_courtesy: { body: null },
+      },
+      "safety_notice",
+    ),
+    "If this is a medical emergency, please call 911 now.",
+  );
+});
+
+test("special reply storage keeps custom overrides and removes default-equal text", () => {
+  const prepared = prepareConversationTemplateStorage({
+    initialTemplate: null,
+    maxAutoReplies: 0,
+    followUps: followUpConfig(),
+    voiceGreetings: {
+      will_send: { body: null },
+      duplicate: { body: null },
+      none: { body: null },
+    },
+    specialReplies: {
+      safety_notice: { body: "If this is a medical emergency, please call 911 now." },
+      thanks_courtesy: { body: DEFAULT_SPECIAL_REPLY_TEMPLATES.thanks_courtesy },
+    },
+  });
+
+  assert.ok(
+    prepared.upsertRows.some(
+      (row) =>
+        row.role === "special_reply" &&
+        row.sequence === 1 &&
+        row.body === "If this is a medical emergency, please call 911 now." &&
+        row.enabled === true,
+    ),
+  );
+  // Default-equal thanks text is a delete (NULL/no row = current default).
+  assert.ok(prepared.deleteRows.some((row) => row.role === "special_reply" && row.sequence === 2));
+  assert.equal(
+    prepared.upsertRows.some((row) => row.body === DEFAULT_SPECIAL_REPLY_TEMPLATES.thanks_courtesy),
+    false,
+  );
+});
+
+test("anti-spam settings store NULL when default and keep the settings row when custom", () => {
+  const allDefault = prepareConversationTemplateStorage({
+    initialTemplate: null,
+    maxAutoReplies: 0,
+    followUps: followUpConfig(),
+    voiceGreetings: { will_send: { body: null }, duplicate: { body: null }, none: { body: null } },
+    antiSpam: { unansweredMuteAfter: 6, unansweredHighVolumeAfter: 10, automationMuteHours: 24 },
+  });
+  assert.deepEqual(allDefault.antiSpam, {
+    unansweredMuteAfter: null,
+    unansweredHighVolumeAfter: null,
+    automationMuteHours: null,
+  });
+  assert.equal(allDefault.keepSettingsRow, false);
+
+  const custom = prepareConversationTemplateStorage({
+    initialTemplate: null,
+    maxAutoReplies: 0,
+    followUps: followUpConfig(),
+    voiceGreetings: { will_send: { body: null }, duplicate: { body: null }, none: { body: null } },
+    antiSpam: { unansweredMuteAfter: 3, unansweredHighVolumeAfter: 10, automationMuteHours: 48 },
+  });
+  assert.deepEqual(custom.antiSpam, {
+    unansweredMuteAfter: 3,
+    unansweredHighVolumeAfter: null,
+    automationMuteHours: 48,
+  });
+  // Custom anti-spam must survive even with max_auto_replies = 0.
+  assert.equal(custom.keepSettingsRow, true);
+});
+
+test("safety notice validation requires conditional 911 wording and stays safe", () => {
+  assert.ok(validateSafetyNoticeText(DEFAULT_SPECIAL_REPLY_TEMPLATES.safety_notice).ok);
+  assert.ok(validateSafetyNoticeText("If this is a medical emergency, please call 911 now.").ok);
+  assert.ok(validateSafetyNoticeText("").ok); // empty = use default
+
+  assert.equal(validateSafetyNoticeText("Call 911.").ok, false); // missing "medical emergency"
+  assert.equal(validateSafetyNoticeText("If this is a medical emergency, seek care.").ok, false); // missing "call 911"
+  assert.equal(
+    validateSafetyNoticeText("You need treatment. If this is a medical emergency, call 911.").ok,
+    false, // diagnosis/treatment language
+  );
+  assert.equal(
+    validateSafetyNoticeText("This is urgent! If this is a medical emergency, call 911.").ok,
+    false, // urgency marketing word
+  );
+  assert.equal(
+    validateSafetyNoticeText("If this is a medical emergency, call 911 or 224-532-9236.").ok,
+    false, // only 911 may appear
+  );
+  assert.equal(
+    validateSafetyNoticeText("If this is a medical emergency, call 911. Visit https://example.com").ok,
+    false,
+  );
+  assert.equal(
+    validateSafetyNoticeText(`If this is a medical emergency, call 911. ${"x".repeat(160)}`).ok,
+    false, // too long
+  );
+});
+
+test("thanks reply validation rejects unsafe content and variables", () => {
+  assert.ok(validateThanksReplyText(DEFAULT_SPECIAL_REPLY_TEMPLATES.thanks_courtesy).ok);
+  assert.ok(validateThanksReplyText("Happy to help. Our office will reach out.").ok);
+  assert.ok(validateThanksReplyText("").ok); // empty = use default
+
+  assert.equal(validateThanksReplyText("You're welcome! We can book you tomorrow.").ok, false);
+  assert.equal(validateThanksReplyText("Appointment confirmed. See you soon.").ok, false);
+  assert.equal(validateThanksReplyText("Thanks! Limited time discount inside.").ok, false);
+  assert.equal(validateThanksReplyText("Email us at a@b.com").ok, false);
+  assert.equal(validateThanksReplyText("Call 224-532-9236").ok, false);
+  assert.equal(validateThanksReplyText("Thanks, {{patient_name}}.").ok, false); // no variables
+  assert.equal(validateThanksReplyText("Reply 1 for a callback").ok, false); // no digits
+});
+
+test("special replies + anti-spam migration is additive and idempotent", () => {
+  const sql = fs.readFileSync(
+    path.join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "20260624000100_sms_special_replies_and_anti_spam.sql",
+    ),
+    "utf8",
+  );
+
+  // special_reply role with sequence 1-2 joins the existing roles.
+  assert.match(sql, /template_role in \('initial', 'auto_reply', 'voice_greeting', 'special_reply'\)/);
+  assert.match(sql, /template_role = 'special_reply' and sequence between 1 and 2/);
+  assert.match(sql, /template_role = 'auto_reply' and sequence between 1 and 10/);
+  assert.match(sql, /template_role = 'voice_greeting' and sequence between 1 and 3/);
+
+  // Anti-spam settings columns (NULL = code default) + range checks.
+  assert.match(sql, /add column if not exists unanswered_mute_after int/);
+  assert.match(sql, /add column if not exists unanswered_high_volume_after int/);
+  assert.match(sql, /add column if not exists automation_mute_hours int/);
+  assert.match(sql, /unanswered_mute_after between 1 and 100/);
+  assert.match(sql, /unanswered_high_volume_after between 1 and 200/);
+  assert.match(sql, /automation_mute_hours between 1 and 168/);
+
+  // Conversation volume state.
+  assert.match(sql, /add column if not exists unanswered_after_automation_count int not null default 0/);
+  assert.match(sql, /add column if not exists automation_muted_until timestamptz/);
+  assert.match(sql, /add column if not exists high_volume_flagged_at timestamptz/);
+  assert.match(sql, /unanswered_after_automation_count >= 0/);
+
+  // Data-safe: no destructive statements.
+  assert.equal(/\bdrop\s+table\b/i.test(sql), false);
+  assert.equal(/\bdelete\s+from\b/i.test(sql), false);
+  assert.equal(/\bupdate\s+public\./i.test(sql), false);
 });
 
 test("voice greeting defaults render with clinic identity", () => {

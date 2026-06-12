@@ -12,6 +12,12 @@
 import { smsRecoveryConfig } from "../../config/sms-recovery.config";
 import { buildMissedCallRecoverySmsBody, resolveClinicIdentity } from "./templates";
 import type { VoiceGreetingTemplateConfig } from "./voice-greeting-templates";
+import {
+  DEFAULT_SPECIAL_REPLY_TEMPLATES,
+  type SpecialReplyKey,
+  type SpecialReplyTemplateConfig,
+} from "./special-reply-templates";
+import type { AutomationVolumeSettingsInput } from "./automation-volume-limits";
 
 // No saved initial template still sends the existing fixed production message.
 export const DEFAULT_INITIAL_TEMPLATE = smsRecoveryConfig.missedCallTemplate;
@@ -126,7 +132,20 @@ export type ConversationTemplateConfig = {
   // text before they are usable.
   followUps: Record<FollowUpSlot, { body: string | null; enabled: boolean }>;
   voiceGreetings: VoiceGreetingTemplateConfig;
+  // Special one-off replies (safety notice prefix + thanks courtesy). Optional
+  // for backward compatibility: missing/null bodies mean the code defaults.
+  specialReplies?: SpecialReplyTemplateConfig;
+  // Anti-spam thresholds. Optional; NULL/missing values mean code defaults
+  // (resolved via resolveAutomationVolumeSettings).
+  antiSpam?: AutomationVolumeSettingsInput;
 };
+
+export function isDefaultSpecialReplyTemplate(
+  key: SpecialReplyKey,
+  text: string | null | undefined,
+): boolean {
+  return sameTemplateText(text, DEFAULT_SPECIAL_REPLY_TEMPLATES[key]);
+}
 
 // The enabled follow-up sequences, capped by maxAutoReplies. Slots 1-3 can be
 // default-backed; slots 4-10 are included only when custom text exists.

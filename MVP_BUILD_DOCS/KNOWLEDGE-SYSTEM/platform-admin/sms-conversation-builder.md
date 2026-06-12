@@ -20,14 +20,28 @@ last_verified: 2026-06-12
 
 Internal platform-admin reference. **Clinic owners cannot edit SMS copy.** Only
 a platform admin configures the SMS conversation flow for a selected clinic from
-**/admin/clinics/[clinicId] → SMS messages**. This is deterministic — there is
+**/admin/clinics/[clinicId] → SMS settings**. This is deterministic — there is
 no AI, no booking, no medical advice, and no unlimited chatbot.
+
+## Panels (SMS settings group)
+
+The left admin nav groups three focused panels under **SMS settings** (the old
+single "SMS messages" page was split):
+
+- **Voice greeting** — only the three voice scenarios.
+- **SMS texts** — initial SMS, follow-ups #1-#10, Safety notice, Thanks reply.
+- **Limits & anti-spam** — maximum automated replies + automation pause
+  settings.
+
+Each panel has its own Edit → Save → read-only flow and saves ONLY its own
+section; the API merges the rest from the saved config, so saving one panel
+never resets another.
 
 ## What it controls
 
-- **Edit mode.** The tab is read-only by default. Click **Edit** to make the
-  Voice greeting and SMS message fields editable, then **Save**. A successful
-  save returns the tab to read-only and shows the saved status. Reset-to-default
+- **Edit mode.** Each panel is read-only by default. Click **Edit** to make its
+  fields editable, then **Save**. A successful
+  save returns the panel to read-only and shows the saved status. Reset-to-default
   controls appear only while editing and place the default text directly in the
   field.
 - **Voice greeting.** This block appears first. The admin can edit three fixed
@@ -78,6 +92,45 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
   `patient_conversations.sms_safety_notice_sent_at` and clears old
   default-like Follow-up #1 bodies to NULL so default-backed clinics pick up
   the new Follow-up #1 default (true custom text untouched).
+- Migration `20260624000100_sms_special_replies_and_anti_spam.sql` allows
+  `template_role='special_reply'` (sequence 1 = safety_notice, 2 =
+  thanks_courtesy), adds the nullable anti-spam settings columns, and adds the
+  per-conversation volume state columns.
+
+## Editable special replies (SMS texts panel)
+
+- **Safety notice** (default `If this is a medical emergency, call 911.`) —
+  a PREFIX added once per recovery cycle before the next otherwise-eligible
+  automated follow-up when the patient mentions pain/emergency wording. It is
+  never a standalone SMS and never a separate branch; the panel preview shows
+  prefix + next follow-up as one SMS. Validation requires "medical emergency"
+  and "call 911", allows 911 as the only digits, and rejects diagnosis/
+  treatment/urgency wording, links, emails, and phone numbers.
+- **Thanks reply** (default `You're welcome. Our team will follow up.`) — sent
+  once per recovery cycle when the patient says thanks; it does not consume a
+  follow-up slot or increment the auto-reply count. Validation rejects digits,
+  variables, contact details, and the shared banned phrases.
+- Both follow the default/override model: code default is the source of truth;
+  only true custom text is stored; reset/default-equal saves remove the
+  override row (≤160 chars, no `{{patient_name}}`/variables).
+
+## Limits & anti-spam panel
+
+Defaults (code-backed; NULL columns): pause automation after **6** unanswered
+inbound SMS once automation has ended for the cycle, pause for **24 hours**,
+flag high volume after **10** unanswered. Bounds: 1-100 / 1-168h / 1-200, and
+the high-volume threshold can never be below the pause threshold.
+
+- Only inbound messages skipped because automation ENDED (max replies reached
+  or no eligible follow-up) count as unanswered. Keywords, duplicates, gate
+  failures, and thanks/ok/negative/unclear replies never count.
+- While paused (`automation_muted_until` in the future) nothing automated
+  sends — no follow-ups, no thanks courtesy, no safety prefix — but inbound
+  messages are STILL saved and counted toward the high-volume flag, and
+  STOP/START/HELP keeps working. The pause is temporary; the phone number is
+  never blocked.
+- A new missed-call recovery SMS resets the count/high-volume flag and clears
+  an EXPIRED pause, but an ACTIVE pause is never cleared early.
 - The 11th and later patient replies, and any reply beyond the configured max,
   are **saved to the workspace only** unless they qualify for the one-time
   thanks courtesy reply.

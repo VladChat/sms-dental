@@ -16,6 +16,7 @@ import {
   hasDefaultFollowUpTemplate,
   isDefaultFollowUpTemplate,
   isDefaultInitialTemplate,
+  isDefaultSpecialReplyTemplate,
   MAX_AUTO_REPLIES,
   MAX_INITIAL_TEMPLATE_LENGTH,
   MAX_TEMPLATE_BODY_LENGTH,
@@ -28,6 +29,8 @@ import {
 import {
   validateFollowUpBody,
   validateInitialTemplate,
+  validateSafetyNoticeText,
+  validateThanksReplyText,
   validateVoiceGreetingTemplate,
 } from "../../../../../../lib/sms-recovery/template-safety";
 import {
@@ -39,6 +42,22 @@ import {
   renderVoiceGreetingTemplate,
   type VoiceGreetingScenario,
 } from "../../../../../../lib/sms-recovery/voice-greeting-templates";
+import {
+  DEFAULT_SPECIAL_REPLY_TEMPLATES,
+  MAX_SPECIAL_REPLY_LENGTH,
+  SPECIAL_REPLY_HELPERS,
+  SPECIAL_REPLY_KEYS,
+  SPECIAL_REPLY_LABELS,
+  specialReplyTextForKey,
+  type SpecialReplyKey,
+} from "../../../../../../lib/sms-recovery/special-reply-templates";
+import {
+  AUTOMATION_VOLUME_BOUNDS,
+  defaultAutomationVolumeSettings,
+  isAutomationVolumeCustomized,
+  resolveAutomationVolumeSettings,
+  validateAutomationVolumeSettings,
+} from "../../../../../../lib/sms-recovery/automation-volume-limits";
 import { recordAdminAuditEvent } from "../../../../../../lib/db/admin/audit";
 
 export const runtime = "nodejs";
@@ -95,6 +114,28 @@ function buildConversationResponse(
     }),
   );
 
+  // Special replies (safety notice prefix + thanks courtesy). No variables;
+  // the effective text is the preview.
+  const specialReplies = Object.fromEntries(
+    SPECIAL_REPLY_KEYS.map((key) => {
+      const body = config.specialReplies?.[key]?.body ?? null;
+      const effectiveText = specialReplyTextForKey(config.specialReplies, key);
+      return [
+        key,
+        {
+          defaultText: DEFAULT_SPECIAL_REPLY_TEMPLATES[key],
+          effectiveText,
+          customBody: body,
+          isCustom: (body ?? "").trim().length > 0,
+          label: SPECIAL_REPLY_LABELS[key],
+          helper: SPECIAL_REPLY_HELPERS[key],
+          preview: effectiveText,
+        },
+      ];
+    }),
+  );
+
+  const antiSpamEffective = resolveAutomationVolumeSettings(config.antiSpam);
   const initialEffectiveText = effectiveInitialTemplate(config.initialTemplate);
 
   return {
@@ -111,6 +152,12 @@ function buildConversationResponse(
       maxAutoReplies: config.maxAutoReplies,
       followUps,
       voiceGreetings,
+      specialReplies,
+      antiSpam: {
+        ...antiSpamEffective,
+        isCustom: isAutomationVolumeCustomized(config.antiSpam),
+        defaults: defaultAutomationVolumeSettings(),
+      },
     },
     preview: {
       initial: buildInitialSmsBody(clinicName, config.initialTemplate),
@@ -138,6 +185,8 @@ function buildConversationResponse(
       maxInitialTemplateLength: MAX_INITIAL_TEMPLATE_LENGTH,
       maxTemplateBodyLength: MAX_TEMPLATE_BODY_LENGTH,
       maxVoiceGreetingTemplateLength: MAX_VOICE_GREETING_TEMPLATE_LENGTH,
+      maxSpecialReplyLength: MAX_SPECIAL_REPLY_LENGTH,
+      antiSpamBounds: AUTOMATION_VOLUME_BOUNDS,
     },
     variables: SUPPORTED_TEMPLATE_VARIABLES,
     voiceVariables: ["clinic_name"],
@@ -174,9 +223,17 @@ type VoiceGreetingInput = {
   customBody?: unknown;
   effectiveText?: unknown;
 };
+type SpecialReplyInput = {
+  body?: unknown;
+  customBody?: unknown;
+  effectiveText?: unknown;
+};
 
 // POST /api/admin/clinics/[clinicId]/sms-conversation
-// Saves the full initial template, follow-up bodies + enabled flags, and max replies.
+// Partial-save aware: each subview submits only its own section(s)
+// (voice: voiceGreetings; texts: initialTemplate + followUps + specialReplies;
+// limits: maxAutoReplies + antiSpam). Missing sections are loaded from the
+// saved config so saving one subview never resets another.
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ clinicId: string }> },
@@ -192,41 +249,61 @@ export async function POST(
     return jsonBadRequest("Invalid request body");
   }
   const input = (body ?? {}) as Record<string, unknown>;
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(input, key);
+
+  // Current saved config is the baseline for any section the request omits.
+  let current: ConversationTemplateConfig;
+  try {
+    current = await getClinicConversationConfig(clinicId);
+  } catch {
+    return jsonError(500, "load_failed", "We couldn't load the SMS settings. Please try again.");
+  }
 
   // Max auto-replies (0..10).
-  const maxRaw = input.maxAutoReplies;
-  if (
-    typeof maxRaw !== "number" ||
-    !Number.isInteger(maxRaw) ||
-    maxRaw < 0 ||
-    maxRaw > MAX_AUTO_REPLIES
-  ) {
-    return jsonBadRequest(`Choose between 0 and ${MAX_AUTO_REPLIES} automated replies.`);
+  let maxAutoReplies = current.maxAutoReplies;
+  if (has("maxAutoReplies")) {
+    const maxRaw = input.maxAutoReplies;
+    if (
+      typeof maxRaw !== "number" ||
+      !Number.isInteger(maxRaw) ||
+      maxRaw < 0 ||
+      maxRaw > MAX_AUTO_REPLIES
+    ) {
+      return jsonBadRequest(`Choose between 0 and ${MAX_AUTO_REPLIES} automated replies.`);
+    }
+    maxAutoReplies = maxRaw;
   }
-  const maxAutoReplies = maxRaw;
 
   // Initial full template (empty/default => current code default).
-  const rawInitial = pickTemplateText(input, "initialTemplate", "initial");
-  const initial = validateInitialTemplate(rawInitial, guard.clinic.name);
-  if (!initial.ok) return jsonBadRequest(initial.message);
-
-  // Follow-ups.
-  const rawFollowUps = (input.followUps ?? {}) as Record<string, FollowUpInput>;
-  const followUps = emptyFollowUps();
-  for (const slot of SLOTS) {
-    const raw = rawFollowUps[String(slot)] ?? rawFollowUps[slot as unknown as string] ?? {};
-    const enabled = raw.enabled === true;
-    const validated = validateFollowUpBody(pickTemplateText(raw as Record<string, unknown>, "body"));
-    if (!validated.ok) return jsonBadRequest(`Follow-up #${slot}: ${validated.message}`);
-    const normalizedBody = validated.value.length > 0 ? validated.value : null;
-    if (enabled && !normalizedBody && !hasDefaultFollowUpTemplate(slot)) {
-      return jsonBadRequest(`Follow-up #${slot} needs custom text before it can be enabled.`);
-    }
-    followUps[slot] = { body: normalizedBody, enabled };
+  let initialTemplate = current.initialTemplate;
+  if (has("initialTemplate") || has("initial")) {
+    const rawInitial = pickTemplateText(input, "initialTemplate", "initial");
+    const initial = validateInitialTemplate(rawInitial, guard.clinic.name);
+    if (!initial.ok) return jsonBadRequest(initial.message);
+    initialTemplate = initial.value.length > 0 ? initial.value : null;
   }
 
-  // max_auto_replies cannot exceed the configured, enabled follow-up slots. A
-  // null/empty body is default-backed only for slots 1-3.
+  // Follow-ups.
+  let followUps = current.followUps;
+  if (has("followUps")) {
+    const rawFollowUps = (input.followUps ?? {}) as Record<string, FollowUpInput>;
+    followUps = emptyFollowUps();
+    for (const slot of SLOTS) {
+      const raw = rawFollowUps[String(slot)] ?? rawFollowUps[slot as unknown as string] ?? {};
+      const enabled = raw.enabled === true;
+      const validated = validateFollowUpBody(pickTemplateText(raw as Record<string, unknown>, "body"));
+      if (!validated.ok) return jsonBadRequest(`Follow-up #${slot}: ${validated.message}`);
+      const normalizedBody = validated.value.length > 0 ? validated.value : null;
+      if (enabled && !normalizedBody && !hasDefaultFollowUpTemplate(slot)) {
+        return jsonBadRequest(`Follow-up #${slot} needs custom text before it can be enabled.`);
+      }
+      followUps[slot] = { body: normalizedBody, enabled };
+    }
+  }
+
+  // max_auto_replies cannot exceed the configured, enabled follow-up slots
+  // (checked on the MERGED values so a limits-only save still validates against
+  // the saved follow-ups). A null/empty body is default-backed only for 1-3.
   for (const slot of SLOTS) {
     if (slot > maxAutoReplies) break;
     const fu = followUps[slot];
@@ -242,9 +319,9 @@ export async function POST(
     }
   }
 
-  const hasVoiceInput = Object.prototype.hasOwnProperty.call(input, "voiceGreetings");
-  let voiceGreetings: Record<VoiceGreetingScenario, { body: string | null }>;
-  if (hasVoiceInput) {
+  // Voice greetings.
+  let voiceGreetings = current.voiceGreetings;
+  if (has("voiceGreetings")) {
     const rawVoiceGreetings = (input.voiceGreetings ?? {}) as Record<string, VoiceGreetingInput>;
     voiceGreetings = emptyVoiceGreetings();
     for (const scenario of VOICE_GREETING_SCENARIOS) {
@@ -260,22 +337,55 @@ export async function POST(
         body: validated.value.length > 0 ? validated.value : null,
       };
     }
-  } else {
-    try {
-      voiceGreetings = (await getClinicConversationConfig(clinicId)).voiceGreetings;
-    } catch {
-      voiceGreetings = emptyVoiceGreetings();
+  }
+
+  // Special replies (safety notice / thanks courtesy).
+  let specialReplies = currentSpecialReplies(current);
+  if (has("specialReplies")) {
+    const rawSpecial = (input.specialReplies ?? {}) as Record<string, SpecialReplyInput>;
+    specialReplies = emptySpecialReplies();
+    for (const key of SPECIAL_REPLY_KEYS) {
+      const raw = rawSpecial[key] ?? {};
+      const rawText = pickTemplateText(raw as Record<string, unknown>, "body");
+      const validated =
+        key === "safety_notice"
+          ? validateSafetyNoticeText(rawText)
+          : validateThanksReplyText(rawText);
+      if (!validated.ok) {
+        return jsonBadRequest(`${SPECIAL_REPLY_LABELS[key]}: ${validated.message}`);
+      }
+      specialReplies[key] = { body: validated.value.length > 0 ? validated.value : null };
     }
+  }
+
+  // Anti-spam thresholds (mute after / high-volume after / mute hours).
+  // Missing fields fall back to the code defaults; present fields must be
+  // valid integers inside the documented bounds, and the high-volume
+  // threshold can never be below the mute threshold.
+  let antiSpam = current.antiSpam ?? {};
+  if (has("antiSpam")) {
+    const rawAntiSpam = (input.antiSpam ?? {}) as Record<string, unknown>;
+    const defaults = defaultAutomationVolumeSettings();
+    const validated = validateAutomationVolumeSettings({
+      unansweredMuteAfter: rawAntiSpam.unansweredMuteAfter ?? defaults.unansweredMuteAfter,
+      unansweredHighVolumeAfter:
+        rawAntiSpam.unansweredHighVolumeAfter ?? defaults.unansweredHighVolumeAfter,
+      automationMuteHours: rawAntiSpam.automationMuteHours ?? defaults.automationMuteHours,
+    });
+    if (!validated.ok) return jsonBadRequest(validated.message);
+    antiSpam = validated.value;
   }
 
   try {
     await saveClinicConversationConfig(
       clinicId,
       {
-        initialTemplate: initial.value.length > 0 ? initial.value : null,
+        initialTemplate,
         maxAutoReplies,
         followUps,
         voiceGreetings,
+        specialReplies,
+        antiSpam,
       },
       { profileId: guard.admin.userId, email: guard.admin.email },
     );
@@ -290,9 +400,10 @@ export async function POST(
         targetId: clinicId,
         clinicId,
         metadata: {
+          changed_section: changedSection(has),
           max_auto_replies: maxAutoReplies,
           initial_customized:
-            initial.value.length > 0 && !isDefaultInitialTemplate(initial.value),
+            (initialTemplate ?? "").length > 0 && !isDefaultInitialTemplate(initialTemplate),
           follow_up_enabled_count: enabledSlotCount,
           follow_up_customized_count: SLOTS.filter(
             (slot) =>
@@ -304,6 +415,12 @@ export async function POST(
               (voiceGreetings[scenario].body ?? "").trim().length > 0 &&
               !sameTemplateText(voiceGreetings[scenario].body, DEFAULT_VOICE_GREETING_TEMPLATES[scenario]),
           ).length,
+          special_reply_customized_count: SPECIAL_REPLY_KEYS.filter(
+            (key) =>
+              (specialReplies[key].body ?? "").trim().length > 0 &&
+              !isDefaultSpecialReplyTemplate(key, specialReplies[key].body),
+          ).length,
+          anti_spam_customized: isAutomationVolumeCustomized(antiSpam),
         },
       });
     } catch {
@@ -317,6 +434,32 @@ export async function POST(
   } catch {
     return jsonError(500, "save_failed", "We couldn't save the SMS settings. Please try again.");
   }
+}
+
+// Compact audit label for which subview submitted (voice/texts/limits/mixed).
+function changedSection(has: (key: string) => boolean): string {
+  const sections: string[] = [];
+  if (has("voiceGreetings")) sections.push("voice");
+  if (has("initialTemplate") || has("followUps") || has("specialReplies")) sections.push("texts");
+  if (has("maxAutoReplies") || has("antiSpam")) sections.push("limits");
+  if (sections.length === 0) return "none";
+  return sections.length === 1 ? sections[0]! : "mixed";
+}
+
+function currentSpecialReplies(
+  config: ConversationTemplateConfig,
+): Record<SpecialReplyKey, { body: string | null }> {
+  return {
+    safety_notice: { body: config.specialReplies?.safety_notice?.body ?? null },
+    thanks_courtesy: { body: config.specialReplies?.thanks_courtesy?.body ?? null },
+  };
+}
+
+function emptySpecialReplies(): Record<SpecialReplyKey, { body: string | null }> {
+  return {
+    safety_notice: { body: null },
+    thanks_courtesy: { body: null },
+  };
 }
 
 function emptyVoiceGreetings(): Record<VoiceGreetingScenario, { body: string | null }> {

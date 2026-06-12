@@ -5,6 +5,14 @@ import { useEffect, useMemo, useState } from "react";
 // Platform-admin-only SMS Conversation Builder. Configures deterministic
 // missed-call recovery messages for ONE clinic. Clinic owners cannot edit this.
 // No AI: templates are validated server-side and sent only through guarded paths.
+//
+// The builder renders one focused subview per left-nav item:
+//   view="voice"  — voice greeting scenarios only
+//   view="texts"  — initial SMS, follow-ups #1-#10, safety notice, thanks reply
+//   view="limits" — maximum automated replies + anti-spam pause settings
+// Each subview loads the shared config and saves ONLY its own section; the
+// admin API merges missing sections from the saved config so saving one
+// subview never resets another.
 
 const SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 type Slot = (typeof SLOTS)[number];
@@ -13,6 +21,10 @@ const ADDITIONAL_SLOTS = [4, 5, 6, 7, 8, 9, 10] as const;
 const SLOTS_WITH_ZERO = [0, ...SLOTS] as const;
 const VOICE_SCENARIOS = ["will_send", "duplicate", "none"] as const;
 type VoiceScenario = (typeof VOICE_SCENARIOS)[number];
+const SPECIAL_KEYS = ["safety_notice", "thanks_courtesy"] as const;
+type SpecialKey = (typeof SPECIAL_KEYS)[number];
+
+export type SmsBuilderView = "voice" | "texts" | "limits";
 
 type FollowUpView = {
   customBody: string | null;
@@ -33,6 +45,34 @@ type VoiceGreetingView = {
   helper: string;
 };
 
+type SpecialReplyView = {
+  customBody: string | null;
+  defaultText: string;
+  effectiveText: string;
+  isCustom: boolean;
+  preview: string;
+  label: string;
+  helper: string;
+};
+
+type AntiSpamView = {
+  unansweredMuteAfter: number;
+  unansweredHighVolumeAfter: number;
+  automationMuteHours: number;
+  isCustom: boolean;
+  defaults: {
+    unansweredMuteAfter: number;
+    unansweredHighVolumeAfter: number;
+    automationMuteHours: number;
+  };
+};
+
+type AntiSpamBounds = {
+  muteAfter: { min: number; max: number };
+  highVolumeAfter: { min: number; max: number };
+  muteHours: { min: number; max: number };
+};
+
 type ConfigPayload = {
   clinicName: string;
   config: {
@@ -46,6 +86,8 @@ type ConfigPayload = {
     maxAutoReplies: number;
     followUps: Record<string, FollowUpView>;
     voiceGreetings: Record<VoiceScenario, VoiceGreetingView>;
+    specialReplies?: Record<SpecialKey, SpecialReplyView>;
+    antiSpam?: AntiSpamView;
   };
   preview: { initial: string; voiceGreetings?: Record<VoiceScenario, string> };
   limits?: {
@@ -53,6 +95,8 @@ type ConfigPayload = {
     maxInitialTemplateLength: number;
     maxTemplateBodyLength: number;
     maxVoiceGreetingTemplateLength: number;
+    maxSpecialReplyLength?: number;
+    antiSpamBounds?: AntiSpamBounds;
   };
   variables?: string[];
   voiceVariables?: string[];
@@ -74,7 +118,20 @@ type VoiceGreetingState = {
   helper: string;
 };
 
+type SpecialReplyState = {
+  body: string;
+  defaultText: string;
+  label: string;
+  helper: string;
+};
+
 type LoadState = "loading" | "error" | "ready";
+
+const DEFAULT_ANTI_SPAM_BOUNDS: AntiSpamBounds = {
+  muteAfter: { min: 1, max: 100 },
+  highVolumeAfter: { min: 1, max: 200 },
+  muteHours: { min: 1, max: 168 },
+};
 
 function emptyFollowUpRecord(): Record<Slot, FollowUpState> {
   return Object.fromEntries(
@@ -85,7 +142,13 @@ function emptyFollowUpRecord(): Record<Slot, FollowUpState> {
   ) as Record<Slot, FollowUpState>;
 }
 
-export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) {
+export function AdminSmsConversationBuilder({
+  clinicId,
+  view,
+}: {
+  clinicId: string;
+  view: SmsBuilderView;
+}) {
   const [load, setLoad] = useState<LoadState>("loading");
   const [editing, setEditing] = useState(false);
   const [clinicName, setClinicName] = useState("");
@@ -98,10 +161,21 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     duplicate: { body: "", defaultText: "", preview: "", label: "When this caller was already texted recently", helper: "" },
     none: { body: "", defaultText: "", preview: "", label: "When no SMS will be sent", helper: "" },
   });
+  const [specialReplies, setSpecialReplies] = useState<Record<SpecialKey, SpecialReplyState>>({
+    safety_notice: { body: "", defaultText: "", label: "Safety notice", helper: "" },
+    thanks_courtesy: { body: "", defaultText: "", label: "Thanks reply", helper: "" },
+  });
+  const [antiSpam, setAntiSpam] = useState({
+    unansweredMuteAfter: 6,
+    unansweredHighVolumeAfter: 10,
+    automationMuteHours: 24,
+  });
+  const [antiSpamBounds, setAntiSpamBounds] = useState<AntiSpamBounds>(DEFAULT_ANTI_SPAM_BOUNDS);
   const [initialPreview, setInitialPreview] = useState("");
   const [maxInitialLen, setMaxInitialLen] = useState(240);
   const [maxBodyLen, setMaxBodyLen] = useState(240);
   const [maxVoiceLen, setMaxVoiceLen] = useState(240);
+  const [maxSpecialLen, setMaxSpecialLen] = useState(160);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,11 +216,34 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     }
     setVoiceGreetings(nextVoice);
 
+    const nextSpecial = { ...specialReplies };
+    for (const key of SPECIAL_KEYS) {
+      const sr = data.config.specialReplies?.[key];
+      const defaultText = sr?.defaultText ?? "";
+      nextSpecial[key] = {
+        body: sr?.effectiveText ?? defaultText,
+        defaultText,
+        label: sr?.label ?? nextSpecial[key].label,
+        helper: sr?.helper ?? "",
+      };
+    }
+    setSpecialReplies(nextSpecial);
+
+    if (data.config.antiSpam) {
+      setAntiSpam({
+        unansweredMuteAfter: data.config.antiSpam.unansweredMuteAfter,
+        unansweredHighVolumeAfter: data.config.antiSpam.unansweredHighVolumeAfter,
+        automationMuteHours: data.config.antiSpam.automationMuteHours,
+      });
+    }
+
     setInitialPreview(data.preview.initial);
     if (data.limits) {
       setMaxInitialLen(data.limits.maxInitialTemplateLength);
       setMaxBodyLen(data.limits.maxTemplateBodyLength);
       setMaxVoiceLen(data.limits.maxVoiceGreetingTemplateLength ?? data.limits.maxTemplateBodyLength);
+      setMaxSpecialLen(data.limits.maxSpecialReplyLength ?? 160);
+      setAntiSpamBounds(data.limits.antiSpamBounds ?? DEFAULT_ANTI_SPAM_BOUNDS);
     }
   }
 
@@ -228,6 +325,16 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     setSaved(false);
   }
 
+  function setSpecialReply(key: SpecialKey, patch: Partial<SpecialReplyState>) {
+    setSpecialReplies((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    setSaved(false);
+  }
+
+  function setAntiSpamField(field: keyof typeof antiSpam, value: number) {
+    setAntiSpam((prev) => ({ ...prev, [field]: value }));
+    setSaved(false);
+  }
+
   function resetInitial() {
     setInitialTemplate(defaultInitialTemplate);
     setSaved(false);
@@ -245,6 +352,53 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     setVoiceGreeting(scenario, { body: voiceGreetings[scenario].defaultText });
   }
 
+  function resetSpecialReply(key: SpecialKey) {
+    setSpecialReply(key, { body: specialReplies[key].defaultText });
+  }
+
+  function resetAntiSpam() {
+    setAntiSpam({
+      unansweredMuteAfter: 6,
+      unansweredHighVolumeAfter: 10,
+      automationMuteHours: 24,
+    });
+    setSaved(false);
+  }
+
+  // Each subview saves ONLY its own section; the server merges the rest from
+  // the saved config (never resets the other subviews).
+  function buildSavePayload(): Record<string, unknown> {
+    if (view === "voice") {
+      return {
+        voiceGreetings: {
+          will_send: { body: voiceGreetings.will_send.body },
+          duplicate: { body: voiceGreetings.duplicate.body },
+          none: { body: voiceGreetings.none.body },
+        },
+      };
+    }
+    if (view === "texts") {
+      return {
+        initialTemplate,
+        followUps: Object.fromEntries(
+          SLOTS.map((slot) => [slot, { body: followUps[slot].body, enabled: followUps[slot].enabled }]),
+        ),
+        specialReplies: {
+          safety_notice: { body: specialReplies.safety_notice.body },
+          thanks_courtesy: { body: specialReplies.thanks_courtesy.body },
+        },
+      };
+    }
+    return {
+      maxAutoReplies,
+      antiSpam: {
+        unansweredMuteAfter: antiSpam.unansweredMuteAfter,
+        unansweredHighVolumeAfter: antiSpam.unansweredHighVolumeAfter,
+        automationMuteHours: antiSpam.automationMuteHours,
+      },
+    };
+  }
+
   async function save() {
     setSaving(true);
     setError(null);
@@ -254,18 +408,7 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          initialTemplate,
-          maxAutoReplies,
-          followUps: Object.fromEntries(
-            SLOTS.map((slot) => [slot, { body: followUps[slot].body, enabled: followUps[slot].enabled }]),
-          ),
-          voiceGreetings: {
-            will_send: { body: voiceGreetings.will_send.body },
-            duplicate: { body: voiceGreetings.duplicate.body },
-            none: { body: voiceGreetings.none.body },
-          },
-        }),
+        body: JSON.stringify(buildSavePayload()),
       });
       const json = (await res.json().catch(() => null)) as
         | (ConfigPayload & { ok?: boolean; error?: { message?: string } })
@@ -308,10 +451,19 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
       <div className="adm-section-head" style={{ alignItems: "start" }}>
         <div style={{ display: "grid", gap: "var(--space-2)" }}>
           <p className="t-helper" style={{ margin: 0, color: "var(--text-muted)" }}>
-            Configure deterministic missed-call voice and SMS messages. Clinic identity, opt-out
-            handling, and send gates stay server-controlled.
+            {view === "voice" &&
+              "Configure the deterministic voice greeting callers hear. The system chooses the correct scenario; send gates stay server-controlled."}
+            {view === "texts" &&
+              "Configure deterministic missed-call SMS texts. Clinic identity, opt-out handling, and send gates stay server-controlled."}
+            {view === "limits" &&
+              "Configure how many automated replies may send and when automation pauses. Inbound messages are always saved; STOP/START/HELP always works."}
           </p>
-          <VariableHelper />
+          {view === "texts" && <VariableHelper />}
+          {view === "voice" && (
+            <div className="t-helper" style={{ color: "var(--text-muted)" }}>
+              Voice variables: <code>{"{{clinic_name}}"}</code>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center", flexWrap: "wrap" }}>
           {editing ? (
@@ -337,6 +489,7 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
         </div>
       )}
 
+      {view === "voice" && (
       <section
         style={{
           display: "grid",
@@ -400,7 +553,9 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
           );
         })}
       </section>
+      )}
 
+      {view === "texts" && (
       <section
         style={{
           display: "grid",
@@ -415,7 +570,7 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
           <h3 className="adm-subhead" style={{ margin: 0 }}>SMS messages</h3>
           <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
             The initial SMS sends after a missed call. Follow-ups send only after patient replies,
-            within the maximum below.
+            within the maximum set under Limits &amp; anti-spam.
           </p>
         </div>
 
@@ -493,6 +648,81 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
           </div>
         </details>
 
+        {SPECIAL_KEYS.map((key) => {
+          const state = specialReplies[key];
+          return (
+            <div
+              key={key}
+              style={{
+                display: "grid",
+                gap: "var(--space-2)",
+                paddingTop: "var(--space-4)",
+                borderTop: "1px solid var(--border)",
+              }}
+            >
+              <div className="adm-section-head">
+                <div style={{ display: "grid", gap: "var(--space-1)" }}>
+                  <label className="t-small" style={{ fontWeight: 700, margin: 0 }}>
+                    {state.label}
+                  </label>
+                  <p className="t-helper" style={{ margin: 0, color: "var(--text-muted)" }}>
+                    {state.helper}
+                  </p>
+                </div>
+                {editing && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => resetSpecialReply(key)}
+                  >
+                    Reset to default
+                  </button>
+                )}
+              </div>
+              <textarea
+                className="textarea"
+                rows={2}
+                value={state.body}
+                maxLength={maxSpecialLen}
+                readOnly={!editing}
+                aria-readonly={!editing}
+                onChange={(e) => setSpecialReply(key, { body: e.target.value })}
+              />
+              {editing && <p className="helper">{state.body.length}/{maxSpecialLen}</p>}
+              {key === "safety_notice" ? (
+                <PreviewBox
+                  label="Example (prefix + next follow-up, one SMS)"
+                  text={`${state.body.trim() || state.defaultText} ${localFollowUpPreviews[1]}`.trim()}
+                />
+              ) : (
+                <PreviewBox label="Preview" text={state.body.trim() || state.defaultText} />
+              )}
+            </div>
+          );
+        })}
+      </section>
+      )}
+
+      {view === "limits" && (
+      <section
+        style={{
+          display: "grid",
+          gap: "var(--space-4)",
+          padding: "var(--space-4)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--r-md)",
+          background: "var(--surface)",
+        }}
+      >
+        <div style={{ display: "grid", gap: "var(--space-2)" }}>
+          <h3 className="adm-subhead" style={{ margin: 0 }}>Limits &amp; anti-spam</h3>
+          <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+            After automated replies are finished, additional patient messages are still saved. If
+            the patient keeps messaging without a system reply, automation can pause temporarily to
+            prevent loops or bot traffic.
+          </p>
+        </div>
+
         <section className="field" style={{ maxWidth: 340 }}>
           <label htmlFor="aisms-max">Maximum automated replies</label>
           <select
@@ -512,7 +742,68 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
             0 turns off automated follow-ups. The limit can't exceed the enabled follow-ups in order.
           </p>
         </section>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "var(--space-3)",
+            paddingTop: "var(--space-4)",
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          <div className="adm-section-head">
+            <label className="t-small" style={{ fontWeight: 700, margin: 0 }}>
+              Automation pause
+            </label>
+            {editing && (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={resetAntiSpam}>
+                Reset to default
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap" }}>
+            <NumberField
+              id="aisms-mute-after"
+              label="Pause automation after"
+              suffix="unanswered messages"
+              value={antiSpam.unansweredMuteAfter}
+              min={antiSpamBounds.muteAfter.min}
+              max={antiSpamBounds.muteAfter.max}
+              editing={editing}
+              saving={saving}
+              onChange={(v) => setAntiSpamField("unansweredMuteAfter", v)}
+            />
+            <NumberField
+              id="aisms-mute-hours"
+              label="Pause duration"
+              suffix="hours"
+              value={antiSpam.automationMuteHours}
+              min={antiSpamBounds.muteHours.min}
+              max={antiSpamBounds.muteHours.max}
+              editing={editing}
+              saving={saving}
+              onChange={(v) => setAntiSpamField("automationMuteHours", v)}
+            />
+            <NumberField
+              id="aisms-high-volume"
+              label="High-volume flag after"
+              suffix="unanswered messages"
+              value={antiSpam.unansweredHighVolumeAfter}
+              min={antiSpamBounds.highVolumeAfter.min}
+              max={antiSpamBounds.highVolumeAfter.max}
+              editing={editing}
+              saving={saving}
+              onChange={(v) => setAntiSpamField("unansweredHighVolumeAfter", v)}
+            />
+          </div>
+          <p className="t-helper" style={{ margin: 0, color: "var(--text-muted)" }}>
+            The pause is temporary and per conversation. Inbound messages keep being recorded, the
+            number is never blocked, and STOP/START/HELP keeps working. A new missed-call recovery
+            SMS starts a fresh cycle once the pause has expired.
+          </p>
+        </div>
       </section>
+      )}
     </div>
   );
 }
@@ -522,6 +813,51 @@ function VariableHelper() {
     <div className="t-helper" style={{ display: "grid", gap: "var(--space-1)", color: "var(--text-muted)" }}>
       <div>SMS variables: <code>{"{{clinic_name}}"}</code>, <code>{"{{patient_name}}"}</code></div>
       <div>Voice variables: <code>{"{{clinic_name}}"}</code></div>
+    </div>
+  );
+}
+
+function NumberField({
+  id,
+  label,
+  suffix,
+  value,
+  min,
+  max,
+  editing,
+  saving,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  suffix: string;
+  value: number;
+  min: number;
+  max: number;
+  editing: boolean;
+  saving: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="field" style={{ maxWidth: 220 }}>
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        className="input"
+        type="number"
+        inputMode="numeric"
+        value={value}
+        min={min}
+        max={max}
+        readOnly={!editing}
+        aria-readonly={!editing}
+        disabled={saving}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          if (Number.isFinite(next)) onChange(Math.trunc(next));
+        }}
+      />
+      <p className="helper">{suffix} ({min}-{max})</p>
     </div>
   );
 }

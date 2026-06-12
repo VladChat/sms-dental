@@ -7497,3 +7497,82 @@ Production migration:
 No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
 Stripe change, no phone-number lifecycle change, no production env change, no
 secret printing, no template body dump, and `.qwen/` remained untouched.
+
+---
+
+## 2026-06-12 — SMS settings split, editable special replies, anti-spam pause
+
+Reorganized the admin SMS Conversation Builder into focused panels, made the
+safety-notice and thanks-courtesy texts admin-editable, and added a simple
+per-conversation anti-spam automation pause — without sending SMS or placing
+calls.
+
+What changed:
+
+- Admin left nav: the single "SMS messages" section became a grouped
+  **SMS settings** block with three panels: Voice greeting, SMS texts
+  (initial + follow-ups #1-#10 + Safety notice + Thanks reply), and
+  Limits & anti-spam. `AdminSmsConversationBuilder` takes
+  `view="voice"|"texts"|"limits"`; each subview keeps Edit -> Save ->
+  read-only and saves ONLY its own section. The admin API merges missing
+  sections from the saved config, so saving one panel never resets another.
+- Special replies are stored as `clinic_sms_message_templates` rows with
+  `template_role='special_reply'` (seq 1 = safety_notice, 2 = thanks_courtesy).
+  Code defaults stay the source of truth (defaults in
+  `lib/sms-recovery/special-reply-templates.ts`); default-equal/blank saves
+  remove the override row. The safety notice remains a once-per-cycle PREFIX
+  on the next eligible follow-up (never standalone, never a separate branch);
+  the thanks courtesy keeps its once-per-cycle, no-slot behavior.
+  `validateSafetyNoticeText` requires "medical emergency" + "call 911" with
+  911 as the only digits; `validateThanksReplyText` rejects digits, variables,
+  and contact details; both inherit the banned-phrase rules.
+- Anti-spam: after automation ENDS for a recovery cycle
+  (`max_auto_replies_reached` / `template_disabled`), ordinary inbound SMS
+  with no automated response increment
+  `patient_conversations.unanswered_after_automation_count` atomically.
+  Defaults (code-backed, NULL columns): pause automation at 6 unanswered for
+  24 hours (`automation_muted_until`), flag high volume at 10
+  (`high_volume_flagged_at`). While muted, the auto-reply path skips ALL
+  automation with reason `automation_muted`, inbound messages are still
+  recorded and counted, STOP/START/HELP is unaffected, and the number is
+  never blocked. A new recovery SMS resets count/flag and clears an EXPIRED
+  mute only — an active mute is never cleared early. Keywords, duplicates,
+  gate failures, and thanks/ack/negative/unclear replies never count.
+- Settings live on `clinic_sms_conversation_settings`
+  (`unanswered_mute_after`, `unanswered_high_volume_after`,
+  `automation_mute_hours`; NULL = defaults 6/10/24; bounds 1-100, 1-200,
+  1-168; high-volume >= mute enforced in the API). The settings row is kept
+  whenever max_auto_replies > 0 OR anti-spam is customized.
+- Added migration
+  `supabase/migrations/20260624000100_sms_special_replies_and_anti_spam.sql`
+  (additive + idempotent).
+- Unchanged: STOP/START/HELP, opt-out, readiness, clinic gate, sender pinning,
+  duplicate-webhook handling, follow-up #1-#10 behavior, safety-concern
+  classification, patient-name extraction, test-only duplicate-bypass name
+  reset, and the owner/front-desk template-editing block.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 185 tests.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+Production migration:
+
+- Supabase project verified: `qfjpvbvfvhbtebwivcdc`.
+- Applied `20260624000100_sms_special_replies_and_anti_spam.sql` via the
+  Supabase management apply-migration path and recorded migration history
+  version `20260624000100` (name `sms_special_replies_and_anti_spam`).
+- Post-migration verification: the three anti-spam settings columns and the
+  three patient_conversations volume columns exist, and both
+  `clinic_sms_message_templates_role_check` and
+  `clinic_sms_message_templates_sequence_check` now allow `special_reply`
+  (sequence 1-2). No template bodies were printed.
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no production env change, no
+secret printing, no template body dump, and `.qwen/` remained untouched.

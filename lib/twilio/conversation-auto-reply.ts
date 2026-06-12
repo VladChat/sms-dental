@@ -6,6 +6,7 @@ import {
   claimSafetyNotice,
   claimThanksCourtesyReply,
   getConversationAutoReplyState,
+  recordUnansweredInboundAfterAutomation,
   touchConversation,
 } from "../db/conversations";
 import { isPhoneOptedOut } from "../db/opt-outs";
@@ -28,6 +29,13 @@ import {
   renderConversationTemplate,
   type FollowUpSlot,
 } from "../sms-recovery/conversation-templates";
+import { specialReplyTextForKey } from "../sms-recovery/special-reply-templates";
+import {
+  isAutomationMuted,
+  reasonCountsAsUnanswered,
+  resolveAutomationVolumeSettings,
+  type AutomationVolumeSettings,
+} from "../sms-recovery/automation-volume-limits";
 import { normalizePhone } from "../phone/normalize";
 import { logger } from "../logging/logger";
 
@@ -80,6 +88,19 @@ export async function maybeSendConversationAutoReply(
   const state = await getConversationAutoReplyState(input.conversationId);
   if (!state) return skipAutoReply(input, "conversation_missing");
 
+  // Anti-spam mute: while automation is paused for this conversation, NOTHING
+  // automated sends (no follow-up, no thanks courtesy, no safety prefix).
+  // Inbound messages were already recorded by the webhook, and STOP/START/HELP
+  // never reach this point. Ordinary (non-blocked) replies keep counting
+  // toward the high-volume flag; an active mute is never extended early.
+  const volumeSettings = resolveAutomationVolumeSettings(config.antiSpam);
+  if (isAutomationMuted(state, new Date())) {
+    if (!replyClassificationBlocksAutoReply(input.replyClassification)) {
+      await countUnansweredInbound(input, volumeSettings);
+    }
+    return skipAutoReply(input, "automation_muted");
+  }
+
   // Gather the remaining (DB-backed) inputs for the shared decision.
   const [hasPrior, optedOut, readiness] = await Promise.all([
     hasPriorRecoveryOutbound(input.conversationId),
@@ -106,6 +127,7 @@ export async function maybeSendConversationAutoReply(
       hasPriorRecoveryOutbound: hasPrior,
       maxAutoReplies: config.maxAutoReplies,
       thanksCourtesyAlreadySent: state.smsThanksCourtesySentAt !== null,
+      customBody: config.specialReplies?.thanks_courtesy?.body ?? null,
     });
     if (!thanksDecision.send) return skipAutoReply(input, thanksDecision.reason);
 
@@ -120,7 +142,10 @@ export async function maybeSendConversationAutoReply(
   }
 
   const enabledSequences = enabledFollowUpSequences(config);
-  if (enabledSequences.length === 0) return skipAutoReply(input, "template_disabled");
+  if (enabledSequences.length === 0) {
+    await countUnansweredInbound(input, volumeSettings);
+    return skipAutoReply(input, "template_disabled");
+  }
 
   const decision = evaluateAutoReplyDecision({
     keyword: input.keyword,
@@ -136,6 +161,12 @@ export async function maybeSendConversationAutoReply(
     enabledSequences,
   });
   if (!decision.send) {
+    // Automation ended for this cycle (max reached / no eligible slot): the
+    // inbound stays unanswered and counts toward the mute/high-volume
+    // thresholds. Gate/keyword/duplicate/classification skips never count.
+    if (reasonCountsAsUnanswered(decision.reason)) {
+      await countUnansweredInbound(input, volumeSettings);
+    }
     return skipAutoReply(input, decision.reason);
   }
 
@@ -174,7 +205,9 @@ export async function maybeSendConversationAutoReply(
 
   const sent = await sendConversationAutoReplySms(
     input,
-    safetyNoticeApplied ? prefixSafetyNotice(body) : body,
+    safetyNoticeApplied
+      ? prefixSafetyNotice(body, specialReplyTextForKey(config.specialReplies, "safety_notice"))
+      : body,
     {
       auto_reply_sequence: decision.sequence,
       ...(safetyNoticeApplied ? { safety_notice: true } : {}),
@@ -277,4 +310,28 @@ function skipAutoReply(input: AutoReplyInput, reason: string): AutoReplyResult {
     reason,
   });
   return { sent: false, reason };
+}
+
+// Count one unanswered-after-automation inbound (atomic in the DB) and log
+// when the mute or high-volume threshold is crossed. Never throws — counting
+// failures must not affect webhook handling or message recording.
+async function countUnansweredInbound(
+  input: AutoReplyInput,
+  settings: AutomationVolumeSettings,
+): Promise<void> {
+  try {
+    const result = await recordUnansweredInboundAfterAutomation(input.conversationId, settings);
+    if (!result) return;
+    logger.info("twilio.sms.unanswered_after_automation", {
+      clinicId: input.clinic.id,
+      count: result.unansweredAfterAutomationCount,
+      muted: result.automationMutedUntil !== null,
+      highVolume: result.highVolumeFlaggedAt !== null,
+    });
+  } catch (err) {
+    logger.error("twilio.sms.unanswered_count_failed", {
+      clinicId: input.clinic.id,
+      message: err instanceof Error ? err.message : "unknown",
+    });
+  }
 }

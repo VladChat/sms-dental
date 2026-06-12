@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-12 (SMS Conversation Builder: safety_concern reply classification with one-time conditional 911 prefix per recovery cycle; expanded conservative patient-name extraction; Follow-up #1 default now also asks for a preferred appointment time)
+Last updated: 2026-06-12 (SMS settings split into Voice greeting / SMS texts / Limits & anti-spam admin panels; editable safety-notice and thanks-courtesy texts via template_role='special_reply'; anti-spam automation pause: 6 unanswered -> 24h mute, 10 unanswered -> high-volume flag)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3522,6 +3522,55 @@ unchanged. No AI runtime — everything is deterministic.
   name AND a preferred time: `Thanks for the info. What name should we use when
   our office follows up? If you're looking for an appointment, what time works
   best for you?` (ASCII apostrophes). Follow-up #2/#3 defaults unchanged.
+- **Admin SMS settings split (2026-06-12):** the single "SMS messages" admin
+  section was split into a grouped **SMS settings** left-nav block with three
+  focused panels: **Voice greeting** (three scenarios only), **SMS texts**
+  (initial SMS, follow-ups #1-#10, Safety notice, Thanks reply), and
+  **Limits & anti-spam** (max automated replies + pause settings).
+  `AdminSmsConversationBuilder` takes `view="voice"|"texts"|"limits"`; each
+  subview keeps its own Edit -> Save -> read-only flow and POSTs ONLY its own
+  section. The admin API merges missing sections from the saved config, so
+  saving one subview never resets another. Keyboard navigation remains a flat
+  roving-tab list; owners and front desk still cannot edit anything here.
+- **Editable special replies (2026-06-12):** the safety notice prefix and the
+  thanks courtesy reply are now admin-editable in the SMS texts panel via
+  `clinic_sms_message_templates` rows with `template_role='special_reply'`
+  (sequence 1 = safety_notice, 2 = thanks_courtesy; defaults in
+  `lib/sms-recovery/special-reply-templates.ts`, ≤160 chars, no variables).
+  Code defaults stay the source of truth: saving default-equal/blank text
+  removes the override row. The safety notice remains a PREFIX/add-on on the
+  next otherwise-eligible follow-up — never a standalone SMS, never a separate
+  branch, still once per recovery cycle via `sms_safety_notice_sent_at`.
+  Validation (`validateSafetyNoticeText`) requires "medical emergency" +
+  "call 911", allows 911 as the only digits, and rejects diagnosis/treatment/
+  urgency-marketing wording, links, emails, and phone numbers.
+  `validateThanksReplyText` rejects digits, variables, contact details, and
+  the shared banned phrases. The thanks courtesy keeps all prior behavior
+  (once per cycle, no numbered slot, no `sms_auto_reply_count` increment).
+- **Anti-spam automation pause (2026-06-12):** simple per-conversation
+  protection against loops/bot traffic after automation has ended. Settings on
+  `clinic_sms_conversation_settings` (`unanswered_mute_after`,
+  `unanswered_high_volume_after`, `automation_mute_hours`; NULL = code
+  defaults 6 / 10 / 24 in `lib/sms-recovery/automation-volume-limits.ts`;
+  bounds 1-100 / 1-200 / 1-168, high-volume >= mute enforced server-side).
+  State on `patient_conversations`: `unanswered_after_automation_count`,
+  `automation_muted_until`, `high_volume_flagged_at`. Behavior: when an
+  ordinary inbound is skipped because automation ENDED for the cycle (reason
+  `max_auto_replies_reached` or `template_disabled`), the count increments
+  atomically (`recordUnansweredInboundAfterAutomation`). At the mute threshold
+  automation pauses until now + mute hours; while muted the auto-reply path
+  skips ALL automation (follow-ups, thanks courtesy, safety prefix) with
+  reason `automation_muted`, ordinary inbound messages keep counting toward
+  the high-volume flag, and an active mute is never extended or shortened.
+  Keywords, duplicates, gate failures, and thanks/ack/negative/unclear
+  classifications NEVER increment the count. Inbound messages are ALWAYS still
+  recorded, STOP/START/HELP is untouched, and nothing blocks the phone number
+  permanently. `resetConversationAutoReplyCycle` clears count/flag/expired
+  mute on a new recovery SMS but PRESERVES an active mute so automation cannot
+  be re-enabled early; the test-only display-name reset is unchanged.
+  Migration: `20260624000100_sms_special_replies_and_anti_spam.sql`
+  (additive/idempotent; widens template role/sequence checks, adds settings
+  columns + conversation volume state).
 - **Template safety** (`template-safety.ts`, deterministic, no AI): rejects
   banned spam/medical/urgency phrases, URLs, emails, phone numbers, unknown
   placeholders, excessive punctuation, and all-caps shouting.
@@ -3577,9 +3626,12 @@ unchanged. No AI runtime — everything is deterministic.
   admin saves with non-default `max_auto_replies`). Confirm
   `clinic_sms_message_templates_role_check` allows `voice_greeting`,
   `clinic_sms_message_templates_sequence_check` allows `auto_reply` 1-10 while
-  keeping `voice_greeting` 1-3, and
-  `patient_conversations.sms_thanks_courtesy_sent_at` and
-  `patient_conversations.sms_safety_notice_sent_at` exist.
+  keeping `voice_greeting` 1-3 and `special_reply` 1-2,
+  `clinic_sms_message_templates_role_check` allows `special_reply`,
+  `clinic_sms_conversation_settings` has the three nullable anti-spam columns,
+  and `patient_conversations` has `sms_thanks_courtesy_sent_at`,
+  `sms_safety_notice_sent_at`, `unanswered_after_automation_count`,
+  `automation_muted_until`, and `high_volume_flagged_at`.
   After applying `20260621000100_clean_sms_template_default_overrides.sql` and
   `20260623000100_sms_safety_notice.sql`,
   default-like strings should no longer appear in
