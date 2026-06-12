@@ -56,6 +56,7 @@ export async function resetConversationAutoReplyCycle(
     set sms_auto_reply_count = 0,
         sms_auto_reply_last_sent_at = null,
         sms_thanks_courtesy_sent_at = null,
+        sms_safety_notice_sent_at = null,
         patient_display_name = case
           when ${resetPatientDisplayName} then null
           else patient_display_name
@@ -69,6 +70,7 @@ export type ConversationAutoReplyState = {
   patientDisplayName: string | null;
   smsAutoReplyCount: number;
   smsThanksCourtesySentAt: string | null;
+  smsSafetyNoticeSentAt: string | null;
 };
 
 // Read the conversation state the auto-reply decision needs.
@@ -80,8 +82,10 @@ export async function getConversationAutoReplyState(
     patient_display_name: string | null;
     sms_auto_reply_count: number;
     sms_thanks_courtesy_sent_at: string | null;
+    sms_safety_notice_sent_at: string | null;
   }[]>`
-    select patient_display_name, sms_auto_reply_count, sms_thanks_courtesy_sent_at
+    select patient_display_name, sms_auto_reply_count, sms_thanks_courtesy_sent_at,
+           sms_safety_notice_sent_at
     from public.patient_conversations
     where id = ${conversationId}
     limit 1
@@ -92,6 +96,7 @@ export async function getConversationAutoReplyState(
     patientDisplayName: row.patient_display_name,
     smsAutoReplyCount: row.sms_auto_reply_count ?? 0,
     smsThanksCourtesySentAt: row.sms_thanks_courtesy_sent_at,
+    smsSafetyNoticeSentAt: row.sms_safety_notice_sent_at,
   };
 }
 
@@ -159,6 +164,23 @@ export async function claimThanksCourtesyReply(conversationId: string): Promise<
         updated_at = now()
     where id = ${conversationId}
       and sms_thanks_courtesy_sent_at is null
+    returning id
+  `;
+  return rows.length > 0;
+}
+
+// Atomically claim the one allowed safety-notice prefix for the current
+// recovery cycle. Returns false when it was already claimed — the normal
+// follow-up then sends without the 911 line. Intentionally never rolled back
+// after a failed Twilio send (idempotent anti-spam behavior).
+export async function claimSafetyNotice(conversationId: string): Promise<boolean> {
+  const sql = getDb();
+  const rows = await sql<{ id: string }[]>`
+    update public.patient_conversations
+    set sms_safety_notice_sent_at = now(),
+        updated_at = now()
+    where id = ${conversationId}
+      and sms_safety_notice_sent_at is null
     returning id
   `;
   return rows.length > 0;

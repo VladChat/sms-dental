@@ -34,8 +34,10 @@ export const dynamic = "force-dynamic";
 //   7. For STOP: write opt-out row — future recovery SMS will be blocked.
 //   8. For START: clear opt-out — future recovery SMS is permitted again.
 //   9. For HELP: no DB change.
-//  10. For ordinary replies: classify deterministically, optionally save a
+//  10. For ordinary replies: classify deterministically (including the
+//      safety_concern class for pain/emergency wording), optionally save a
 //      safe patient name, and run the guarded auto-reply flow when eligible.
+//      Name extraction runs on every ordinary inbound until a name is stored.
 //  11. Return empty <Response/> for all cases — Twilio platform already sends
 //      STOP/START/HELP compliance replies; returning our own <Message> caused duplicates.
 export async function POST(request: NextRequest) {

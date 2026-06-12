@@ -7422,3 +7422,78 @@ Validation:
 No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
 Stripe change, no phone-number lifecycle change, no production env change, no
 secret printing, no template body dump, and `.qwen/` remained untouched.
+
+---
+
+## 2026-06-12 — Safety-aware SMS replies and expanded patient-name extraction
+
+Added a deterministic emergency/pain safety layer to the SMS Conversation
+Builder and widened conservative patient-name extraction, without sending SMS
+or placing calls.
+
+What changed:
+
+- `classifyInboundReply` adds a `safety_concern` class for potential
+  emergency/pain wording (pain, emergency, urgent, swelling, bleeding,
+  infection, fever, abscess, trauma, "knocked out", "can't breathe", "trouble
+  breathing"). No AI, no diagnosis, no severity inference, no treatment advice.
+- A safety-concern reply runs through the SAME guarded auto-reply flow. When
+  the next follow-up is otherwise eligible, the conditional line
+  `If this is a medical emergency, call 911.` is prepended ONCE per recovery
+  cycle. The prefixed reply consumes its normal numbered slot and is recorded
+  as `message_kind='conversation_auto_reply'` with `safety_notice: true` and
+  `auto_reply_sequence` metadata. No standalone safety SMS exists:
+  `max_auto_replies=0`, opt-out, readiness/clinic-gate failure, missing prior
+  recovery outbound, STOP/START/HELP, and duplicate webhooks all block it.
+- Added `patient_conversations.sms_safety_notice_sent_at` with atomic
+  `claimSafetyNotice` (mirrors `claimThanksCourtesyReply`; never rolled back
+  after a failed Twilio send). `resetConversationAutoReplyCycle` now clears it
+  when a new missed-call recovery SMS starts a cycle. `patient_display_name`
+  reset behavior is unchanged (test-only duplicate-bypass callers only).
+- `extractPatientName` stays fail-closed but now recognizes explicit inline
+  phrases anywhere in a bounded message: "use X as (it's|it is) my name",
+  "X is my name" (sentence start), "my name should be X", "my name is X"
+  mid-message, "you can use X", "you can call me X", "call me X".
+  "Ok. maybe, use alex sikorsky as it's my name appointment need tomorrow"
+  now extracts "Alex Sikorsky". Digits/links/emails/keywords, >3 words,
+  request/filler/safety words still fail closed; existing names are never
+  overwritten; the webhook still attempts extraction on every ordinary inbound
+  until a name is stored.
+- Follow-up #1 default updated to ask for name + preferred time:
+  `Thanks for the info. What name should we use when our office follows up?
+  If you're looking for an appointment, what time works best for you?`
+  (ASCII apostrophes). Follow-ups #2/#3 unchanged. Default/override model
+  unchanged (code defaults are source of truth; `body_text=NULL` =
+  default-backed).
+- Added migration `supabase/migrations/20260623000100_sms_safety_notice.sql`:
+  idempotent `sms_safety_notice_sent_at` column + data-only cleanup setting old
+  default-like Follow-up #1 bodies to NULL (enabled flags and true custom text
+  preserved).
+- Thanks courtesy reply, ok/ack/negative silence, STOP/START/HELP handling,
+  opt-out, readiness, clinic gate, sender pinning, and owner template-edit
+  blocking are all unchanged.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 161 tests.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+Production migration:
+
+- Supabase project verified: `qfjpvbvfvhbtebwivcdc`.
+- Applied `20260623000100_sms_safety_notice.sql` via the Supabase management
+  apply-migration path and recorded migration history version
+  `20260623000100` (name `sms_safety_notice`).
+- Post-migration verification: `patient_conversations.sms_safety_notice_sent_at`
+  exists; Follow-up #1 rows: 0 custom-body rows, 1 default-backed (NULL body)
+  row — default-backed clinics now use the new Follow-up #1 default. No
+  template bodies were printed.
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no production env change, no
+secret printing, no template body dump, and `.qwen/` remained untouched.

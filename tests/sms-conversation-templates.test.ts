@@ -173,7 +173,7 @@ test("canonical default copy is current", () => {
   );
   assert.equal(
     DEFAULT_FOLLOW_UP_TEMPLATES[1],
-    "Thanks for the info. What name should we use when our office follows up?",
+    "Thanks for the info. What name should we use when our office follows up? If you're looking for an appointment, what time works best for you?",
   );
   assert.equal(
     DEFAULT_FOLLOW_UP_TEMPLATES[2],
@@ -410,6 +410,49 @@ test("follow-up expansion migration widens SMS slots and adds thanks courtesy st
   assert.match(sql, /template_role\s+=\s+'auto_reply'\s+and\s+sequence\s+between\s+1\s+and\s+10/i);
   assert.match(sql, /template_role\s+=\s+'voice_greeting'\s+and\s+sequence\s+between\s+1\s+and\s+3/i);
   assert.match(sql, /add column if not exists sms_thanks_courtesy_sent_at timestamptz/i);
+});
+
+test("safety notice migration adds the marker and cleans old follow-up #1 defaults", () => {
+  const sql = fs.readFileSync(
+    path.join(process.cwd(), "supabase", "migrations", "20260623000100_sms_safety_notice.sql"),
+    "utf8",
+  );
+
+  assert.match(sql, /add column if not exists sms_safety_notice_sent_at timestamptz/i);
+  assert.match(sql, /update public\.clinic_sms_message_templates\s+set body_text = null/i);
+  assert.match(sql, /where template_role = 'auto_reply'/i);
+  assert.match(sql, /sequence = 1/);
+  // Old default-like Follow-up #1 bodies are cleared so default-backed clinics
+  // pick up the new code default; custom text rows are untouched.
+  assert.ok(sql.includes("Thanks for the info. What name should we use when our office follows up?"));
+  assert.ok(sql.includes("If you''re looking for an appointment, what time works best for you?"));
+  assert.ok(sql.includes("body_text is not null"));
+  assert.equal(/\bcreate\s+table\b/i.test(sql), false);
+  assert.equal(/\bdelete\s+from\b/i.test(sql), false);
+});
+
+test("follow-up #1 default asks for name and preferred time; custom text is preserved", () => {
+  assert.equal(effectiveFollowUpTemplate(1, null), DEFAULT_FOLLOW_UP_TEMPLATES[1]);
+  assert.equal(effectiveFollowUpTemplate(1, "Custom first reply."), "Custom first reply.");
+  assert.ok(validateFollowUpBody(DEFAULT_FOLLOW_UP_TEMPLATES[1]).ok);
+
+  // Saving the new default stores NULL (default-backed), not a literal override.
+  const prepared = prepareConversationTemplateStorage({
+    initialTemplate: null,
+    maxAutoReplies: 1,
+    followUps: followUpConfig({
+      1: { body: DEFAULT_FOLLOW_UP_TEMPLATES[1], enabled: true },
+    }),
+    voiceGreetings: {
+      will_send: { body: null },
+      duplicate: { body: null },
+      none: { body: null },
+    },
+  });
+  assert.deepEqual(
+    prepared.upsertRows.filter((row) => row.role === "auto_reply"),
+    [{ role: "auto_reply", sequence: 1, body: null, enabled: true }],
+  );
 });
 
 test("voice greeting defaults render with clinic identity", () => {

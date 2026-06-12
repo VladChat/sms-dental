@@ -59,3 +59,46 @@ test("rejects non-name and overlong inputs", () => {
   assert.equal(extractPatientName("office"), null);
   assert.equal(extractPatientName("John Smith Williams Junior"), null); // > 3 words
 });
+
+test("extracts names from explicit inline name phrases", () => {
+  assert.equal(extractPatientName("use Alex Sikorsky as my name"), "Alex Sikorsky");
+  assert.equal(extractPatientName("use Alex Sikorsky as it's my name"), "Alex Sikorsky");
+  assert.equal(extractPatientName("use Alex Sikorsky as it is my name"), "Alex Sikorsky");
+  assert.equal(extractPatientName("Alex Sikorsky is my name"), "Alex Sikorsky");
+  assert.equal(extractPatientName("my name should be Alex Sikorsky"), "Alex Sikorsky");
+  assert.equal(extractPatientName("you can use Alex Sikorsky"), "Alex Sikorsky");
+  assert.equal(extractPatientName("call me Alex"), "Alex");
+});
+
+test("extracts names from inline phrases inside longer real messages", () => {
+  assert.equal(
+    extractPatientName("Ok. maybe, use alex sikorsky as it's my name appointment need tomorrow"),
+    "Alex Sikorsky",
+  );
+  assert.equal(
+    extractPatientName("Ok. maybe, use Alex Sikorsky as my name. appointment need tomorrow"),
+    "Alex Sikorsky",
+  );
+  assert.equal(
+    extractPatientName("Pain. Use Alex Sikorsky as my name. appointment tomorrow"),
+    "Alex Sikorsky",
+  );
+  assert.equal(extractPatientName("Hi, my name is John"), "John");
+  assert.equal(extractPatientName("Sure. you can call me Sarah"), "Sarah");
+});
+
+test("inline phrases still fail closed on request/filler/safety content", () => {
+  assert.equal(extractPatientName("call me later"), null);
+  assert.equal(extractPatientName("call me back tomorrow"), null);
+  assert.equal(extractPatientName("call me when you can"), null);
+  assert.equal(extractPatientName("you can use whatever"), null);
+  assert.equal(extractPatientName("use tooth pain as my name"), null);
+  assert.equal(extractPatientName("my name should be the office"), null);
+  assert.equal(extractPatientName("severe pain"), null);
+  assert.equal(extractPatientName("emergency"), null);
+});
+
+test("does not extract from request-only messages", () => {
+  assert.equal(extractPatientName("appointment need tomorrow"), null);
+  assert.equal(extractPatientName("I need an appointment as soon as possible"), null);
+});

@@ -24,7 +24,7 @@ export const DEFAULT_FOLLOW_UP_SLOTS = [1, 2, 3] as const;
 export type DefaultFollowUpSlot = (typeof DEFAULT_FOLLOW_UP_SLOTS)[number];
 
 export const DEFAULT_FOLLOW_UP_TEMPLATES: Record<DefaultFollowUpSlot, string> = {
-  1: "Thanks for the info. What name should we use when our office follows up?",
+  1: "Thanks for the info. What name should we use when our office follows up? If you're looking for an appointment, what time works best for you?",
   2: "Thanks, {{patient_name}}. I'll pass this to our team so they can follow up.",
   3: "Got it. We'll pass that along to our team.",
 };

@@ -3,6 +3,7 @@ import { getTwilioMessagingEnv, getSmsRecoveryConfig, getAppDomainsSafe } from "
 import { recordOutboundMessage, hasPriorRecoveryOutbound } from "../db/messages";
 import {
   claimAutoReplySequence,
+  claimSafetyNotice,
   claimThanksCourtesyReply,
   getConversationAutoReplyState,
   touchConversation,
@@ -14,6 +15,8 @@ import { evaluateRecoverySendGate } from "../sms-recovery/live-send-evaluation";
 import {
   evaluateAutoReplyDecision,
   evaluateThanksCourtesyDecision,
+  prefixSafetyNotice,
+  shouldAttemptSafetyNoticePrefix,
 } from "../sms-recovery/auto-reply-evaluation";
 import {
   replyClassificationBlocksAutoReply,
@@ -155,9 +158,28 @@ export async function maybeSendConversationAutoReply(
     return skipAutoReply(input, "slot_already_claimed");
   }
 
-  const sent = await sendConversationAutoReplySms(input, body, {
-    auto_reply_sequence: decision.sequence,
-  });
+  // Safety-concern replies carry a conditional 911 line ONCE per recovery
+  // cycle, prepended to the normal follow-up (which keeps its claimed slot).
+  // The claim is atomic and never rolled back after a failed send; if another
+  // delivery already claimed it, the follow-up sends without the prefix.
+  let safetyNoticeApplied = false;
+  if (
+    shouldAttemptSafetyNoticePrefix({
+      replyClassification: input.replyClassification,
+      safetyNoticeAlreadySent: state.smsSafetyNoticeSentAt !== null,
+    })
+  ) {
+    safetyNoticeApplied = await claimSafetyNotice(input.conversationId);
+  }
+
+  const sent = await sendConversationAutoReplySms(
+    input,
+    safetyNoticeApplied ? prefixSafetyNotice(body) : body,
+    {
+      auto_reply_sequence: decision.sequence,
+      ...(safetyNoticeApplied ? { safety_notice: true } : {}),
+    },
+  );
   if (!sent.sent) return sent;
   return {
     sent: true,

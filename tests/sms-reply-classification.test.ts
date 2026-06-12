@@ -86,3 +86,77 @@ test("compliance keywords are outside the normal follow-up flow", () => {
     assert.equal(classified.patientName, null);
   }
 });
+
+test("classifies pain/emergency/urgent wording as safety_concern", () => {
+  for (const body of [
+    "Pain",
+    "tooth pain",
+    "severe pain",
+    "emergency",
+    "urgent",
+    "swelling",
+    "bleeding",
+    "infection",
+    "fever",
+    "abscess",
+    "trauma",
+    "knocked out",
+    "can't breathe",
+    "trouble breathing",
+  ]) {
+    const classified = classifyInboundReply(body);
+    assert.equal(classified.kind, "safety_concern", `should flag: ${body}`);
+    assert.equal(classified.hasRequestContent, true);
+    // safety_concern does NOT block the guarded follow-up flow.
+    assert.equal(replyClassificationBlocksAutoReply(classified.kind), null);
+  }
+});
+
+test("thanks/ok/negative replies never become safety concerns", () => {
+  assert.equal(classifyInboundReply("thanks").kind, "thanks");
+  assert.equal(classifyInboundReply("ok").kind, "acknowledgement");
+  assert.equal(classifyInboundReply("wrong number").kind, "negative");
+});
+
+test("STOP/START/HELP never become safety concerns", () => {
+  for (const body of ["STOP", "START", "HELP", "stop.", "Start", "help!"]) {
+    const classified = classifyInboundReply(body);
+    assert.equal(classified.kind, "unclear_short");
+  }
+});
+
+test("safety concern carries a safely extracted name when present", () => {
+  const classified = classifyInboundReply(
+    "Pain. Use Alex Sikorsky as my name. appointment tomorrow",
+  );
+  assert.equal(classified.kind, "safety_concern");
+  assert.equal(classified.patientName, "Alex Sikorsky");
+  assert.equal(classified.hasRequestContent, true);
+  assert.equal(replyClassificationBlocksAutoReply(classified.kind), null);
+});
+
+test("the live manual name reply with filler/request content extracts the name", () => {
+  const classified = classifyInboundReply(
+    "Ok. maybe, use Alex Sikorsky as my name. appointment need tomorrow",
+  );
+  assert.equal(classified.kind, "name_provided");
+  assert.equal(classified.patientName, "Alex Sikorsky");
+});
+
+test("a name can still be extracted on the 3rd or 4th ordinary inbound", () => {
+  // Webhook behavior: classifyInboundReply runs on EVERY ordinary inbound and
+  // the extracted name is saved only while none is stored yet.
+  const first = classifyInboundReply("I need cleaning appointment");
+  assert.equal(first.patientName, null);
+
+  const second = classifyInboundReply("appointment need tomorrow morning");
+  assert.equal(second.patientName, null);
+
+  const third = classifyInboundReply(
+    "Ok. maybe, use alex sikorsky as it's my name appointment need tomorrow",
+  );
+  assert.equal(third.patientName, "Alex Sikorsky");
+
+  const fourth = classifyInboundReply("my name should be Alex Sikorsky");
+  assert.equal(fourth.patientName, "Alex Sikorsky");
+});

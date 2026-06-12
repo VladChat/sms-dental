@@ -4,6 +4,9 @@ import test from "node:test";
 import {
   evaluateAutoReplyDecision,
   evaluateThanksCourtesyDecision,
+  prefixSafetyNotice,
+  SAFETY_NOTICE_PREFIX,
+  shouldAttemptSafetyNoticePrefix,
   THANKS_COURTESY_REPLY_BODY,
   type AutoReplyDecisionInput,
   type ThanksCourtesyDecisionInput,
@@ -215,6 +218,130 @@ test("new missed-call recovery cycle reset restores follow-up eligibility", () =
   );
 });
 
+test("safety concern sends the next eligible follow-up and consumes its normal slot", () => {
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({ replyClassification: "safety_concern" })),
+    { send: true, sequence: 1 },
+  );
+  assert.deepEqual(
+    evaluateAutoReplyDecision(
+      base({ replyClassification: "safety_concern", currentAutoReplyCount: 1 }),
+    ),
+    { send: true, sequence: 2 },
+  );
+  // With a known name, the first name-question slot is skipped as usual.
+  assert.deepEqual(
+    evaluateAutoReplyDecision(
+      base({ replyClassification: "safety_concern", patientNameKnown: true }),
+    ),
+    { send: true, sequence: 2 },
+  );
+});
+
+test("safety prefix renders the documented example for follow-up #1", () => {
+  const body = renderConversationTemplate(DEFAULT_FOLLOW_UP_TEMPLATES[1], {
+    clinicName: "Fairstone Dental Smile",
+    patientName: null,
+  });
+  assert.equal(
+    SAFETY_NOTICE_PREFIX,
+    "If this is a medical emergency, call 911.",
+  );
+  assert.equal(
+    prefixSafetyNotice(body),
+    "If this is a medical emergency, call 911. Thanks for the info. What name should we use when our office follows up? If you're looking for an appointment, what time works best for you?",
+  );
+});
+
+test("safety notice is attempted at most once per recovery cycle", () => {
+  assert.equal(
+    shouldAttemptSafetyNoticePrefix({
+      replyClassification: "safety_concern",
+      safetyNoticeAlreadySent: false,
+    }),
+    true,
+  );
+  // Second safety concern in the same cycle: no repeated 911 prefix.
+  assert.equal(
+    shouldAttemptSafetyNoticePrefix({
+      replyClassification: "safety_concern",
+      safetyNoticeAlreadySent: true,
+    }),
+    false,
+  );
+  // A new recovery cycle clears the marker (resetConversationAutoReplyCycle),
+  // restoring eligibility.
+  assert.equal(
+    shouldAttemptSafetyNoticePrefix({
+      replyClassification: "safety_concern",
+      safetyNoticeAlreadySent: false,
+    }),
+    true,
+  );
+  // Non-safety replies never get the prefix.
+  for (const kind of ["informative", "name_provided", "thanks", "acknowledgement"] as const) {
+    assert.equal(
+      shouldAttemptSafetyNoticePrefix({ replyClassification: kind, safetyNoticeAlreadySent: false }),
+      false,
+    );
+  }
+});
+
+test("all standard gates block the safety auto-reply too (no standalone safety SMS)", () => {
+  const safety = { replyClassification: "safety_concern" as const };
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({ ...safety, maxAutoReplies: 0, enabledSequences: [] })),
+    { send: false, reason: "auto_replies_disabled" },
+  );
+  assert.deepEqual(evaluateAutoReplyDecision(base({ ...safety, optedOut: true })), {
+    send: false,
+    reason: "opted_out",
+  });
+  assert.deepEqual(evaluateAutoReplyDecision(base({ ...safety, gateOk: false })), {
+    send: false,
+    reason: "send_gate_blocked",
+  });
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({ ...safety, hasPriorRecoveryOutbound: false })),
+    { send: false, reason: "no_prior_recovery" },
+  );
+  assert.deepEqual(evaluateAutoReplyDecision(base({ ...safety, isDuplicateInbound: true })), {
+    send: false,
+    reason: "duplicate_inbound",
+  });
+  assert.deepEqual(evaluateAutoReplyDecision(base({ ...safety, modeAllowsSend: false })), {
+    send: false,
+    reason: "mode_disabled",
+  });
+  for (const keyword of ["stop", "start", "help"] as const) {
+    assert.deepEqual(evaluateAutoReplyDecision(base({ ...safety, keyword })), {
+      send: false,
+      reason: `keyword_${keyword}`,
+    });
+  }
+});
+
+test("pain + name reply gets the safety prefix and renders the name in later follow-ups", () => {
+  const inbound = classifyInboundReply("Pain. Use Alex Sikorsky as my name. appointment tomorrow");
+  assert.equal(inbound.kind, "safety_concern");
+  assert.equal(inbound.patientName, "Alex Sikorsky");
+
+  // The name is known once saved, so the next eligible follow-up is #2.
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({ replyClassification: inbound.kind, patientNameKnown: true })),
+    { send: true, sequence: 2 },
+  );
+
+  const rendered = renderConversationTemplate(DEFAULT_FOLLOW_UP_TEMPLATES[2], {
+    clinicName: "Fairstone Dental Smile",
+    patientName: inbound.patientName,
+  });
+  assert.equal(
+    prefixSafetyNotice(rendered),
+    "If this is a medical emergency, call 911. Thanks, Alex Sikorsky. I'll pass this to our team so they can follow up.",
+  );
+});
+
 test("live manual +12245329236 cleaning/name sequence sends two expected follow-ups, then stops on thanks", () => {
   const recordedRecoverySms = {
     toNumber: "+12245329236",
@@ -243,7 +370,7 @@ test("live manual +12245329236 cleaning/name sequence sends two expected follow-
       clinicName: "Fairstone Dental Smile",
       patientName: null,
     }),
-    "Thanks for the info. What name should we use when our office follows up?",
+    "Thanks for the info. What name should we use when our office follows up? If you're looking for an appointment, what time works best for you?",
   );
 
   const secondInbound = classifyInboundReply("I'm Vlad");

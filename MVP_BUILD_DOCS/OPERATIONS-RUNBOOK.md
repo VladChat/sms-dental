@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-12 (SMS Conversation Builder: recovery SMS starts a fresh auto-reply cycle after the outbound recovery row is recorded; admin UI is read-only until Edit; default copy refreshed)
+Last updated: 2026-06-12 (SMS Conversation Builder: safety_concern reply classification with one-time conditional 911 prefix per recovery cycle; expanded conservative patient-name extraction; Follow-up #1 default now also asks for a preferred appointment time)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3475,15 +3475,53 @@ unchanged. No AI runtime — everything is deterministic.
   and does not increment `sms_auto_reply_count`. Acknowledgements, negative
   replies, and unclear short replies never trigger a courtesy reply. Compliance
   keywords are still owned by `detectSmsKeyword` before classification.
-- **Patient name:** `extractPatientName` is conservative and fail-closed (1–3
-  letter words, known lead-ins like "my name is", rejects digits/links/emails/
-  keywords/ambiguous appointment words; simple messages ≤40 chars, clear
-  prefixed messages ≤160 chars). It supports a first reply like "My name is Jon
-  Svillow. I need an appointment". Stored only when empty; never overwritten;
-  never on STOP/START/HELP or duplicates. If a name is already known or safely
-  collected on the first reply, follow-up #1 (the name question) is skipped and
-  the next eligible slot is claimed atomically. `{{patient_name}}` resolves only
-  when set, else the placeholder is removed cleanly.
+- **Patient name (expanded 2026-06-12):** `extractPatientName` is conservative
+  and fail-closed (1–3 letter words, rejects digits/links/emails/keywords/
+  ambiguous appointment words; simple messages ≤40 chars, explicit phrases ≤160
+  chars). Besides start-anchored lead-ins ("my name is", "this is", "I'm"), it
+  now recognizes explicit inline phrases anywhere in a bounded message:
+  "use X as (it's|it is) my name", "X is my name" (sentence start), "my name
+  should be X", "my name is X" mid-message, "you can use X", "you can call me
+  X", and "call me X". Example: "Ok. maybe, use alex sikorsky as it's my name
+  appointment need tomorrow" extracts "Alex Sikorsky" (title-cased). The
+  webhook runs classification (and therefore name extraction) on EVERY ordinary
+  non-keyword inbound, so a name volunteered on the 3rd or 4th reply is still
+  captured. Stored only when empty; never overwritten; never on STOP/START/HELP
+  or duplicates. If a name is already known or safely collected on the first
+  reply, follow-up #1 (the name question) is skipped and the next eligible slot
+  is claimed atomically. `{{patient_name}}` resolves only when set, else the
+  placeholder is removed cleanly.
+- **Safety concern replies (2026-06-12):** `classifyInboundReply` adds a
+  deterministic `safety_concern` class for potential emergency/pain wording
+  (pain, emergency, urgent, swelling, bleeding, infection, fever, abscess,
+  trauma, "knocked out", "can't breathe", "trouble breathing" — see
+  `SAFETY_CONCERN_RE`). No AI, no diagnosis, no severity inference, no
+  treatment advice. A safety-concern reply proceeds through the SAME guarded
+  follow-up flow (mode, readiness, clinic gate, opt-out, prior recovery,
+  `max_auto_replies`, enabled slot, keyword/duplicate). When the next normal
+  follow-up is otherwise eligible, the conditional line
+  `If this is a medical emergency, call 911.` is prepended ONCE per recovery
+  cycle — claimed atomically via
+  `patient_conversations.sms_safety_notice_sent_at`
+  (`claimSafetyNotice`, mirrors `claimThanksCourtesyReply`; never rolled back
+  after a failed Twilio send). The prefixed reply consumes its normal numbered
+  slot and is recorded as `message_kind='conversation_auto_reply'` with
+  `safety_notice: true` + `auto_reply_sequence` in the raw payload. There is
+  NEVER a standalone safety SMS: if `max_auto_replies=0`, the patient opted
+  out, readiness/gates fail, or there is no prior recovery outbound, nothing
+  sends. A second safety concern in the same cycle gets the normal follow-up
+  without the prefix; `resetConversationAutoReplyCycle` clears the marker when
+  a new missed-call recovery SMS starts a new cycle. A message containing both
+  a safety concern and an explicit name ("Pain. Use Alex Sikorsky as my name.")
+  classifies as `safety_concern` AND still carries the extracted name.
+  Migration `20260623000100_sms_safety_notice.sql` adds the marker column
+  idempotently and clears old default-like Follow-up #1 bodies to NULL so
+  default-backed clinics pick up the new Follow-up #1 default (custom text
+  untouched).
+- **Follow-up #1 default (2026-06-12):** the canonical default now asks for the
+  name AND a preferred time: `Thanks for the info. What name should we use when
+  our office follows up? If you're looking for an appointment, what time works
+  best for you?` (ASCII apostrophes). Follow-up #2/#3 defaults unchanged.
 - **Template safety** (`template-safety.ts`, deterministic, no AI): rejects
   banned spam/medical/urgency phrases, URLs, emails, phone numbers, unknown
   placeholders, excessive punctuation, and all-caps shouting.
@@ -3540,8 +3578,10 @@ unchanged. No AI runtime — everything is deterministic.
   `clinic_sms_message_templates_role_check` allows `voice_greeting`,
   `clinic_sms_message_templates_sequence_check` allows `auto_reply` 1-10 while
   keeping `voice_greeting` 1-3, and
-  `patient_conversations.sms_thanks_courtesy_sent_at` exists.
-  After applying `20260621000100_clean_sms_template_default_overrides.sql`,
+  `patient_conversations.sms_thanks_courtesy_sent_at` and
+  `patient_conversations.sms_safety_notice_sent_at` exist.
+  After applying `20260621000100_clean_sms_template_default_overrides.sql` and
+  `20260623000100_sms_safety_notice.sql`,
   default-like strings should no longer appear in
   `clinic_sms_message_templates.body_text`; do not print template bodies in
   logs or final reports.

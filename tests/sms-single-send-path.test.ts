@@ -126,9 +126,33 @@ test("resetConversationAutoReplyCycle clears reply-cycle state and conditionally
   assert.ok(helper.includes("sms_auto_reply_count = 0"));
   assert.ok(helper.includes("sms_auto_reply_last_sent_at = null"));
   assert.ok(helper.includes("sms_thanks_courtesy_sent_at = null"));
+  assert.ok(helper.includes("sms_safety_notice_sent_at = null"));
   assert.ok(helper.includes("patient_display_name = case"));
   assert.ok(helper.includes("when ${resetPatientDisplayName} then null"));
   assert.ok(helper.includes("else patient_display_name"));
+});
+
+test("safety notice prefix is claimed atomically after the slot claim, never standalone", () => {
+  const src = stripCommentLines(
+    fs.readFileSync(path.join(REPO_ROOT, "lib", "twilio", "conversation-auto-reply.ts"), "utf8"),
+  );
+
+  const slotClaimIdx = src.indexOf("await claimAutoReplySequence(");
+  const safetyClaimIdx = src.indexOf("await claimSafetyNotice(");
+  assert.ok(slotClaimIdx >= 0, "slot claim exists");
+  assert.ok(safetyClaimIdx > slotClaimIdx, "safety notice claim happens after the slot claim");
+  assert.ok(src.includes("shouldAttemptSafetyNoticePrefix"));
+  assert.ok(src.includes("safetyNoticeApplied ? prefixSafetyNotice(body) : body"));
+  assert.ok(src.includes("safety_notice: true"));
+
+  const dbSrc = stripCommentLines(
+    fs.readFileSync(path.join(REPO_ROOT, "lib", "db", "conversations.ts"), "utf8"),
+  );
+  const claimStart = dbSrc.indexOf("export async function claimSafetyNotice");
+  assert.ok(claimStart >= 0, "claimSafetyNotice helper exists");
+  const claim = dbSrc.slice(claimStart, claimStart + 600);
+  assert.ok(claim.includes("sms_safety_notice_sent_at = now()"));
+  assert.ok(claim.includes("and sms_safety_notice_sent_at is null"));
 });
 
 test("recovery send path resets patient name only for duplicate-bypass test callers", () => {

@@ -45,7 +45,9 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
   and body. The **Maximum automated replies** setting (0–10) caps how many may
   send; it cannot exceed the enabled/usable follow-ups in order. **0 disables
   follow-ups.** Slots #1-#3 keep the canonical defaults; slots #4-#10 have no
-  default and require custom text before they can be enabled.
+  default and require custom text before they can be enabled. The Follow-up #1
+  default asks for both the name and a preferred appointment time:
+  `Thanks for the info. What name should we use when our office follows up? If you're looking for an appointment, what time works best for you?`
 - **Variables.** `{{clinic_name}}` (always from the clinic profile) and
   `{{patient_name}}` (only when safely collected). When no name was collected,
   `{{patient_name}}` is removed cleanly so the sentence stays natural.
@@ -72,6 +74,10 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
   `max_auto_replies` and auto-reply template sequence constraints to 10, keeps
   voice greetings at sequence 1-3, and adds
   `patient_conversations.sms_thanks_courtesy_sent_at`.
+- Migration `20260623000100_sms_safety_notice.sql` adds
+  `patient_conversations.sms_safety_notice_sent_at` and clears old
+  default-like Follow-up #1 bodies to NULL so default-backed clinics pick up
+  the new Follow-up #1 default (true custom text untouched).
 - The 11th and later patient replies, and any reply beyond the configured max,
   are **saved to the workspace only** unless they qualify for the one-time
   thanks courtesy reply.
@@ -101,6 +107,31 @@ increment `sms_auto_reply_count`. Acknowledgements, negative replies, and
 unclear short replies never trigger a courtesy reply. Informative replies and
 safe name-provided replies may continue through the normal guarded flow.
 
+## Safety concern replies (deterministic, no medical advice)
+
+A reply containing potential emergency/pain wording (pain, emergency, urgent,
+swelling, bleeding, infection, fever, abscess, trauma, "knocked out", "can't
+breathe", "trouble breathing") is classified as `safety_concern`. The system
+**never diagnoses, never infers severity, and never gives treatment advice** —
+it only conditionally prepends `If this is a medical emergency, call 911.` to
+the next automated follow-up that is otherwise eligible under ALL normal guards
+(mode, readiness, clinic gate, opt-out, prior recovery outbound,
+`max_auto_replies`, enabled slot, no STOP/START/HELP, no duplicate webhook).
+
+- The safety-prefixed reply consumes its normal numbered follow-up slot.
+- The 911 line is sent at most **once per recovery cycle**, claimed atomically
+  via `patient_conversations.sms_safety_notice_sent_at`; a second safety
+  concern in the same cycle gets the normal follow-up without the prefix. A new
+  missed-call recovery SMS resets the marker with the rest of the cycle state.
+- There is **no standalone safety SMS**: if `max_auto_replies` is 0, the
+  patient opted out, readiness or the clinic gate fails, or there is no prior
+  recovery thread, nothing sends.
+- A message containing both a safety concern and an explicit name ("Pain. Use
+  Alex Sikorsky as my name.") still saves the name and renders
+  `{{patient_name}}` in later follow-ups.
+- The thanks courtesy reply, acknowledgement/negative silence, and
+  STOP/START/HELP handling are unchanged.
+
 When a new missed-call recovery SMS is successfully sent and its outbound
 `missed_call_recovery` message row is recorded, the conversation starts a fresh
 auto-reply cycle: `sms_auto_reply_count` resets to 0 and
@@ -116,10 +147,18 @@ the outbound message record succeeds.
 Names are extracted conservatively and fail-closed: short simple replies
 ("John", "My name is John Smith", "I'm John") and clear name-prefix messages
 with later request content ("My name is Jon Svillow. I need an appointment")
-can yield a name. Anything with digits, links, emails, keywords, or ambiguous
-appointment/problem content is ignored. A name is stored only when none exists
-yet and is never overwritten. If a name is safely found on the first reply, the
-name-question follow-up is skipped.
+can yield a name. Explicit inline phrases are also recognized anywhere in a
+bounded message: "use Alex Sikorsky as (it's/it is) my name", "Alex Sikorsky
+is my name" (sentence start), "my name should be Alex Sikorsky", "you can use
+Alex Sikorsky", "call me Alex" — so a reply like "Ok. maybe, use alex sikorsky
+as it's my name appointment need tomorrow" extracts "Alex Sikorsky"
+(title-cased). Anything with digits, links, emails, keywords, or ambiguous
+appointment/problem content is ignored, and candidates longer than 3 words
+fail closed. Classification (and therefore name extraction) runs on every
+ordinary non-keyword inbound, so a name volunteered on the 3rd or 4th reply is
+still captured. A name is stored only when none exists yet and is never
+overwritten. If a name is safely found on the first reply, the name-question
+follow-up is skipped.
 
 ## Template safety (deterministic)
 

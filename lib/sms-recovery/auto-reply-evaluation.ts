@@ -11,6 +11,28 @@ import { MAX_AUTO_REPLIES, type FollowUpSlot } from "./conversation-templates";
 
 export const THANKS_COURTESY_REPLY_BODY = "You're welcome. Our team will follow up.";
 
+// Conditional safety wording for potential emergency/pain replies. This is
+// deliberately NOT medical advice: no diagnosis, no severity inference, no
+// treatment guidance — only a conditional 911 line prepended ONCE per recovery
+// cycle to an otherwise-eligible normal follow-up. It is never sent standalone.
+export const SAFETY_NOTICE_PREFIX = "If this is a medical emergency, call 911.";
+
+export type SafetyNoticePrefixInput = {
+  replyClassification: ReplyClassificationKind | null;
+  safetyNoticeAlreadySent: boolean;
+};
+
+// Whether an already-eligible follow-up should try to claim the one-per-cycle
+// safety notice. The caller must still claim atomically in the DB; a failed
+// claim sends the normal follow-up without the prefix.
+export function shouldAttemptSafetyNoticePrefix(input: SafetyNoticePrefixInput): boolean {
+  return input.replyClassification === "safety_concern" && !input.safetyNoticeAlreadySent;
+}
+
+export function prefixSafetyNotice(body: string): string {
+  return `${SAFETY_NOTICE_PREFIX} ${body}`;
+}
+
 export type AutoReplyDecisionInput = {
   // Compliance keyword detected on the inbound message, if any.
   keyword: "stop" | "start" | "help" | null;
