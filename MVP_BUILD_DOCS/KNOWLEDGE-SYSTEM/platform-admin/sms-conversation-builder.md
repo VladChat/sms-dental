@@ -11,6 +11,8 @@ source_of_truth:
   - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
   - config/sms-recovery.config.ts
   - lib/sms-recovery/conversation-templates.ts
+  - lib/sms-recovery/reply-classification.ts
+  - lib/sms-recovery/voice-greeting-templates.ts
 last_verified: 2026-06-12
 ---
 
@@ -32,6 +34,10 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
   may send follow-up #1, then #2, then #3. Each has its own enabled toggle and
   body. The **Maximum automated replies** setting (0–3) caps how many may send;
   it cannot exceed the enabled follow-ups in order. **0 disables follow-ups.**
+- **Voice greeting.** The admin can edit one grouped voice greeting block with
+  three fixed scenarios: `will_send`, `duplicate`, and `none`. The system still
+  chooses the scenario and owns TwiML/Say/Hangup behavior; the admin edits only
+  safe text that may use `{{clinic_name}}`.
 - **Variables.** `{{clinic_name}}` (always from the clinic profile) and
   `{{patient_name}}` (only when safely collected). When no name was collected,
   `{{patient_name}}` is removed cleanly so the sentence stays natural.
@@ -41,6 +47,8 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
 - With no saved settings, `max_auto_replies` = 0: **no follow-ups send** and the
   missed-call SMS is unchanged. Follow-ups are inactive until an admin saves and
   enables them for that specific clinic.
+- With no saved voice greeting rows, each scenario uses the system default
+  wording from `lib/sms-recovery/voice-greeting-templates.ts`.
 - The 4th and later patient replies are **saved to the workspace only** — never
   auto-replied.
 
@@ -55,13 +63,20 @@ deliveries never trigger an auto-reply, and slots are claimed atomically so
 retries never double-send. STOP/START/HELP compliance is still handled by Twilio
 (the webhook returns empty TwiML).
 
+Simple replies classified as thanks, acknowledgements, negative replies, or
+unclear short replies are saved but do not trigger a normal follow-up and do not
+consume an auto-reply slot. Informative replies and safe name-provided replies
+may continue through the normal guarded flow.
+
 ## Patient name collection
 
-Names are extracted conservatively and fail-closed: only short, simple replies
-("John", "My name is John Smith", "I'm John") yield a name; anything with
-digits, links, emails, keywords, or appointment/problem words is ignored. A name
-is stored only when none exists yet and is never overwritten. It is better to
-store nothing than the wrong name.
+Names are extracted conservatively and fail-closed: short simple replies
+("John", "My name is John Smith", "I'm John") and clear name-prefix messages
+with later request content ("My name is Jon Svillow. I need an appointment")
+can yield a name. Anything with digits, links, emails, keywords, or ambiguous
+appointment/problem content is ignored. A name is stored only when none exists
+yet and is never overwritten. If a name is safely found on the first reply, the
+name-question follow-up is skipped.
 
 ## Template safety (deterministic)
 
@@ -75,14 +90,19 @@ The initial SMS has two extra requirements: it must include clinic identity
 `Reply STOP to opt out`. The preview renders `{{clinic_name}}` to the real
 clinic name and does not leave unresolved placeholders.
 
+Voice greetings allow only `{{clinic_name}}`. Duplicate/no-text greetings cannot
+promise that a text will be sent now.
+
 ## Audit
 
 Saving the builder writes `clinic.sms_conversation.update` with redacted
-metadata only (max replies, enabled slot count, whether the initial template is
-customized) — never the message bodies.
+metadata only (`max_auto_replies`, whether the initial template is customized,
+enabled follow-up count, customized voice greeting count) — never message bodies.
 
 ## Source of truth
 
 - `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` — operate & verify, migration, guards
 - `lib/sms-recovery/conversation-templates.ts` — defaults, render, build rules
+- `lib/sms-recovery/reply-classification.ts` — deterministic reply taxonomy
+- `lib/sms-recovery/voice-greeting-templates.ts` — voice scenario defaults
 - `config/sms-recovery.config.ts` — fixed default template + length limits

@@ -3407,6 +3407,11 @@ unchanged. No AI runtime — everything is deterministic.
   added to `patient_conversations` (`patient_display_name`,
   `sms_auto_reply_count`, `sms_auto_reply_last_sent_at`) and a `message_kind`
   classifier on `messages`.
+- Voice template storage (migration
+  `20260620000100_voice_greeting_templates.sql`): the same
+  `clinic_sms_message_templates` table also allows
+  `template_role='voice_greeting'`; seq 1 = `will_send`, seq 2 = `duplicate`,
+  seq 3 = `none`.
 - **Initial SMS (corrected 2026-06-12):** platform admins edit one full
   template textarea. There is no locked start/end UI. Server-side validation
   still requires clinic identity (`{{clinic_name}}` or the rendered clinic name)
@@ -3417,6 +3422,12 @@ unchanged. No AI runtime — everything is deterministic.
   middle-only rows from the first implementation are wrapped safely at render
   time; rows that already contain the full initial SMS are not wrapped again, so
   previews/sends do not duplicate the clinic identity or STOP language.
+- **Saved initial send path (2026-06-12):** `sendRecoverySms` reads
+  `getClinicConversationConfig` and builds the actual outbound body through
+  `buildRecoverySmsBodyFromConversationConfig`, which delegates to
+  `buildInitialSmsBody`. With no saved initial template, the default remains
+  exactly:
+  `Hi, this is {{clinic_name}}. We missed your call. Reply here and our team will follow up. Reply STOP to opt out.`
 - **Auto-replies:** after an ordinary patient reply, `maybeSendConversationAutoReply`
   may send one deterministic follow-up. It enforces every guard itself: mode
   (live/owner_test), exact-number readiness, recovery send gate
@@ -3428,20 +3439,40 @@ unchanged. No AI runtime — everything is deterministic.
   `message_kind='conversation_auto_reply'` and are excluded from recovery
   duplicate suppression (`hasSentRecoverySmsSince` counts only
   recovery/legacy-null rows).
+- **Reply classification (2026-06-12):** ordinary first-seen inbound replies
+  are classified in `lib/sms-recovery/reply-classification.ts`. Thanks,
+  acknowledgements, negative replies, and unclear short replies are saved but
+  produce no normal follow-up, consume no auto-reply slot, and send no courtesy
+  reply. Informative replies and safe name-provided replies may continue through
+  the guarded auto-reply flow. Compliance keywords are still owned by
+  `detectSmsKeyword` before classification.
 - **Patient name:** `extractPatientName` is conservative and fail-closed (1–3
   letter words, known lead-ins like "my name is", rejects digits/links/emails/
-  keywords/appointment words; ≤40-char messages). Stored only when empty; never
-  overwritten; never on STOP/START/HELP or duplicates. `{{patient_name}}`
-  resolves only when set, else the placeholder is removed cleanly.
+  keywords/ambiguous appointment words; simple messages ≤40 chars, clear
+  prefixed messages ≤160 chars). It supports a first reply like "My name is Jon
+  Svillow. I need an appointment". Stored only when empty; never overwritten;
+  never on STOP/START/HELP or duplicates. If a name is already known or safely
+  collected on the first reply, follow-up #1 (the name question) is skipped and
+  the next eligible slot is claimed atomically. `{{patient_name}}` resolves only
+  when set, else the placeholder is removed cleanly.
 - **Template safety** (`template-safety.ts`, deterministic, no AI): rejects
   banned spam/medical/urgency phrases, URLs, emails, phone numbers, unknown
   placeholders, excessive punctuation, and all-caps shouting.
+- **Voice greeting builder (2026-06-12):** the same admin tab includes a grouped
+  Voice greeting block for `will_send`, `duplicate`, and `none`. Admins edit
+  text only; TwiML/Say/Hangup/provider behavior remains system-controlled in
+  `voice-twiml.ts`. With no custom rows, defaults come from
+  `voice-greeting-templates.ts`. Voice templates allow only `{{clinic_name}}`,
+  use XML escaping in the final TwiML, and duplicate/no-text scenarios reject
+  future SMS promises such as "we'll send you a text now".
 
 ### Default-safe / verify
 
 - With NO saved settings, `max_auto_replies` is 0 → no auto-replies, and the
   missed-call SMS is unchanged. Auto-replies are inactive until an admin saves
   and enables them for a specific clinic.
+- With no saved voice greeting rows, each scenario uses the system default voice
+  greeting text.
 - Verify after deploy: `GET /api/admin/clinics/{id}/ai-knowledge` and
   `…/sms-conversation` return 401 unauthenticated; `/admin/clinics/{id}` shows
   the **AI knowledge** and **SMS messages** tabs; `/account?section=ai_knowledge`
@@ -3449,7 +3480,9 @@ unchanged. No AI runtime — everything is deterministic.
 - DB check: `select to_regclass('public.clinic_sms_conversation_settings'),
   to_regclass('public.clinic_sms_message_templates');` (both non-null);
   `select count(*) from public.clinic_sms_conversation_settings;` (0 until an
-  admin saves).
+  admin saves). Confirm `clinic_sms_message_templates_role_check` allows
+  `voice_greeting`.
 
 Tests: `npm run test:sms-recovery` (template render incl. default-equals-prod,
-safety, patient-name, auto-reply decision, single-send-path, admin routing).
+safety, patient-name, reply classification, auto-reply decision,
+single-send-path, voice greeting TwiML/admin routing).

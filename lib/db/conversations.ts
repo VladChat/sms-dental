@@ -90,10 +90,22 @@ export async function claimAutoReplySlot(
   conversationId: string,
   expectedCount: number,
 ): Promise<number | null> {
+  return claimAutoReplySequence(conversationId, expectedCount, expectedCount + 1);
+}
+
+// Atomically claim a specific auto-reply sequence. This is used when sequence 1
+// is skipped because a patient name is already known and the flow sends
+// sequence 2 as the first automated follow-up.
+export async function claimAutoReplySequence(
+  conversationId: string,
+  expectedCount: number,
+  sequence: number,
+): Promise<number | null> {
+  if (!Number.isInteger(sequence) || sequence <= expectedCount) return null;
   const sql = getDb();
   const rows = await sql<{ sms_auto_reply_count: number }[]>`
     update public.patient_conversations
-    set sms_auto_reply_count = ${expectedCount + 1},
+    set sms_auto_reply_count = ${sequence},
         sms_auto_reply_last_sent_at = now(),
         updated_at = now()
     where id = ${conversationId}

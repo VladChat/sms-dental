@@ -11,6 +11,14 @@ test("extracts simple names", () => {
   assert.equal(extractPatientName("This is John"), "John");
   assert.equal(extractPatientName("I'm John"), "John");
   assert.equal(extractPatientName("I am John"), "John");
+  assert.equal(
+    extractPatientName("My name is Jon Svillow. I need an appointment"),
+    "Jon Svillow",
+  );
+  assert.equal(
+    extractPatientName("My name is Jon Svillow and I need an appointment"),
+    "Jon Svillow",
+  );
 });
 
 test("title-cases and preserves apostrophes/hyphens", () => {
@@ -24,6 +32,9 @@ test("does not extract from ambiguous / appointment requests", () => {
   assert.equal(extractPatientName("Can I book a cleaning next week?"), null);
   assert.equal(extractPatientName("I have tooth pain"), null);
   assert.equal(extractPatientName("what is the price of a cleaning"), null);
+  assert.equal(extractPatientName("thanks"), null);
+  assert.equal(extractPatientName("ok"), null);
+  assert.equal(extractPatientName("thank you so much"), null);
 });
 
 test("does not extract from STOP/HELP/START", () => {

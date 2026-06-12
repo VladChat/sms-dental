@@ -11,12 +11,14 @@ function base(overrides: Partial<AutoReplyDecisionInput> = {}): AutoReplyDecisio
   return {
     keyword: null,
     isDuplicateInbound: false,
+    replyClassification: "informative",
     modeAllowsSend: true,
     gateOk: true,
     optedOut: false,
     hasPriorRecoveryOutbound: true,
     maxAutoReplies: 3,
     currentAutoReplyCount: 0,
+    patientNameKnown: false,
     enabledSequences: [1, 2, 3],
     ...overrides,
   };
@@ -50,6 +52,43 @@ test("duplicate inbound never auto-replies", () => {
     send: false,
     reason: "duplicate_inbound",
   });
+});
+
+test("thanks, acknowledgements, negative replies, and unclear short replies do not consume a follow-up", () => {
+  assert.deepEqual(evaluateAutoReplyDecision(base({ replyClassification: "thanks" })), {
+    send: false,
+    reason: "reply_thanks",
+  });
+  assert.deepEqual(evaluateAutoReplyDecision(base({ replyClassification: "acknowledgement" })), {
+    send: false,
+    reason: "reply_acknowledgement",
+  });
+  assert.deepEqual(evaluateAutoReplyDecision(base({ replyClassification: "negative" })), {
+    send: false,
+    reason: "reply_negative",
+  });
+  assert.deepEqual(evaluateAutoReplyDecision(base({ replyClassification: "unclear_short" })), {
+    send: false,
+    reason: "reply_unclear_short",
+  });
+});
+
+test("known patient name skips the first name-question follow-up", () => {
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({ currentAutoReplyCount: 0, patientNameKnown: true })),
+    { send: true, sequence: 2 },
+  );
+});
+
+test("known patient name does not send if the next usable slot is not enabled", () => {
+  assert.deepEqual(
+    evaluateAutoReplyDecision(base({
+      currentAutoReplyCount: 0,
+      patientNameKnown: true,
+      enabledSequences: [1],
+    })),
+    { send: false, reason: "template_disabled" },
+  );
 });
 
 test("opted-out patient gets no auto-reply", () => {

@@ -45,7 +45,7 @@ test("missed-call TwiML uses configured voice and language", () => {
   assert.ok(twiml.includes(`language="${voiceGreetingConfig.defaultLanguage}"`));
   assert.ok(twiml.includes(`voice="${option.twilioVoice}"`));
   assert.ok(!twiml.includes('voice="alice"'));
-  assert.ok(twiml.includes("We'll send you a text now, so our team can follow up."));
+  assert.ok(twiml.includes("We&apos;ll send you a text now, so our team can follow up."));
 });
 
 test("missed-call TwiML escapes clinic names", () => {
@@ -54,6 +54,17 @@ test("missed-call TwiML escapes clinic names", () => {
   assert.ok(twiml.includes("A&amp;B &lt;Dental&gt; &quot;Smile&quot;"));
   assert.ok(!twiml.includes("<Dental>"));
   assert.ok(twiml.includes("We already sent a text, and our team will follow up shortly."));
+});
+
+test("missed-call TwiML uses saved voice greeting templates", () => {
+  const twiml = buildMissedCallVoiceTwiml("Fairstone Dental Smile", "none", {
+    will_send: { body: null },
+    duplicate: { body: null },
+    none: { body: "Hello {{clinic_name}}. The office will follow up." },
+  });
+
+  assert.ok(twiml.includes("Hello Fairstone Dental Smile. The office will follow up."));
+  assert.ok(!twiml.includes("Our team will follow up shortly."));
 });
 
 test("fallback and inactive-number TwiML use the configured voice", () => {

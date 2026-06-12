@@ -49,6 +49,29 @@ test("admin SMS conversation route is platform-admin guarded and validates full 
   assert.ok(src.includes("initialTemplate"));
 });
 
+test("admin SMS builder exposes editable voice greeting scenarios", () => {
+  const src = read(
+    path.join("app", "admin", "(console)", "clinics", "[clinicId]", "_components", "AdminSmsConversationBuilder.tsx"),
+  );
+  assert.ok(src.includes("Voice greeting"));
+  assert.ok(src.includes("Voice greeting is what callers hear before the call ends."));
+  assert.ok(src.includes("will_send"));
+  assert.ok(src.includes("duplicate"));
+  assert.ok(src.includes("none"));
+  assert.ok(src.includes("Reset to default"));
+  assert.ok(src.includes("{{clinic_name}}"));
+});
+
+test("admin SMS conversation route validates and audits voice greetings without bodies", () => {
+  const src = read(path.join("app", "api", "admin", "clinics", "[clinicId]", "sms-conversation", "route.ts"));
+  assert.ok(src.includes("validateVoiceGreetingTemplate"));
+  assert.ok(src.includes("voiceGreetings"));
+  assert.ok(src.includes("voice_customized_count"));
+  assert.ok(src.includes("follow_up_enabled_count"));
+  assert.ok(!src.includes("initial_body"));
+  assert.ok(!src.includes("voice_body"));
+});
+
 test("clinic owner account does not expose SMS template editing", () => {
   const files = listSourceFiles(path.join(REPO_ROOT, "app", "account"));
   const offenders = files

@@ -834,3 +834,24 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
 - [ ] If a new mode-aware schema migration is required, fail closed in the UI
       and routes until that migration is applied instead of silently falling
       back to an unsafe single-row overwrite path.
+
+---
+
+## Deterministic SMS/voice conversation templates (reusable lessons)
+
+- [ ] Keep customer/admin-editable copy as text templates only. Provider XML,
+      TwiML verbs, sender selection, send gates, and lifecycle behavior stay
+      system-controlled.
+- [ ] When reusing a template table for a new role, widen role/sequence
+      constraints with a small additive migration and keep no-row defaults safe.
+- [ ] Test the real send-path body builder, not only the pure renderer, so saved
+      templates cannot drift back to fixed defaults.
+- [ ] Classify ordinary inbound replies before automation. Thanks,
+      acknowledgements, negative replies, and unclear short replies should be
+      saved without auto-replying or consuming a follow-up slot.
+- [ ] Treat patient-name extraction as fail-closed. Never overwrite an existing
+      name; when a safe name is already known, skip the name-question slot and
+      atomically claim the actual sequence sent.
+- [ ] For voice greetings, escape XML at the final TwiML boundary and validate
+      scenario-specific copy (for example, no "we'll send a text now" promise in
+      duplicate/no-text scenarios).

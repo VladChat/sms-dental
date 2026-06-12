@@ -7185,3 +7185,53 @@ Validation:
 No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
 Stripe change, no phone-number lifecycle change, no env change, no migration,
 and no secrets printed.
+
+---
+
+## 2026-06-12 — SMS Conversation Builder live-test fixes + voice greetings
+
+Built the follow-up fixes for production live testing without sending SMS or
+placing calls.
+
+What changed:
+
+- Initial missed-call SMS send path now has a pure
+  `buildRecoverySmsBodyFromConversationConfig` helper used by
+  `sendRecoverySms`, with tests proving saved full initial templates render in
+  the real recovery-send body path. With no saved initial template, the fixed
+  default remains unchanged.
+- Added deterministic inbound reply classification:
+  `thanks`, `acknowledgement`, `negative`, and `unclear_short` save inbound
+  messages without normal follow-up, slot consumption, or courtesy reply;
+  `informative` and safe `name_provided` replies can continue through the
+  existing guarded auto-reply flow.
+- Improved fail-closed patient-name extraction to support clear first replies
+  such as "My name is Jon Svillow. I need an appointment"; existing names are
+  not overwritten. When a name is already known or safely collected on the first
+  reply, the name-question follow-up is skipped and the actual sent sequence is
+  claimed atomically.
+- Added platform-admin Voice greeting editing inside the existing **SMS
+  messages** builder. The three fixed scenarios are `will_send`, `duplicate`,
+  and `none`; TwiML/Say/Hangup behavior remains system-controlled. Voice
+  templates allow only `{{clinic_name}}`, use XML-safe final TwiML escaping,
+  and duplicate/no-text scenarios reject future SMS promises.
+- Added additive migration
+  `20260620000100_voice_greeting_templates.sql` to widen
+  `clinic_sms_message_templates` role/sequence constraints for
+  `template_role='voice_greeting'`.
+- Admin API GET/POST now returns and saves SMS + voice settings together and
+  audits compact metadata only: `max_auto_replies`, `initial_customized`,
+  `follow_up_enabled_count`, and `voice_customized_count`.
+
+Validation so far:
+
+- `npm run test:sms-recovery` pass: 119 tests.
+- `npm run typecheck` pass.
+- `npm run build` pass.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `git diff --check` clean, with only Git's CRLF normalization warning for
+  `MVP_BUILD_DOCS/SETUP-LOG.md`.
+
+Not done yet in this entry: production migration application and Vercel
+deployment verification are pending the final commit/push rollout step.

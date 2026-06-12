@@ -9,12 +9,23 @@ import { useEffect, useMemo, useState } from "react";
 
 const SLOTS = [1, 2, 3] as const;
 type Slot = (typeof SLOTS)[number];
+const VOICE_SCENARIOS = ["will_send", "duplicate", "none"] as const;
+type VoiceScenario = (typeof VOICE_SCENARIOS)[number];
 
 type FollowUpView = {
   body: string | null;
   enabled: boolean;
   suggestion: string;
   preview: string;
+};
+
+type VoiceGreetingView = {
+  body: string | null;
+  defaultText: string;
+  suggestion: string;
+  preview: string;
+  label: string;
+  helper: string;
 };
 
 type ConfigPayload = {
@@ -25,13 +36,28 @@ type ConfigPayload = {
     initialSuggestion: string;
     maxAutoReplies: number;
     followUps: Record<string, FollowUpView>;
+    voiceGreetings: Record<VoiceScenario, VoiceGreetingView>;
   };
-  preview: { initial: string };
-  limits?: { maxAutoReplies: number; maxInitialTemplateLength: number; maxTemplateBodyLength: number };
+  preview: { initial: string; voiceGreetings?: Record<VoiceScenario, string> };
+  limits?: {
+    maxAutoReplies: number;
+    maxInitialTemplateLength: number;
+    maxTemplateBodyLength: number;
+    maxVoiceGreetingTemplateLength: number;
+  };
   variables?: string[];
+  voiceVariables?: string[];
 };
 
 type FollowUpState = { body: string; enabled: boolean; suggestion: string };
+type VoiceGreetingState = {
+  body: string;
+  defaultText: string;
+  suggestion: string;
+  preview: string;
+  label: string;
+  helper: string;
+};
 
 type LoadState = "loading" | "error" | "ready";
 
@@ -47,9 +73,15 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     2: { body: "", enabled: false, suggestion: "" },
     3: { body: "", enabled: false, suggestion: "" },
   });
+  const [voiceGreetings, setVoiceGreetings] = useState<Record<VoiceScenario, VoiceGreetingState>>({
+    will_send: { body: "", defaultText: "", suggestion: "", preview: "", label: "Will send text", helper: "" },
+    duplicate: { body: "", defaultText: "", suggestion: "", preview: "", label: "Duplicate text", helper: "" },
+    none: { body: "", defaultText: "", suggestion: "", preview: "", label: "No text", helper: "" },
+  });
   const [initialPreview, setInitialPreview] = useState("");
   const [maxInitialLen, setMaxInitialLen] = useState(240);
   const [maxBodyLen, setMaxBodyLen] = useState(240);
+  const [maxVoiceLen, setMaxVoiceLen] = useState(240);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +103,24 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
       };
     }
     setFollowUps(next);
+    const nextVoice = { ...voiceGreetings };
+    for (const scenario of VOICE_SCENARIOS) {
+      const vg = data.config.voiceGreetings?.[scenario];
+      nextVoice[scenario] = {
+        body: vg?.body ?? "",
+        defaultText: vg?.defaultText ?? "",
+        suggestion: vg?.suggestion ?? vg?.defaultText ?? "",
+        preview: vg?.preview ?? "",
+        label: vg?.label ?? scenario,
+        helper: vg?.helper ?? "",
+      };
+    }
+    setVoiceGreetings(nextVoice);
     setInitialPreview(data.preview.initial);
     if (data.limits) {
       setMaxInitialLen(data.limits.maxInitialTemplateLength);
       setMaxBodyLen(data.limits.maxTemplateBodyLength);
+      setMaxVoiceLen(data.limits.maxVoiceGreetingTemplateLength ?? data.limits.maxTemplateBodyLength);
     }
   }
 
@@ -110,6 +156,16 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     return renderLocalPreview(source, clinicName);
   }, [initialTemplate, defaultInitialTemplate, clinicName]);
 
+  const localVoicePreviews = useMemo(() => {
+    return Object.fromEntries(
+      VOICE_SCENARIOS.map((scenario) => {
+        const state = voiceGreetings[scenario];
+        const source = state.body.trim().length > 0 ? state.body : state.defaultText;
+        return [scenario, renderLocalVoicePreview(source, clinicName)];
+      }),
+    ) as Record<VoiceScenario, string>;
+  }, [voiceGreetings, clinicName]);
+
   const initialInlineError = useMemo(() => {
     const source = initialTemplate.trim();
     if (!source) return null;
@@ -130,9 +186,18 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     setSaved(false);
   }
 
+  function setVoiceGreeting(scenario: VoiceScenario, patch: Partial<VoiceGreetingState>) {
+    setVoiceGreetings((prev) => ({ ...prev, [scenario]: { ...prev[scenario], ...patch } }));
+    setSaved(false);
+  }
+
   function resetInitial() {
     setInitialTemplate(defaultInitialTemplate);
     setSaved(false);
+  }
+
+  function resetVoiceGreeting(scenario: VoiceScenario) {
+    setVoiceGreeting(scenario, { body: "" });
   }
 
   async function save() {
@@ -151,6 +216,11 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
             1: { body: followUps[1].body, enabled: followUps[1].enabled },
             2: { body: followUps[2].body, enabled: followUps[2].enabled },
             3: { body: followUps[3].body, enabled: followUps[3].enabled },
+          },
+          voiceGreetings: {
+            will_send: { body: voiceGreetings.will_send.body },
+            duplicate: { body: voiceGreetings.duplicate.body },
+            none: { body: voiceGreetings.none.body },
           },
         }),
       });
@@ -314,6 +384,75 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
         ))}
       </section>
 
+      {/* Voice greeting templates */}
+      <section style={{ display: "grid", gap: "var(--space-4)" }}>
+        <h3 className="adm-subhead">Voice greeting</h3>
+        <p className="t-small" style={{ margin: 0, color: "var(--text-secondary)" }}>
+          Voice greeting is what callers hear before the call ends. The system chooses the correct
+          version automatically.
+        </p>
+        <p className="t-helper" style={{ margin: 0, color: "var(--text-muted)" }}>
+          Use <code>{"{{clinic_name}}"}</code> for the clinic profile name.
+        </p>
+        {VOICE_SCENARIOS.map((scenario) => {
+          const state = voiceGreetings[scenario];
+          return (
+            <div
+              key={scenario}
+              style={{
+                display: "grid",
+                gap: "var(--space-2)",
+                padding: "var(--space-4)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--r-md)",
+                background: "var(--surface-sunken)",
+              }}
+            >
+              <div className="adm-section-head">
+                <h4 className="t-small" style={{ fontWeight: 700, margin: 0 }}>
+                  {state.label}
+                </h4>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => resetVoiceGreeting(scenario)}
+                >
+                  Reset to default
+                </button>
+              </div>
+              <p className="t-helper" style={{ margin: 0, color: "var(--text-muted)" }}>
+                {state.helper}
+              </p>
+              <textarea
+                className="textarea"
+                rows={3}
+                value={state.body}
+                maxLength={maxVoiceLen}
+                placeholder={state.defaultText}
+                onChange={(e) => setVoiceGreeting(scenario, { body: e.target.value })}
+              />
+              <p className="helper">
+                {state.body.length}/{maxVoiceLen}
+                {state.suggestion ? (
+                  <>
+                    {" "}· Default:{" "}
+                    <button
+                      type="button"
+                      className="link"
+                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                      onClick={() => setVoiceGreeting(scenario, { body: state.suggestion })}
+                    >
+                      use “{state.suggestion}”
+                    </button>
+                  </>
+                ) : null}
+              </p>
+              <PreviewBox label="Preview" text={localVoicePreviews[scenario] || state.preview} />
+            </div>
+          );
+        })}
+      </section>
+
       {/* Max automated replies */}
       <section className="field" style={{ maxWidth: 320 }}>
         <label htmlFor="aisms-max">Maximum automated replies</label>
@@ -342,7 +481,7 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
 
       <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Save SMS settings"}
+          {saving ? "Saving…" : "Save message settings"}
         </button>
         {saved && !error && (
           <span className="t-small" role="status" aria-live="polite" style={{ color: "var(--success-text)" }}>
@@ -379,6 +518,16 @@ function renderLocalPreview(template: string, clinicName: string): string {
   return template
     .replace(/\{\{\s*clinic_name\s*\}\}/gi, identity)
     .replace(/,?\s*\{\{\s*patient_name\s*\}\}/gi, "")
+    .replace(/\{\{[^}]*\}\}/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .trim();
+}
+
+function renderLocalVoicePreview(template: string, clinicName: string): string {
+  const identity = clinicName.trim() || "us";
+  return template
+    .replace(/\{\{\s*clinic_name\s*\}\}/gi, identity)
     .replace(/\{\{[^}]*\}\}/g, "")
     .replace(/\s+/g, " ")
     .replace(/\s+([.,!?;:])/g, "$1")

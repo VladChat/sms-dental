@@ -2,7 +2,7 @@ import { getTwilioClient } from "./client";
 import { getTwilioMessagingEnv, getSmsRecoveryConfig, getAppDomainsSafe } from "../env";
 import { recordOutboundMessage, hasPriorRecoveryOutbound } from "../db/messages";
 import {
-  claimAutoReplySlot,
+  claimAutoReplySequence,
   getConversationAutoReplyState,
   touchConversation,
 } from "../db/conversations";
@@ -11,6 +11,10 @@ import { getClinicConversationConfig } from "../db/sms-conversation-settings";
 import { evaluateSmsReadinessForLiveSend } from "../db/sms-readiness";
 import { evaluateRecoverySendGate } from "../sms-recovery/live-send-evaluation";
 import { evaluateAutoReplyDecision } from "../sms-recovery/auto-reply-evaluation";
+import {
+  replyClassificationBlocksAutoReply,
+  type ReplyClassificationKind,
+} from "../sms-recovery/reply-classification";
 import {
   enabledFollowUpSequences,
   followUpBodyForSlot,
@@ -33,6 +37,7 @@ export type AutoReplyInput = {
   conversationId: string;
   keyword: "stop" | "start" | "help" | null;
   isDuplicateInbound: boolean;
+  replyClassification: ReplyClassificationKind | null;
 };
 
 export type AutoReplyResult =
@@ -51,6 +56,8 @@ export async function maybeSendConversationAutoReply(
   // where auto-replies are disabled.
   if (input.keyword) return { sent: false, reason: `keyword_${input.keyword}` };
   if (input.isDuplicateInbound) return { sent: false, reason: "duplicate_inbound" };
+  const classificationBlock = replyClassificationBlocksAutoReply(input.replyClassification);
+  if (classificationBlock) return { sent: false, reason: classificationBlock };
 
   const smsConfig = getSmsRecoveryConfig();
   const modeAllowsSend = smsConfig.mode === "owner_test" || smsConfig.mode === "live";
@@ -82,12 +89,14 @@ export async function maybeSendConversationAutoReply(
   const decision = evaluateAutoReplyDecision({
     keyword: input.keyword,
     isDuplicateInbound: input.isDuplicateInbound,
+    replyClassification: input.replyClassification,
     modeAllowsSend,
     gateOk: gate.ok,
     optedOut,
     hasPriorRecoveryOutbound: hasPrior,
     maxAutoReplies: config.maxAutoReplies,
     currentAutoReplyCount: state.smsAutoReplyCount,
+    patientNameKnown: (state.patientDisplayName ?? "").trim().length > 0,
     enabledSequences,
   });
   if (!decision.send) {
@@ -108,7 +117,11 @@ export async function maybeSendConversationAutoReply(
 
   // Atomically claim the slot. A concurrent delivery/retry that already advanced
   // the count loses the compare and we abort — no duplicate auto-reply.
-  const claimed = await claimAutoReplySlot(input.conversationId, state.smsAutoReplyCount);
+  const claimed = await claimAutoReplySequence(
+    input.conversationId,
+    state.smsAutoReplyCount,
+    decision.sequence,
+  );
   if (claimed === null) {
     return { sent: false, reason: "slot_already_claimed" };
   }

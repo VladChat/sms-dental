@@ -11,6 +11,7 @@
 
 import { smsRecoveryConfig } from "../../config/sms-recovery.config";
 import { buildMissedCallRecoverySmsBody, resolveClinicIdentity } from "./templates";
+import type { VoiceGreetingTemplateConfig } from "./voice-greeting-templates";
 
 export const INITIAL_PREFIX_TEMPLATE = "Hi, this is {{clinic_name}}.";
 export const INITIAL_SUFFIX = "Reply STOP to opt out.";
@@ -150,6 +151,7 @@ export type ConversationTemplateConfig = {
   initialTemplate: string | null; // null => fixed default initial template
   maxAutoReplies: number; // 0..3
   followUps: Record<FollowUpSlot, { body: string | null; enabled: boolean }>;
+  voiceGreetings: VoiceGreetingTemplateConfig;
 };
 
 // The enabled follow-up sequences with a usable (non-empty) body, capped by

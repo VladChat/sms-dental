@@ -11,6 +11,7 @@ import { normalizePhone } from "@/lib/phone/normalize";
 import { lookupClinicByPhoneIncludingScheduled, type ClinicRow } from "@/lib/db/clinics";
 import { upsertCallEvent } from "@/lib/db/call-events";
 import { hasSentRecoverySmsSince } from "@/lib/db/messages";
+import { getClinicConversationConfig } from "@/lib/db/sms-conversation-settings";
 import { evaluateSmsReadinessForLiveSend } from "@/lib/db/sms-readiness";
 import {
   evaluateDuplicateSuppression,
@@ -22,6 +23,7 @@ import {
   buildMissedCallVoiceTwiml,
   type VoiceGreetingPrediction,
 } from "@/lib/sms-recovery/voice-twiml";
+import type { VoiceGreetingTemplateConfig } from "@/lib/sms-recovery/voice-greeting-templates";
 import { getSmsRecoveryConfig } from "@/lib/env";
 import { logger } from "@/lib/logging/logger";
 
@@ -136,6 +138,7 @@ export async function POST(request: NextRequest) {
   // Steps 3–4: call event + read-only greeting prediction.
   let prediction: VoiceGreetingPrediction = "none";
   let clinicNameForTwiml: string | null = null;
+  let voiceGreetings: VoiceGreetingTemplateConfig | null = null;
 
   if (!isDuplicate && isDatabaseConfigured() && callSid) {
     try {
@@ -164,6 +167,14 @@ export async function POST(request: NextRequest) {
       const clinic = routing && routing.removalStatus === "active" ? routing.clinic : null;
       if (clinic && from) {
         clinicNameForTwiml = clinic.name;
+        try {
+          voiceGreetings = (await getClinicConversationConfig(clinic.id)).voiceGreetings;
+        } catch (err) {
+          logger.warn("twilio.voice.greeting_config_failed", {
+            callSid,
+            message: err instanceof Error ? err.message : "unknown",
+          });
+        }
         // Predict greeting based on read-only state. Non-fatal — fall back to
         // "none" if prediction fails so TwiML is always returned.
         try {
@@ -186,5 +197,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return twimlResponse(buildMissedCallVoiceTwiml(clinicNameForTwiml, prediction));
+  return twimlResponse(buildMissedCallVoiceTwiml(clinicNameForTwiml, prediction, voiceGreetings));
 }

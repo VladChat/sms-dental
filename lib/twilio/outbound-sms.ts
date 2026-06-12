@@ -15,7 +15,7 @@ import {
   buildMissedCallRecoverySmsBody,
   getDuplicateSuppressionWindowMs,
 } from "../sms-recovery/templates";
-import { buildInitialSmsBody } from "../sms-recovery/conversation-templates";
+import { buildRecoverySmsBodyFromConversationConfig } from "../sms-recovery/send-body";
 import { getClinicConversationConfig } from "../db/sms-conversation-settings";
 import { normalizePhone } from "../phone/normalize";
 import { logger } from "../logging/logger";
@@ -117,7 +117,7 @@ export async function sendRecoverySms(
   let body: string;
   try {
     const config = await getClinicConversationConfig(input.clinic.id);
-    body = buildInitialSmsBody(input.clinic.name, config.initialTemplate);
+    body = buildRecoverySmsBodyFromConversationConfig(input.clinic.name, config);
   } catch (err) {
     logger.warn("twilio.sms.initial_template_fallback", {
       clinicId: input.clinic.id,

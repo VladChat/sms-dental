@@ -11,10 +11,16 @@ import {
   initialTemplateForEditor,
   renderConversationTemplate,
 } from "../lib/sms-recovery/conversation-templates";
+import { buildRecoverySmsBodyFromConversationConfig } from "../lib/sms-recovery/send-body";
 import {
   validateFollowUpBody,
   validateInitialTemplate,
+  validateVoiceGreetingTemplate,
 } from "../lib/sms-recovery/template-safety";
+import {
+  DEFAULT_VOICE_GREETING_TEMPLATES,
+  renderVoiceGreetingTemplate,
+} from "../lib/sms-recovery/voice-greeting-templates";
 
 const CLINIC = "Fairstone Dental Smile";
 
@@ -66,6 +72,18 @@ test("saved full initial text no longer duplicates clinic identity or STOP", () 
   );
   assert.equal(count(body, CLINIC), 1);
   assert.equal(count(body, "Reply STOP to opt out"), 1);
+});
+
+test("real recovery SMS send body helper uses the saved initial template", () => {
+  const fullTemplate =
+    "Hello, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.";
+  const body = buildRecoverySmsBodyFromConversationConfig(CLINIC, {
+    initialTemplate: fullTemplate,
+  });
+  assert.equal(
+    body,
+    "Hello, this is Fairstone Dental Smile. We missed your call. How can we help? Reply STOP to opt out.",
+  );
 });
 
 test("duplicated initial template text is normalized before final render", () => {
@@ -187,6 +205,37 @@ test("unknown placeholders are rejected in follow-up validation", () => {
   assert.equal(validateFollowUpBody("Email us at a@b.com").ok, false);
   assert.ok(validateFollowUpBody("Thanks, {{patient_name}}. We'll follow up.").ok);
   assert.ok(validateFollowUpBody("").ok);
+});
+
+test("voice greeting defaults render with clinic identity", () => {
+  assert.equal(
+    renderVoiceGreetingTemplate(DEFAULT_VOICE_GREETING_TEMPLATES.will_send, { clinicName: CLINIC }),
+    "Hi, thanks for calling Fairstone Dental Smile. We're sorry we missed you. We'll send you a text now, so our team can follow up.",
+  );
+  assert.equal(
+    renderVoiceGreetingTemplate(DEFAULT_VOICE_GREETING_TEMPLATES.duplicate, { clinicName: CLINIC }),
+    "Hi, thanks for calling Fairstone Dental Smile. We're sorry we missed you. We already sent a text, and our team will follow up shortly.",
+  );
+  assert.equal(
+    renderVoiceGreetingTemplate(DEFAULT_VOICE_GREETING_TEMPLATES.none, { clinicName: CLINIC }),
+    "Hi, thanks for calling Fairstone Dental Smile. We're sorry we missed you. Our team will follow up shortly.",
+  );
+});
+
+test("voice greeting validation permits only safe clinic-name templates", () => {
+  assert.ok(validateVoiceGreetingTemplate(DEFAULT_VOICE_GREETING_TEMPLATES.will_send, "will_send").ok);
+  assert.equal(validateVoiceGreetingTemplate("Hi {{patient_name}}", "will_send").ok, false);
+  assert.equal(validateVoiceGreetingTemplate("Visit https://example.com", "will_send").ok, false);
+  assert.equal(validateVoiceGreetingTemplate("Call 224-532-9236", "will_send").ok, false);
+  assert.equal(validateVoiceGreetingTemplate("We can book you tomorrow", "will_send").ok, false);
+  assert.equal(
+    validateVoiceGreetingTemplate(
+      "Hi, thanks for calling {{clinic_name}}. We'll send you a text now.",
+      "duplicate",
+    ).ok,
+    false,
+  );
+  assert.ok(validateVoiceGreetingTemplate(DEFAULT_VOICE_GREETING_TEMPLATES.duplicate, "duplicate").ok);
 });
 
 test("rendered follow-up never leaves an unresolved placeholder", () => {

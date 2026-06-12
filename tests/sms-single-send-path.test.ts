@@ -92,3 +92,11 @@ test("sendRecoverySms is invoked only from the voice status webhook", () => {
     `sendRecoverySms() has an unexpected caller: ${offenders.join(", ")}`,
   );
 });
+
+test("recovery send path renders the initial SMS from saved conversation settings", () => {
+  const src = fs.readFileSync(path.join(REPO_ROOT, "lib", "twilio", "outbound-sms.ts"), "utf8");
+
+  assert.ok(src.includes("getClinicConversationConfig(input.clinic.id)"));
+  assert.ok(src.includes("buildRecoverySmsBodyFromConversationConfig(input.clinic.name, config)"));
+  assert.ok(!src.includes("buildMissedCallRecoverySmsBody(input.clinic.name);") || src.includes("initial_template_fallback"));
+});

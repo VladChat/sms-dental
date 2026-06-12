@@ -3,6 +3,13 @@ import type {
   ConversationTemplateConfig,
   FollowUpSlot,
 } from "../sms-recovery/conversation-templates";
+import {
+  defaultVoiceGreetingTemplateConfig,
+  VOICE_GREETING_SCENARIO_BY_SEQUENCE,
+  VOICE_GREETING_SEQUENCE_BY_SCENARIO,
+  VOICE_GREETING_SCENARIOS,
+  type VoiceGreetingScenario,
+} from "../sms-recovery/voice-greeting-templates";
 
 // Clinic SMS conversation settings + message templates (admin-configured).
 // No row -> safe defaults (max_auto_replies 0, no custom initial template,
@@ -10,7 +17,7 @@ import type {
 
 type SettingsRow = { max_auto_replies: number };
 type TemplateRow = {
-  template_role: "initial" | "auto_reply";
+  template_role: "initial" | "auto_reply" | "voice_greeting";
   sequence: number;
   body_text: string | null;
   enabled: boolean;
@@ -43,6 +50,7 @@ export async function getClinicConversationConfig(
     2: { body: null, enabled: false },
     3: { body: null, enabled: false },
   };
+  const voiceGreetings = defaultVoiceGreetingTemplateConfig();
 
   for (const row of templateRows) {
     if (row.template_role === "initial" && row.sequence === 0) {
@@ -53,16 +61,22 @@ export async function getClinicConversationConfig(
         body: row.body_text ?? null,
         enabled: row.enabled,
       };
+    } else if (row.template_role === "voice_greeting" && row.sequence >= 1 && row.sequence <= 3) {
+      const scenario = VOICE_GREETING_SCENARIO_BY_SEQUENCE[row.sequence as 1 | 2 | 3];
+      voiceGreetings[scenario] = {
+        body: normalizeBody(row.body_text),
+      };
     }
   }
 
-  return { initialTemplate, maxAutoReplies, followUps };
+  return { initialTemplate, maxAutoReplies, followUps, voiceGreetings };
 }
 
 export type SaveConversationConfigInput = {
   initialTemplate: string | null; // null/empty => fixed default initial template
   maxAutoReplies: number; // 0..3 (clamped)
   followUps: Record<FollowUpSlot, { body: string | null; enabled: boolean }>;
+  voiceGreetings: Record<VoiceGreetingScenario, { body: string | null }>;
 };
 
 // Upsert settings + all template slots in one transaction. Caller validates all
@@ -74,11 +88,22 @@ export async function saveClinicConversationConfig(
 ): Promise<void> {
   const sql = getDb();
   const maxAutoReplies = clampMax(input.maxAutoReplies);
-  const rows: { role: "initial" | "auto_reply"; sequence: number; body: string | null; enabled: boolean }[] = [
+  const rows: {
+    role: "initial" | "auto_reply" | "voice_greeting";
+    sequence: number;
+    body: string | null;
+    enabled: boolean;
+  }[] = [
     { role: "initial", sequence: 0, body: normalizeBody(input.initialTemplate), enabled: true },
     { role: "auto_reply", sequence: 1, body: normalizeBody(input.followUps[1].body), enabled: input.followUps[1].enabled },
     { role: "auto_reply", sequence: 2, body: normalizeBody(input.followUps[2].body), enabled: input.followUps[2].enabled },
     { role: "auto_reply", sequence: 3, body: normalizeBody(input.followUps[3].body), enabled: input.followUps[3].enabled },
+    ...VOICE_GREETING_SCENARIOS.map((scenario) => ({
+      role: "voice_greeting" as const,
+      sequence: VOICE_GREETING_SEQUENCE_BY_SCENARIO[scenario],
+      body: normalizeBody(input.voiceGreetings[scenario].body),
+      enabled: true,
+    })),
   ];
   await sql.begin(async (tx) => {
     await tx`

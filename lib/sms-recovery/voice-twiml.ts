@@ -2,8 +2,13 @@ import {
   getDefaultVoiceOption,
   voiceGreetingConfig,
 } from "../../config/voice-greeting.config";
+import {
+  buildVoiceGreetingMessage,
+  type VoiceGreetingScenario,
+  type VoiceGreetingTemplateConfig,
+} from "./voice-greeting-templates";
 
-export type VoiceGreetingPrediction = "will_send" | "duplicate" | "none";
+export type VoiceGreetingPrediction = VoiceGreetingScenario;
 
 function escapeXml(text: string): string {
   return text
@@ -18,33 +23,16 @@ function buildSayTwiml(message: string): string {
   const voice = getDefaultVoiceOption();
   return (
     `<Response><Say language="${voiceGreetingConfig.defaultLanguage}" ` +
-    `voice="${escapeXml(voice.twilioVoice)}">${message}</Say><Hangup/></Response>`
+    `voice="${escapeXml(voice.twilioVoice)}">${escapeXml(message)}</Say><Hangup/></Response>`
   );
 }
 
 export function buildMissedCallVoiceTwiml(
-  clinicName: string | null,
+  clinicName: string | null | undefined,
   prediction: VoiceGreetingPrediction,
+  voiceGreetings?: VoiceGreetingTemplateConfig | null,
 ): string {
-  const name = clinicName ? escapeXml(clinicName) : "us";
-  let message: string;
-  if (prediction === "will_send") {
-    message =
-      `Hi, thanks for calling ${name}. ` +
-      "We're sorry we missed you. " +
-      "We'll send you a text now, so our team can follow up.";
-  } else if (prediction === "duplicate") {
-    message =
-      `Hi, thanks for calling ${name}. ` +
-      "We're sorry we missed you. " +
-      "We already sent a text, and our team will follow up shortly.";
-  } else {
-    message =
-      `Hi, thanks for calling ${name}. ` +
-      "We're sorry we missed you. " +
-      "Our team will follow up shortly.";
-  }
-  return buildSayTwiml(message);
+  return buildSayTwiml(buildVoiceGreetingMessage(clinicName, prediction, voiceGreetings));
 }
 
 export function buildInactiveNumberVoiceTwiml(): string {

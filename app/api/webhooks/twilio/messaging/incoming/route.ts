@@ -17,7 +17,7 @@ import {
 } from "@/lib/db/conversations";
 import { recordInboundMessage } from "@/lib/db/messages";
 import { upsertOptOut, clearOptOut } from "@/lib/db/opt-outs";
-import { extractPatientName } from "@/lib/sms-recovery/patient-name";
+import { classifyInboundReply } from "@/lib/sms-recovery/reply-classification";
 import { maybeSendConversationAutoReply } from "@/lib/twilio/conversation-auto-reply";
 import { logger } from "@/lib/logging/logger";
 
@@ -34,7 +34,8 @@ export const dynamic = "force-dynamic";
 //   7. For STOP: write opt-out row — future recovery SMS will be blocked.
 //   8. For START: clear opt-out — future recovery SMS is permitted again.
 //   9. For HELP: no DB change.
-//  10. For ordinary replies: record only; no auto-reply (future milestone).
+//  10. For ordinary replies: classify deterministically, optionally save a
+//      safe patient name, and run the guarded auto-reply flow when eligible.
 //  11. Return empty <Response/> for all cases — Twilio platform already sends
 //      STOP/START/HELP compliance replies; returning our own <Message> caused duplicates.
 export async function POST(request: NextRequest) {
@@ -147,16 +148,15 @@ export async function POST(request: NextRequest) {
           logger.info("twilio.sms.opted_in", { clinicId: clinic.id });
         }
 
-        // Ordinary (non-keyword), first-seen reply: conservatively collect a
-        // patient name and run the deterministic auto-reply flow. STOP/START/
-        // HELP and duplicate webhooks never reach name extraction or auto-reply.
-        // The auto-reply helper enforces every send guard itself and is a no-op
-        // when no admin settings enable follow-ups (max_auto_replies defaults 0).
+        // Ordinary (non-keyword), first-seen reply: classify deterministically,
+        // conservatively collect a patient name, and run the deterministic
+        // auto-reply flow. Thanks/acks/negative/unclear replies are saved above
+        // but never consume an auto-reply slot.
         if (!keyword && !inboundIsDuplicate) {
+          const reply = classifyInboundReply(body);
           try {
-            const extractedName = extractPatientName(body);
-            if (extractedName) {
-              await setPatientDisplayNameIfEmpty(conversationId, extractedName);
+            if (reply.patientName) {
+              await setPatientDisplayNameIfEmpty(conversationId, reply.patientName);
             }
           } catch (err) {
             logger.error("twilio.sms.name_extract_failed", {
@@ -173,6 +173,7 @@ export async function POST(request: NextRequest) {
               conversationId,
               keyword,
               isDuplicateInbound: inboundIsDuplicate,
+              replyClassification: reply.kind,
             });
           } catch (err) {
             logger.error("twilio.sms.auto_reply_failed", {

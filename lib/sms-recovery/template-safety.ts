@@ -12,6 +12,10 @@ import {
   hasRequiredStopOptOut,
   normalizeInitialTemplateForStorage,
 } from "./conversation-templates";
+import {
+  MAX_VOICE_GREETING_TEMPLATE_LENGTH,
+  type VoiceGreetingScenario,
+} from "./voice-greeting-templates";
 
 export type TemplateTextResult =
   | { ok: true; value: string }
@@ -147,4 +151,35 @@ export function validateInitialTemplate(
 
 export function validateFollowUpBody(raw: unknown): TemplateTextResult {
   return validateTemplateText(raw, { allowPatientName: true, maxLength: MAX_TEMPLATE_BODY_LENGTH });
+}
+
+export function validateVoiceGreetingTemplate(
+  raw: unknown,
+  scenario: VoiceGreetingScenario,
+): TemplateTextResult {
+  const base = validateTemplateText(raw, {
+    allowPatientName: false,
+    maxLength: MAX_VOICE_GREETING_TEMPLATE_LENGTH,
+  });
+  if (!base.ok) return base;
+  if (base.value.length === 0) return base;
+
+  if ((scenario === "duplicate" || scenario === "none") && promisesFutureText(base.value)) {
+    return {
+      ok: false,
+      message: "Duplicate and no-text greetings can’t promise that a text will be sent now.",
+    };
+  }
+
+  return base;
+}
+
+function promisesFutureText(value: string): boolean {
+  const lower = value.toLowerCase().replace(/[’]/g, "'");
+  return (
+    /\bwe(?:'ll| will| can| are going to|'re going to)\s+(?:send|text)\b/.test(lower) ||
+    /\bsend you a text now\b/.test(lower) ||
+    /\btext you now\b/.test(lower) ||
+    /\bwe(?:'ll| will)\s+send you a text\b/.test(lower)
+  );
 }
