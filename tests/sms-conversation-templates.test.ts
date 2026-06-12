@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import fs from "node:fs";
+import path from "node:path";
 
 import { smsRecoveryConfig } from "../config/sms-recovery.config";
 import { buildMissedCallRecoverySmsBody } from "../lib/sms-recovery/templates";
 import {
-  DEFAULT_FOLLOW_UP_SUGGESTIONS,
+  DEFAULT_FOLLOW_UP_TEMPLATES,
   DEFAULT_INITIAL_TEMPLATE,
-  SUGGESTED_INITIAL_TEMPLATE,
   buildInitialSmsBody,
-  initialTemplateForEditor,
+  effectiveFollowUpTemplate,
+  effectiveInitialTemplate,
+  enabledFollowUpSequences,
+  followUpBodyForSlot,
   renderConversationTemplate,
 } from "../lib/sms-recovery/conversation-templates";
+import { prepareConversationTemplateStorage } from "../lib/db/sms-conversation-settings";
 import { buildRecoverySmsBodyFromConversationConfig } from "../lib/sms-recovery/send-body";
 import {
   validateFollowUpBody,
@@ -52,14 +57,11 @@ test("platform admin full initial template renders directly", () => {
   assert.equal(count(body, "Reply STOP to opt out"), 1);
 });
 
-test("legacy middle-only initial rows are still wrapped safely", () => {
-  const body = buildInitialSmsBody(CLINIC, "Sorry we missed you. How can we help?");
-  assert.equal(
-    body,
-    "Hi, this is Fairstone Dental Smile. Sorry we missed you. How can we help? Reply STOP to opt out.",
+test("custom initial template must remain a full safe template", () => {
+  assert.throws(
+    () => buildInitialSmsBody(CLINIC, "Sorry we missed you. How can we help?"),
+    /missing clinic identity/,
   );
-  assert.equal(count(body, CLINIC), 1);
-  assert.equal(count(body, "Reply STOP to opt out"), 1);
 });
 
 test("saved full initial text no longer duplicates clinic identity or STOP", () => {
@@ -98,29 +100,19 @@ test("duplicated initial template text is normalized before final render", () =>
   assert.equal(count(body, "Reply STOP to opt out"), 1);
 });
 
-test("literal clinic identity rows do not keep a stale clinic name after rename", () => {
+test("literal clinic identity rows fail closed after a clinic rename", () => {
   const savedWithOldName =
     "Hello, this is Fairstone Dental Smile. We missed your call. How can we help? Reply STOP to opt out.";
-  const body = buildInitialSmsBody("Renamed Dental Office", savedWithOldName);
-  assert.equal(
-    body,
-    "Hi, this is Renamed Dental Office. We missed your call. How can we help? Reply STOP to opt out.",
+  assert.throws(
+    () => buildInitialSmsBody("Renamed Dental Office", savedWithOldName),
+    /missing clinic identity/,
   );
-  assert.equal(count(body, "Fairstone Dental Smile"), 0);
-  assert.equal(count(body, "Renamed Dental Office"), 1);
-  assert.equal(count(body, "Reply STOP to opt out"), 1);
 });
 
-test("initial editor shows a full template for defaults and legacy rows", () => {
-  assert.equal(initialTemplateForEditor(null, CLINIC), DEFAULT_INITIAL_TEMPLATE);
-  assert.equal(
-    initialTemplateForEditor("We missed your call. How can we help?", CLINIC),
-    "Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.",
-  );
-  assert.equal(
-    initialTemplateForEditor(SUGGESTED_INITIAL_TEMPLATE, CLINIC),
-    SUGGESTED_INITIAL_TEMPLATE,
-  );
+test("default-backed templates expose effective code defaults", () => {
+  assert.equal(effectiveInitialTemplate(null), DEFAULT_INITIAL_TEMPLATE);
+  assert.equal(effectiveFollowUpTemplate(1, null), DEFAULT_FOLLOW_UP_TEMPLATES[1]);
+  assert.equal(effectiveFollowUpTemplate(2, "Custom text"), "Custom text");
 });
 
 test("initial full-template validation preserves identity and STOP requirements", () => {
@@ -144,7 +136,7 @@ test("initial full-template validation preserves identity and STOP requirements"
     ).ok,
     false,
   );
-  assert.ok(validateInitialTemplate(SUGGESTED_INITIAL_TEMPLATE, CLINIC).ok);
+  assert.ok(validateInitialTemplate(DEFAULT_INITIAL_TEMPLATE, CLINIC).ok);
   assert.ok(
     validateInitialTemplate(
       "Hello, this is Fairstone Dental Smile. We missed your call. How can we help? Reply STOP to opt out.",
@@ -154,31 +146,31 @@ test("initial full-template validation preserves identity and STOP requirements"
   assert.ok(validateInitialTemplate("", CLINIC).ok);
 });
 
-test("suggested English copy is current", () => {
+test("canonical default copy is current", () => {
   assert.equal(
-    SUGGESTED_INITIAL_TEMPLATE,
+    DEFAULT_INITIAL_TEMPLATE,
     "Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.",
   );
   assert.equal(
-    DEFAULT_FOLLOW_UP_SUGGESTIONS[1],
+    DEFAULT_FOLLOW_UP_TEMPLATES[1],
     "Thanks for the info. What name should we use when our office follows up?",
   );
   assert.equal(
-    DEFAULT_FOLLOW_UP_SUGGESTIONS[2],
+    DEFAULT_FOLLOW_UP_TEMPLATES[2],
     "Thanks, {{patient_name}}. I'll pass this to our team so they can follow up.",
   );
   assert.equal(
-    DEFAULT_FOLLOW_UP_SUGGESTIONS[3],
+    DEFAULT_FOLLOW_UP_TEMPLATES[3],
     "Got it. We'll pass that along to our team.",
   );
 });
 
 test("default SMS and voice copy uses ASCII punctuation only", () => {
   const defaults = [
-    SUGGESTED_INITIAL_TEMPLATE,
-    DEFAULT_FOLLOW_UP_SUGGESTIONS[1],
-    DEFAULT_FOLLOW_UP_SUGGESTIONS[2],
-    DEFAULT_FOLLOW_UP_SUGGESTIONS[3],
+    DEFAULT_INITIAL_TEMPLATE,
+    DEFAULT_FOLLOW_UP_TEMPLATES[1],
+    DEFAULT_FOLLOW_UP_TEMPLATES[2],
+    DEFAULT_FOLLOW_UP_TEMPLATES[3],
     DEFAULT_VOICE_GREETING_TEMPLATES.will_send,
     DEFAULT_VOICE_GREETING_TEMPLATES.duplicate,
     DEFAULT_VOICE_GREETING_TEMPLATES.none,
@@ -206,7 +198,7 @@ test("{{clinic_name}} and {{patient_name}} render when present", () => {
 });
 
 test("missing patient name produces natural text, not broken placeholders", () => {
-  const out = renderConversationTemplate(DEFAULT_FOLLOW_UP_SUGGESTIONS[2], {
+  const out = renderConversationTemplate(DEFAULT_FOLLOW_UP_TEMPLATES[2], {
     clinicName: CLINIC,
     patientName: null,
   });
@@ -221,6 +213,105 @@ test("unknown placeholders are rejected in follow-up validation", () => {
   assert.equal(validateFollowUpBody("Email us at a@b.com").ok, false);
   assert.ok(validateFollowUpBody("Thanks, {{patient_name}}. We'll follow up.").ok);
   assert.ok(validateFollowUpBody("").ok);
+});
+
+test("enabled follow-up with null body uses the current code default", () => {
+  const config = {
+    initialTemplate: null,
+    maxAutoReplies: 3,
+    followUps: {
+      1: { body: null, enabled: true },
+      2: { body: "Custom second reply.", enabled: true },
+      3: { body: null, enabled: false },
+    },
+    voiceGreetings: {
+      will_send: { body: null },
+      duplicate: { body: null },
+      none: { body: null },
+    },
+  };
+
+  assert.deepEqual(enabledFollowUpSequences(config), [1, 2]);
+  assert.equal(followUpBodyForSlot(config, 1), DEFAULT_FOLLOW_UP_TEMPLATES[1]);
+  assert.equal(followUpBodyForSlot(config, 2), "Custom second reply.");
+});
+
+test("saving default text prepares null/delete storage instead of literal defaults", () => {
+  const prepared = prepareConversationTemplateStorage({
+    initialTemplate: DEFAULT_INITIAL_TEMPLATE,
+    maxAutoReplies: 2,
+    followUps: {
+      1: { body: DEFAULT_FOLLOW_UP_TEMPLATES[1], enabled: true },
+      2: { body: "Custom second reply.", enabled: true },
+      3: { body: DEFAULT_FOLLOW_UP_TEMPLATES[3], enabled: false },
+    },
+    voiceGreetings: {
+      will_send: { body: DEFAULT_VOICE_GREETING_TEMPLATES.will_send },
+      duplicate: { body: DEFAULT_VOICE_GREETING_TEMPLATES.duplicate },
+      none: { body: DEFAULT_VOICE_GREETING_TEMPLATES.none },
+    },
+  });
+
+  assert.equal(prepared.keepSettingsRow, true);
+  assert.equal(prepared.maxAutoReplies, 2);
+  assert.deepEqual(
+    prepared.upsertRows.filter((row) => row.role === "auto_reply"),
+    [
+      { role: "auto_reply", sequence: 1, body: null, enabled: true },
+      { role: "auto_reply", sequence: 2, body: "Custom second reply.", enabled: true },
+    ],
+  );
+  assert.ok(prepared.deleteRows.some((row) => row.role === "initial" && row.sequence === 0));
+  assert.ok(prepared.deleteRows.some((row) => row.role === "auto_reply" && row.sequence === 3));
+  assert.equal(prepared.upsertRows.some((row) => row.body === DEFAULT_INITIAL_TEMPLATE), false);
+  assert.equal(prepared.upsertRows.some((row) => row.body === DEFAULT_FOLLOW_UP_TEMPLATES[1]), false);
+});
+
+test("disabled custom follow-up draft is preserved, disabled default follow-up is deleted", () => {
+  const prepared = prepareConversationTemplateStorage({
+    initialTemplate: null,
+    maxAutoReplies: 0,
+    followUps: {
+      1: { body: "Custom draft reply.", enabled: false },
+      2: { body: DEFAULT_FOLLOW_UP_TEMPLATES[2], enabled: false },
+      3: { body: null, enabled: false },
+    },
+    voiceGreetings: {
+      will_send: { body: null },
+      duplicate: { body: null },
+      none: { body: null },
+    },
+  });
+
+  assert.equal(prepared.keepSettingsRow, false);
+  assert.ok(
+    prepared.upsertRows.some(
+      (row) =>
+        row.role === "auto_reply" &&
+        row.sequence === 1 &&
+        row.body === "Custom draft reply." &&
+        row.enabled === false,
+    ),
+  );
+  assert.ok(prepared.deleteRows.some((row) => row.role === "auto_reply" && row.sequence === 2));
+  assert.ok(prepared.deleteRows.some((row) => row.role === "auto_reply" && row.sequence === 3));
+});
+
+test("default-cleanup migration is data-only and preserves follow-up enabled rows", () => {
+  const sql = fs.readFileSync(
+    path.join(process.cwd(), "supabase", "migrations", "20260621000100_clean_sms_template_default_overrides.sql"),
+    "utf8",
+  );
+
+  assert.match(sql, /update public\.clinic_sms_message_templates\s+set body_text = null/i);
+  assert.match(sql, /where template_role = 'auto_reply'/i);
+  assert.match(sql, /delete from public\.clinic_sms_message_templates\s+where template_role = 'initial'/i);
+  assert.match(sql, /delete from public\.clinic_sms_message_templates\s+where template_role = 'voice_greeting'/i);
+  assert.equal(/\balter\s+table\b/i.test(sql), false);
+  assert.equal(/\bcreate\s+table\b/i.test(sql), false);
+  assert.ok(sql.includes("Thanks. What name should we use when our office follows up?"));
+  assert.ok(sql.includes("Got it. We''ll include that note for the office."));
+  assert.ok(sql.includes("We''ll send you a text now, so our team can follow up."));
 });
 
 test("voice greeting defaults render with clinic identity", () => {
@@ -256,11 +347,11 @@ test("voice greeting validation permits only safe clinic-name templates", () => 
 
 test("rendered follow-up never leaves an unresolved placeholder", () => {
   for (const slot of [1, 2, 3] as const) {
-    const withName = renderConversationTemplate(DEFAULT_FOLLOW_UP_SUGGESTIONS[slot], {
+    const withName = renderConversationTemplate(DEFAULT_FOLLOW_UP_TEMPLATES[slot], {
       clinicName: CLINIC,
       patientName: "Sam",
     });
-    const withoutName = renderConversationTemplate(DEFAULT_FOLLOW_UP_SUGGESTIONS[slot], {
+    const withoutName = renderConversationTemplate(DEFAULT_FOLLOW_UP_TEMPLATES[slot], {
       clinicName: CLINIC,
       patientName: null,
     });
@@ -271,7 +362,7 @@ test("rendered follow-up never leaves an unresolved placeholder", () => {
 
 test("safety validation allows normal dental-office-neutral language", () => {
   for (const ok of [
-    SUGGESTED_INITIAL_TEMPLATE,
+    DEFAULT_INITIAL_TEMPLATE,
     "Thanks. The office will follow up.",
     "What name should we use?",
     "We'll pass this to the office.",

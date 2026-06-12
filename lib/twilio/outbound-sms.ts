@@ -115,8 +115,8 @@ export async function sendRecoverySms(
 
   // All guards passed. Build the message body. With no admin-configured initial
   // template this is byte-for-byte the fixed, compliance-reviewed default. Saved
-  // full templates are rendered directly, and legacy middle-only rows are
-  // wrapped safely. Settings/build failure falls back to the approved default.
+  // full templates are rendered directly. Settings/build failure falls back to
+  // the approved default.
   let body: string;
   try {
     const config = await getClinicConversationConfig(input.clinic.id);

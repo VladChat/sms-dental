@@ -6,7 +6,7 @@ import {
   type AutoReplyDecisionInput,
 } from "../lib/sms-recovery/auto-reply-evaluation";
 import {
-  DEFAULT_FOLLOW_UP_SUGGESTIONS,
+  DEFAULT_FOLLOW_UP_TEMPLATES,
   renderConversationTemplate,
 } from "../lib/sms-recovery/conversation-templates";
 import { classifyInboundReply } from "../lib/sms-recovery/reply-classification";
@@ -172,7 +172,7 @@ test("live manual +12245329236 cleaning/name sequence sends two expected follow-
     { send: true, sequence: 1 },
   );
   assert.equal(
-    renderConversationTemplate(DEFAULT_FOLLOW_UP_SUGGESTIONS[1], {
+    renderConversationTemplate(DEFAULT_FOLLOW_UP_TEMPLATES[1], {
       clinicName: "Fairstone Dental Smile",
       patientName: null,
     }),
@@ -191,7 +191,7 @@ test("live manual +12245329236 cleaning/name sequence sends two expected follow-
     { send: true, sequence: 2 },
   );
   assert.equal(
-    renderConversationTemplate(DEFAULT_FOLLOW_UP_SUGGESTIONS[2], {
+    renderConversationTemplate(DEFAULT_FOLLOW_UP_TEMPLATES[2], {
       clinicName: "Fairstone Dental Smile",
       patientName: secondInbound.patientName,
     }),

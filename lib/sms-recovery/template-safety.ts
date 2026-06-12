@@ -50,7 +50,7 @@ const PLACEHOLDER_RE = /\{\{\s*([a-z0-9_]+)\s*\}\}/gi;
 // Validate one template body. `allowPatientName` controls whether
 // {{patient_name}} is permitted (initial SMS: no; follow-ups: yes). Empty
 // input is allowed and returned as "" — callers decide what empty means
-// (default middle / disabled follow-up).
+// (default-backed template / disabled follow-up).
 export function validateTemplateText(
   raw: unknown,
   opts: { allowPatientName: boolean; maxLength?: number },
@@ -116,10 +116,6 @@ export function validateTemplateText(
   }
 
   return { ok: true, value };
-}
-
-export function validateInitialMiddle(raw: unknown): TemplateTextResult {
-  return validateTemplateText(raw, { allowPatientName: false, maxLength: MAX_INITIAL_TEMPLATE_LENGTH });
 }
 
 export function validateInitialTemplate(

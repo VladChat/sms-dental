@@ -38,9 +38,8 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
   There are no locked start/end blocks. With no saved template, the message
   uses the current approved default:
   `Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.`
-  Rows saved by the first implementation as middle-only text are wrapped safely
-  when rendered; rows that already contain a full initial SMS are not wrapped
-  again.
+  Resetting to the default does not save that literal default text as an
+  override.
 - **Up to three deterministic follow-ups.** After a patient replies, the office
   may send follow-up #1, then #2, then #3. Each has its own enabled toggle and
   body. The **Maximum automated replies** setting (0–3) caps how many may send;
@@ -54,8 +53,18 @@ no AI, no booking, no medical advice, and no unlimited chatbot.
 - With no saved settings, `max_auto_replies` = 0: **no follow-ups send** and the
   current default missed-call SMS sends. Follow-ups are inactive until an admin
   saves and enables them for that specific clinic.
+- Code defaults are the source of truth. `clinic_sms_message_templates.body_text
+  = NULL` means "use the current code default." The database stores real custom
+  overrides and real follow-up enablement, not copies of the default text.
+- Saving text equal to the canonical default stores NULL or removes the
+  unnecessary override. Enabled follow-ups can have `body_text=NULL`; those send
+  the current default for that slot. Disabled default-backed follow-ups are not
+  kept as junk rows.
 - With no saved voice greeting rows, each scenario uses the system default
   wording from `lib/sms-recovery/voice-greeting-templates.ts`.
+- Migration `20260621000100_clean_sms_template_default_overrides.sql` cleans old
+  saved default-like template bodies while preserving true custom text and
+  follow-up enabled flags.
 - The 4th and later patient replies are **saved to the workspace only** — never
   auto-replied.
 
@@ -65,10 +74,11 @@ An auto-reply sends only when ALL hold: global mode is live/owner-test; the exac
 called number passes readiness; the clinic recovery gate passes (clinic enabled,
 or owner-test allowlist); the patient is not opted out; the conversation already
 has a missed-call recovery message; the next slot is within `max_auto_replies`
-and its template is enabled and non-empty. STOP/START/HELP and duplicate webhook
-deliveries never trigger an auto-reply, and slots are claimed atomically so
-retries never double-send. STOP/START/HELP compliance is still handled by Twilio
-(the webhook returns empty TwiML).
+and its template is enabled (with either custom text or a NULL default-backed
+body). STOP/START/HELP and duplicate webhook deliveries never trigger an
+auto-reply, and slots are claimed atomically so retries never double-send.
+STOP/START/HELP compliance is still handled by Twilio (the webhook returns empty
+TwiML).
 
 Simple replies classified as thanks, acknowledgements, negative replies, or
 unclear short replies are saved but do not trigger a normal follow-up and do not
@@ -111,7 +121,8 @@ promise that a text will be sent now.
 
 Saving the builder writes `clinic.sms_conversation.update` with redacted
 metadata only (`max_auto_replies`, whether the initial template is customized,
-enabled follow-up count, customized voice greeting count) — never message bodies.
+enabled follow-up count, customized follow-up count, customized voice greeting
+count) — never message bodies.
 
 ## Source of truth
 

@@ -12,16 +12,19 @@ const VOICE_SCENARIOS = ["will_send", "duplicate", "none"] as const;
 type VoiceScenario = (typeof VOICE_SCENARIOS)[number];
 
 type FollowUpView = {
-  body: string | null;
-  enabled: boolean;
-  suggestion: string;
+  customBody: string | null;
+  defaultText: string;
+  effectiveText: string;
+  isCustom: boolean;
   preview: string;
+  enabled: boolean;
 };
 
 type VoiceGreetingView = {
-  body: string | null;
+  customBody: string | null;
   defaultText: string;
-  suggestion: string;
+  effectiveText: string;
+  isCustom: boolean;
   preview: string;
   label: string;
   helper: string;
@@ -30,8 +33,13 @@ type VoiceGreetingView = {
 type ConfigPayload = {
   clinicName: string;
   config: {
-    initialTemplate: string | null;
-    defaultInitialTemplate: string;
+    initial: {
+      customBody: string | null;
+      defaultText: string;
+      effectiveText: string;
+      isCustom: boolean;
+      preview: string;
+    };
     maxAutoReplies: number;
     followUps: Record<string, FollowUpView>;
     voiceGreetings: Record<VoiceScenario, VoiceGreetingView>;
@@ -92,16 +100,16 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
 
   function apply(data: ConfigPayload) {
     setClinicName(data.clinicName);
-    setDefaultInitialTemplate(data.config.defaultInitialTemplate);
-    setInitialTemplate(data.config.initialTemplate ?? data.config.defaultInitialTemplate);
+    setDefaultInitialTemplate(data.config.initial.defaultText);
+    setInitialTemplate(data.config.initial.effectiveText);
     setMaxAutoReplies(data.config.maxAutoReplies);
 
     const nextFollowUps = { ...followUps };
     for (const slot of SLOTS) {
       const fu = data.config.followUps[String(slot)];
-      const defaultText = fu?.suggestion ?? "";
+      const defaultText = fu?.defaultText ?? "";
       nextFollowUps[slot] = {
-        body: fu?.body ?? defaultText,
+        body: fu?.effectiveText ?? defaultText,
         enabled: fu?.enabled ?? false,
         defaultText,
         preview: fu?.preview ?? "",
@@ -112,9 +120,9 @@ export function AdminSmsConversationBuilder({ clinicId }: { clinicId: string }) 
     const nextVoice = { ...voiceGreetings };
     for (const scenario of VOICE_SCENARIOS) {
       const vg = data.config.voiceGreetings?.[scenario];
-      const defaultText = vg?.defaultText ?? vg?.suggestion ?? "";
+      const defaultText = vg?.defaultText ?? "";
       nextVoice[scenario] = {
-        body: vg?.body ?? defaultText,
+        body: vg?.effectiveText ?? defaultText,
         defaultText,
         preview: vg?.preview ?? "",
         label: vg?.label ?? scenario,

@@ -1,9 +1,9 @@
 // Deterministic SMS conversation templates (admin-configured).
 //
-// Pure rendering + defaults for the SMS Conversation Builder. No DB, no Twilio,
-// no AI. Platform admins can edit the full initial missed-call SMS, while the
-// server still enforces clinic identity and STOP opt-out language. Follow-up
-// templates are full bodies sent after patient replies.
+// Pure rendering + canonical defaults for the SMS Conversation Builder. No DB,
+// no Twilio, no AI. Platform admins can edit the full initial missed-call SMS,
+// while the server still enforces clinic identity and STOP opt-out language.
+// Follow-up templates are full bodies sent after patient replies.
 //
 // Supported variables: {{clinic_name}} (always resolved) and {{patient_name}}
 // (resolved only when a name was safely collected; otherwise removed cleanly so
@@ -13,23 +13,10 @@ import { smsRecoveryConfig } from "../../config/sms-recovery.config";
 import { buildMissedCallRecoverySmsBody, resolveClinicIdentity } from "./templates";
 import type { VoiceGreetingTemplateConfig } from "./voice-greeting-templates";
 
-export const INITIAL_PREFIX_TEMPLATE = "Hi, this is {{clinic_name}}.";
-export const INITIAL_SUFFIX = "Reply STOP to opt out.";
-
-// Legacy editable middle from the first builder implementation. Kept so
-// middle-only rows can be rendered safely as full templates without a migration.
-export const DEFAULT_INITIAL_MIDDLE =
-  "We missed your call. How can we help?";
-
 // No saved initial template still sends the existing fixed production message.
 export const DEFAULT_INITIAL_TEMPLATE = smsRecoveryConfig.missedCallTemplate;
 
-// Suggestion shown in the platform-admin builder. Inactive until inserted/saved.
-export const SUGGESTED_INITIAL_TEMPLATE =
-  "Hi, this is {{clinic_name}}. We missed your call. How can we help? Reply STOP to opt out.";
-
-// Suggested (inactive until saved/enabled) follow-up bodies.
-export const DEFAULT_FOLLOW_UP_SUGGESTIONS: Record<1 | 2 | 3, string> = {
+export const DEFAULT_FOLLOW_UP_TEMPLATES: Record<1 | 2 | 3, string> = {
   1: "Thanks for the info. What name should we use when our office follows up?",
   2: "Thanks, {{patient_name}}. I'll pass this to our team so they can follow up.",
   3: "Got it. We'll pass that along to our team.",
@@ -68,25 +55,10 @@ export function renderConversationTemplate(text: string, ctx: RenderContext): st
   return out;
 }
 
-// The editor always shows a full template. Existing rows from the first
-// implementation may contain only the legacy middle; convert those to a safe
-// full template on read without mutating the DB.
-export function initialTemplateForEditor(
-  savedTemplate: string | null | undefined,
-  clinicName?: string | null,
-): string {
-  const raw = collapseTemplateWhitespace(savedTemplate ?? "");
-  if (!raw) return DEFAULT_INITIAL_TEMPLATE;
-  if (hasClinicIdentity(raw, clinicName) && hasRequiredStopOptOut(raw)) {
-    return normalizeInitialTemplateForStorage(raw, clinicName) ?? DEFAULT_INITIAL_TEMPLATE;
-  }
-  return composeLegacyInitialMiddle(raw, clinicName);
-}
-
-// Normalize a full initial template for storage after platform-admin input. This
-// removes accidental duplicate sentences / STOP phrases but does not add missing
-// required content; validation is responsible for rejecting missing identity or
-// opt-out language.
+// Normalize a full initial template for storage after platform-admin input.
+// This removes accidental duplicate STOP phrases / adjacent duplicate sentences
+// but does not add missing required content; validation is responsible for
+// rejecting missing identity or opt-out language.
 export function normalizeInitialTemplateForStorage(
   raw: string | null | undefined,
   clinicName?: string | null,
@@ -108,10 +80,10 @@ export function hasClinicIdentity(text: string, clinicName?: string | null): boo
   return normalizeComparable(text).includes(normalizeComparable(identity));
 }
 
-// Build the initial missed-call SMS. With a blank/missing template this delegates
-// to the fixed recovery template, guaranteeing the current production wording is
-// unchanged when no admin settings exist. Full templates are rendered directly.
-// Legacy middle-only rows are wrapped in the safe prefix/suffix at render time.
+// Build the initial missed-call SMS. With a blank/missing template this
+// delegates to the fixed recovery template, guaranteeing the current production
+// wording is unchanged when no admin settings exist. Full custom templates are
+// rendered directly.
 export function buildInitialSmsBody(
   clinicName: string | null | undefined,
   initialTemplate?: string | null,
@@ -121,11 +93,7 @@ export function buildInitialSmsBody(
     return buildMissedCallRecoverySmsBody(clinicName);
   }
 
-  const template =
-    hasClinicIdentity(raw, clinicName) && hasRequiredStopOptOut(raw)
-      ? (normalizeInitialTemplateForStorage(raw, clinicName) ?? DEFAULT_INITIAL_TEMPLATE)
-      : composeLegacyInitialMiddle(raw, clinicName);
-
+  const template = normalizeInitialTemplateForStorage(raw, clinicName) ?? DEFAULT_INITIAL_TEMPLATE;
   const body = dedupeRenderedInitialSms(
     renderConversationTemplate(template, { clinicName }),
   );
@@ -148,60 +116,70 @@ export function buildInitialSmsBody(
 export type FollowUpSlot = 1 | 2 | 3;
 
 export type ConversationTemplateConfig = {
-  initialTemplate: string | null; // null => fixed default initial template
+  initialTemplate: string | null; // null => current code default initial template
   maxAutoReplies: number; // 0..3
+  // body null means "use the current code default for this follow-up slot".
   followUps: Record<FollowUpSlot, { body: string | null; enabled: boolean }>;
   voiceGreetings: VoiceGreetingTemplateConfig;
 };
 
-// The enabled follow-up sequences with a usable (non-empty) body, capped by
-// maxAutoReplies. Used by both the preview and the inbound auto-reply decision.
+// The enabled follow-up sequences, capped by maxAutoReplies. A null body is
+// default-backed and still sendable when the slot is enabled.
 export function enabledFollowUpSequences(config: ConversationTemplateConfig): FollowUpSlot[] {
   const slots: FollowUpSlot[] = [];
   for (const slot of [1, 2, 3] as FollowUpSlot[]) {
     if (slot > config.maxAutoReplies) continue;
     const fu = config.followUps[slot];
-    if (fu.enabled && (fu.body ?? "").trim().length > 0) slots.push(slot);
+    if (fu.enabled) slots.push(slot);
   }
   return slots;
 }
 
-// Resolve the body for a given follow-up slot (saved body, else suggestion).
+// Resolve the body for a given follow-up slot (custom body, else code default).
 export function followUpBodyForSlot(
   config: ConversationTemplateConfig,
   slot: FollowUpSlot,
 ): string | null {
   const saved = (config.followUps[slot]?.body ?? "").trim();
-  return saved.length > 0 ? saved : null;
+  return saved.length > 0 ? saved : DEFAULT_FOLLOW_UP_TEMPLATES[slot];
 }
 
-function composeLegacyInitialMiddle(rawMiddle: string, clinicName?: string | null): string {
-  const middle = normalizeLegacyInitialMiddle(rawMiddle, clinicName) || DEFAULT_INITIAL_MIDDLE;
-  return dedupeInitialTemplateText(
-    `${INITIAL_PREFIX_TEMPLATE} ${middle} ${INITIAL_SUFFIX}`,
-    clinicName,
-  );
+export function effectiveInitialTemplate(customBody: string | null | undefined): string {
+  const saved = normalizeTemplateBody(customBody);
+  return saved ?? DEFAULT_INITIAL_TEMPLATE;
 }
 
-function normalizeLegacyInitialMiddle(rawMiddle: string, clinicName?: string | null): string {
-  let out = collapseTemplateWhitespace(rawMiddle);
-  out = removeKnownInitialPrefix(out, clinicName);
-  out = out.replace(STOP_OPT_OUT_RE, "");
-  return collapseTemplateWhitespace(out);
+export function effectiveFollowUpTemplate(
+  slot: FollowUpSlot,
+  customBody: string | null | undefined,
+): string {
+  const saved = normalizeTemplateBody(customBody);
+  return saved ?? DEFAULT_FOLLOW_UP_TEMPLATES[slot];
 }
 
-function removeKnownInitialPrefix(text: string, clinicName?: string | null): string {
-  const escapedIdentity = escapeRegExp(resolveClinicIdentity(clinicName));
-  const patterns = [
-    /^\s*(Hi|Hello),\s+this\s+is\s+\{\{\s*clinic_name\s*\}\}\.\s*/i,
-    new RegExp(`^\\s*(Hi|Hello),\\s+this\\s+is\\s+${escapedIdentity}\\.\\s*`, "i"),
-    /^\s*(Hi|Hello),\s+this\s+is\s+[^.]{1,120}\.\s*/i,
-  ];
-  let out = text;
-  for (const pattern of patterns) {
-    out = out.replace(pattern, "");
-  }
-  return collapseTemplateWhitespace(out);
+export function isDefaultInitialTemplate(text: string | null | undefined): boolean {
+  return sameTemplateText(text, DEFAULT_INITIAL_TEMPLATE);
+}
+
+export function isDefaultFollowUpTemplate(
+  slot: FollowUpSlot,
+  text: string | null | undefined,
+): boolean {
+  return sameTemplateText(text, DEFAULT_FOLLOW_UP_TEMPLATES[slot]);
+}
+
+export function normalizeTemplateBody(body: string | null | undefined): string | null {
+  const trimmed = collapseTemplateWhitespace(body ?? "");
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function sameTemplateText(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  const normalizedLeft = normalizeTemplateBody(left);
+  const normalizedRight = normalizeTemplateBody(right);
+  return normalizedLeft !== null && normalizedRight !== null && normalizedLeft === normalizedRight;
 }
 
 function dedupeInitialTemplateText(text: string, clinicName?: string | null): string {
@@ -267,8 +245,4 @@ function normalizeComparable(text: string): string {
   return collapseTemplateWhitespace(text)
     .replace(/[.?!]+$/g, "")
     .toLowerCase();
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

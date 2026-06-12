@@ -7315,3 +7315,53 @@ No migration was added or applied. No SMS sent, no calls placed, no Twilio
 resource mutation, no A2P mutation, no Stripe change, no phone-number lifecycle
 change, no production env change, no secret printing, and `.qwen/` remained
 untouched.
+
+---
+
+## 2026-06-12 — SMS Conversation Builder default-backed template storage cleanup
+
+Fixed the SMS Conversation Builder default/custom storage model and applied the
+production data-only cleanup for stale saved default-like template text.
+
+What changed:
+
+- Code defaults are now the source of truth for the Initial SMS, follow-up
+  templates, and voice greetings.
+- `clinic_sms_message_templates.body_text = NULL` now explicitly means "use the
+  current code default" for default-backed rows.
+- Saving text equal to the canonical default removes the unnecessary override or
+  stores a NULL default-backed body instead of saving the literal default text.
+- Enabled follow-up rows can have `body_text=NULL`; those send the current code
+  default for that follow-up slot. Disabled default-backed rows are cleaned up.
+- Admin API responses expose active state as `defaultText`, `effectiveText`,
+  `customBody`, and `isCustom`; the builder UI uses effective active text and no
+  longer depends on suggestion fields.
+- Added data-only migration
+  `supabase/migrations/20260621000100_clean_sms_template_default_overrides.sql`.
+
+Production data cleanup:
+
+- Supabase project verified: `qfjpvbvfvhbtebwivcdc`.
+- Preflight count-only check found stale saved default-like rows in the initial
+  template, follow-up #1, follow-up #2, and all three voice greeting scenarios.
+  No template bodies were printed.
+- Applied migration `20260621000100_clean_sms_template_default_overrides.sql`
+  over the documented direct/admin DB connection and recorded migration history
+  version `20260621000100`.
+- Post-migration count-only verification: all known default-like body counts are
+  0. Follow-up rows remain 3 total / 3 enabled / 2 default-backed NULL bodies /
+  1 custom body. No template bodies were printed.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 134 tests.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no production env change, no
+secret printing, and `.qwen/` remained untouched.

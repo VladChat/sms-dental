@@ -8,12 +8,16 @@ import {
 } from "../../../../../../lib/db/sms-conversation-settings";
 import {
   buildInitialSmsBody,
+  DEFAULT_FOLLOW_UP_TEMPLATES,
   DEFAULT_INITIAL_TEMPLATE,
-  DEFAULT_FOLLOW_UP_SUGGESTIONS,
-  initialTemplateForEditor,
+  effectiveFollowUpTemplate,
+  effectiveInitialTemplate,
+  isDefaultFollowUpTemplate,
+  isDefaultInitialTemplate,
   MAX_INITIAL_TEMPLATE_LENGTH,
   MAX_TEMPLATE_BODY_LENGTH,
   renderConversationTemplate,
+  sameTemplateText,
   SUPPORTED_TEMPLATE_VARIABLES,
   type ConversationTemplateConfig,
   type FollowUpSlot,
@@ -49,15 +53,17 @@ function buildConversationResponse(
     SLOTS.map((slot) => {
       const body = config.followUps[slot]?.body ?? null;
       const enabled = config.followUps[slot]?.enabled ?? false;
-      const suggestion = DEFAULT_FOLLOW_UP_SUGGESTIONS[slot];
-      const previewSource = (body ?? "").trim().length > 0 ? body! : suggestion;
+      const defaultText = DEFAULT_FOLLOW_UP_TEMPLATES[slot];
+      const effectiveText = effectiveFollowUpTemplate(slot, body);
       return [
         slot,
         {
-          body,
+          customBody: body,
+          defaultText,
+          effectiveText,
+          isCustom: (body ?? "").trim().length > 0,
           enabled,
-          suggestion,
-          preview: renderConversationTemplate(previewSource, {
+          preview: renderConversationTemplate(effectiveText, {
             clinicName,
             patientName: PREVIEW_PATIENT_NAME,
           }),
@@ -70,33 +76,50 @@ function buildConversationResponse(
     VOICE_GREETING_SCENARIOS.map((scenario) => {
       const body = config.voiceGreetings[scenario]?.body ?? null;
       const defaultText = DEFAULT_VOICE_GREETING_TEMPLATES[scenario];
-      const previewSource = (body ?? "").trim().length > 0 ? body! : defaultText;
+      const effectiveText = (body ?? "").trim().length > 0 ? body! : defaultText;
       return [
         scenario,
         {
-          body,
           defaultText,
-          suggestion: defaultText,
+          effectiveText,
+          customBody: body,
+          isCustom: (body ?? "").trim().length > 0,
           label: VOICE_GREETING_LABELS[scenario],
           helper: VOICE_GREETING_HELPERS[scenario],
-          preview: renderVoiceGreetingTemplate(previewSource, { clinicName }),
+          preview: renderVoiceGreetingTemplate(effectiveText, { clinicName }),
         },
       ];
     }),
   );
 
+  const initialEffectiveText = effectiveInitialTemplate(config.initialTemplate);
+
   return {
     ok: true,
     clinicName,
     config: {
-      initialTemplate: initialTemplateForEditor(config.initialTemplate, clinicName),
-      defaultInitialTemplate: DEFAULT_INITIAL_TEMPLATE,
+      initial: {
+        defaultText: DEFAULT_INITIAL_TEMPLATE,
+        effectiveText: initialEffectiveText,
+        customBody: config.initialTemplate,
+        isCustom: (config.initialTemplate ?? "").trim().length > 0,
+        preview: buildInitialSmsBody(clinicName, config.initialTemplate),
+      },
       maxAutoReplies: config.maxAutoReplies,
       followUps,
       voiceGreetings,
     },
     preview: {
       initial: buildInitialSmsBody(clinicName, config.initialTemplate),
+      followUps: Object.fromEntries(
+        SLOTS.map((slot) => [
+          slot,
+          renderConversationTemplate(effectiveFollowUpTemplate(slot, config.followUps[slot]?.body), {
+            clinicName,
+            patientName: PREVIEW_PATIENT_NAME,
+          }),
+        ]),
+      ),
       voiceGreetings: Object.fromEntries(
         VOICE_GREETING_SCENARIOS.map((scenario) => [
           scenario,
@@ -119,7 +142,7 @@ function buildConversationResponse(
 }
 
 // GET /api/admin/clinics/[clinicId]/sms-conversation
-// Returns the saved config, defaults/suggestions, live previews, and limits.
+// Returns saved custom bodies, effective active text, defaults, previews, and limits.
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ clinicId: string }> },
@@ -137,8 +160,17 @@ export async function GET(
   }
 }
 
-type FollowUpInput = { body?: unknown; enabled?: unknown };
-type VoiceGreetingInput = { body?: unknown };
+type FollowUpInput = {
+  body?: unknown;
+  customBody?: unknown;
+  effectiveText?: unknown;
+  enabled?: unknown;
+};
+type VoiceGreetingInput = {
+  body?: unknown;
+  customBody?: unknown;
+  effectiveText?: unknown;
+};
 
 // POST /api/admin/clinics/[clinicId]/sms-conversation
 // Saves the full initial template, follow-up bodies + enabled flags, and max replies.
@@ -165,12 +197,8 @@ export async function POST(
   }
   const maxAutoReplies = maxRaw;
 
-  // Initial full template (empty => fixed default). `initialMiddle` is accepted
-  // only for compatibility with the first builder implementation.
-  const rawInitial =
-    Object.prototype.hasOwnProperty.call(input, "initialTemplate")
-      ? input.initialTemplate
-      : legacyMiddleToFullTemplate(input.initialMiddle);
+  // Initial full template (empty/default => current code default).
+  const rawInitial = pickTemplateText(input, "initialTemplate", "initial");
   const initial = validateInitialTemplate(rawInitial, guard.clinic.name);
   if (!initial.ok) return jsonBadRequest(initial.message);
 
@@ -184,19 +212,19 @@ export async function POST(
   for (const slot of SLOTS) {
     const raw = rawFollowUps[String(slot)] ?? rawFollowUps[slot as unknown as string] ?? {};
     const enabled = raw.enabled === true;
-    const validated = validateFollowUpBody(raw.body);
+    const validated = validateFollowUpBody(pickTemplateText(raw as Record<string, unknown>, "body"));
     if (!validated.ok) return jsonBadRequest(`Follow-up #${slot}: ${validated.message}`);
     followUps[slot] = { body: validated.value.length > 0 ? validated.value : null, enabled };
   }
 
-  // max_auto_replies cannot exceed the configured, enabled follow-up slots: for
-  // every slot 1..max the follow-up must be enabled and non-empty.
+  // max_auto_replies cannot exceed the configured, enabled follow-up slots. A
+  // null/empty body is default-backed and still usable when enabled.
   for (const slot of SLOTS) {
     if (slot > maxAutoReplies) break;
     const fu = followUps[slot];
-    if (!fu.enabled || !(fu.body ?? "").trim()) {
+    if (!fu.enabled) {
       return jsonBadRequest(
-        `Enable and write follow-up #${slot} before allowing ${maxAutoReplies} automated replies.`,
+        `Enable follow-up #${slot} before allowing ${maxAutoReplies} automated replies.`,
       );
     }
   }
@@ -208,7 +236,10 @@ export async function POST(
     voiceGreetings = emptyVoiceGreetings();
     for (const scenario of VOICE_GREETING_SCENARIOS) {
       const raw = rawVoiceGreetings[scenario] ?? {};
-      const validated = validateVoiceGreetingTemplate(raw.body, scenario);
+      const validated = validateVoiceGreetingTemplate(
+        pickTemplateText(raw as Record<string, unknown>, "body"),
+        scenario,
+      );
       if (!validated.ok) {
         return jsonBadRequest(`${VOICE_GREETING_LABELS[scenario]} greeting: ${validated.message}`);
       }
@@ -236,9 +267,7 @@ export async function POST(
       { profileId: guard.admin.userId, email: guard.admin.email },
     );
 
-    const enabledSlotCount = SLOTS.filter(
-      (slot) => followUps[slot].enabled && (followUps[slot].body ?? "").trim().length > 0,
-    ).length;
+    const enabledSlotCount = SLOTS.filter((slot) => followUps[slot].enabled).length;
     try {
       await recordAdminAuditEvent({
         adminUserId: guard.admin.userId,
@@ -250,10 +279,17 @@ export async function POST(
         metadata: {
           max_auto_replies: maxAutoReplies,
           initial_customized:
-            initial.value.length > 0 && initial.value !== DEFAULT_INITIAL_TEMPLATE,
+            initial.value.length > 0 && !isDefaultInitialTemplate(initial.value),
           follow_up_enabled_count: enabledSlotCount,
+          follow_up_customized_count: SLOTS.filter(
+            (slot) =>
+              (followUps[slot].body ?? "").trim().length > 0 &&
+              !isDefaultFollowUpTemplate(slot, followUps[slot].body),
+          ).length,
           voice_customized_count: VOICE_GREETING_SCENARIOS.filter(
-            (scenario) => (voiceGreetings[scenario].body ?? "").trim().length > 0,
+            (scenario) =>
+              (voiceGreetings[scenario].body ?? "").trim().length > 0 &&
+              !sameTemplateText(voiceGreetings[scenario].body, DEFAULT_VOICE_GREETING_TEMPLATES[scenario]),
           ).length,
         },
       });
@@ -270,17 +306,25 @@ export async function POST(
   }
 }
 
-function legacyMiddleToFullTemplate(raw: unknown): unknown {
-  if (typeof raw !== "string") return raw;
-  const middle = raw.replace(/\s+/g, " ").trim();
-  if (!middle) return "";
-  return `Hi, this is {{clinic_name}}. ${middle} Reply STOP to opt out.`;
-}
-
 function emptyVoiceGreetings(): Record<VoiceGreetingScenario, { body: string | null }> {
   return {
     will_send: { body: null },
     duplicate: { body: null },
     none: { body: null },
   };
+}
+
+function pickTemplateText(
+  input: Record<string, unknown>,
+  directKey: string,
+  nestedKey?: string,
+): unknown {
+  if (Object.prototype.hasOwnProperty.call(input, directKey)) return input[directKey];
+  if (Object.prototype.hasOwnProperty.call(input, "customBody")) return input.customBody;
+  if (Object.prototype.hasOwnProperty.call(input, "effectiveText")) return input.effectiveText;
+  if (!nestedKey) return undefined;
+  const nested = input[nestedKey];
+  if (!nested || typeof nested !== "object") return undefined;
+  return pickTemplateText(nested as Record<string, unknown>, "customBody") ??
+    pickTemplateText(nested as Record<string, unknown>, "effectiveText");
 }

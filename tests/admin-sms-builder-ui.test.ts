@@ -90,9 +90,9 @@ test("admin SMS builder shows compact variables, SMS block labels, and active pr
   assert.ok(src.includes("Initial SMS"));
   assert.ok(src.includes("Follow-up #{slot}"));
   assert.ok(src.includes("Maximum automated replies"));
-  assert.ok(src.includes("setInitialTemplate(data.config.initialTemplate ?? data.config.defaultInitialTemplate)"));
-  assert.ok(src.includes("body: fu?.body ?? defaultText"));
-  assert.ok(src.includes("body: vg?.body ?? defaultText"));
+  assert.ok(src.includes("setInitialTemplate(data.config.initial.effectiveText)"));
+  assert.ok(src.includes("body: fu?.effectiveText ?? defaultText"));
+  assert.ok(src.includes("body: vg?.effectiveText ?? defaultText"));
   assert.ok(src.includes("initialTemplate,"));
 });
 
@@ -122,6 +122,10 @@ test("admin SMS conversation route validates and audits voice greetings without 
   assert.ok(src.includes("voiceGreetings"));
   assert.ok(src.includes("voice_customized_count"));
   assert.ok(src.includes("follow_up_enabled_count"));
+  assert.ok(src.includes("customBody"));
+  assert.ok(src.includes("effectiveText"));
+  assert.ok(src.includes("defaultText"));
+  assert.ok(!src.includes("suggestion"));
   assert.ok(!src.includes("initial_body"));
   assert.ok(!src.includes("voice_body"));
 });

@@ -3407,8 +3407,10 @@ unchanged. No AI runtime — everything is deterministic.
 - Tables (migration `20260619000100_sms_conversation_builder.sql`):
   `clinic_sms_conversation_settings` (`max_auto_replies` 0–3) and
   `clinic_sms_message_templates` (`initial` seq 0 = full initial template;
-  `auto_reply` seq 1–3 = full follow-up body, ≤240 chars). Conversation state
-  added to `patient_conversations` (`patient_display_name`,
+  `auto_reply` seq 1–3 = full follow-up body, ≤240 chars). In
+  `clinic_sms_message_templates`, `body_text=NULL` means use the current code
+  default for that template; the database stores only real custom overrides and
+  real follow-up enablement. Conversation state added to `patient_conversations` (`patient_display_name`,
   `sms_auto_reply_count`, `sms_auto_reply_last_sent_at`) and a `message_kind`
   classifier on `messages`.
 - Voice template storage (migration
@@ -3422,10 +3424,9 @@ unchanged. No AI runtime — everything is deterministic.
   and `Reply STOP to opt out`, rejects unsafe wording, and strips unresolved
   placeholders before send. With no saved initial template the built body is
   byte-for-byte the existing fixed production message
-  (`buildInitialSmsBody` delegates to `buildMissedCallRecoverySmsBody`). Old
-  middle-only rows from the first implementation are wrapped safely at render
-  time; rows that already contain the full initial SMS are not wrapped again, so
-  previews/sends do not duplicate the clinic identity or STOP language.
+  (`buildInitialSmsBody` delegates to `buildMissedCallRecoverySmsBody`). Saving
+  text equal to the canonical default deletes/removes the override instead of
+  storing the default text.
 - **Saved initial send path (2026-06-12):** `sendRecoverySms` reads
   `getClinicConversationConfig` and builds the actual outbound body through
   `buildRecoverySmsBodyFromConversationConfig`, which delegates to
@@ -3445,7 +3446,8 @@ unchanged. No AI runtime — everything is deterministic.
   may send one deterministic follow-up. It enforces every guard itself: mode
   (live/owner_test), exact-number readiness, recovery send gate
   (clinic enabled / owner-test allowlist), opt-out, prior recovery outbound,
-  `max_auto_replies`, enabled+non-empty template slot, and never on
+  `max_auto_replies`, enabled template slot (custom body or NULL default-backed
+  body), and never on
   STOP/START/HELP or a duplicate webhook. Slots are claimed with an atomic
   compare on `sms_auto_reply_count` so retries/races never double-send. The 4th+
   reply is stored only (no send). Auto-replies are recorded with
@@ -3483,6 +3485,17 @@ unchanged. No AI runtime — everything is deterministic.
   block second, then clicks **Save**. A successful save returns to read-only and
   shows the saved status. Reset-to-default buttons appear only while editing and
   write the default text directly into the textarea.
+- **Default/override storage (2026-06-12):** code defaults are the source of
+  truth. Admin API GET returns `defaultText`, `effectiveText`, `customBody`, and
+  `isCustom` for each editable template. Save compares submitted text to the
+  canonical defaults; matching default text is stored as NULL or the row is
+  deleted. Enabled follow-up rows may intentionally have `body_text=NULL`, which
+  means send the current code default for that slot.
+- **Default cleanup migration (2026-06-12):** data-only migration
+  `20260621000100_clean_sms_template_default_overrides.sql` cleans known stale
+  saved default-like values from `clinic_sms_message_templates`. It deletes
+  default-like initial and voice rows, sets default-like follow-up `body_text`
+  to NULL, preserves follow-up `enabled`, and leaves true custom text untouched.
 
 ### Default-safe / verify
 
@@ -3491,6 +3504,8 @@ unchanged. No AI runtime — everything is deterministic.
   and enables them for a specific clinic.
 - With no saved voice greeting rows, each scenario uses the system default voice
   greeting text.
+- With an enabled follow-up row whose `body_text` is NULL, the current code
+  default follow-up for that slot is sent. Disabled follow-ups do not send.
 - Verify after deploy: `GET /api/admin/clinics/{id}/ai-knowledge` and
   `…/sms-conversation` return 401 unauthenticated; `/admin/clinics/{id}` shows
   the **AI knowledge** and **SMS messages** tabs; `/account?section=ai_knowledge`
@@ -3498,8 +3513,12 @@ unchanged. No AI runtime — everything is deterministic.
 - DB check: `select to_regclass('public.clinic_sms_conversation_settings'),
   to_regclass('public.clinic_sms_message_templates');` (both non-null);
   `select count(*) from public.clinic_sms_conversation_settings;` (0 until an
-  admin saves). Confirm `clinic_sms_message_templates_role_check` allows
-  `voice_greeting`.
+  admin saves with non-default `max_auto_replies`). Confirm
+  `clinic_sms_message_templates_role_check` allows `voice_greeting`.
+  After applying `20260621000100_clean_sms_template_default_overrides.sql`,
+  default-like strings should no longer appear in
+  `clinic_sms_message_templates.body_text`; do not print template bodies in
+  logs or final reports.
 
 Tests: `npm run test:sms-recovery` (template render incl. default-equals-prod,
 safety, patient-name, reply classification, auto-reply decision,
