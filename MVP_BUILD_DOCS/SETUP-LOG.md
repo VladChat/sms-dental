@@ -7233,5 +7233,40 @@ Validation so far:
 - `git diff --check` clean, with only Git's CRLF normalization warning for
   `MVP_BUILD_DOCS/SETUP-LOG.md`.
 
-Not done yet in this entry: production migration application and Vercel
-deployment verification are pending the final commit/push rollout step.
+Production migration application and Vercel deployment verification were
+completed in the rollout entry below.
+
+---
+
+## 2026-06-12 — Production rollout: SMS Conversation Builder live-test fixes + voice greetings
+
+- Commit `8fbef8851703148e84539d7ed2168b161102578c`
+  (`fix: harden sms conversation builder`) pushed to `origin/main`.
+- Applied production migration
+  `supabase/migrations/20260620000100_voice_greeting_templates.sql` over the
+  documented direct/admin DB connection. Recorded migration history version
+  `20260620000100`.
+- Verified production DB: migration history count for `20260620000100` = 1;
+  `clinic_sms_message_templates_role_check` and
+  `clinic_sms_message_templates_sequence_check` allow `voice_greeting`;
+  current `clinic_sms_message_templates` row counts are `initial` = 1,
+  `auto_reply` = 3, `voice_greeting` = 0. No template bodies were read or
+  logged.
+- GitHub-triggered Vercel production deployment
+  `dpl_B7wq64a5NKUpRRD9Kc3Cb9evW5N3` reached **Ready** and was aliased to
+  `https://app.missedcallsdental.com`.
+
+Production verification:
+
+- `GET https://app.missedcallsdental.com/api/health` -> HTTP 200, `ok:true`.
+- `GET /api/admin/clinics/{Fairstone clinic id}/sms-conversation` -> HTTP 401
+  unauthenticated (platform-admin guarded).
+- `GET /api/admin/clinics/{Fairstone clinic id}/ai-knowledge` -> HTTP 401
+  unauthenticated (admin guard unchanged).
+- `GET /account?section=ai_knowledge` -> HTTP 200 (owner account page still
+  renders).
+- Read-only DB check confirmed Fairstone `sms_recovery_enabled=true`.
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no env change, no secret
+printing, no template body dump, and `.qwen/` remained untouched.
