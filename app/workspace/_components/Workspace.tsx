@@ -5,6 +5,7 @@ import {
   applyFlagsToStatus,
   deriveWorkspaceStatus,
   formatDateTime,
+  sortWorkspaceSectionCards,
   workspaceSectionForCard,
   type PatientRequestCard,
   type WorkspaceCardChip,
@@ -154,6 +155,9 @@ function RequestQueue({
       blocked: [],
     };
     for (const item of items) g[workspaceSectionForCard(item.flags)].push(item);
+    for (const section of SECTIONS) {
+      g[section.id] = sortWorkspaceSectionCards(section.id, g[section.id]);
+    }
     return g;
   }, [items]);
 
@@ -268,16 +272,8 @@ function QueueCard({
     >
       <span className="ws-list-top">
         <span className="ws-list-name">{card.patientName ?? card.callerPhone}</span>
-        {card.isSample && <span className="badge badge-info">Sample</span>}
       </span>
       {card.patientName && <span className="t-small ws-meta t-mono">{card.callerPhone}</span>}
-      <span className="ws-list-summary">{card.summaryHeadline}</span>
-      {card.latestMessage && (
-        <span className="ws-snippet">
-          {card.latestMessageDirection === "outbound" ? "Office" : "Patient"}: {card.latestMessage}
-        </span>
-      )}
-      <SummaryChips chips={card.summaryChips} />
       <span className="t-helper ws-meta">Last activity · {formatDateTime(card.lastActivityAt)}</span>
     </button>
   );
@@ -287,7 +283,16 @@ async function postConversationAction(
   conversationId: string,
   action: WorkspaceAction,
   extra?: { note?: string; name?: string; appointmentBooked?: boolean },
-): Promise<{ ok: boolean; message?: string; note?: string; name?: string }> {
+): Promise<{
+  ok: boolean;
+  message?: string;
+  note?: string;
+  name?: string;
+  archivedAt?: string;
+  handledAt?: string;
+  blockedAt?: string;
+  outcome?: PatientRequestCard["frontDeskOutcome"];
+}> {
   try {
     const res = await fetch("/api/workspace/conversation-action", {
       method: "POST",
@@ -295,12 +300,29 @@ async function postConversationAction(
       body: JSON.stringify({ conversationId, action, ...(extra ?? {}) }),
     });
     const data = (await res.json().catch(() => null)) as
-      | { ok?: boolean; note?: string; name?: string; error?: { message?: string } }
+      | {
+          ok?: boolean;
+          note?: string;
+          name?: string;
+          archivedAt?: string;
+          handledAt?: string;
+          blockedAt?: string;
+          outcome?: PatientRequestCard["frontDeskOutcome"];
+          error?: { message?: string };
+        }
       | null;
     if (!res.ok || !data?.ok) {
       return { ok: false, message: data?.error?.message ?? "Could not complete this action." };
     }
-    return { ok: true, note: data.note, name: data.name };
+    return {
+      ok: true,
+      note: data.note,
+      name: data.name,
+      archivedAt: data.archivedAt,
+      handledAt: data.handledAt,
+      blockedAt: data.blockedAt,
+      outcome: data.outcome,
+    };
   } catch {
     return { ok: false, message: "Could not complete this action." };
   }
@@ -336,24 +358,35 @@ function RequestDetail({
       return;
     }
     if (action === "archive") {
-      onPatched(card.id, { flags: { ...card.flags, archived: true } });
+      onPatched(card.id, {
+        flags: { ...card.flags, archived: true },
+        workspaceArchivedAt: result.archivedAt ?? new Date().toISOString(),
+      });
     } else if (action === "reopen") {
       onPatched(card.id, {
         flags: { ...card.flags, archived: false, handled: false },
         frontDeskOutcome: null,
         baseStatus: deriveWorkspaceStatus("open", card.timeline),
+        workspaceArchivedAt: null,
+        workspaceHandledAt: null,
       });
     } else if (action === "mark_handled") {
       setAskingHandled(false);
       onPatched(card.id, {
         flags: { ...card.flags, handled: true },
-        frontDeskOutcome: extra?.appointmentBooked ? "appointment_booked" : "no_appointment_booked",
+        frontDeskOutcome:
+          result.outcome ?? (extra?.appointmentBooked ? "appointment_booked" : "no_appointment_booked"),
+        workspaceHandledAt: result.handledAt ?? new Date().toISOString(),
       });
     } else if (action === "block_number") {
       setConfirmingBlock(false);
-      onPatched(card.id, { flags: { ...card.flags, blocked: true, archived: true } });
+      onPatched(card.id, {
+        flags: { ...card.flags, blocked: true, archived: true },
+        blockedAt: result.blockedAt ?? new Date().toISOString(),
+        workspaceArchivedAt: result.blockedAt ?? new Date().toISOString(),
+      });
     } else if (action === "unblock_number") {
-      onPatched(card.id, { flags: { ...card.flags, blocked: false } });
+      onPatched(card.id, { flags: { ...card.flags, blocked: false }, blockedAt: null });
     }
   }
 

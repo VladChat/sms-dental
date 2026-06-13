@@ -91,6 +91,27 @@ export async function hasSentRecoverySmsSince(
   return parseInt(rows[0]?.cnt ?? "0", 10) > 0;
 }
 
+// True when this clinic has ever sent a missed-call recovery SMS to this
+// patient phone. No date window: this gates public inbound SMS so the product
+// stays a missed-call recovery workflow, not an open public inbox. Legacy null
+// message_kind outbounds count as recovery; conversation auto-replies do not.
+export async function hasAnyRecoveryOutboundToClinicPhone(
+  clinicId: string,
+  toNumber: string,
+): Promise<boolean> {
+  const sql = getDb();
+  const rows = await sql<{ cnt: string }[]>`
+    select count(*) as cnt
+    from public.messages
+    where clinic_id   = ${clinicId}
+      and to_number   = ${toNumber}
+      and direction   = 'outbound'
+      and (message_kind is null or message_kind = 'missed_call_recovery')
+    limit 1
+  `;
+  return parseInt(rows[0]?.cnt ?? "0", 10) > 0;
+}
+
 // True when the conversation already has a missed-call recovery outbound. The
 // auto-reply flow only runs inside an existing recovery thread. Legacy null
 // message_kind outbounds count as recovery.

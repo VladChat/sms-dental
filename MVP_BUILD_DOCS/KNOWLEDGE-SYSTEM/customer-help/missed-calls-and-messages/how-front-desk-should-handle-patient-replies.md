@@ -71,9 +71,11 @@ See [Patient opt-out — STOP and START](patient-opt-out-stop-start.md).
 
 - Open the **workspace** to see patient replies and request cards.
 - Start in the **Needs follow-up** section. It is expanded by default; Handled,
-  Archived, and Blocked start collapsed.
-- Read the one-line request summary and latest message snippet, then open the
-  selected request if you need the conversation.
+  Archived, and Blocked start collapsed. Needs follow-up is oldest first; the
+  other sections show newest first.
+- Use the left queue card to identify the patient name or phone number and last
+  activity, then open the selected request to read the request summary and
+  conversation.
 - Review each reply and follow up using your clinic's normal process (for example,
   using **Call patient** to open your device's normal phone dialer and call the
   patient back to schedule).
@@ -90,6 +92,11 @@ See [Patient opt-out — STOP and START](patient-opt-out-stop-start.md).
 - New replies appear as request cards for the front desk to handle.
 - Cards are grouped into **Needs follow-up**, **Handled**, **Archived**, and
   **Blocked**. Use **Load more** when a section has more cards.
+- Missed Calls Dental is not a public texting inbox. If a phone number sends an
+  ordinary inbound text without ever receiving a missed-call recovery text from
+  your clinic, the inbound message is saved, automation is blocked for that
+  number, and the card appears under **Blocked**. Existing recovery contacts are
+  not blocked by this rule.
 - Recording an outcome helps your team keep track of which patients still need
   follow-up.
 - Cards clearly labeled **"Sample"** are examples only — they are not real patients

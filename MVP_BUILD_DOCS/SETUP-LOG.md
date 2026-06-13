@@ -7651,6 +7651,54 @@ secret printing, no patient data printed, and `.qwen/` remained untouched.
 
 ---
 
+## 2026-06-13 — Workspace queue cards simplified and inbound-only SMS auto-blocked
+
+Tightened the `/workspace` left queue cards and added a webhook guard so Missed
+Calls Dental remains a missed-call recovery workflow rather than a public SMS
+inbox.
+
+What changed:
+
+- Left queue cards now show only safe name when available, phone number, and
+  last activity. They no longer show request summaries, `Review conversation`,
+  latest-message snippets, Patient/Office prefixes, chips, or status badges.
+  The right detail panel still keeps the deterministic request summary,
+  conversation preview, name edit, actions, and internal note.
+- Section sorting is now: Needs follow-up oldest first by last activity;
+  Handled / Archived / Blocked newest first by handled / archived / blocked
+  timestamp when present, falling back to last activity.
+- Ordinary non-keyword inbound SMS now checks for any prior missed-call recovery
+  outbound to the same clinic + patient phone after the inbound message is
+  saved. Legacy null `message_kind` outbound rows count as recovery;
+  `conversation_auto_reply` rows and other clinics do not count. If no recovery
+  history exists, the patient/caller number is clinic-scoped blocked with reason
+  `inbound_without_recovery_history`, the conversation is archived when
+  practical, classification/name extraction/auto-reply are skipped, and the
+  webhook returns normal empty TwiML 200.
+- STOP/START/HELP handling, duplicate inbound suppression, blocked-number
+  inbound recording, patient-number block semantics, Twilio settings, and
+  phone-number lifecycle behavior are unchanged.
+
+Validation:
+
+- `npm run test:sms-recovery` pass: 226 tests.
+- `npm run typecheck` pass.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+Production migration: none needed (existing `messages`,
+`patient_conversations`, and `clinic_blocked_patient_numbers` structures cover
+the behavior).
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no production env change, no
+secret printing, no patient data printed, and `.qwen/` remained untouched.
+
+---
+
 ## 2026-06-13 — Front-desk Workspace decluttered section queue
 
 Decluttered `/workspace` so the queue is organized by section headers instead

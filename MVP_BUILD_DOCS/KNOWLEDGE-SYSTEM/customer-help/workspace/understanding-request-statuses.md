@@ -41,12 +41,14 @@ The workspace uses four visible sections:
 - **Archived** — staff moved the request out of the active work area. Messages
   stay saved, and the request can be reopened later.
 - **Blocked** — staff blocked automated texts to that patient/caller phone number
-  for this clinic. Messages stay saved, and inbound messages can still be
-  recorded.
+  for this clinic, or the system auto-blocked an inbound-only SMS number that had
+  never received a missed-call recovery text from this clinic. Messages stay
+  saved, and inbound messages can still be recorded.
 
 The section header is the status. Cards inside a section do not repeat the same
-status label. Always read the summary and conversation snippet to understand the
-full picture before you act.
+status label. Left-side cards show only the name when available, the phone
+number, and last activity. Open the card to read the request summary and
+conversation in the detail panel before you act.
 
 ### What "Not provided" means
 
@@ -65,9 +67,10 @@ patient or use the inline name edit after you know it.
 ## What you can do
 
 - Start with **Needs follow-up**. It is expanded by default and is the main work
-  area.
+  area. It is oldest first by last activity.
 - Expand **Handled**, **Archived**, or **Blocked** when you need older or
-  completed requests. If a section has many cards, use **Load more**.
+  completed requests. These sections are newest first. If a section has many
+  cards, use **Load more**.
 - Open a card and read the conversation before following up.
 - Follow up with the patient using your clinic's normal process, and mark the
   request **Handled** when done. See
@@ -83,7 +86,9 @@ patient or use the inline name edit after you know it.
   available today. The **Call patient** action is a normal phone link for your
   device; it does not place an automated call.
 - A request can move between sections when staff use Handled, Archive, Reopen,
-  Block number, or Unblock number.
+  Block number, or Unblock number. Inbound-only SMS numbers with no prior
+  recovery-text history from this clinic can also move directly to Blocked after
+  the inbound message is saved.
 - Recording an outcome helps your team keep track of which patients still need
   follow-up.
 

@@ -15,11 +15,16 @@ import {
   setPatientDisplayNameIfEmpty,
   touchConversation,
 } from "@/lib/db/conversations";
-import { recordInboundMessage } from "@/lib/db/messages";
+import {
+  hasAnyRecoveryOutboundToClinicPhone,
+  recordInboundMessage,
+} from "@/lib/db/messages";
 import { upsertOptOut, clearOptOut } from "@/lib/db/opt-outs";
 import { classifyInboundReply } from "@/lib/sms-recovery/reply-classification";
 import { maybeSendConversationAutoReply } from "@/lib/twilio/conversation-auto-reply";
 import { logger } from "@/lib/logging/logger";
+import { blockPatientNumberForClinic } from "@/lib/db/patient-blocks";
+import { archiveConversation } from "@/lib/db/front-desk";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,11 +39,16 @@ export const dynamic = "force-dynamic";
 //   7. For STOP: write opt-out row — future recovery SMS will be blocked.
 //   8. For START: clear opt-out — future recovery SMS is permitted again.
 //   9. For HELP: no DB change.
-//  10. For ordinary replies: classify deterministically (including the
+//  10. For ordinary replies: require prior missed-call recovery history for
+//      this clinic + patient phone. If none exists, block that patient number
+//      for this clinic, archive the conversation, and skip classification/name
+//      extraction/auto-reply. This keeps inbound SMS tied to recovery threads,
+//      not a public inbox.
+//  11. For ordinary replies with recovery history: classify deterministically (including the
 //      safety_concern class for pain/emergency wording), optionally save a
 //      safe patient name, and run the guarded auto-reply flow when eligible.
 //      Name extraction runs on every ordinary inbound until a name is stored.
-//  11. Return empty <Response/> for all cases — Twilio platform already sends
+//  12. Return empty <Response/> for all cases — Twilio platform already sends
 //      STOP/START/HELP compliance replies; returning our own <Message> caused duplicates.
 export async function POST(request: NextRequest) {
   const url = reconstructTwilioWebhookUrl(request);
@@ -117,6 +127,7 @@ export async function POST(request: NextRequest) {
 
         // Record the inbound message.
         let inboundIsDuplicate = false;
+        let inboundRecorded = false;
         try {
           const recorded = await recordInboundMessage({
             clinicId: clinic.id,
@@ -130,6 +141,7 @@ export async function POST(request: NextRequest) {
             rawPayload: params,
           });
           inboundIsDuplicate = recorded.duplicate;
+          inboundRecorded = !recorded.duplicate;
           if (!recorded.duplicate) {
             await touchConversation(conversationId);
           }
@@ -154,7 +166,40 @@ export async function POST(request: NextRequest) {
         // conservatively collect a patient name, and run the deterministic
         // auto-reply flow. Thanks/acks/negative/unclear replies are saved above
         // but never consume an auto-reply slot.
-        if (!keyword && !inboundIsDuplicate) {
+        if (!keyword && inboundRecorded && !inboundIsDuplicate) {
+          const hasRecoveryHistory = await hasAnyRecoveryOutboundToClinicPhone(clinic.id, from);
+          if (!hasRecoveryHistory) {
+            try {
+              await blockPatientNumberForClinic({
+                clinicId: clinic.id,
+                phoneNumber: from,
+                blockedByProfileId: null,
+                blockedByEmail: null,
+                reason: "inbound_without_recovery_history",
+                sourceConversationId: conversationId,
+              });
+              await archiveConversation({
+                clinicId: clinic.id,
+                conversationId,
+                actor: { profileId: null, email: null },
+              });
+              logger.info("twilio.sms.auto_blocked_no_recovery_history", {
+                clinicId: clinic.id,
+                conversationId,
+                patientPhoneLast4: from.slice(-4),
+                toPhoneLast4: to.slice(-4),
+              });
+            } catch (err) {
+              logger.error("twilio.sms.auto_block_no_recovery_failed", {
+                clinicId: clinic.id,
+                conversationId,
+                patientPhoneLast4: from.slice(-4),
+                message: err instanceof Error ? err.message : "unknown",
+              });
+            }
+            return twimlResponse();
+          }
+
           const reply = classifyInboundReply(body);
           try {
             if (reply.patientName) {

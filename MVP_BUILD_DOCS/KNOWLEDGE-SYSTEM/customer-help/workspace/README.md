@@ -41,8 +41,8 @@ visible to staff):
   yes/no, plus an optional short internal note.
 - Reinforce opt-out respect: never message a patient who replied STOP. Link to
   [../missed-calls-and-messages/README.md](../missed-calls-and-messages/README.md).
-- Sample cards are clearly labeled "Sample" and are not real patients — note this
-  so staff don't act on them.
+- The Sample requests section is clearly separated from real requests — note this
+  so staff don't act on examples.
 - Do not describe owner-only features (billing, SMS approval, setup) here, even to
   say staff "can't" use them — keep the workspace scope clean.
 

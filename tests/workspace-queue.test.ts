@@ -6,13 +6,41 @@ import path from "node:path";
 import {
   applyFlagsToStatus,
   derivePrimaryWorkspaceStatus,
+  sortWorkspaceSectionCards,
   workspaceSectionForCard,
   WORKSPACE_STATUS_META,
   WORKSPACE_FLAG_META,
+  type PatientRequestCard,
 } from "../app/workspace/_components/workspace-types";
 
 const REPO_ROOT = process.cwd();
 const read = (rel: string) => fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
+
+const BASE_FLAGS = {
+  safetyConcern: false,
+  automationPaused: false,
+  highVolume: false,
+  blocked: false,
+  archived: false,
+  handled: false,
+};
+
+function card(input: Partial<PatientRequestCard> & Pick<PatientRequestCard, "id" | "lastActivityAt">): PatientRequestCard {
+  return {
+    callerPhone: "+15550101010",
+    patientName: null,
+    summaryHeadline: "Review conversation",
+    summaryChips: [],
+    latestMessage: null,
+    latestMessageDirection: null,
+    status: "needs_follow_up",
+    baseStatus: "needs_follow_up",
+    flags: BASE_FLAGS,
+    createdAt: "2026-06-01T00:00:00.000Z",
+    timeline: [],
+    ...input,
+  };
+}
 
 // ------------------------------------------------------ status + filters
 
@@ -73,6 +101,62 @@ test("queue sections: blocked > handled > archived > needs follow-up", () => {
   assert.equal(
     workspaceSectionForCard({ blocked: true, archived: false, handled: false }),
     "blocked",
+  );
+});
+
+test("queue section sorting follows the product order rules", () => {
+  assert.deepEqual(
+    sortWorkspaceSectionCards("needs_follow_up", [
+      card({ id: "newer", lastActivityAt: "2026-06-10T10:00:00.000Z" }),
+      card({ id: "older", lastActivityAt: "2026-06-10T09:00:00.000Z" }),
+    ]).map((c) => c.id),
+    ["older", "newer"],
+  );
+
+  assert.deepEqual(
+    sortWorkspaceSectionCards("handled", [
+      card({
+        id: "older-handled",
+        lastActivityAt: "2026-06-12T10:00:00.000Z",
+        workspaceHandledAt: "2026-06-11T10:00:00.000Z",
+      }),
+      card({
+        id: "newer-handled",
+        lastActivityAt: "2026-06-10T10:00:00.000Z",
+        workspaceHandledAt: "2026-06-12T10:00:00.000Z",
+      }),
+    ]).map((c) => c.id),
+    ["newer-handled", "older-handled"],
+  );
+
+  assert.deepEqual(
+    sortWorkspaceSectionCards("archived", [
+      card({
+        id: "fallback-older",
+        lastActivityAt: "2026-06-10T10:00:00.000Z",
+      }),
+      card({
+        id: "archived-newer",
+        lastActivityAt: "2026-06-01T10:00:00.000Z",
+        workspaceArchivedAt: "2026-06-12T10:00:00.000Z",
+      }),
+    ]).map((c) => c.id),
+    ["archived-newer", "fallback-older"],
+  );
+
+  assert.deepEqual(
+    sortWorkspaceSectionCards("blocked", [
+      card({
+        id: "older-block",
+        lastActivityAt: "2026-06-12T10:00:00.000Z",
+        blockedAt: "2026-06-11T10:00:00.000Z",
+      }),
+      card({
+        id: "fallback-newer",
+        lastActivityAt: "2026-06-13T10:00:00.000Z",
+      }),
+    ]).map((c) => c.id),
+    ["fallback-newer", "older-block"],
   );
 });
 
@@ -193,7 +277,20 @@ test("blocked patient number suppresses follow-ups, thanks courtesy, and safety 
   assert.ok(blockIdx < followUpIdx, "block skip precedes the follow-up decision");
 });
 
-test("incoming webhook still records inbound and keeps STOP/START/HELP first", () => {
+test("message helper detects any prior recovery outbound for a clinic phone", () => {
+  const src = read(path.join("lib", "db", "messages.ts"));
+  const start = src.indexOf("export async function hasAnyRecoveryOutboundToClinicPhone");
+  const end = src.indexOf("export async function hasPriorRecoveryOutbound", start);
+  const helper = src.slice(start, end);
+  assert.ok(helper.includes("clinic_id   = ${clinicId}"));
+  assert.ok(helper.includes("to_number   = ${toNumber}"));
+  assert.ok(helper.includes("direction   = 'outbound'"));
+  assert.ok(helper.includes("message_kind is null or message_kind = 'missed_call_recovery'"));
+  assert.ok(!helper.includes("created_at >="), "ever check has no date window");
+  assert.ok(!helper.includes("conversation_auto_reply"), "auto-replies do not count");
+});
+
+test("incoming webhook records inbound, preserves keywords, and auto-blocks public inbound SMS", () => {
   const src = read(
     path.join("app", "api", "webhooks", "twilio", "messaging", "incoming", "route.ts"),
   );
@@ -201,11 +298,28 @@ test("incoming webhook still records inbound and keeps STOP/START/HELP first", (
   // numbers keep an audit trail; compliance keyword handling is untouched.
   const recordIdx = src.indexOf("recordInboundMessage({");
   const optOutIdx = src.indexOf('if (keyword === "stop")', recordIdx);
+  const historyIdx = src.indexOf("hasAnyRecoveryOutboundToClinicPhone(clinic.id, from)", optOutIdx);
+  const blockIdx = src.indexOf("blockPatientNumberForClinic({", historyIdx);
+  const archiveIdx = src.indexOf("archiveConversation({", blockIdx);
+  const classificationIdx = src.indexOf("const reply = classifyInboundReply(body)", historyIdx);
   const autoReplyIdx = src.indexOf("maybeSendConversationAutoReply({");
-  assert.ok(recordIdx >= 0 && optOutIdx > recordIdx && autoReplyIdx > optOutIdx);
+  assert.ok(recordIdx >= 0 && optOutIdx > recordIdx);
+  assert.ok(historyIdx > optOutIdx, "recovery history check runs after keyword handling");
+  assert.ok(blockIdx > historyIdx && archiveIdx > blockIdx);
+  assert.ok(classificationIdx > archiveIdx && autoReplyIdx > classificationIdx);
   assert.ok(src.includes("upsertOptOut"));
   assert.ok(src.includes("clearOptOut"));
-  assert.ok(!src.includes("patient_number_blocked"), "webhook itself does not gate recording");
+  assert.ok(src.includes("!keyword && inboundRecorded && !inboundIsDuplicate"));
+  assert.ok(src.includes('reason: "inbound_without_recovery_history"'));
+  assert.ok(src.includes("blockedByProfileId: null"));
+  assert.ok(src.includes("blockedByEmail: null"));
+  assert.ok(src.includes("actor: { profileId: null, email: null }"));
+  assert.ok(src.includes('logger.info("twilio.sms.auto_blocked_no_recovery_history"'));
+  assert.ok(src.includes("patientPhoneLast4"));
+  const logStart = src.indexOf('logger.info("twilio.sms.auto_blocked_no_recovery_history"');
+  const logEnd = src.indexOf("});", logStart);
+  const logBlock = src.slice(logStart, logEnd);
+  assert.ok(!logBlock.includes("body"), "auto-block logs do not include message body");
 });
 
 // -------------------------------------------------------------- UI layer
@@ -225,6 +339,27 @@ test("workspace detail header carries the call button and actions; phone shown o
   assert.ok(src.includes('const NOT_PROVIDED = "Not provided"'));
   assert.ok(src.includes("{card.patientName && <span"));
   assert.ok(!src.includes('"Unknown"'), "Unknown placeholder fully replaced");
+});
+
+test("left queue cards show only name or phone, optional phone, and last activity", () => {
+  const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
+  const start = src.indexOf("function QueueCard");
+  const end = src.indexOf("async function postConversationAction", start);
+  const queueCard = src.slice(start, end);
+  const render = queueCard.slice(queueCard.indexOf("return ("));
+
+  assert.ok(render.includes("{card.patientName ?? card.callerPhone}"));
+  assert.ok(render.includes("{card.patientName && <span"));
+  assert.ok(render.includes("{card.callerPhone}"));
+  assert.ok(render.includes("Last activity"));
+
+  assert.ok(!render.includes("summaryHeadline"));
+  assert.ok(!render.includes("latestMessage"));
+  assert.ok(!render.includes("SummaryChips"));
+  assert.ok(!render.includes("Patient:"));
+  assert.ok(!render.includes("Office:"));
+  assert.ok(!render.includes("badge"));
+  assert.ok(!render.includes("Review conversation"));
 });
 
 test("request summary card shows one headline + signal chips, no empty rows", () => {

@@ -71,6 +71,9 @@ export type PatientRequestCard = {
   flags: WorkspaceCardFlags;
   createdAt: string; // ISO
   lastActivityAt: string; // ISO
+  workspaceArchivedAt?: string | null; // ISO
+  workspaceHandledAt?: string | null; // ISO
+  blockedAt?: string | null; // ISO
   timeline: WorkspaceTimelineItem[];
   // True only for UI-only demo cards rendered when no real conversations exist.
   isSample?: boolean;
@@ -128,6 +131,34 @@ export function workspaceSectionForCard(
   if (flags.handled) return "handled";
   if (flags.archived) return "archived";
   return "needs_follow_up";
+}
+
+function timestampMs(iso: string | null | undefined): number {
+  const ms = Date.parse(iso ?? "");
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function sectionSortTimestamp(sectionId: WorkspaceSectionId, card: PatientRequestCard): number {
+  if (sectionId === "blocked") return timestampMs(card.blockedAt ?? card.lastActivityAt);
+  if (sectionId === "handled") return timestampMs(card.workspaceHandledAt ?? card.lastActivityAt);
+  if (sectionId === "archived") return timestampMs(card.workspaceArchivedAt ?? card.lastActivityAt);
+  return timestampMs(card.lastActivityAt);
+}
+
+export function sortWorkspaceSectionCards(
+  sectionId: WorkspaceSectionId,
+  cards: PatientRequestCard[],
+): PatientRequestCard[] {
+  const direction = sectionId === "needs_follow_up" ? 1 : -1;
+  return [...cards].sort((a, b) => {
+    const sectionDelta =
+      (sectionSortTimestamp(sectionId, a) - sectionSortTimestamp(sectionId, b)) * direction;
+    if (sectionDelta !== 0) return sectionDelta;
+
+    const activityDelta = (timestampMs(a.lastActivityAt) - timestampMs(b.lastActivityAt)) * direction;
+    if (activityDelta !== 0) return activityDelta;
+    return a.id.localeCompare(b.id);
+  });
 }
 
 // Conservative status derivation from existing data only. We never guess beyond

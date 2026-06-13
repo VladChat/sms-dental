@@ -40,8 +40,10 @@ reviewing those replies and tracking your follow-up.
 - The patient's phone number.
 - The request queue grouped into **Needs follow-up**, **Handled**,
   **Archived**, and **Blocked** sections.
-- A short request summary and the latest message snippet on each request card.
-- The conversation history (patient and office messages with timestamps).
+- Minimal left-side request cards with the patient name when available, phone
+  number, and last activity.
+- The selected request's summary and conversation history (patient and office
+  messages with timestamps) in the detail panel.
 - The selected request's patient name or **Not provided**, plus the phone number
   once in the patient header.
 - Staff-only notes and follow-up actions.
@@ -60,13 +62,13 @@ belong to the owner account, not the front desk.
   not repeat the same status label.
 - **Patient name / phone** — if a safe name is available, it is the title and the
   phone is secondary; otherwise the phone is the title.
-- **Request summary** — one short line such as `Cleaning appointment · Tomorrow`
-  or `Review conversation`. It is deterministic and not AI-generated.
-- **Latest message** — a quick snippet of the most recent activity.
-- **System chips** — only useful system state such as **Automation paused** or
-  **High volume**.
+- **Last activity** — the most recent saved activity time.
 - **Not provided** — means the system does not have a safe patient name. It is
   not an error; confirm directly with the patient if you need it.
+
+Open a card to see the request summary, conversation preview, name edit, actions,
+and internal note on the right. The summary is deterministic and not
+AI-generated.
 
 ### Recording outcomes
 
@@ -84,7 +86,8 @@ them.
 - Open the workspace to review patient replies and request cards.
 - Expand or collapse the four queue sections. **Needs follow-up** starts open;
   the other sections start collapsed. Use **Load more** when a section has more
-  than six cards.
+  than six cards. **Needs follow-up** is oldest first by last activity; Handled,
+  Archived, and Blocked show newest first.
 - Use **Call patient** to open your device's normal phone dialer for the patient
   number. This does not place an automated call from Missed Calls Dental.
 - Follow up with patients through your clinic's normal process. See
@@ -97,6 +100,10 @@ them.
 - The workspace currently helps you **review** replies and **record outcomes**.
 - Sending text replies from the workspace, automated calling, and task assignment
   are not available today — follow up using your normal phone process.
+- The workspace is for missed-call recovery replies, not a public texting inbox.
+  If a phone number texts the clinic's Missed Calls Dental number without ever
+  receiving a recovery text from that clinic, the inbound message is saved and the
+  number is blocked for automation. It appears under **Blocked**.
 - Always respect patient opt-outs. See
   [Patient opt-out — STOP and START](../missed-calls-and-messages/patient-opt-out-stop-start.md).
 

@@ -1,7 +1,7 @@
 # Front Desk Workspace
 
 Status: Active (operational patient-request queue)
-Last updated: 2026-06-13
+Last updated: 2026-06-13 (queue-card simplification, section sorting, inbound-only SMS auto-block)
 
 ## 0.1 2026-06-13 — Sectioned queue polish (decluttered cards)
 
@@ -16,6 +16,15 @@ Last updated: 2026-06-13
 - **Load more.** Each section shows up to 6 cards at first. If more cards exist,
   a visible `Load more` button reveals the next 6 cards for that section. Header
   counts always show the total section count, not only visible cards.
+- **Section sorting.** Needs follow-up is oldest first by last activity so the
+  oldest active work stays visible. Handled, Archived, and Blocked are newest
+  first by their handled / archived / blocked timestamp when available, falling
+  back to last activity.
+- **Left queue cards.** Queue cards are intentionally minimal: safe patient name
+  when available, phone number, and last activity. If no safe name exists, the
+  phone number is the title and is not duplicated. Cards do not show request
+  summaries, `Review conversation`, latest-message snippets, Patient/Office
+  prefixes, signal chips, or status badges.
 - **No repeated status badges.** The section header is the primary status. Cards
   inside a section do not repeat `Needs follow-up`, `Handled`, `Archived`, or
   `Blocked` as per-card badges, and the selected-card header does not repeat the
@@ -45,10 +54,22 @@ Last updated: 2026-06-13
   `Mentions pain/urgent concern · Wants appointment`, `Payment question`,
   fallback `Review conversation`). Request signals such as pain/urgent,
   payment, and insurance are not repeated as chips when the headline already
-  says them. Visible chips are reserved for useful non-redundant system state:
-  `Automation paused` and `High volume`. No empty chip rows and no
-  `None detected` rows render. `buildWorkspaceRequestSummary` keeps a future
-  `aiSummary` input hook, but nothing produces AI today — no provider, no env.
+  says them. The request summary and conversation preview live in the right
+  detail panel, not the left queue cards. Visible chips in the detail panel are
+  reserved for useful non-redundant system state: `Automation paused` and
+  `High volume`. No empty chip rows and no `None detected` rows render.
+  `buildWorkspaceRequestSummary` keeps a future `aiSummary` input hook, but
+  nothing produces AI today — no provider, no env.
+- **Inbound-only SMS auto-block.** The inbound SMS webhook records the inbound
+  message first, then for ordinary non-keyword inbound SMS checks whether the
+  same clinic has ever sent that phone number a missed-call recovery SMS
+  (`message_kind` null legacy rows or `missed_call_recovery`). If not, the
+  patient/caller number is clinic-scoped blocked with reason
+  `inbound_without_recovery_history`, the conversation is archived, and no
+  reply classification, name extraction, or automated reply runs. STOP / START /
+  HELP handling is unchanged and is never auto-blocked. Existing contacts who
+  have ever received a recovery SMS from that clinic continue through the
+  normal reply flow.
 - **Action copy.** Exact tooltips on all actions (Call/Handled/Archive/Block/
   Reopen/Unblock). Block copy describes only the phone number: confirmation
   reads `Block this phone number? Automated texts to this number will stop,
@@ -63,11 +84,11 @@ Last updated: 2026-06-13
 what do they want, what did they say, and what should staff do next.
 
 - **Queue (left column).** Four sections: Needs follow-up, Handled, Archived,
-  Blocked. Each card shows the patient name (or phone when no safe name is
-  available), the phone as secondary when a name exists, one-line request
-  summary, latest message snippet with direction, optional system chips
-  (Automation paused / High volume), and last activity. Cards do not repeat the
-  section status as a badge.
+  Blocked. Each card shows only the patient name when a safe name is available,
+  the phone number, and last activity. If no safe name exists, the phone number
+  is the title and is not duplicated. Cards do not show request summaries,
+  latest-message snippets, Patient/Office labels, signal chips, or status
+  badges.
 - **Patient header (right panel).** Name or `Not provided`, the phone once,
   primary **Call patient** (a normal `tel:` link), and
   secondary actions: **Mark handled**, **Archive**, **Block number** (or
@@ -84,7 +105,10 @@ what do they want, what did they say, and what should staff do next.
   The big Outcome radio form was removed from the layout; the legacy
   `/api/workspace/outcome` route remains for compatibility only.
 - **Sections.** Membership priority: Blocked > Handled > Archived >
-  Needs follow-up. The section header is the staff-facing status.
+  Needs follow-up. Needs follow-up sorts oldest first by last activity. Handled,
+  Archived, and Blocked sort newest first by their action timestamp when
+  available, falling back to last activity. The section header is the
+  staff-facing status.
 
 ### Block number vs Archive (terminology)
 
@@ -98,8 +122,12 @@ what do they want, what did they say, and what should staff do next.
   RLS-enabled, service-role only) and are an operator action separate from
   carrier opt-outs. STOP/START/HELP handling is unchanged. Blocking archives
   the conversation; **Unblock number** clears the block, sends nothing, and
-  leaves the conversation archived until reopened. The UI requires an inline
-  confirmation that names the patient number explicitly.
+  leaves the conversation archived until reopened. Ordinary inbound SMS from a
+  phone number that has never received a recovery SMS from that clinic is
+  auto-blocked with no AI/text analysis after the inbound message is recorded,
+  so it appears under Blocked instead of Needs follow-up. The UI requires an
+  inline confirmation that names the patient number explicitly for manual
+  blocks.
 - **Archive** moves a conversation to the Archived section
   (`workspace_archived_at`). It deletes nothing and is reversible with
   **Reopen**. **Mark handled** stamps `workspace_handled_at` without implying
@@ -132,13 +160,15 @@ approval documents, owner setup settings, Twilio technical details, internal IDs
 request cards. It now supports the minimal human follow-up workflow:
 
 - no outbound replies;
-- visible latest patient reply without opening the full conversation;
+- selected-card conversation preview with a full-timeline toggle;
 - a normal browser/phone `tel:` link labeled `Call patient` (not a Twilio
   outbound call and not automation);
-- status mutations only through the explicit outcome form;
+- explicit queue actions: Handled, Archive, Reopen, Block number, Unblock number,
+  save_name, and save_note;
 - no new staff invite/onboarding system in this pass;
 - no new task-management system;
-- no new database tables.
+- no new database tables in this follow-up (the existing
+  `clinic_blocked_patient_numbers` table and workspace state columns are reused).
 
 ## 3. Access model
 
@@ -166,12 +196,13 @@ UI shape (`app/workspace/_components/workspace-types.ts` → `PatientRequestCard
 | id                     | `patient_conversations.id`                    | Opaque selection key only; NOT shown to the user. |
 | callerPhone            | `patient_conversations.patient_phone`         | Patient phone (E.164). |
 | patientName            | `patient_conversations.patient_display_name`  | Sanitized; unsafe/request-like text renders as `Not provided`. |
-| summaryHeadline        | deterministic request summary helper          | One line; never AI-generated today. |
-| summaryChips           | conversation system state                     | Only non-redundant system chips such as Automation paused / High volume. |
-| latestMessage          | latest `messages.body` in the conversation    | Snippet on the card. |
+| summaryHeadline        | deterministic request summary helper          | One line in the right detail panel; never AI-generated today. |
+| summaryChips           | conversation system state                     | Only non-redundant system chips such as Automation paused / High volume; shown in the right detail panel. |
+| latestMessage          | latest `messages.body` in the conversation    | Used for detail context, not shown on the left card. |
 | status / section       | workspace state + derived flags               | Shown as the section header, not a repeated card badge. |
 | createdAt              | `patient_conversations.created_at`            | |
 | lastActivityAt         | `patient_conversations.last_message_at`       | falls back to `created_at`. |
+| workspaceHandledAt / workspaceArchivedAt / blockedAt | workspace state + block join | Used for section sorting; falls back to last activity when absent. |
 | timeline               | `messages` (direction, body, created_at)      | Safe columns only. |
 
 Unknown or unsafe names render as `Not provided`. Unknown request details are not
@@ -190,7 +221,9 @@ The visible queue sections are:
 - **Archived** — staff moved the request out of the active work area; messages
   stay saved and the request can be reopened.
 - **Blocked** — staff blocked the patient/caller phone number for this clinic;
-  automated texts to that number stop, while inbound messages still record.
+  automated texts to that number stop, while inbound messages still record. The
+  system also auto-blocks ordinary inbound-only SMS when that clinic has no
+  prior missed-call recovery outbound to that phone number.
 
 Membership priority:
 
@@ -200,6 +233,15 @@ blocked > handled > archived > needs follow-up
 
 The older outbound-waiting lifecycle value remains internal logic only; it is not
 a staff-facing label in the Workspace UI.
+
+Sorting:
+
+```txt
+Needs follow-up: oldest first by last activity
+Handled: newest first by handled timestamp, else last activity
+Archived: newest first by archived timestamp, else last activity
+Blocked: newest first by blocked timestamp, else last activity
+```
 
 ## 6. Data-source mapping
 

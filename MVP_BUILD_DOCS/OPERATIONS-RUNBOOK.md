@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-13 (Workspace queue declutter: four visible sections, Needs follow-up expanded by default, 6-card client-side Load more, no repeated status badges, request-summary signals not duplicated as chips)
+Last updated: 2026-06-13 (Workspace queue cards simplified; inbound-only SMS auto-blocked when no prior recovery history exists)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3620,19 +3620,22 @@ unchanged. No AI runtime — everything is deterministic.
   outbound-waiting label is not shown to staff. Membership priority:
   blocked > handled > archived > needs follow-up. Active, non-handled,
   non-archived, non-blocked conversations stay in Needs follow-up whether the
-  latest message is inbound or outbound.
+  latest message is inbound or outbound. Sorting: Needs follow-up is oldest
+  first by `lastActivityAt`; Handled, Archived, and Blocked are newest first by
+  their handled / archived / blocked timestamp when present, falling back to
+  `lastActivityAt`.
 - Patient header: sanitized name or `Not provided`, phone once, Call patient
   `tel:` link, Mark handled / Archive / Block number / Reopen / Unblock.
-  Cards show title, optional phone, one-line deterministic request summary,
-  latest message snippet, last activity, and only non-redundant system chips
-  (`Automation paused`, `High volume`). The request summary comes from
-  `lib/workspace/request-summary.ts` (inbound text only, deterministic fallback,
-  no AI, fallback `Review conversation`). Pain/urgent, payment, and insurance
-  signals stay in the headline when present instead of duplicating as chips.
-  Conversation preview shows the last 2 messages with a full-timeline toggle.
-  Staff-only Internal note saves independently (`save_note`). The old "Latest
-  patient reply" block and the big Outcome radio form are removed;
-  `/api/workspace/outcome` remains for compatibility only.
+  Left queue cards show only title (safe name or phone), optional secondary
+  phone when a safe name exists, and last activity. They do not show the request
+  summary, `Review conversation`, latest message snippets, Patient/Office
+  prefixes, chips, or status badges. The right detail panel keeps the
+  deterministic request summary from `lib/workspace/request-summary.ts`
+  (inbound text only, no AI, fallback `Review conversation`), conversation
+  preview (last 2 messages with full-timeline toggle), inline name edit,
+  actions, and staff-only Internal note (`save_note`). The old "Latest patient
+  reply" block and the big Outcome radio form are removed; `/api/workspace/outcome`
+  remains for compatibility only.
 - **Block number = the PATIENT/CALLER number for one clinic.** Never the
   clinic's Twilio business number, never a Twilio mutation, never deletes
   history, never stored in `opt_outs`. Table
@@ -3642,7 +3645,18 @@ unchanged. No AI runtime — everything is deterministic.
   follow-ups, no thanks courtesy, no safety prefix). Inbound messages from
   blocked numbers are still recorded by the webhook and STOP/START/HELP is
   unchanged. Blocking archives the conversation; unblocking sends nothing and
-  leaves it archived until reopened.
+  leaves it archived until reopened. Ordinary non-keyword inbound SMS with no
+  prior missed-call recovery outbound for the same clinic + patient phone is
+  automatically blocked after the inbound message is saved. The check is an
+  "ever" query over `public.messages` where `direction='outbound'` and
+  `message_kind is null OR message_kind='missed_call_recovery'`; auto-replies
+  (`conversation_auto_reply`) and other clinics do not count. The webhook uses
+  reason `inbound_without_recovery_history`, archives the conversation when
+  practical, skips `classifyInboundReply`, skips patient-name extraction, skips
+  `maybeSendConversationAutoReply`, logs
+  `twilio.sms.auto_blocked_no_recovery_history` with safe metadata only, and
+  returns normal empty TwiML 200. STOP/START/HELP are unchanged and are never
+  auto-blocked.
 - **Archive / Mark handled** are reversible queue states on
   `patient_conversations` (`workspace_archived_at`, `workspace_handled_at` +
   actor columns) — nothing is deleted. Section precedence:
