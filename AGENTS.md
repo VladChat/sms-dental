@@ -1,11 +1,14 @@
 # Agent Instructions
 
-This repository intentionally has two valid instruction layers:
+This repository intentionally has valid instruction/reference layers for the
+agents Vlad chooses to use:
 
-1. `.claude/skills/` — Claude-specific skills for Claude Code.
-2. `Skills/*.md` — universal project/reference instructions for all agents.
+1. `AGENTS.md` — repo-wide rules and source-priority guidance.
+2. `.claude/skills/` — Claude-specific skills for Claude Code.
+3. `Skills/*.md` — universal project/reference instructions for all agents.
+4. `.codex/skills/` — local Codex/ChatGPT workspace skills requested by Vlad.
 
-Keep both layers.
+Keep all of these layers.
 
 Do not use obsolete instruction systems:
 
@@ -14,7 +17,13 @@ Do not use obsolete instruction systems:
 - `.github/skills/`
 
 Do not delete `.claude/skills/`.
-Do not create or install new instruction systems during cleanup unless Vlad explicitly asks.
+Do not create or install other instruction systems during cleanup unless Vlad
+explicitly asks.
+
+Note for Codex: current public Codex documentation discovers repo skills from
+`.agents/skills`, but this project intentionally does not use `.agents/`.
+Treat `.codex/skills/` as the project-local Codex/ChatGPT skill workspace unless
+Vlad explicitly changes that policy.
 
 ## Source Priority for Project Facts
 
@@ -36,6 +45,70 @@ When project values conflict, use this priority:
 - `MVP_BUILD_DOCS/START-HERE.md`
 - `MVP_BUILD_DOCS/AGENT-RULES.md`
 - `Skills/missed-calls-dental-product-context.md`
+
+## Project Summary
+
+Missed Calls Dental, sometimes called Dental SMS internally, is a B2B SaaS for
+dental clinics. It detects supported missed-call events and sends automatic,
+professional SMS follow-up so front desks can recover appointment opportunities.
+
+The current stack is Next.js App Router, React, Supabase/Postgres, Twilio,
+Stripe, Vercel, Clerk where applicable, Inngest where applicable, and Sentry
+where applicable.
+
+The product is not an AI receptionist, dental CRM, PMS integration, phone-system
+replacement, call-recording product, or medical-advice system in the current
+MVP.
+
+## Agent Safety Rules
+
+- Never expose, print, copy, rewrite, or commit secrets.
+- Never send live SMS unless the current task explicitly asks for it and all app
+  readiness guards pass.
+- Never mutate Twilio, Vercel, Supabase, Stripe, DNS, or production resources
+  without explicit owner instruction for the exact stated scope.
+- Preserve STOP, START, HELP, carrier opt-out behavior, and local opt-out
+  enforcement.
+- Validate Twilio webhook signatures before trusting webhook payloads.
+- Keep webhook handlers idempotent.
+- Store inbound, outbound, delivery-status, and call events as the relevant
+  source files require.
+- Use exact sender/number matching for SMS and phone-number workflows.
+- Fail closed when readiness, billing, compliance, or provider state is missing.
+
+## Implementation Rules
+
+- Inspect existing files and patterns before editing.
+- Make minimal safe changes and preserve existing behavior.
+- Name exact files changed in the final report.
+- Run validation commands that match the risk and file types changed.
+- Avoid broad refactors unless Vlad explicitly requests them.
+- Do not change app source code for agent/tooling setup unless required for the
+  requested documentation or config.
+
+## UI Rules
+
+- Use professional B2B SaaS design suitable for dental clinics.
+- Do not invent fake statistics, fake testimonials, fake medical claims, or
+  unsupported trust claims.
+- Keep layouts responsive, accessible, and mobile-safe.
+- Include clear loading, error, and empty states for user-facing workflows.
+- Keep forms minimal: ask only for information needed for the next immediate
+  step and explain why required fields are needed.
+
+## Final Report Format
+
+Use this structure unless Vlad asks for a different format:
+
+```txt
+Summary
+Files changed
+Validation run
+Risks/unknowns
+Manual steps required
+Operations docs update needed: yes/no
+Knowledge System update needed: yes/no
+```
 
 ## Production Authorization Note
 

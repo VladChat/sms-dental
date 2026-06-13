@@ -19,7 +19,9 @@ out/
 # Local/editor files
 .DS_Store
 .local-agent/
-.vscode/
+.vscode/*
+!.vscode/
+!.vscode/mcp.json
 .idea/
 *.log
 *.zip

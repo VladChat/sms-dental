@@ -1,0 +1,30 @@
+# Project-scoped Codex config for Missed Calls Dental.
+# Safe to commit: public MCP endpoints and prompt-first tool policy only.
+# Do not add provider auth keys, OAuth tokens, secret env values, or model
+# provider overrides here. Keep auth/provider settings in the user-level Codex
+# config or the provider OAuth flow.
+
+# Current public Codex docs discover repo skills from `.agents/skills`.
+# This repo intentionally does not use `.agents`; `.codex/skills` is kept as a
+# local project workspace by owner request and is documented in `.codex/README.md`.
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.vercel]
+url = "https://mcp.vercel.com"
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.twilioDocs]
+url = "https://mcp.twilio.com/docs"
+default_tools_approval_mode = "prompt"
+
+# Official Stripe MCP exists, but Stripe access should be enabled deliberately
+# in sandbox/test mode first. Leave disabled until Vlad authorizes a billing
+# task that needs it and completes OAuth in the browser.
+[mcp_servers.stripe]
+url = "https://mcp.stripe.com"
+enabled = false
+default_tools_approval_mode = "prompt"
