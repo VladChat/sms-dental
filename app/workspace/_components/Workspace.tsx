@@ -17,7 +17,7 @@ import { FRONT_DESK_NOTE_MAX } from "../../../lib/workspace/outcome";
 // want, what did they say, and what should staff do next. Deterministic only —
 // no AI. Missing name/time/summary values render as "Not provided".
 //
-// Layout: four visible sections — Needs follow-up, Handled, Archived, Blocked.
+// Layout: three visible sections — Needs follow-up, Handled, Blocked.
 // The section header is the status, so cards and the selected header do not
 // repeat primary status badges. "Block number" affects ONLY the caller's phone
 // number for automation — messages stay saved.
@@ -27,8 +27,6 @@ const NOT_PROVIDED = "Not provided";
 // Exact action tooltips (also the accessible descriptions).
 const TOOLTIP_CALL = "Call this phone number.";
 const TOOLTIP_HANDLED = "Close this request and record whether an appointment was booked.";
-const TOOLTIP_ARCHIVE =
-  "Move this request out of Active. Messages stay saved and it can be reopened later.";
 const TOOLTIP_BLOCK =
   "Block this phone number. Automated texts to this number will stop, but messages stay saved.";
 const TOOLTIP_REOPEN = "Move this request back to Active.";
@@ -43,7 +41,6 @@ const SECTION_PAGE_SIZE = 6;
 type WorkspaceAction =
   | "save_note"
   | "save_name"
-  | "archive"
   | "reopen"
   | "mark_handled"
   | "block_number"
@@ -52,13 +49,12 @@ type WorkspaceAction =
 type SectionDef = {
   id: WorkspaceSectionId;
   label: string;
-  tone: "warning" | "success" | "info" | "danger";
+  tone: "warning" | "success" | "danger";
 };
 
 const SECTIONS: SectionDef[] = [
   { id: "needs_follow_up", label: "Needs follow-up", tone: "warning" },
   { id: "handled", label: "Handled", tone: "success" },
-  { id: "archived", label: "Archived", tone: "info" },
   { id: "blocked", label: "Blocked", tone: "danger" },
 ];
 
@@ -137,13 +133,11 @@ function RequestQueue({
   const [sectionLimits, setSectionLimits] = useState<Record<WorkspaceSectionId, number>>({
     needs_follow_up: SECTION_PAGE_SIZE,
     handled: SECTION_PAGE_SIZE,
-    archived: SECTION_PAGE_SIZE,
     blocked: SECTION_PAGE_SIZE,
   });
   const [expandedSections, setExpandedSections] = useState<Record<WorkspaceSectionId, boolean>>({
     needs_follow_up: true,
     handled: false,
-    archived: false,
     blocked: false,
   });
 
@@ -151,7 +145,6 @@ function RequestQueue({
     const g: Record<WorkspaceSectionId, PatientRequestCard[]> = {
       needs_follow_up: [],
       handled: [],
-      archived: [],
       blocked: [],
     };
     for (const item of items) g[workspaceSectionForCard(item.flags)].push(item);
@@ -167,15 +160,8 @@ function RequestQueue({
     null;
 
   // Apply a successful queue action to local state. `status` is recomputed
-  // from the card's flag-free base status. If the action moves the card, open
-  // the destination section so the selected request remains easy to track.
+  // from the card's flag-free base status.
   function patchCard(id: string, patch: Partial<PatientRequestCard>) {
-    const current = items.find((c) => c.id === id);
-    if (current) {
-      const nextFlags = patch.flags ?? current.flags;
-      const destination = workspaceSectionForCard(nextFlags);
-      setExpandedSections((prev) => ({ ...prev, [destination]: true }));
-    }
     setItems((prev) =>
       prev.map((c) => {
         if (c.id !== id) return c;
@@ -263,6 +249,9 @@ function QueueCard({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const section = workspaceSectionForCard(card.flags);
+  const outcomeBadge = section === "handled" ? handledOutcomeBadge(card.frontDeskOutcome) : null;
+
   return (
     <button
       type="button"
@@ -272,11 +261,24 @@ function QueueCard({
     >
       <span className="ws-list-top">
         <span className="ws-list-name">{card.patientName ?? card.callerPhone}</span>
+        {outcomeBadge && <span className={`badge ${outcomeBadge.badge}`}>{outcomeBadge.label}</span>}
       </span>
       {card.patientName && <span className="t-small ws-meta t-mono">{card.callerPhone}</span>}
       <span className="t-helper ws-meta">Last activity · {formatDateTime(card.lastActivityAt)}</span>
     </button>
   );
+}
+
+function handledOutcomeBadge(
+  outcome: PatientRequestCard["frontDeskOutcome"],
+): { label: string; badge: "badge-success" | "badge-neutral" } | null {
+  if (outcome === "appointment_booked") {
+    return { label: "Appointment booked", badge: "badge-success" };
+  }
+  if (outcome === "no_appointment_booked") {
+    return { label: "No appointment booked", badge: "badge-neutral" };
+  }
+  return null;
 }
 
 async function postConversationAction(
@@ -357,15 +359,11 @@ function RequestDetail({
       setActionError(result.message ?? "Could not complete this action.");
       return;
     }
-    if (action === "archive") {
-      onPatched(card.id, {
-        flags: { ...card.flags, archived: true },
-        workspaceArchivedAt: result.archivedAt ?? new Date().toISOString(),
-      });
-    } else if (action === "reopen") {
+    if (action === "reopen") {
       onPatched(card.id, {
         flags: { ...card.flags, archived: false, handled: false },
         frontDeskOutcome: null,
+        frontDeskOutcomeAt: null,
         baseStatus: deriveWorkspaceStatus("open", card.timeline),
         workspaceArchivedAt: null,
         workspaceHandledAt: null,
@@ -386,7 +384,15 @@ function RequestDetail({
         workspaceArchivedAt: result.blockedAt ?? new Date().toISOString(),
       });
     } else if (action === "unblock_number") {
-      onPatched(card.id, { flags: { ...card.flags, blocked: false }, blockedAt: null });
+      onPatched(card.id, {
+        flags: { ...card.flags, blocked: false, archived: false, handled: false },
+        blockedAt: null,
+        frontDeskOutcome: null,
+        frontDeskOutcomeAt: null,
+        baseStatus: deriveWorkspaceStatus("open", card.timeline),
+        workspaceArchivedAt: null,
+        workspaceHandledAt: null,
+      });
     }
   }
 
@@ -420,7 +426,7 @@ function RequestDetail({
             >
               {busyAction === "unblock_number" ? "Unblocking…" : "Unblock number"}
             </button>
-          ) : section === "archived" || section === "handled" ? (
+          ) : section === "handled" ? (
             <>
               <button
                 type="button"
@@ -452,15 +458,6 @@ function RequestDetail({
                 onClick={() => setAskingHandled((prev) => !prev)}
               >
                 Handled
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                title={TOOLTIP_ARCHIVE}
-                disabled={isSample || busyAction !== null}
-                onClick={() => runAction("archive")}
-              >
-                {busyAction === "archive" ? "Archiving…" : "Archive"}
               </button>
               <span className="ws-actions-divider" aria-hidden="true" />
               <button
@@ -774,7 +771,7 @@ function InternalNote({
   );
 }
 
-// Sample/demo cards demonstrating the same four-section layout as real cards.
+// Sample/demo cards demonstrating the same three visible sections as real cards.
 // They are never persisted and actions are disabled.
 const SAMPLE_FLAGS = {
   safetyConcern: false,
@@ -846,30 +843,6 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     isSample: true,
     sampleNote: "Booked over the phone.",
     frontDeskOutcome: "appointment_booked",
-  },
-  {
-    id: "sample-archived",
-    callerPhone: "+1 (555) 010-1003",
-    patientName: "Morgan Patel",
-    summaryHeadline: "Insurance question",
-    summaryChips: [],
-    latestMessage: "Do you take Delta Dental insurance?",
-    latestMessageDirection: "inbound",
-    status: "archived",
-    baseStatus: "needs_follow_up",
-    flags: { ...SAMPLE_FLAGS, archived: true },
-    createdAt: "2026-05-23T11:00:00.000Z",
-    lastActivityAt: "2026-05-23T11:18:00.000Z",
-    timeline: [
-      {
-        id: "sample-archived-1",
-        direction: "inbound",
-        body: "Do you take Delta Dental insurance?",
-        at: "2026-05-23T11:18:00.000Z",
-      },
-    ],
-    isSample: true,
-    sampleNote: "Answered by email; archived.",
   },
   {
     id: "sample-blocked",

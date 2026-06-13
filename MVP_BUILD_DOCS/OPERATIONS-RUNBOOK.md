@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-13 (Workspace queue cards simplified; inbound-only SMS auto-blocked when no prior recovery history exists)
+Last updated: 2026-06-13 (Workspace simplified to three visible states; Archive removed from staff UI)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1175,8 +1175,8 @@ requests. Separate from the owner/admin `/account` area. Full spec:
 `FRONT-DESK-WORKSPACE.md`.
 
 - **Route:** `app/workspace/page.tsx` (server, `force-dynamic`, nodejs).
-  The page shows existing patient conversations in four sections (Needs
-  follow-up, Handled, Archived, Blocked), exposes a normal `tel:` link labeled
+  The page shows existing patient conversations in three visible sections (Needs
+  follow-up, Handled, Blocked), exposes a normal `tel:` link labeled
   `Call patient`, and lets staff save workspace actions through
   `POST /api/workspace/conversation-action`. The legacy
   `POST /api/workspace/outcome` route remains for compatibility. The workspace
@@ -1196,10 +1196,11 @@ requests. Separate from the owner/admin `/account` area. Full spec:
   owner setup settings, Twilio details, or internal IDs (conversation UUIDs are
   used only as React keys). When patient detail fields have no source yet, the
   detail panel shows one short note instead of repeating empty fields.
-- **Visible queue sections:** Needs follow-up / Handled / Archived / Blocked.
+- **Visible queue sections:** Needs follow-up / Handled / Blocked.
   Needs follow-up is expanded by default, lower sections are collapsed by
   default, and section headers are the staff-facing status. The older
   outbound-waiting lifecycle name remains internal-only and is not displayed.
+  Legacy archived-only conversations remain visible under Needs follow-up.
 - **Ordinary inbound replies:** stored in `messages`, update
   `patient_conversations.last_message_at`, appear in `/workspace`, and do not
   create an outbound auto-reply. STOP/START behavior remains the separate opt-out
@@ -3610,26 +3611,30 @@ unchanged. No AI runtime — everything is deterministic.
 
 ### Front-desk Workspace queue + patient-number blocks (2026-06-12; updated 2026-06-13)
 
-- `/workspace` is an operational front-desk queue with four visible sections:
-  **Needs follow-up**, **Handled**, **Archived**, and **Blocked**. Needs
-  follow-up is expanded by default and can be collapsed manually; Handled,
-  Archived, and Blocked are collapsed by default. Each section header shows the
-  total count, and each section uses client-side `Load more` in batches of 6.
+- `/workspace` is an operational front-desk queue with three visible sections:
+  **Needs follow-up**, **Handled**, and **Blocked**. Needs follow-up is expanded
+  by default and can be collapsed manually; Handled and Blocked are collapsed by
+  default. Each section header shows the total count, and each section uses
+  client-side `Load more` in batches of 6.
   The section header is the primary staff-facing status: queue cards and the
   selected detail header do not repeat status badges, and the older
   outbound-waiting label is not shown to staff. Membership priority:
-  blocked > handled > archived > needs follow-up. Active, non-handled,
-  non-archived, non-blocked conversations stay in Needs follow-up whether the
-  latest message is inbound or outbound. Sorting: Needs follow-up is oldest
-  first by `lastActivityAt`; Handled, Archived, and Blocked are newest first by
-  their handled / archived / blocked timestamp when present, falling back to
-  `lastActivityAt`.
+  blocked > handled > needs follow-up. Active, non-handled, non-blocked
+  conversations stay in Needs follow-up whether the latest message is inbound or
+  outbound. Legacy archived-only conversations also stay visible in Needs
+  follow-up. Sorting: Needs follow-up is oldest first by `lastActivityAt`;
+  Handled is newest first by handled / outcome timestamp when present, and
+  Blocked is newest first by blocked timestamp when present, each falling back
+  to `lastActivityAt`.
 - Patient header: sanitized name or `Not provided`, phone once, Call patient
-  `tel:` link, Mark handled / Archive / Block number / Reopen / Unblock.
+  `tel:` link, Handled / Block number / Reopen / Unblock. The Archive button
+  and visible Archived section are removed from the customer-facing Workspace UI.
   Left queue cards show only title (safe name or phone), optional secondary
-  phone when a safe name exists, and last activity. They do not show the request
-  summary, `Review conversation`, latest message snippets, Patient/Office
-  prefixes, chips, or status badges. The right detail panel keeps the
+  phone when a safe name exists, and last activity. Handled-section cards may
+  show only the saved result badge (`Appointment booked` or
+  `No appointment booked`). They do not show the request summary,
+  `Review conversation`, latest message snippets, Patient/Office prefixes,
+  chips, or status badges. The right detail panel keeps the
   deterministic request summary from `lib/workspace/request-summary.ts`
   (inbound text only, no AI, fallback `Review conversation`), conversation
   preview (last 2 messages with full-timeline toggle), inline name edit,
@@ -3644,8 +3649,10 @@ unchanged. No AI runtime — everything is deterministic.
   both fail closed with reason `patient_number_blocked` (no initial SMS, no
   follow-ups, no thanks courtesy, no safety prefix). Inbound messages from
   blocked numbers are still recorded by the webhook and STOP/START/HELP is
-  unchanged. Blocking archives the conversation; unblocking sends nothing and
-  leaves it archived until reopened. Ordinary non-keyword inbound SMS with no
+  unchanged. Blocking may archive the conversation internally while the visible
+  staff section remains Blocked; unblocking sends nothing, clears the block, and
+  reopens the conversation so it returns to Needs follow-up. Ordinary
+  non-keyword inbound SMS with no
   prior missed-call recovery outbound for the same clinic + patient phone is
   automatically blocked after the inbound message is saved. The check is an
   "ever" query over `public.messages` where `direction='outbound'` and
@@ -3657,23 +3664,26 @@ unchanged. No AI runtime — everything is deterministic.
   `twilio.sms.auto_blocked_no_recovery_history` with safe metadata only, and
   returns normal empty TwiML 200. STOP/START/HELP are unchanged and are never
   auto-blocked.
-- **Archive / Mark handled** are reversible queue states on
-  `patient_conversations` (`workspace_archived_at`, `workspace_handled_at` +
-  actor columns) — nothing is deleted. Section precedence:
-  Blocked > Handled > Archived > Needs follow-up. Secondary system flags:
-  Automation paused (`automation_muted_until`) and High volume
-  (`high_volume_flagged_at`).
+- **Archive compatibility / Mark handled**: the backend `archive` action and
+  `patient_conversations.workspace_archived_at` columns remain for historical
+  compatibility and audit/history, but Archive is no longer a visible staff
+  action. Mark handled stores `workspace_handled_at` plus the
+  appointment-booked yes/no outcome. Reopen clears handled, archived, and stale
+  outcome state. Section precedence: Blocked > Handled > Needs follow-up.
+  Secondary system flags: Automation paused (`automation_muted_until`) and High
+  volume (`high_volume_flagged_at`).
 - Actions API: `POST /api/workspace/conversation-action`
   (`save_note|save_name|archive|reopen|mark_handled|block_number|unblock_number`),
   guarded by `resolveAuthClinicAccess`, clinic-scoped updates only, sample IDs
   rejected, UUIDs validated, 300-char note cap, cross-clinic conversations
   indistinguishable from missing. The UI requires an inline confirmation
   before blocking; all block/unblock copy describes only the phone number.
-- **Workspace polish (2026-06-13):** Four sections use the same structure and
-  differ only by tone: Needs follow-up warning/yellow, Handled success/green,
-  Archived neutral/info blue-gray, Blocked danger/red. Needs follow-up starts
-  expanded; the other sections start collapsed. All sections page 6 cards at a
-  time with a visible `Load more` button, and header counts remain total counts.
+- **Workspace polish (2026-06-13):** Three visible sections use the same
+  structure and differ by tone: Needs follow-up warning/yellow, Handled
+  success/green, Blocked danger/red. Needs follow-up starts expanded; the other
+  sections start collapsed. All sections page 6 cards at a time with a visible
+  `Load more` button, and header counts remain total counts. Moving a card does
+  not auto-expand the destination section.
   `mark_handled` now REQUIRES `appointmentBooked: boolean` (inline
   "Was appointment booked?" Yes/No panel) and records
   `front_desk_outcome(_at)` + lifecycle status with the handled stamp.

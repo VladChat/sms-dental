@@ -77,7 +77,7 @@ test("primary status precedence: Blocked > Handled > Archived > base", () => {
   );
 });
 
-test("queue sections: blocked > handled > archived > needs follow-up", () => {
+test("queue sections: blocked > handled > needs follow-up, with archived-only still visible", () => {
   assert.equal(
     workspaceSectionForCard({ blocked: false, archived: false, handled: false }),
     "needs_follow_up",
@@ -88,7 +88,7 @@ test("queue sections: blocked > handled > archived > needs follow-up", () => {
   );
   assert.equal(
     workspaceSectionForCard({ blocked: false, archived: true, handled: false }),
-    "archived",
+    "needs_follow_up",
   );
   assert.equal(
     workspaceSectionForCard({ blocked: false, archived: true, handled: true }),
@@ -130,18 +130,18 @@ test("queue section sorting follows the product order rules", () => {
   );
 
   assert.deepEqual(
-    sortWorkspaceSectionCards("archived", [
+    sortWorkspaceSectionCards("handled", [
       card({
-        id: "fallback-older",
-        lastActivityAt: "2026-06-10T10:00:00.000Z",
+        id: "fallback-last-activity",
+        lastActivityAt: "2026-06-11T10:00:00.000Z",
       }),
       card({
-        id: "archived-newer",
+        id: "outcome-timestamp",
         lastActivityAt: "2026-06-01T10:00:00.000Z",
-        workspaceArchivedAt: "2026-06-12T10:00:00.000Z",
+        frontDeskOutcomeAt: "2026-06-12T10:00:00.000Z",
       }),
     ]).map((c) => c.id),
-    ["archived-newer", "fallback-older"],
+    ["outcome-timestamp", "fallback-last-activity"],
   );
 
   assert.deepEqual(
@@ -329,7 +329,7 @@ test("workspace detail header carries the call button and actions; phone shown o
   assert.ok(src.includes("Call patient"));
   assert.ok(src.includes('href={`tel:${card.callerPhone}`}'));
   assert.ok(src.includes("Handled"));
-  assert.ok(src.includes("Archive"));
+  assert.ok(!src.includes("TOOLTIP_ARCHIVE"));
   assert.ok(src.includes("Block number"));
   assert.ok(src.includes("Reopen"));
   assert.ok(src.includes("Unblock number"));
@@ -358,8 +358,21 @@ test("left queue cards show only name or phone, optional phone, and last activit
   assert.ok(!render.includes("SummaryChips"));
   assert.ok(!render.includes("Patient:"));
   assert.ok(!render.includes("Office:"));
-  assert.ok(!render.includes("badge"));
   assert.ok(!render.includes("Review conversation"));
+});
+
+test("handled cards show saved result badges only in the Handled section", () => {
+  const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
+  const start = src.indexOf("function QueueCard");
+  const end = src.indexOf("async function postConversationAction", start);
+  const queueCard = src.slice(start, end);
+
+  assert.ok(queueCard.includes('section === "handled" ? handledOutcomeBadge'));
+  assert.ok(queueCard.includes("Appointment booked"));
+  assert.ok(queueCard.includes("No appointment booked"));
+  assert.ok(queueCard.includes('"badge-success"'));
+  assert.ok(queueCard.includes('"badge-neutral"'));
+  assert.ok(!queueCard.includes("recovered"));
 });
 
 test("request summary card shows one headline + signal chips, no empty rows", () => {
@@ -421,6 +434,7 @@ test("handled flow asks Was appointment booked? and saves on Yes/No", () => {
   // Reopen clears handled+archived and the stale outcome locally.
   assert.ok(src.includes("archived: false, handled: false"));
   assert.ok(src.includes("frontDeskOutcome: null"));
+  assert.ok(src.includes("frontDeskOutcomeAt: null"));
 });
 
 test("action tooltips use the exact agreed strings", () => {
@@ -429,11 +443,8 @@ test("action tooltips use the exact agreed strings", () => {
   assert.ok(
     src.includes('"Close this request and record whether an appointment was booked."'),
   );
-  assert.ok(
-    src.includes(
-      '"Move this request out of Active. Messages stay saved and it can be reopened later."',
-    ),
-  );
+  assert.ok(!src.includes("TOOLTIP_ARCHIVE"));
+  assert.ok(!src.includes("Move this request out of Active"));
   assert.ok(
     src.includes(
       '"Block this phone number. Automated texts to this number will stop, but messages stay saved."',
@@ -490,26 +501,29 @@ test("internal note saves independently without an outcome", () => {
   assert.ok(!src.includes("Please choose an outcome"));
 });
 
-test("four sectioned queue has default expansion, tones, counts, and Load more", () => {
+test("three sectioned queue has default expansion, tones, counts, Load more, and no auto-expand", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
   const css = read(path.join("app", "globals.css"));
   // Sections replace the old top filter buttons and the separate Active list.
   assert.ok(src.includes('{ id: "needs_follow_up", label: "Needs follow-up", tone: "warning" }'));
   assert.ok(src.includes('{ id: "handled", label: "Handled", tone: "success" }'));
-  assert.ok(src.includes('{ id: "archived", label: "Archived", tone: "info" }'));
   assert.ok(src.includes('{ id: "blocked", label: "Blocked", tone: "danger" }'));
+  assert.ok(!src.includes('{ id: "archived"'));
+  assert.ok(!src.includes('label: "Archived"'));
   assert.ok(!src.includes('aria-pressed={filter === f.id}'), "old filter pills removed");
   assert.ok(!src.includes("grouped.active"));
   // Needs follow-up starts expanded; lower sections start collapsed.
-  assert.ok(src.includes("needs_follow_up: true"));
-  assert.ok(src.includes("handled: false"));
-  assert.ok(src.includes("archived: false"));
-  assert.ok(src.includes("blocked: false"));
+  const expandedStart = src.indexOf("const [expandedSections");
+  const expandedEnd = src.indexOf("const grouped", expandedStart);
+  const expanded = src.slice(expandedStart, expandedEnd);
+  assert.ok(expanded.includes("needs_follow_up: true"));
+  assert.ok(expanded.includes("handled: false"));
+  assert.ok(!expanded.includes("archived"));
+  assert.ok(expanded.includes("blocked: false"));
   assert.ok(src.includes("open={expandedSections[section.id]}"));
   assert.ok(src.includes("{section.label} ({sectionCards.length})"));
   assert.ok(css.includes(".ws-section.tone-warning"));
   assert.ok(css.includes(".ws-section.tone-success"));
-  assert.ok(css.includes(".ws-section.tone-info"));
   assert.ok(css.includes(".ws-section.tone-danger"));
   // Load more: every section pages by 6, client-side only.
   assert.ok(src.includes("const SECTION_PAGE_SIZE = 6"));
@@ -517,20 +531,25 @@ test("four sectioned queue has default expansion, tones, counts, and Load more",
   assert.ok(src.includes("[section.id]: limit + SECTION_PAGE_SIZE"));
   assert.ok(src.includes("Load more"));
   assert.ok(!src.includes("Load more ("));
+
+  const patchStart = src.indexOf("function patchCard");
+  const patchEnd = src.indexOf("return (", patchStart);
+  const patchCard = src.slice(patchStart, patchEnd);
+  assert.ok(!patchCard.includes("setExpandedSections"));
+  assert.ok(!patchCard.includes("workspaceSectionForCard(nextFlags)"));
 });
 
-test("samples demonstrate the four section layout and never dominate a live workspace", () => {
+test("samples demonstrate the three section layout and never dominate a live workspace", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
   // Samples collapse by default when real conversations exist.
   assert.ok(src.includes("useState(hasReal)"));
   assert.ok(src.includes('"sample-needs-follow-up"'));
   assert.ok(src.includes('"sample-handled"'));
-  assert.ok(src.includes('"sample-archived"'));
+  assert.ok(!src.includes('"sample-archived"'));
   assert.ok(src.includes('"sample-blocked"'));
   // Sample headlines use the compact summary format.
   assert.ok(src.includes('"Cleaning appointment · Tomorrow"'));
   assert.ok(src.includes('"Appointment request · Next week"'));
-  assert.ok(src.includes('"Insurance question"'));
   assert.ok(src.includes('"Review conversation"'));
   assert.ok(!src.includes('"Pain/urgent"'));
   assert.ok(!src.includes('"Insurance", label'));
@@ -566,12 +585,16 @@ test("conversation-action route validates input and scopes by clinic", () => {
   // Cross-clinic conversations are indistinguishable from missing ones.
   assert.ok(src.includes('"This request was not found."'));
   assert.ok(src.includes("findClinicConversationPhone(clinicId, conversationId)"));
-  // Blocking archives the conversation; unblocking never sends SMS.
+  // Backend archive compatibility remains, blocking archives internally, and
+  // unblocking returns the request to a visible state without sending SMS.
   assert.ok(src.includes("blockPatientNumberForClinic"));
   assert.ok(src.includes("unblockPatientNumberForClinic"));
   const blockIdx = src.indexOf("blockPatientNumberForClinic({");
   const archiveAfterBlockIdx = src.indexOf("archiveConversation({ clinicId, conversationId, actor })", blockIdx);
   assert.ok(blockIdx >= 0 && archiveAfterBlockIdx > blockIdx, "block also archives");
+  const unblockIdx = src.indexOf("await unblockPatientNumberForClinic");
+  const reopenAfterUnblockIdx = src.indexOf("reopenConversation({ clinicId, conversationId })", unblockIdx);
+  assert.ok(unblockIdx >= 0 && reopenAfterUnblockIdx > unblockIdx, "unblock also reopens");
   assert.ok(!src.includes("messages.create"));
 });
 

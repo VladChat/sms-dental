@@ -34,12 +34,11 @@ export type WorkspaceCardFlags = {
   handled: boolean;
 };
 
-// Queue sections. The section header is the primary status shown to staff; cards
-// inside the section do not repeat that status badge.
+// Visible queue sections. Archived remains a stored compatibility state, but it
+// is not a customer-facing section.
 export type WorkspaceSectionId =
   | "needs_follow_up"
   | "handled"
-  | "archived"
   | "blocked";
 
 export type WorkspaceCardChip = {
@@ -120,16 +119,14 @@ export function derivePrimaryWorkspaceStatus(input: {
   );
 }
 
-// Queue section membership. Priority mirrors the current UX requirement:
-// blocked wins, handled second, archived third, and every other conversation
-// stays in Needs follow-up. Latest outbound messages are still follow-up work;
-// the outbound-waiting lifecycle name is internal-only and not staff-facing.
+// Queue section membership. Blocked wins, handled second, and every other
+// conversation stays in Needs follow-up. Archived-only legacy conversations
+// remain reachable instead of falling into a hidden state.
 export function workspaceSectionForCard(
   flags: Pick<WorkspaceCardFlags, "blocked" | "archived" | "handled">,
 ): WorkspaceSectionId {
   if (flags.blocked) return "blocked";
   if (flags.handled) return "handled";
-  if (flags.archived) return "archived";
   return "needs_follow_up";
 }
 
@@ -140,8 +137,9 @@ function timestampMs(iso: string | null | undefined): number {
 
 function sectionSortTimestamp(sectionId: WorkspaceSectionId, card: PatientRequestCard): number {
   if (sectionId === "blocked") return timestampMs(card.blockedAt ?? card.lastActivityAt);
-  if (sectionId === "handled") return timestampMs(card.workspaceHandledAt ?? card.lastActivityAt);
-  if (sectionId === "archived") return timestampMs(card.workspaceArchivedAt ?? card.lastActivityAt);
+  if (sectionId === "handled") {
+    return timestampMs(card.workspaceHandledAt ?? card.frontDeskOutcomeAt ?? card.lastActivityAt);
+  }
   return timestampMs(card.lastActivityAt);
 }
 

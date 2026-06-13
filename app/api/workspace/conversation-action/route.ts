@@ -66,8 +66,8 @@ const ActionBodySchema = z.object({
 //                    Twilio business number, never deletes history, and is
 //                    separate from carrier opt-outs. Future automation to this
 //                    number is suppressed; inbound messages stay recorded.
-//   unblock_number — removes the clinic-scoped patient-number block. Sends
-//                    nothing; the conversation stays archived until reopened.
+//   unblock_number — removes the clinic-scoped patient-number block and returns
+//                    the conversation to Needs follow-up. Sends nothing.
 //
 // Any active clinic member (owner, admin, front_desk) may act on conversations
 // that belong to their clinic only. Sample cards are rejected, and a missing/
@@ -189,9 +189,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return jsonOk({ ok: true, action, blockedAt: blocked.blockedAt.toISOString() });
     }
 
-    // unblock_number: clears the block only. No SMS is sent, and the
-    // conversation stays archived until staff explicitly reopen it.
+    // unblock_number: clears the block and removes any archived/handled trap so
+    // the request is immediately visible again. No SMS is sent.
     await unblockPatientNumberForClinic(clinicId, conversation.patientPhone);
+    await reopenConversation({ clinicId, conversationId });
     return jsonOk({ ok: true, action });
   } catch {
     return jsonError(500, "action_failed", "We couldn't complete this action. Please try again.");

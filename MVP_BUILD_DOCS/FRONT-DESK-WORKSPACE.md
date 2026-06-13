@@ -1,47 +1,51 @@
 # Front Desk Workspace
 
 Status: Active (operational patient-request queue)
-Last updated: 2026-06-13 (queue-card simplification, section sorting, inbound-only SMS auto-block)
+Last updated: 2026-06-13 (three visible workspace states; Archive removed from customer-facing UI)
 
-## 0.1 2026-06-13 — Sectioned queue polish (decluttered cards)
+## 0.1 2026-06-13 — Three visible workspace states
 
-- **Layout order.** The queue renders four visible sections in order:
-  **Needs follow-up** (warning/yellow), **Handled** (success/green),
-  **Archived** (neutral/info blue-gray), and **Blocked** (danger/red). The old
-  top filter pills are gone. **Needs follow-up** is expanded by default and can
-  be collapsed manually; Handled, Archived, and Blocked are collapsed by
-  default. Each header shows the total count (for example,
-  `Needs follow-up (4)`). Section priority is blocked > handled > archived >
-  needs follow-up.
+- **Layout order.** The queue renders three visible sections in order:
+  **Needs follow-up** (warning/yellow), **Handled** (success/green), and
+  **Blocked** (danger/red). The old top filter pills and the visible Archived
+  section are gone. **Needs follow-up** is expanded by default and can be
+  collapsed manually; Handled and Blocked are collapsed by default. Each header
+  shows the total count (for example, `Needs follow-up (4)`). Section priority
+  is blocked > handled > needs follow-up.
 - **Load more.** Each section shows up to 6 cards at first. If more cards exist,
   a visible `Load more` button reveals the next 6 cards for that section. Header
   counts always show the total section count, not only visible cards.
 - **Section sorting.** Needs follow-up is oldest first by last activity so the
-  oldest active work stays visible. Handled, Archived, and Blocked are newest
-  first by their handled / archived / blocked timestamp when available, falling
-  back to last activity.
+  oldest active work stays visible. Handled is newest first by handled /
+  outcome timestamp when available, falling back to last activity. Blocked is
+  newest first by blocked timestamp when available, falling back to last
+  activity.
 - **Left queue cards.** Queue cards are intentionally minimal: safe patient name
   when available, phone number, and last activity. If no safe name exists, the
   phone number is the title and is not duplicated. Cards do not show request
   summaries, `Review conversation`, latest-message snippets, Patient/Office
-  prefixes, signal chips, or status badges.
+  prefixes, signal chips, or status badges. Handled-section cards may show only
+  the saved result badge: `Appointment booked` or `No appointment booked`.
 - **No repeated status badges.** The section header is the primary status. Cards
-  inside a section do not repeat `Needs follow-up`, `Handled`, `Archived`, or
-  `Blocked` as per-card badges, and the selected-card header does not repeat the
-  same status. The older outbound-waiting label is not staff-facing; active,
-  non-handled, non-archived, non-blocked conversations stay under
-  **Needs follow-up** whether the latest message is inbound or outbound.
+  inside a section do not repeat `Needs follow-up`, `Handled`, or `Blocked` as
+  per-card badges, and the selected-card header does not repeat the same status.
+  The older outbound-waiting label is not staff-facing; active, non-handled,
+  non-blocked conversations stay under **Needs follow-up** whether the latest
+  message is inbound or outbound. Legacy archived-only conversations are also
+  visible under **Needs follow-up** so no request becomes unreachable.
 - **Handled flow.** Clicking `Handled` opens a small inline panel
   (`Was appointment booked?`) with Yes / No. Choosing either saves
   immediately: `mark_handled` now REQUIRES `appointmentBooked: boolean` and
   records `front_desk_outcome` (`appointment_booked` / `no_appointment_booked`)
   + `front_desk_outcome_at` + lifecycle status alongside
-  `workspace_handled_at`. The card moves to the Handled section.
-- **Reopen** (from Handled or Archived) returns the request fully to
-  Needs follow-up:
-  it clears `workspace_handled_at`, `workspace_archived_at`,
+  `workspace_handled_at`. The card moves to the Handled section and the left
+  card shows the saved result badge.
+- **Reopen / Unblock.** Reopen from Handled returns the request fully to
+  Needs follow-up: it clears `workspace_handled_at`, `workspace_archived_at`,
   `front_desk_outcome(_at)`, and resets the lifecycle status to `open`, so no
-  stale booked state shows after reopen. Nothing is deleted.
+  stale booked state shows after reopen. Unblock number clears the phone-number
+  block, sends nothing, and also returns the request to a visible Needs
+  follow-up state. Nothing is deleted.
 - **Name handling.** Missing names display as `Not provided` (never
   `Unknown`). Stored display names are sanitized through the conservative
   fail-closed extractor (`normalizeWorkspaceDisplayName`): request-like text
@@ -65,12 +69,16 @@ Last updated: 2026-06-13 (queue-card simplification, section sorting, inbound-on
   same clinic has ever sent that phone number a missed-call recovery SMS
   (`message_kind` null legacy rows or `missed_call_recovery`). If not, the
   patient/caller number is clinic-scoped blocked with reason
-  `inbound_without_recovery_history`, the conversation is archived, and no
-  reply classification, name extraction, or automated reply runs. STOP / START /
-  HELP handling is unchanged and is never auto-blocked. Existing contacts who
-  have ever received a recovery SMS from that clinic continue through the
-  normal reply flow.
-- **Action copy.** Exact tooltips on all actions (Call/Handled/Archive/Block/
+  `inbound_without_recovery_history`, the conversation may be archived
+  internally, and no reply classification, name extraction, or automated reply
+  runs. It remains visible to staff under **Blocked**. STOP / START / HELP
+  handling is unchanged and is never auto-blocked. Existing contacts who have
+  ever received a recovery SMS from that clinic continue through the normal
+  reply flow.
+- **Archive is not customer-facing.** The backend archive action and archived
+  columns remain for compatibility and audit/history, but staff no longer see an
+  Archive button or Archived section in `/workspace`.
+- **Action copy.** Exact tooltips on visible actions (Call/Handled/Block/
   Reopen/Unblock). Block copy describes only the phone number: confirmation
   reads `Block this phone number? Automated texts to this number will stop,
   but messages stay saved.` Block is a visually separated danger action.
@@ -83,16 +91,16 @@ Last updated: 2026-06-13 (queue-card simplification, section sorting, inbound-on
 `/workspace` is now a real front-desk queue that answers: who is this patient,
 what do they want, what did they say, and what should staff do next.
 
-- **Queue (left column).** Four sections: Needs follow-up, Handled, Archived,
+- **Queue (left column).** Three visible sections: Needs follow-up, Handled,
   Blocked. Each card shows only the patient name when a safe name is available,
   the phone number, and last activity. If no safe name exists, the phone number
   is the title and is not duplicated. Cards do not show request summaries,
   latest-message snippets, Patient/Office labels, signal chips, or status
-  badges.
+  badges. Handled cards may show only the saved result badge.
 - **Patient header (right panel).** Name or `Not provided`, the phone once,
   primary **Call patient** (a normal `tel:` link), and
-  secondary actions: **Mark handled**, **Archive**, **Block number** (or
-  **Reopen** when archived / **Unblock number** when blocked).
+  secondary actions: **Handled**, **Block number** (or **Reopen** when handled /
+  **Unblock number** when blocked).
 - **Request summary.** One deterministic, human-readable headline from
   `lib/workspace/request-summary.ts`, based on INBOUND text plus conversation
   state. No AI, no invented facts, no large field table, no duplicated phone,
@@ -104,13 +112,13 @@ what do they want, what did they say, and what should staff do next.
   `/api/workspace/conversation-action` (`save_note`) — no outcome required.
   The big Outcome radio form was removed from the layout; the legacy
   `/api/workspace/outcome` route remains for compatibility only.
-- **Sections.** Membership priority: Blocked > Handled > Archived >
-  Needs follow-up. Needs follow-up sorts oldest first by last activity. Handled,
-  Archived, and Blocked sort newest first by their action timestamp when
-  available, falling back to last activity. The section header is the
-  staff-facing status.
+- **Sections.** Membership priority: Blocked > Handled > Needs follow-up.
+  Archived-only legacy conversations are still visible in Needs follow-up.
+  Needs follow-up sorts oldest first by last activity. Handled and Blocked sort
+  newest first by their action timestamp when available, falling back to last
+  activity. The section header is the staff-facing status.
 
-### Block number vs Archive (terminology)
+### Block number, Reopen, Unblock, and archive compatibility
 
 - **Block number** blocks the PATIENT/CALLER phone number for THIS clinic. It
   never releases or changes the clinic's own Twilio business number, never
@@ -120,19 +128,23 @@ what do they want, what did they say, and what should staff do next.
   keep being recorded for audit. Blocks live in
   `public.clinic_blocked_patient_numbers` (unique per clinic + phone,
   RLS-enabled, service-role only) and are an operator action separate from
-  carrier opt-outs. STOP/START/HELP handling is unchanged. Blocking archives
-  the conversation; **Unblock number** clears the block, sends nothing, and
-  leaves the conversation archived until reopened. Ordinary inbound SMS from a
+  carrier opt-outs. STOP/START/HELP handling is unchanged. Blocking may archive
+  the conversation internally, but the visible staff section is **Blocked**.
+  **Unblock number** clears the block, sends nothing, clears the archived/handled
+  trap, and returns the request to Needs follow-up. Ordinary inbound SMS from a
   phone number that has never received a recovery SMS from that clinic is
   auto-blocked with no AI/text analysis after the inbound message is recorded,
   so it appears under Blocked instead of Needs follow-up. The UI requires an
-  inline confirmation that names the patient number explicitly for manual
-  blocks.
-- **Archive** moves a conversation to the Archived section
-  (`workspace_archived_at`). It deletes nothing and is reversible with
-  **Reopen**. **Mark handled** stamps `workspace_handled_at` without implying
-  booked/no-booked.
-- Samples use the same four sections as real cards. They show when no real
+  inline confirmation that names the phone-number consequence explicitly for
+  manual blocks.
+- **Archive compatibility** remains in the backend route and archived columns
+  (`workspace_archived_at`) for historical/internal compatibility. It is not a
+  customer-facing Workspace action, there is no Archive button, and there is no
+  visible Archived section.
+- **Handled / Reopen** records `workspace_handled_at` plus the appointment-booked
+  yes/no outcome. Reopen clears handled, archived, and stale outcome state and
+  returns the request to Needs follow-up.
+- Samples use the same three visible sections as real cards. They show when no real
   conversations exist; with real conversations they collapse behind a
   "Show samples" strip.
 
@@ -163,7 +175,7 @@ request cards. It now supports the minimal human follow-up workflow:
 - selected-card conversation preview with a full-timeline toggle;
 - a normal browser/phone `tel:` link labeled `Call patient` (not a Twilio
   outbound call and not automation);
-- explicit queue actions: Handled, Archive, Reopen, Block number, Unblock number,
+- explicit queue actions: Handled, Reopen, Block number, Unblock number,
   save_name, and save_note;
 - no new staff invite/onboarding system in this pass;
 - no new task-management system;
@@ -215,11 +227,10 @@ inferred medical details.
 The visible queue sections are:
 
 - **Needs follow-up** — active work, expanded by default. This includes active
-  conversations whether the latest message is inbound or outbound.
+  conversations whether the latest message is inbound or outbound, plus
+  legacy archived-only conversations that are not handled or blocked.
 - **Handled** — front desk marked the request handled and recorded whether an
   appointment was booked.
-- **Archived** — staff moved the request out of the active work area; messages
-  stay saved and the request can be reopened.
 - **Blocked** — staff blocked the patient/caller phone number for this clinic;
   automated texts to that number stop, while inbound messages still record. The
   system also auto-blocks ordinary inbound-only SMS when that clinic has no
@@ -228,7 +239,7 @@ The visible queue sections are:
 Membership priority:
 
 ```txt
-blocked > handled > archived > needs follow-up
+blocked > handled > needs follow-up
 ```
 
 The older outbound-waiting lifecycle value remains internal logic only; it is not
@@ -238,8 +249,7 @@ Sorting:
 
 ```txt
 Needs follow-up: oldest first by last activity
-Handled: newest first by handled timestamp, else last activity
-Archived: newest first by archived timestamp, else last activity
+Handled: newest first by handled timestamp / outcome timestamp, else last activity
 Blocked: newest first by blocked timestamp, else last activity
 ```
 
@@ -342,7 +352,6 @@ Current sample sections included:
 
 - Needs follow-up
 - Handled
-- Archived
 - Blocked
 
 Sample behavior rules:
@@ -363,11 +372,11 @@ Result controls (preview-only in this phase):
 
 No production mutation is implemented from these controls in this phase.
 
-Future analytics derivation (planned):
+Future analytics derivation (planned, internal wording only):
 
-- Appointment booked -> follow-up completed + recovered
-- No appointment booked -> follow-up completed + not recovered
-- Could not reach patient -> follow-up completed + unreachable/not recovered
+- Appointment booked -> follow-up completed + booked
+- No appointment booked -> follow-up completed + not booked
+- Could not reach patient -> follow-up completed + unreachable
 - no result selected -> still needs follow-up
 
 Sample-domain policy:
@@ -383,7 +392,6 @@ Focused cleanup in this pass:
 - sample section labels are simplified for staff scanning:
   - Needs follow-up
   - Handled
-  - Archived
   - Blocked
 - conversation is collapsed by default behind `View conversation`.
 - conversation remains message history only (patient/office + timestamps), with
@@ -402,8 +410,8 @@ Safety in this pass:
 
 Future analytics mapping (documented only):
 
-- `Yes` -> booked/recovered
-- `No` -> not booked/not recovered
+- `Yes` -> appointment booked
+- `No` -> no appointment booked
 - blank -> still needs follow-up
 
 ## 11. Outcome saving (implemented 2026-06-01) — supersedes the read-only scope

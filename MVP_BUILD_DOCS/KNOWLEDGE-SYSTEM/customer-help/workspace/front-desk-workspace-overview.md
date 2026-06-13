@@ -39,9 +39,10 @@ reviewing those replies and tracking your follow-up.
 
 - The patient's phone number.
 - The request queue grouped into **Needs follow-up**, **Handled**,
-  **Archived**, and **Blocked** sections.
+  and **Blocked** sections.
 - Minimal left-side request cards with the patient name when available, phone
-  number, and last activity.
+  number, and last activity. Handled cards may also show **Appointment booked**
+  or **No appointment booked**.
 - The selected request's summary and conversation history (patient and office
   messages with timestamps) in the detail panel.
 - The selected request's patient name or **Not provided**, plus the phone number
@@ -57,9 +58,9 @@ belong to the owner account, not the front desk.
 
 ### Reading a request card
 
-- **Section** — where the request stands: **Needs follow-up**, **Handled**,
-  **Archived**, or **Blocked**. The section header is the status, so cards do
-  not repeat the same status label.
+- **Section** — where the request stands: **Needs follow-up**, **Handled**, or
+  **Blocked**. The section header is the status, so cards do not repeat the same
+  status label.
 - **Patient name / phone** — if a safe name is available, it is the title and the
   phone is secondary; otherwise the phone is the title.
 - **Last activity** — the most recent saved activity time.
@@ -84,16 +85,17 @@ them.
 ## What you can do
 
 - Open the workspace to review patient replies and request cards.
-- Expand or collapse the four queue sections. **Needs follow-up** starts open;
-  the other sections start collapsed. Use **Load more** when a section has more
-  than six cards. **Needs follow-up** is oldest first by last activity; Handled,
-  Archived, and Blocked show newest first.
+- Expand or collapse the three queue sections. **Needs follow-up** starts open;
+  Handled and Blocked start collapsed. Use **Load more** when a section has more
+  than six cards. **Needs follow-up** is oldest first by last activity; Handled
+  and Blocked show newest first.
 - Use **Call patient** to open your device's normal phone dialer for the patient
   number. This does not place an automated call from Missed Calls Dental.
 - Follow up with patients through your clinic's normal process. See
   [How front desk should handle patient replies](../missed-calls-and-messages/how-front-desk-should-handle-patient-replies.md).
-- Mark a request **Handled**, **Archive** it, **Reopen** it, or **Block number**
-  when appropriate.
+- Mark a request **Handled**, **Reopen** a handled request, or **Block number**
+  when appropriate. If a number is blocked, **Unblock number** returns the
+  request to a visible follow-up state without sending a text.
 
 ## What to expect
 

@@ -487,6 +487,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .ws-list-item[aria-current="true"] { border-color:var(--primary); background:var(--primary-soft); box-shadow:inset 3px 0 0 var(--primary), var(--shadow-xs); }
 .ws-list-top { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); }
 .ws-list-name { font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ws-list-top .badge { flex:0 0 auto; }
 .ws-meta { color:var(--text-muted); }
 .ws-snippet { font:var(--body-sm); color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ws-detail { display:grid; gap:var(--space-5); }
@@ -566,7 +567,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 }
 .ws-sample-strip-dot { color:var(--text-muted); }
 
-/* queue column: four visible sections */
+/* queue column: three visible sections */
 .ws-queue-col { display:flex; flex-direction:column; gap:var(--space-4); min-width:0; }
 .ws-list-summary { font:var(--body-sm); font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ws-load-more { align-self:stretch; justify-content:center; margin-top:var(--space-1); }
@@ -581,7 +582,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .ws-chip.is-automation_paused { border-color:var(--border-strong); background:var(--surface-sunken); color:var(--text-muted); }
 .ws-chip.is-high_volume { border-color:var(--warning-border); background:var(--warning-bg); color:var(--warning-text); }
 
-/* queue sections: Needs follow-up (warning), Handled (success), Archived (info), Blocked (danger) */
+/* queue sections: Needs follow-up (warning), Handled (success), Blocked (danger) */
 .ws-section { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); overflow:hidden; }
 .ws-section-summary {
   cursor:pointer; list-style:none; display:flex; align-items:center; gap:var(--space-2);
@@ -611,7 +612,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text); }
 .ws-name-editor-row { display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center; }
 .ws-name-editor-row .input { flex:1; min-width:180px; }
 
-/* action row: primary call, normal handled/archive, danger block separated */
+/* action row: primary call, normal handled/reopen, danger block separated */
 .ws-actions { display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center; }
 .ws-actions-divider { width:1px; align-self:stretch; background:var(--border-strong); margin:0 var(--space-1); }
 

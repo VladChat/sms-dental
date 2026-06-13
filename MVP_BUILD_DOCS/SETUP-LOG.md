@@ -7813,3 +7813,42 @@ feature; no schema change).
 No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
 Stripe change, no phone-number lifecycle change, no production env change, no
 secret printing, no patient data printed, and `.qwen/` remained untouched.
+
+---
+
+## 2026-06-13 — Front-desk Workspace simplified to three visible states
+
+Simplified `/workspace` from four visible queue sections to three visible
+states: Needs follow-up, Handled, and Blocked. Archive remains as backend
+compatibility/internal stored state only; it is no longer a staff-facing button,
+tooltip, or visible section.
+
+What changed:
+
+- Visible queue sections are exactly Needs follow-up, Handled, and Blocked.
+  Needs follow-up starts expanded; Handled and Blocked start collapsed.
+- Section headers keep total counts; each section still pages 6 cards at a time
+  with `Load more`.
+- Moving a card to Handled or Blocked no longer auto-expands the destination
+  section.
+- Archived-only legacy conversations remain reachable under Needs follow-up so
+  no old conversation is hidden by the removed Archived section.
+- Handled cards show the saved result badge only in the Handled section:
+  `Appointment booked` or `No appointment booked`.
+- Reopen from Handled clears handled/archive/outcome state and returns the card
+  to Needs follow-up. Unblock now also clears the archived/handled trap and
+  returns the request to a visible follow-up state without sending SMS.
+- Updated `FRONT-DESK-WORKSPACE.md`, `OPERATIONS-RUNBOOK.md`, and the
+  Knowledge System customer-help Workspace entries/inventory.
+
+Validation:
+
+- Focused workspace tests pass: 47 tests.
+- `npm run typecheck` pass.
+
+Production migration: none needed (existing columns and tables cover the
+behavior; no schema change).
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no production env change, no
+secret printing, no patient data printed, and `.qwen/` remained untouched.

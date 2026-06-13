@@ -31,15 +31,13 @@ Front-desk staff using the workspace to review patient replies and requests.
 
 ## What this means
 
-The workspace uses four visible sections:
+The workspace uses three visible sections:
 
 - **Needs follow-up** — active work for the front desk. This section starts open.
   It includes active requests whether the latest message is from the patient or
   from the office.
 - **Handled** — staff marked the request handled and recorded whether an
   appointment was booked.
-- **Archived** — staff moved the request out of the active work area. Messages
-  stay saved, and the request can be reopened later.
 - **Blocked** — staff blocked automated texts to that patient/caller phone number
   for this clinic, or the system auto-blocked an inbound-only SMS number that had
   never received a missed-call recovery text from this clinic. Messages stay
@@ -68,9 +66,8 @@ patient or use the inline name edit after you know it.
 
 - Start with **Needs follow-up**. It is expanded by default and is the main work
   area. It is oldest first by last activity.
-- Expand **Handled**, **Archived**, or **Blocked** when you need older or
-  completed requests. These sections are newest first. If a section has many
-  cards, use **Load more**.
+- Expand **Handled** or **Blocked** when you need older or completed requests.
+  These sections are newest first. If a section has many cards, use **Load more**.
 - Open a card and read the conversation before following up.
 - Follow up with the patient using your clinic's normal process, and mark the
   request **Handled** when done. See
@@ -85,8 +82,8 @@ patient or use the inline name edit after you know it.
   replies from the workspace, automated calling, and task assignment are not
   available today. The **Call patient** action is a normal phone link for your
   device; it does not place an automated call.
-- A request can move between sections when staff use Handled, Archive, Reopen,
-  Block number, or Unblock number. Inbound-only SMS numbers with no prior
+- A request can move between sections when staff use Handled, Reopen, Block
+  number, or Unblock number. Inbound-only SMS numbers with no prior
   recovery-text history from this clinic can also move directly to Blocked after
   the inbound message is saved.
 - Recording an outcome helps your team keep track of which patients still need

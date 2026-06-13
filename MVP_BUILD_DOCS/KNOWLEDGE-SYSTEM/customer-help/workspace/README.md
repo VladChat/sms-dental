@@ -36,7 +36,8 @@ visible to staff):
 - Describe the workspace as the place to review missed-call SMS replies and
   patient requests, and to record the outcome of a follow-up.
 - **Queue sections** (from `FRONT-DESK-WORKSPACE.md`): Needs follow-up, Handled,
-  Archived, Blocked. Explain them simply.
+  Blocked. Explain them simply. Do not describe Archive as a staff-facing action
+  or visible section.
 - **Handled outcome** staff records per real conversation: appointment booked
   yes/no, plus an optional short internal note.
 - Reinforce opt-out respect: never message a patient who replied STOP. Link to
