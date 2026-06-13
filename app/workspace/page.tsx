@@ -11,8 +11,8 @@ import { buildWorkspaceRequestSummary } from "../../lib/workspace/request-summar
 import { normalizeWorkspaceDisplayName } from "../../lib/workspace/display-name";
 import { Workspace } from "./_components/Workspace";
 import {
-  applyFlagsToStatus,
   deriveWorkspaceStatus,
+  applyFlagsToStatus,
   workspaceStatusForOutcome,
   type PatientRequestCard,
   type WorkspaceCardChip,
@@ -47,7 +47,9 @@ function toCard(c: FrontDeskConversation): PatientRequestCard {
   });
   const now = Date.now();
   const flags = {
-    safetyConcern: summary.chips.some((chip) => chip.id === "pain_urgent"),
+    safetyConcern:
+      summary.requestCategory === "Pain / urgent concern" ||
+      summary.chips.some((chip) => chip.id === "pain_urgent"),
     automationPaused:
       c.automationMutedUntil !== null && c.automationMutedUntil.getTime() > now,
     highVolume: c.highVolumeFlaggedAt !== null,
@@ -55,10 +57,9 @@ function toCard(c: FrontDeskConversation): PatientRequestCard {
     archived: c.workspaceArchivedAt !== null,
     handled: c.workspaceHandledAt !== null,
   };
-  // Signal chips only — no empty placeholders. Automation chips join the
-  // text-derived ones so staff see everything useful in one row.
+  // Visible chips are reserved for non-redundant system state. Request signals
+  // such as pain/payment/insurance live in the one-line summary instead.
   const summaryChips: WorkspaceCardChip[] = [
-    ...summary.chips.map((chip) => ({ id: chip.id, label: chip.label }) as WorkspaceCardChip),
     ...(flags.automationPaused
       ? [{ id: "automation_paused", label: "Automation paused" } as WorkspaceCardChip]
       : []),

@@ -6,7 +6,7 @@ import path from "node:path";
 import {
   applyFlagsToStatus,
   derivePrimaryWorkspaceStatus,
-  workspaceFilterForCard,
+  workspaceSectionForCard,
   WORKSPACE_STATUS_META,
   WORKSPACE_FLAG_META,
 } from "../app/workspace/_components/workspace-types";
@@ -16,13 +16,13 @@ const read = (rel: string) => fs.readFileSync(path.join(REPO_ROOT, rel), "utf8")
 
 // ------------------------------------------------------ status + filters
 
-test("primary status precedence: Blocked > Archived > Handled > base", () => {
+test("primary status precedence: Blocked > Handled > Archived > base", () => {
   const base = { blocked: false, archived: false, handled: false };
   assert.equal(applyFlagsToStatus({ ...base }, "needs_follow_up"), "needs_follow_up");
   assert.equal(applyFlagsToStatus({ ...base, handled: true }, "needs_follow_up"), "handled");
   assert.equal(
     applyFlagsToStatus({ ...base, handled: true, archived: true }, "needs_follow_up"),
-    "archived",
+    "handled",
   );
   assert.equal(
     applyFlagsToStatus({ blocked: true, archived: true, handled: true }, "booked"),
@@ -49,29 +49,29 @@ test("primary status precedence: Blocked > Archived > Handled > base", () => {
   );
 });
 
-test("queue sections: blocked > archived > handled > active; handled leaves Active", () => {
+test("queue sections: blocked > handled > archived > needs follow-up", () => {
   assert.equal(
-    workspaceFilterForCard({ blocked: false, archived: false, handled: false }),
-    "active",
+    workspaceSectionForCard({ blocked: false, archived: false, handled: false }),
+    "needs_follow_up",
   );
   assert.equal(
-    workspaceFilterForCard({ blocked: false, archived: false, handled: true }),
+    workspaceSectionForCard({ blocked: false, archived: false, handled: true }),
     "handled",
   );
   assert.equal(
-    workspaceFilterForCard({ blocked: false, archived: true, handled: false }),
+    workspaceSectionForCard({ blocked: false, archived: true, handled: false }),
     "archived",
   );
   assert.equal(
-    workspaceFilterForCard({ blocked: false, archived: true, handled: true }),
-    "archived",
+    workspaceSectionForCard({ blocked: false, archived: true, handled: true }),
+    "handled",
   );
   assert.equal(
-    workspaceFilterForCard({ blocked: true, archived: true, handled: true }),
+    workspaceSectionForCard({ blocked: true, archived: true, handled: true }),
     "blocked",
   );
   assert.equal(
-    workspaceFilterForCard({ blocked: true, archived: false, handled: false }),
+    workspaceSectionForCard({ blocked: true, archived: false, handled: false }),
     "blocked",
   );
 });
@@ -80,6 +80,7 @@ test("status and flag meta cover the new vocabulary", () => {
   assert.equal(WORKSPACE_STATUS_META.handled.label, "Handled");
   assert.equal(WORKSPACE_STATUS_META.archived.label, "Archived");
   assert.equal(WORKSPACE_STATUS_META.blocked.label, "Blocked");
+  assert.equal(WORKSPACE_STATUS_META.waiting_for_patient.label, "Needs follow-up");
   assert.equal(WORKSPACE_FLAG_META.safetyConcern.label, "Safety concern");
   assert.equal(WORKSPACE_FLAG_META.automationPaused.label, "Automation paused");
   assert.equal(WORKSPACE_FLAG_META.highVolume.label, "High volume");
@@ -234,9 +235,31 @@ test("request summary card shows one headline + signal chips, no empty rows", ()
   // Chips render nothing when no signal exists; no "None detected" clutter.
   assert.ok(src.includes("if (chips.length === 0) return null"));
   assert.ok(!src.includes("None detected"));
+  assert.ok(!src.includes('label: "Pain/urgent"'));
+  assert.ok(!src.includes('label: "Payment"'));
+  assert.ok(!src.includes('label: "Insurance"'));
   // The old field table is gone.
   assert.ok(!src.includes("Preferred appointment time"));
   assert.ok(!src.includes("Payment / insurance"));
+});
+
+test("workspace page passes only non-redundant system chips to cards", () => {
+  const src = read(path.join("app", "workspace", "page.tsx"));
+  assert.ok(src.includes('id: "automation_paused"'));
+  assert.ok(src.includes('id: "high_volume"'));
+  assert.ok(src.includes("Request signals"));
+  assert.ok(!src.includes("...summary.chips.map"));
+});
+
+test("workspace UI does not render duplicated primary status badges", () => {
+  const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
+  assert.ok(!src.includes("function StatusBadge"));
+  assert.ok(!src.includes("<StatusBadge"));
+  assert.ok(!src.includes("WORKSPACE_STATUS_META"));
+  assert.ok(!src.includes("Waiting for patient"));
+  // The section header owns this status; cards do not render a repeated badge.
+  assert.ok(!src.includes('{m.label}'));
+  assert.ok(!src.includes('badge ${m.badge}'));
 });
 
 test("name is inline-editable and saved via save_name", () => {
@@ -332,39 +355,50 @@ test("internal note saves independently without an outcome", () => {
   assert.ok(!src.includes("Please choose an outcome"));
 });
 
-test("Active queue is first with collapsed toned sections below, counts, and Load more", () => {
+test("four sectioned queue has default expansion, tones, counts, and Load more", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
-  // Sections replace the old top filter buttons.
+  const css = read(path.join("app", "globals.css"));
+  // Sections replace the old top filter buttons and the separate Active list.
+  assert.ok(src.includes('{ id: "needs_follow_up", label: "Needs follow-up", tone: "warning" }'));
   assert.ok(src.includes('{ id: "handled", label: "Handled", tone: "success" }'));
   assert.ok(src.includes('{ id: "archived", label: "Archived", tone: "info" }'));
   assert.ok(src.includes('{ id: "blocked", label: "Blocked", tone: "danger" }'));
   assert.ok(!src.includes('aria-pressed={filter === f.id}'), "old filter pills removed");
-  // Collapsed by default (<details> without open) with a count in the summary.
-  assert.ok(src.includes("<details key={section.id}"));
-  assert.ok(!src.includes("<details open"));
+  assert.ok(!src.includes("grouped.active"));
+  // Needs follow-up starts expanded; lower sections start collapsed.
+  assert.ok(src.includes("needs_follow_up: true"));
+  assert.ok(src.includes("handled: false"));
+  assert.ok(src.includes("archived: false"));
+  assert.ok(src.includes("blocked: false"));
+  assert.ok(src.includes("open={expandedSections[section.id]}"));
   assert.ok(src.includes("{section.label} ({sectionCards.length})"));
-  // Section quick actions: Reopen (handled/archived) and Unblock (blocked).
-  const sectionRow = src.slice(src.indexOf("function SectionRow"), src.indexOf("async function postConversationAction"));
-  assert.ok(sectionRow.includes('section === "blocked" ? "unblock_number" : "reopen"'));
-  // Load more: Active pages by 25, sections by 10 — client-side only.
-  assert.ok(src.includes("const ACTIVE_PAGE_SIZE = 25"));
-  assert.ok(src.includes("const SECTION_PAGE_SIZE = 10"));
+  assert.ok(css.includes(".ws-section.tone-warning"));
+  assert.ok(css.includes(".ws-section.tone-success"));
+  assert.ok(css.includes(".ws-section.tone-info"));
+  assert.ok(css.includes(".ws-section.tone-danger"));
+  // Load more: every section pages by 6, client-side only.
+  assert.ok(src.includes("const SECTION_PAGE_SIZE = 6"));
+  assert.ok(src.includes("sectionCards.slice(0, limit)"));
+  assert.ok(src.includes("[section.id]: limit + SECTION_PAGE_SIZE"));
   assert.ok(src.includes("Load more"));
+  assert.ok(!src.includes("Load more ("));
 });
 
-test("samples demonstrate the five new layouts and never dominate a live workspace", () => {
+test("samples demonstrate the four section layout and never dominate a live workspace", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
   // Samples collapse by default when real conversations exist.
   assert.ok(src.includes("useState(hasReal)"));
-  assert.ok(src.includes('"sample-appointment"'));
-  assert.ok(src.includes('"sample-no-name"'));
+  assert.ok(src.includes('"sample-needs-follow-up"'));
   assert.ok(src.includes('"sample-handled"'));
   assert.ok(src.includes('"sample-archived"'));
   assert.ok(src.includes('"sample-blocked"'));
   // Sample headlines use the compact summary format.
-  assert.ok(src.includes('"Cleaning appointment · Tuesday morning"'));
-  assert.ok(src.includes('"Mentions pain/urgent concern · Wants appointment"'));
+  assert.ok(src.includes('"Cleaning appointment · Tomorrow"'));
+  assert.ok(src.includes('"Appointment request · Next week"'));
+  assert.ok(src.includes('"Insurance question"'));
   assert.ok(src.includes('"Review conversation"'));
+  assert.ok(!src.includes('"Pain/urgent"'));
+  assert.ok(!src.includes('"Insurance", label'));
   // The handled sample records a booked appointment.
   assert.ok(src.includes('frontDeskOutcome: "appointment_booked"'));
 });

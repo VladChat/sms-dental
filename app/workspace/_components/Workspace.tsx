@@ -2,14 +2,13 @@
 
 import { useMemo, useState } from "react";
 import {
-  WORKSPACE_STATUS_META,
   applyFlagsToStatus,
   deriveWorkspaceStatus,
   formatDateTime,
-  workspaceFilterForCard,
+  workspaceSectionForCard,
   type PatientRequestCard,
   type WorkspaceCardChip,
-  type WorkspaceFilter,
+  type WorkspaceSectionId,
 } from "./workspace-types";
 import { FRONT_DESK_NOTE_MAX } from "../../../lib/workspace/outcome";
 
@@ -17,9 +16,10 @@ import { FRONT_DESK_NOTE_MAX } from "../../../lib/workspace/outcome";
 // want, what did they say, and what should staff do next. Deterministic only —
 // no AI. Missing name/time/summary values render as "Not provided".
 //
-// Layout: Active queue first, then collapsed Handled (success tone), Archived
-// (info tone), and Blocked (danger tone) sections with counts. "Block number"
-// affects ONLY the caller's phone number for automation — messages stay saved.
+// Layout: four visible sections — Needs follow-up, Handled, Archived, Blocked.
+// The section header is the status, so cards and the selected header do not
+// repeat primary status badges. "Block number" affects ONLY the caller's phone
+// number for automation — messages stay saved.
 
 const NOT_PROVIDED = "Not provided";
 
@@ -37,8 +37,7 @@ const TOOLTIP_UNBLOCK =
 const BLOCK_CONFIRM_TEXT =
   "Block this phone number? Automated texts to this number will stop, but messages stay saved.";
 
-const ACTIVE_PAGE_SIZE = 25;
-const SECTION_PAGE_SIZE = 10;
+const SECTION_PAGE_SIZE = 6;
 
 type WorkspaceAction =
   | "save_note"
@@ -50,21 +49,17 @@ type WorkspaceAction =
   | "unblock_number";
 
 type SectionDef = {
-  id: Exclude<WorkspaceFilter, "active">;
+  id: WorkspaceSectionId;
   label: string;
-  tone: "success" | "info" | "danger";
+  tone: "warning" | "success" | "info" | "danger";
 };
 
 const SECTIONS: SectionDef[] = [
+  { id: "needs_follow_up", label: "Needs follow-up", tone: "warning" },
   { id: "handled", label: "Handled", tone: "success" },
   { id: "archived", label: "Archived", tone: "info" },
   { id: "blocked", label: "Blocked", tone: "danger" },
 ];
-
-function StatusBadge({ status }: { status: PatientRequestCard["status"] }) {
-  const m = WORKSPACE_STATUS_META[status];
-  return <span className={`badge ${m.badge}`}><span className="dot" aria-hidden="true" />{m.label}</span>;
-}
 
 // Signal chips only — rendered exclusively when something useful exists.
 function SummaryChips({ chips }: { chips: WorkspaceCardChip[] }) {
@@ -138,29 +133,45 @@ function RequestQueue({
 }) {
   const [items, setItems] = useState(cards);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeLimit, setActiveLimit] = useState(ACTIVE_PAGE_SIZE);
-  const [sectionLimits, setSectionLimits] = useState<Record<string, number>>({
+  const [sectionLimits, setSectionLimits] = useState<Record<WorkspaceSectionId, number>>({
+    needs_follow_up: SECTION_PAGE_SIZE,
     handled: SECTION_PAGE_SIZE,
     archived: SECTION_PAGE_SIZE,
     blocked: SECTION_PAGE_SIZE,
   });
+  const [expandedSections, setExpandedSections] = useState<Record<WorkspaceSectionId, boolean>>({
+    needs_follow_up: true,
+    handled: false,
+    archived: false,
+    blocked: false,
+  });
 
   const grouped = useMemo(() => {
-    const g: Record<WorkspaceFilter, PatientRequestCard[]> = {
-      active: [],
+    const g: Record<WorkspaceSectionId, PatientRequestCard[]> = {
+      needs_follow_up: [],
       handled: [],
       archived: [],
       blocked: [],
     };
-    for (const item of items) g[workspaceFilterForCard(item.flags)].push(item);
+    for (const item of items) g[workspaceSectionForCard(item.flags)].push(item);
     return g;
   }, [items]);
 
-  const selected = items.find((c) => c.id === selectedId) ?? grouped.active[0] ?? null;
+  const selected =
+    items.find((c) => c.id === selectedId) ??
+    SECTIONS.map((section) => grouped[section.id][0]).find(Boolean) ??
+    null;
 
   // Apply a successful queue action to local state. `status` is recomputed
-  // from the card's flag-free base status, so the badge stays correct.
+  // from the card's flag-free base status. If the action moves the card, open
+  // the destination section so the selected request remains easy to track.
   function patchCard(id: string, patch: Partial<PatientRequestCard>) {
+    const current = items.find((c) => c.id === id);
+    if (current) {
+      const nextFlags = patch.flags ?? current.flags;
+      const destination = workspaceSectionForCard(nextFlags);
+      setExpandedSections((prev) => ({ ...prev, [destination]: true }));
+    }
     setItems((prev) =>
       prev.map((c) => {
         if (c.id !== id) return c;
@@ -174,41 +185,21 @@ function RequestQueue({
   return (
     <div className="ws-layout">
       <div className="ws-queue-col">
-        <nav className="ws-list" aria-label={kind === "sample" ? "Sample requests" : "Active patient requests"}>
-          {grouped.active.length === 0 ? (
-            <p className="t-small ws-empty-note" style={{ padding: "var(--space-3)" }}>
-              No active requests.
-            </p>
-          ) : (
-            <>
-              {grouped.active.slice(0, activeLimit).map((c) => (
-                <QueueCard
-                  key={c.id}
-                  card={c}
-                  selected={selected?.id === c.id}
-                  onSelect={() => setSelectedId(c.id)}
-                />
-              ))}
-              {grouped.active.length > activeLimit && (
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm ws-load-more"
-                  onClick={() => setActiveLimit((n) => n + ACTIVE_PAGE_SIZE)}
-                >
-                  Load more ({grouped.active.length - activeLimit} more)
-                </button>
-              )}
-            </>
-          )}
-        </nav>
-
         {SECTIONS.map((section) => {
           const sectionCards = grouped[section.id];
           const limit = sectionLimits[section.id] ?? SECTION_PAGE_SIZE;
           return (
-            <details key={section.id} className={`ws-section tone-${section.tone}`}>
+            <details
+              key={section.id}
+              className={`ws-section tone-${section.tone}`}
+              open={expandedSections[section.id]}
+              onToggle={(event) => {
+                const isOpen = event.currentTarget.open;
+                setExpandedSections((prev) => ({ ...prev, [section.id]: isOpen }));
+              }}
+            >
               <summary className="ws-section-summary">
-                {section.label} ({sectionCards.length})
+                <span>{section.label} ({sectionCards.length})</span>
               </summary>
               <div className="ws-section-body">
                 {sectionCards.length === 0 ? (
@@ -216,28 +207,26 @@ function RequestQueue({
                 ) : (
                   <>
                     {sectionCards.slice(0, limit).map((c) => (
-                      <SectionRow
+                      <QueueCard
                         key={c.id}
                         card={c}
-                        section={section.id}
-                        kind={kind}
                         selected={selected?.id === c.id}
                         onSelect={() => setSelectedId(c.id)}
-                        onPatched={patchCard}
                       />
                     ))}
                     {sectionCards.length > limit && (
                       <button
                         type="button"
-                        className="btn btn-secondary btn-sm ws-load-more"
+                        className="btn btn-secondary ws-load-more"
                         onClick={() =>
                           setSectionLimits((prev) => ({
                             ...prev,
                             [section.id]: limit + SECTION_PAGE_SIZE,
                           }))
                         }
+                        aria-label={`Load more ${section.label.toLowerCase()} requests`}
                       >
-                        Load more ({sectionCards.length - limit} more)
+                        Load more
                       </button>
                     )}
                   </>
@@ -270,7 +259,6 @@ function QueueCard({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const m = WORKSPACE_STATUS_META[card.status];
   return (
     <button
       type="button"
@@ -280,90 +268,18 @@ function QueueCard({
     >
       <span className="ws-list-top">
         <span className="ws-list-name">{card.patientName ?? card.callerPhone}</span>
-        <span className="ws-list-badges">
-          {card.isSample && <span className="badge badge-info">Sample</span>}
-          <span className={`badge ${m.badge}`}><span className="dot" aria-hidden="true" />{m.label}</span>
-        </span>
+        {card.isSample && <span className="badge badge-info">Sample</span>}
       </span>
       {card.patientName && <span className="t-small ws-meta t-mono">{card.callerPhone}</span>}
       <span className="ws-list-summary">{card.summaryHeadline}</span>
+      {card.latestMessage && (
+        <span className="ws-snippet">
+          {card.latestMessageDirection === "outbound" ? "Office" : "Patient"}: {card.latestMessage}
+        </span>
+      )}
       <SummaryChips chips={card.summaryChips} />
       <span className="t-helper ws-meta">Last activity · {formatDateTime(card.lastActivityAt)}</span>
     </button>
-  );
-}
-
-// Compact row inside a collapsed section: select + the one quick action that
-// makes the next state obvious (Reopen, or Unblock for blocked numbers).
-function SectionRow({
-  card,
-  section,
-  kind,
-  selected,
-  onSelect,
-  onPatched,
-}: {
-  card: PatientRequestCard;
-  section: Exclude<WorkspaceFilter, "active">;
-  kind: "real" | "sample";
-  selected: boolean;
-  onSelect: () => void;
-  onPatched: (id: string, patch: Partial<PatientRequestCard>) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const isSample = kind === "sample";
-
-  async function quickAction() {
-    if (isSample) return;
-    const action: WorkspaceAction = section === "blocked" ? "unblock_number" : "reopen";
-    setBusy(true);
-    const result = await postConversationAction(card.id, action);
-    setBusy(false);
-    if (!result.ok) return;
-    if (action === "unblock_number") {
-      onPatched(card.id, { flags: { ...card.flags, blocked: false } });
-    } else {
-      onPatched(card.id, {
-        flags: { ...card.flags, archived: false, handled: false },
-        frontDeskOutcome: null,
-        baseStatus: deriveWorkspaceStatus("open", card.timeline),
-      });
-    }
-  }
-
-  return (
-    <div className={`ws-section-row${selected ? " is-selected" : ""}`}>
-      <button type="button" className="ws-section-row-main" onClick={onSelect}>
-        <span className="ws-list-name">{card.patientName ?? card.callerPhone}</span>
-        <span className="ws-list-summary">{card.summaryHeadline}</span>
-        {section === "handled" && card.frontDeskOutcome && (
-          <span className={`badge ${card.frontDeskOutcome === "appointment_booked" ? "badge-success" : "badge-neutral"}`}>
-            {card.frontDeskOutcome === "appointment_booked" ? "Appointment booked" : "No appointment"}
-          </span>
-        )}
-      </button>
-      {section === "blocked" ? (
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          title={TOOLTIP_UNBLOCK}
-          disabled={isSample || busy}
-          onClick={quickAction}
-        >
-          {busy ? "Unblocking…" : "Unblock number"}
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          title={TOOLTIP_REOPEN}
-          disabled={isSample || busy}
-          onClick={quickAction}
-        >
-          {busy ? "Reopening…" : "Reopen"}
-        </button>
-      )}
-    </div>
   );
 }
 
@@ -407,7 +323,7 @@ function RequestDetail({
 
   const isSample = kind === "sample";
   const lastTwo = card.timeline.slice(-2);
-  const section = workspaceFilterForCard(card.flags);
+  const section = workspaceSectionForCard(card.flags);
 
   async function runAction(action: WorkspaceAction, extra?: { appointmentBooked?: boolean }) {
     if (isSample) return;
@@ -443,17 +359,14 @@ function RequestDetail({
 
   return (
     <section className="ws-detail" aria-labelledby="ws-detail-title">
-      {/* 1. Patient header: who + status + the actions staff take next. */}
+      {/* 1. Patient header: who + the actions staff take next. */}
       <div className="card card-pad ws-head-card">
         <header className="acct-section-head">
           <div className="ws-head-id">
             <NameEditor card={card} isSample={isSample} onPatched={onPatched} />
             <p className="t-small t-mono ws-head-phone">{card.callerPhone}</p>
           </div>
-          <div className="ws-list-badges">
-            {card.isSample && <span className="badge badge-info">Sample</span>}
-            <StatusBadge status={card.status} />
-          </div>
+          {card.isSample && <span className="badge badge-info">Sample</span>}
         </header>
 
         <div className="ws-actions">
@@ -530,7 +443,7 @@ function RequestDetail({
           )}
         </div>
 
-        {askingHandled && section === "active" && (
+        {askingHandled && section === "needs_follow_up" && (
           <div className="ws-mini-panel" role="group" aria-label="Was appointment booked?">
             <span className="ws-mini-title">Was appointment booked?</span>
             <div className="ws-mini-options">
@@ -828,9 +741,8 @@ function InternalNote({
   );
 }
 
-// Sample/demo cards demonstrating the clean layout: active with name+time,
-// active with no name, handled (booked yes), archived, blocked. Same structure
-// as real cards; never persisted; actions disabled.
+// Sample/demo cards demonstrating the same four-section layout as real cards.
+// They are never persisted and actions are disabled.
 const SAMPLE_FLAGS = {
   safetyConcern: false,
   automationPaused: false,
@@ -842,12 +754,12 @@ const SAMPLE_FLAGS = {
 
 const SAMPLE_REQUESTS: PatientRequestCard[] = [
   {
-    id: "sample-appointment",
+    id: "sample-needs-follow-up",
     callerPhone: "+1 (555) 010-1001",
-    patientName: "Jordan Lee",
-    summaryHeadline: "Cleaning appointment · Tuesday morning",
+    patientName: null,
+    summaryHeadline: "Cleaning appointment · Tomorrow",
     summaryChips: [],
-    latestMessage: "Hi, can I book a cleaning for Tuesday morning?",
+    latestMessage: "Hi, can I book a cleaning tomorrow?",
     latestMessageDirection: "inbound",
     status: "needs_follow_up",
     baseStatus: "needs_follow_up",
@@ -856,54 +768,24 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     lastActivityAt: "2026-05-24T14:36:00.000Z",
     timeline: [
       {
-        id: "sample-appointment-1",
+        id: "sample-needs-follow-up-1",
         direction: "outbound",
         body: "Hi, this is Bright Smile Dental. We missed your call. How can we help? Reply STOP to opt out.",
         at: "2026-05-24T14:31:00.000Z",
       },
       {
-        id: "sample-appointment-2",
+        id: "sample-needs-follow-up-2",
         direction: "inbound",
-        body: "Hi, can I book a cleaning for Tuesday morning?",
+        body: "Hi, can I book a cleaning tomorrow?",
         at: "2026-05-24T14:36:00.000Z",
       },
     ],
     isSample: true,
-    sampleNote: "Patient asked for a cleaning appointment Tuesday morning.",
-  },
-  {
-    id: "sample-no-name",
-    callerPhone: "+1 (555) 010-1002",
-    patientName: null,
-    summaryHeadline: "Mentions pain/urgent concern · Wants appointment",
-    summaryChips: [{ id: "pain_urgent", label: "Pain/urgent" }],
-    latestMessage: "I have bad tooth pain, can someone see me today?",
-    latestMessageDirection: "inbound",
-    status: "needs_follow_up",
-    baseStatus: "needs_follow_up",
-    flags: { ...SAMPLE_FLAGS, safetyConcern: true },
-    createdAt: "2026-05-24T13:10:00.000Z",
-    lastActivityAt: "2026-05-24T13:22:00.000Z",
-    timeline: [
-      {
-        id: "sample-no-name-1",
-        direction: "inbound",
-        body: "I have bad tooth pain, can someone see me today?",
-        at: "2026-05-24T13:18:00.000Z",
-      },
-      {
-        id: "sample-no-name-2",
-        direction: "outbound",
-        body: "If this is a medical emergency, call 911. Thanks for the info. What name should we use when our office follows up? If you're looking for an appointment, what time works best for you?",
-        at: "2026-05-24T13:22:00.000Z",
-      },
-    ],
-    isSample: true,
-    sampleNote: "Patient mentioned tooth pain — call first.",
+    sampleNote: "Name is not provided; call back about tomorrow.",
   },
   {
     id: "sample-handled",
-    callerPhone: "+1 (555) 010-1003",
+    callerPhone: "+1 (555) 010-1002",
     patientName: "Taylor Brooks",
     summaryHeadline: "Appointment request · Next week",
     summaryChips: [],
@@ -934,10 +816,10 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
   },
   {
     id: "sample-archived",
-    callerPhone: "+1 (555) 010-1004",
+    callerPhone: "+1 (555) 010-1003",
     patientName: "Morgan Patel",
     summaryHeadline: "Insurance question",
-    summaryChips: [{ id: "insurance", label: "Insurance" }],
+    summaryChips: [],
     latestMessage: "Do you take Delta Dental insurance?",
     latestMessageDirection: "inbound",
     status: "archived",
@@ -958,7 +840,7 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
   },
   {
     id: "sample-blocked",
-    callerPhone: "+1 (555) 010-1005",
+    callerPhone: "+1 (555) 010-1004",
     patientName: null,
     summaryHeadline: "Review conversation",
     summaryChips: [{ id: "high_volume", label: "High volume" }],

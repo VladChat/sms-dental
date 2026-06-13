@@ -11,7 +11,7 @@ source_of_truth:
   - MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md
   - MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md
   - MVP_BUILD_DOCS/PROJECT-CONTEXT.md
-last_verified: 2026-06-10
+last_verified: 2026-06-13
 related:
   - ../workspace/front-desk-workspace-overview
   - patient-opt-out-stop-start
@@ -57,9 +57,10 @@ for giving clinical guidance.
 
 ### Some details may be missing
 
-Patient request cards show what is known. Fields the system does not have yet
-appear as **"not provided yet"** rather than a guess. Do not assume or invent
-details that are not shown — confirm anything you need directly with the patient.
+Patient request cards show what is known. If the system does not have a safe
+patient name, the selected request shows **Not provided** rather than a guess. Do
+not assume or invent details that are not shown — confirm anything you need
+directly with the patient.
 
 ### Respect opt-outs
 
@@ -69,13 +70,15 @@ See [Patient opt-out — STOP and START](patient-opt-out-stop-start.md).
 ## What you can do
 
 - Open the **workspace** to see patient replies and request cards.
-- Read the **Latest patient reply** section on the selected request before
-  opening the full conversation.
+- Start in the **Needs follow-up** section. It is expanded by default; Handled,
+  Archived, and Blocked start collapsed.
+- Read the one-line request summary and latest message snippet, then open the
+  selected request if you need the conversation.
 - Review each reply and follow up using your clinic's normal process (for example,
   using **Call patient** to open your device's normal phone dialer and call the
   patient back to schedule).
-- Record the outcome of a follow-up — for example, appointment booked, no
-  appointment booked, or could not reach the patient — plus a short note if helpful.
+- When finished, click **Handled** and answer **Was appointment booked?** with
+  **Yes** or **No**. Add a short internal note if helpful.
 
 > Sending text replies directly from the workspace is not available today. Use the
 > workspace to review replies and track outcomes, and follow up with the patient
@@ -85,6 +88,8 @@ See [Patient opt-out — STOP and START](patient-opt-out-stop-start.md).
 ## What to expect
 
 - New replies appear as request cards for the front desk to handle.
+- Cards are grouped into **Needs follow-up**, **Handled**, **Archived**, and
+  **Blocked**. Use **Load more** when a section has more cards.
 - Recording an outcome helps your team keep track of which patients still need
   follow-up.
 - Cards clearly labeled **"Sample"** are examples only — they are not real patients
@@ -105,6 +110,6 @@ Email: **support@missedcallsdental.com**
 ## Source of truth
 
 - `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md` — workspace scope, outcomes, sample
-  cards, minimum-necessary display, "not provided yet"
+  cards, minimum-necessary display, "Not provided"
 - `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` — reply handling and opt-out behavior
 - `MVP_BUILD_DOCS/PROJECT-CONTEXT.md` — no medical advice; scheduling focus

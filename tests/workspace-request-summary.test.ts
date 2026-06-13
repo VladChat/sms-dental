@@ -185,21 +185,22 @@ test("summary headline falls back to Review conversation with no signal", () => 
   );
 });
 
-test("summary chips appear only on real signals — never empty placeholders", () => {
+test("summary chips never duplicate signals already present in the headline", () => {
   assert.deepEqual(buildWorkspaceRequestSummary({ inboundTexts: ["Hello"] }).chips, []);
   assert.deepEqual(
     buildWorkspaceRequestSummary({ inboundTexts: ["I have tooth pain"] }).chips,
-    [{ id: "pain_urgent", label: "Pain/urgent" }],
+    [],
   );
   assert.deepEqual(
     buildWorkspaceRequestSummary({ inboundTexts: ["Do you take Aetna?"] }).chips,
-    [{ id: "insurance", label: "Insurance" }],
+    [],
   );
   assert.deepEqual(
     buildWorkspaceRequestSummary({ inboundTexts: ["can I pay cash"] }).chips,
-    [{ id: "payment", label: "Payment" }],
+    [],
   );
-  // Safety-notice state contributes the pain/urgent chip even without words.
+  // A state-only safety signal can still surface as a non-redundant helper chip
+  // when the fallback headline does not already say pain/urgent.
   assert.deepEqual(
     buildWorkspaceRequestSummary({ inboundTexts: ["call me"], safetyNoticeSent: true }).chips,
     [{ id: "pain_urgent", label: "Pain/urgent" }],

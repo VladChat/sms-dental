@@ -2,7 +2,7 @@
 
 Status: active (articles ready; not yet published)
 Audience: Front-desk staff · Visibility: `clinic_staff`
-Last updated: 2026-06-09
+Last updated: 2026-06-13
 
 Help for front-desk staff using `/workspace` to handle patient replies and
 requests after a missed-call follow-up.
@@ -27,18 +27,18 @@ visible to staff):
 
 | Article | Title | Visibility | Status | Notes |
 |---|---|---|---|---|
-| [front-desk-workspace-overview.md](front-desk-workspace-overview.md) | Front-desk workspace overview | clinic_staff | ready | What the workspace is; what staff can/can't see; request cards; statuses |
+| [front-desk-workspace-overview.md](front-desk-workspace-overview.md) | Front-desk workspace overview | clinic_staff | ready | What the workspace is; what staff can/can't see; sectioned request cards |
 | [../missed-calls-and-messages/how-front-desk-should-handle-patient-replies.md](../missed-calls-and-messages/how-front-desk-should-handle-patient-replies.md) | How front desk should handle patient replies | clinic_staff | ready | Lives in missed-calls-and-messages; cross-listed here |
-| [understanding-request-statuses.md](understanding-request-statuses.md) | Understanding patient request statuses | clinic_staff | ready | What each status means; "not provided yet"; what not to assume |
+| [understanding-request-statuses.md](understanding-request-statuses.md) | Understanding patient request statuses | clinic_staff | ready | What each queue section means; Not provided; what not to assume |
 
 ## Staff-safe notes
 
 - Describe the workspace as the place to review missed-call SMS replies and
   patient requests, and to record the outcome of a follow-up.
-- **Status vocabulary** (from `FRONT-DESK-WORKSPACE.md`): New, Needs reply,
-  Waiting for patient, Ready to call, Booked, Closed. Explain them simply.
-- **Outcomes** staff can record per real conversation: appointment booked, no
-  appointment booked, could not reach patient (plus an optional short note).
+- **Queue sections** (from `FRONT-DESK-WORKSPACE.md`): Needs follow-up, Handled,
+  Archived, Blocked. Explain them simply.
+- **Handled outcome** staff records per real conversation: appointment booked
+  yes/no, plus an optional short internal note.
 - Reinforce opt-out respect: never message a patient who replied STOP. Link to
   [../missed-calls-and-messages/README.md](../missed-calls-and-messages/README.md).
 - Sample cards are clearly labeled "Sample" and are not real patients — note this
@@ -48,7 +48,7 @@ visible to staff):
 
 ## Source of truth
 
-- `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md` — workspace scope, statuses, outcomes,
+- `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md` — workspace scope, queue sections, outcomes,
   minimum-necessary display
 
 ## Need more help?

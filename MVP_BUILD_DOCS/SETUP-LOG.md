@@ -7651,6 +7651,57 @@ secret printing, no patient data printed, and `.qwen/` remained untouched.
 
 ---
 
+## 2026-06-13 — Front-desk Workspace decluttered section queue
+
+Decluttered `/workspace` so the queue is organized by section headers instead
+of repeated per-card status badges — no migration needed, no SMS sent, no calls
+placed.
+
+What changed:
+
+- Queue sections now render in this order: Needs follow-up, Handled, Archived,
+  Blocked. Needs follow-up uses warning/yellow styling and is expanded by
+  default; Handled (success), Archived (neutral/info), and Blocked (danger)
+  are collapsed by default.
+- Section membership priority is blocked > handled > archived > needs
+  follow-up. Active conversations remain under Needs follow-up regardless of
+  latest inbound/outbound message; the older outbound-waiting label is not
+  staff-facing.
+- Each section initially shows up to 6 cards with a visible client-side
+  `Load more` button for the next 6. Section header counts always show total
+  section counts.
+- Cards and selected detail headers no longer repeat the primary section status
+  badge. Cards show title, optional phone, one-line request summary, latest
+  message snippet, last activity, and only non-redundant system chips
+  (`Automation paused`, `High volume`).
+- Request-summary signal chips for pain/urgent, payment, and insurance no
+  longer duplicate the headline. The deterministic fallback remains
+  `Review conversation`; no AI was added.
+- Samples now use the same four-section structure as real requests and remain
+  collapsed when real conversations exist.
+- Updated `FRONT-DESK-WORKSPACE.md`, `OPERATIONS-RUNBOOK.md`, and the
+  Knowledge System workspace/help inventory to match the staff-facing behavior.
+
+Validation:
+
+- Focused workspace tests pass: 38 tests.
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass: 223 tests.
+- `npm run test:ai-knowledge` pass: 76 tests.
+- `npm run test:a2p` pass: 65 tests.
+- `npm run test:phone-numbers` pass: 32 tests.
+- `npm run build` pass.
+- `git diff --check` clean.
+
+Production migration: none needed (existing columns and tables cover the
+feature; no schema change).
+
+No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
+Stripe change, no phone-number lifecycle change, no production env change, no
+secret printing, no patient data printed, and `.qwen/` remained untouched.
+
+---
+
 ## 2026-06-12 — Front-desk Workspace polish (sections, handled flow, name edit)
 
 Polished `/workspace` into a cleaner, faster front-desk screen — no migration

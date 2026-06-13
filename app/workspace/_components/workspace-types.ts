@@ -34,12 +34,16 @@ export type WorkspaceCardFlags = {
   handled: boolean;
 };
 
-// Queue sections: Active is the working list; Handled/Archived/Blocked render
-// as collapsed sections below it.
-export type WorkspaceFilter = "active" | "handled" | "archived" | "blocked";
+// Queue sections. The section header is the primary status shown to staff; cards
+// inside the section do not repeat that status badge.
+export type WorkspaceSectionId =
+  | "needs_follow_up"
+  | "handled"
+  | "archived"
+  | "blocked";
 
 export type WorkspaceCardChip = {
-  id: "pain_urgent" | "payment" | "insurance" | "automation_paused" | "high_volume";
+  id: "automation_paused" | "high_volume";
   label: string;
 };
 
@@ -88,15 +92,15 @@ export const NO_FLAGS: WorkspaceCardFlags = {
   handled: false,
 };
 
-// Primary status precedence: Blocked > Archived > Handled > saved outcome >
+// Primary status precedence: Blocked > Handled > Archived > saved outcome >
 // timeline-derived needs-follow-up / waiting-for-patient.
 export function applyFlagsToStatus(
   flags: Pick<WorkspaceCardFlags, "blocked" | "archived" | "handled">,
   baseStatus: WorkspaceStatus,
 ): WorkspaceStatus {
   if (flags.blocked) return "blocked";
-  if (flags.archived) return "archived";
   if (flags.handled) return "handled";
+  if (flags.archived) return "archived";
   return baseStatus;
 }
 
@@ -113,16 +117,17 @@ export function derivePrimaryWorkspaceStatus(input: {
   );
 }
 
-// Queue section membership. Priority mirrors the status precedence:
-// blocked wins over archived/handled, archived over handled, and everything
-// else stays in the Active working list. Handled never shows in Active.
-export function workspaceFilterForCard(
+// Queue section membership. Priority mirrors the current UX requirement:
+// blocked wins, handled second, archived third, and every other conversation
+// stays in Needs follow-up. Latest outbound messages are still follow-up work;
+// the outbound-waiting lifecycle name is internal-only and not staff-facing.
+export function workspaceSectionForCard(
   flags: Pick<WorkspaceCardFlags, "blocked" | "archived" | "handled">,
-): WorkspaceFilter {
+): WorkspaceSectionId {
   if (flags.blocked) return "blocked";
-  if (flags.archived) return "archived";
   if (flags.handled) return "handled";
-  return "active";
+  if (flags.archived) return "archived";
+  return "needs_follow_up";
 }
 
 // Conservative status derivation from existing data only. We never guess beyond
@@ -175,7 +180,7 @@ export const WORKSPACE_STATUS_META: Record<
 > = {
   new: { label: "Needs follow-up", badge: "badge-warning" },
   needs_follow_up: { label: "Needs follow-up", badge: "badge-warning" },
-  waiting_for_patient: { label: "Waiting for patient", badge: "badge-neutral" },
+  waiting_for_patient: { label: "Needs follow-up", badge: "badge-warning" },
   ready_to_call: { label: "Ready to call", badge: "badge-brand" },
   booked: { label: "Appointment booked", badge: "badge-success" },
   closed: { label: "Closed", badge: "badge-neutral" },

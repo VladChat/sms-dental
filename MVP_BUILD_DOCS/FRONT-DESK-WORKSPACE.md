@@ -1,24 +1,35 @@
 # Front Desk Workspace
 
 Status: Active (operational patient-request queue)
-Last updated: 2026-06-12
+Last updated: 2026-06-13
 
-## 0.1 2026-06-12 — Queue polish (sections, handled flow, name edit, summary)
+## 0.1 2026-06-13 — Sectioned queue polish (decluttered cards)
 
-- **Layout order.** Active queue first; Handled (success tone), Archived
-  (info tone), and Blocked (danger tone) render as collapsed sections below
-  with counts (e.g. `Handled (4)`). Handled never shows in Active. Section
-  priority: blocked > archived > handled > active. The old top filter pills
-  are gone. Active pages 25 at a time, sections 10, with client-side
-  `Load more`.
+- **Layout order.** The queue renders four visible sections in order:
+  **Needs follow-up** (warning/yellow), **Handled** (success/green),
+  **Archived** (neutral/info blue-gray), and **Blocked** (danger/red). The old
+  top filter pills are gone. **Needs follow-up** is expanded by default and can
+  be collapsed manually; Handled, Archived, and Blocked are collapsed by
+  default. Each header shows the total count (for example,
+  `Needs follow-up (4)`). Section priority is blocked > handled > archived >
+  needs follow-up.
+- **Load more.** Each section shows up to 6 cards at first. If more cards exist,
+  a visible `Load more` button reveals the next 6 cards for that section. Header
+  counts always show the total section count, not only visible cards.
+- **No repeated status badges.** The section header is the primary status. Cards
+  inside a section do not repeat `Needs follow-up`, `Handled`, `Archived`, or
+  `Blocked` as per-card badges, and the selected-card header does not repeat the
+  same status. The older outbound-waiting label is not staff-facing; active,
+  non-handled, non-archived, non-blocked conversations stay under
+  **Needs follow-up** whether the latest message is inbound or outbound.
 - **Handled flow.** Clicking `Handled` opens a small inline panel
   (`Was appointment booked?`) with Yes / No. Choosing either saves
   immediately: `mark_handled` now REQUIRES `appointmentBooked: boolean` and
   records `front_desk_outcome` (`appointment_booked` / `no_appointment_booked`)
   + `front_desk_outcome_at` + lifecycle status alongside
-  `workspace_handled_at`. The card moves to the Handled section, which shows
-  the booked/no-appointment badge.
-- **Reopen** (from Handled or Archived) returns the request fully to Active:
+  `workspace_handled_at`. The card moves to the Handled section.
+- **Reopen** (from Handled or Archived) returns the request fully to
+  Needs follow-up:
   it clears `workspace_handled_at`, `workspace_archived_at`,
   `front_desk_outcome(_at)`, and resets the lifecycle status to `open`, so no
   stale booked state shows after reopen. Nothing is deleted.
@@ -32,15 +43,17 @@ Last updated: 2026-06-12
 - **Request summary.** The field table was replaced by one compact card: a
   deterministic one-line headline (`Cleaning appointment · Tomorrow`,
   `Mentions pain/urgent concern · Wants appointment`, `Payment question`,
-  fallback `Review conversation`) plus signal chips ONLY when present
-  (Pain/urgent, Payment, Insurance, Automation paused, High volume). No empty
-  "None detected" rows. `buildWorkspaceRequestSummary` keeps a future
+  fallback `Review conversation`). Request signals such as pain/urgent,
+  payment, and insurance are not repeated as chips when the headline already
+  says them. Visible chips are reserved for useful non-redundant system state:
+  `Automation paused` and `High volume`. No empty chip rows and no
+  `None detected` rows render. `buildWorkspaceRequestSummary` keeps a future
   `aiSummary` input hook, but nothing produces AI today — no provider, no env.
 - **Action copy.** Exact tooltips on all actions (Call/Handled/Archive/Block/
   Reopen/Unblock). Block copy describes only the phone number: confirmation
   reads `Block this phone number? Automated texts to this number will stop,
   but messages stay saved.` Block is a visually separated danger action.
-- **Visual polish.** Token-based `.ws-*` classes: toned collapsed sections,
+- **Visual polish.** Token-based `.ws-*` classes: toned queue sections,
   clearer selected card, primary-accent summary card, distinct patient (info
   tone, left accent) vs office bubbles, mobile-wrapping action rows.
 
@@ -49,21 +62,20 @@ Last updated: 2026-06-12
 `/workspace` is now a real front-desk queue that answers: who is this patient,
 what do they want, what did they say, and what should staff do next.
 
-- **Queue (left column).** Filter pills: Active / Archived / Blocked. Each card
-  shows the patient name (or phone when unknown), the phone as secondary when a
-  name exists, the primary status badge, secondary flags (Safety concern,
-  Automation paused, High volume), the last message snippet with direction, and
-  last activity.
-- **Patient header (right panel).** Name or `Unknown`, the phone once,
-  status + flags, primary **Call patient** (a normal `tel:` link), and
+- **Queue (left column).** Four sections: Needs follow-up, Handled, Archived,
+  Blocked. Each card shows the patient name (or phone when no safe name is
+  available), the phone as secondary when a name exists, one-line request
+  summary, latest message snippet with direction, optional system chips
+  (Automation paused / High volume), and last activity. Cards do not repeat the
+  section status as a badge.
+- **Patient header (right panel).** Name or `Not provided`, the phone once,
+  primary **Call patient** (a normal `tel:` link), and
   secondary actions: **Mark handled**, **Archive**, **Block number** (or
   **Reopen** when archived / **Unblock number** when blocked).
-- **Request details.** The same deterministic fields always render: Name,
-  Phone, Request, Preferred appointment time, Safety concern,
-  Payment / insurance, First seen, Last activity. Values come from
-  `lib/workspace/request-summary.ts` — simple keyword matches over INBOUND
-  text plus conversation state. No AI, no invented facts; missing values show
-  `Unknown` (or `None detected` for safety).
+- **Request summary.** One deterministic, human-readable headline from
+  `lib/workspace/request-summary.ts`, based on INBOUND text plus conversation
+  state. No AI, no invented facts, no large field table, no duplicated phone,
+  and no empty chip rows.
 - **Conversation preview.** The last 2 messages render immediately with
   Patient / Your office labels and timestamps; **Show full conversation**
   toggles the full timeline. The old "Latest patient reply" block is gone.
@@ -71,9 +83,8 @@ what do they want, what did they say, and what should staff do next.
   `/api/workspace/conversation-action` (`save_note`) — no outcome required.
   The big Outcome radio form was removed from the layout; the legacy
   `/api/workspace/outcome` route remains for compatibility only.
-- **Statuses.** Primary precedence: Blocked > Archived > Handled > saved
-  outcome > Needs follow-up / Waiting for patient. Secondary flags: Safety
-  concern, Automation paused, High volume.
+- **Sections.** Membership priority: Blocked > Handled > Archived >
+  Needs follow-up. The section header is the staff-facing status.
 
 ### Block number vs Archive (terminology)
 
@@ -89,12 +100,13 @@ what do they want, what did they say, and what should staff do next.
   the conversation; **Unblock number** clears the block, sends nothing, and
   leaves the conversation archived until reopened. The UI requires an inline
   confirmation that names the patient number explicitly.
-- **Archive** hides a conversation from the active queue
+- **Archive** moves a conversation to the Archived section
   (`workspace_archived_at`). It deletes nothing and is reversible with
   **Reopen**. **Mark handled** stamps `workspace_handled_at` without implying
   booked/no-booked.
-- Samples show only when no real conversations exist; with real conversations
-  they collapse behind a "Show samples" strip.
+- Samples use the same four sections as real cards. They show when no real
+  conversations exist; with real conversations they collapse behind a
+  "Show samples" strip.
 
 The front-desk workspace (`/workspace`) is the operational view where clinic
 staff review the results of missed-call SMS recovery — patient replies and
@@ -153,39 +165,41 @@ UI shape (`app/workspace/_components/workspace-types.ts` → `PatientRequestCard
 |------------------------|-----------------------------------------------|-------|
 | id                     | `patient_conversations.id`                    | Opaque selection key only; NOT shown to the user. |
 | callerPhone            | `patient_conversations.patient_phone`         | Patient phone (E.164). |
-| patientName            | — (no column yet)                             | `Not provided yet`. |
-| requestType            | — (no column yet)                             | `Not provided yet`. |
-| preferredTime          | — (no column yet)                             | `Not provided yet`. |
-| summary                | — (no column yet)                             | `Not provided yet`; never AI-generated. |
+| patientName            | `patient_conversations.patient_display_name`  | Sanitized; unsafe/request-like text renders as `Not provided`. |
+| summaryHeadline        | deterministic request summary helper          | One line; never AI-generated today. |
+| summaryChips           | conversation system state                     | Only non-redundant system chips such as Automation paused / High volume. |
 | latestMessage          | latest `messages.body` in the conversation    | Snippet on the card. |
-| latestInboundReply     | latest inbound `messages.body` in the conversation | Shown in detail as `Latest patient reply`; not inferred. |
-| status                 | derived (see below)                           | |
+| status / section       | workspace state + derived flags               | Shown as the section header, not a repeated card badge. |
 | createdAt              | `patient_conversations.created_at`            | |
 | lastActivityAt         | `patient_conversations.last_message_at`       | falls back to `created_at`. |
 | timeline               | `messages` (direction, body, created_at)      | Safe columns only. |
 
-Unknown fields are not repeated as a long list when there is no source data. The
-detail view instead says: `Patient details are not collected yet. Use the reply
-and phone number to follow up.` No external AI calls, no speculative summaries,
-no inferred medical details.
+Unknown or unsafe names render as `Not provided`. Unknown request details are not
+expanded into a field table; the deterministic summary falls back to
+`Review conversation`. No external AI calls, no speculative summaries, no
+inferred medical details.
 
-## 5. Status vocabulary
+## 5. Queue sections
 
-`New`, `Needs reply`, `Waiting for patient`, `Ready to call`, `Booked`,
-`Closed`.
+The visible queue sections are:
 
-Conservative derivation from existing data
-(`deriveWorkspaceStatus`):
+- **Needs follow-up** — active work, expanded by default. This includes active
+  conversations whether the latest message is inbound or outbound.
+- **Handled** — front desk marked the request handled and recorded whether an
+  appointment was booked.
+- **Archived** — staff moved the request out of the active work area; messages
+  stay saved and the request can be reopened.
+- **Blocked** — staff blocked the patient/caller phone number for this clinic;
+  automated texts to that number stop, while inbound messages still record.
 
-- `patient_conversations.status = booked` → **Booked**
-- `patient_conversations.status = closed | lost` → **Closed**
-- open + no messages → **New**
-- open + latest message inbound → **Needs reply**
-- open + latest message outbound → **Waiting for patient**
-- **Ready to call** is in the vocabulary but is not auto-assigned yet (no
-  reliable signal in current data).
+Membership priority:
 
-Calm status colors; red is never used for normal states.
+```txt
+blocked > handled > archived > needs follow-up
+```
+
+The older outbound-waiting lifecycle value remains internal logic only; it is not
+a staff-facing label in the Workspace UI.
 
 ## 6. Data-source mapping
 
@@ -282,13 +296,12 @@ To reduce "empty screen" confusion while real data is sparse, `/workspace` now
 shows a clearly labeled **Sample requests** section when there are no real
 conversation cards.
 
-Sample states included:
+Current sample sections included:
 
 - Needs follow-up
-- Waiting for patient
-- Appointment booked
-- No appointment booked
-- Could not reach patient
+- Handled
+- Archived
+- Blocked
 
 Sample behavior rules:
 
@@ -324,13 +337,12 @@ Sample-domain policy:
 Focused cleanup in this pass:
 
 - sample request copy now uses neutral request types (cleaning appointment,
-  appointment question, reschedule request, callback request).
-- sample status labels are simplified for staff scanning:
+  appointment question, insurance question, review conversation).
+- sample section labels are simplified for staff scanning:
   - Needs follow-up
-  - Waiting for patient
-  - Appointment booked
-  - No appointment booked
-  - Closed
+  - Handled
+  - Archived
+  - Blocked
 - conversation is collapsed by default behind `View conversation`.
 - conversation remains message history only (patient/office + timestamps), with
   no inferred outcomes.

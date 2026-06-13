@@ -162,14 +162,15 @@ export function buildWorkspaceRequestSummary(
   const safety = deriveSafetyConcern(input) === SAFETY_SIGNAL;
   const paymentInsurance = derivePaymentInsurance(input.inboundTexts);
 
-  const chips: WorkspaceSummaryChip[] = [];
-  if (safety) chips.push({ id: "pain_urgent", label: "Pain/urgent" });
-  if (paymentInsurance === "Insurance mentioned") chips.push({ id: "insurance", label: "Insurance" });
-  if (paymentInsurance === "Payment mentioned") chips.push({ id: "payment", label: "Payment" });
-
   const aiSummary = (input.aiSummary ?? "").trim();
   if (aiSummary.length > 0) {
-    return { headline: aiSummary, chips, preferredTime, requestCategory: category, source: "ai" };
+    return {
+      headline: aiSummary,
+      chips: buildNonRedundantSignalChips(aiSummary, safety, paymentInsurance),
+      preferredTime,
+      requestCategory: category,
+      source: "ai",
+    };
   }
 
   if (category === "Pain / urgent concern") {
@@ -178,9 +179,10 @@ export function buildWorkspaceRequestSummary(
     const parts = ["Mentions pain/urgent concern"];
     if (wantsAppointment) parts.push("Wants appointment");
     else if (preferredTime) parts.push(preferredTime);
+    const headline = parts.join(" · ");
     return {
-      headline: parts.join(" · "),
-      chips,
+      headline,
+      chips: buildNonRedundantSignalChips(headline, safety, paymentInsurance),
       preferredTime,
       requestCategory: category,
       source: "deterministic",
@@ -188,9 +190,10 @@ export function buildWorkspaceRequestSummary(
   }
 
   if (category === "Unknown" || category === "General message") {
+    const headline = REVIEW_CONVERSATION;
     return {
-      headline: REVIEW_CONVERSATION,
-      chips,
+      headline,
+      chips: buildNonRedundantSignalChips(headline, safety, paymentInsurance),
       preferredTime,
       requestCategory: category === "Unknown" ? null : category,
       source: "fallback",
@@ -199,13 +202,41 @@ export function buildWorkspaceRequestSummary(
 
   const parts = [category as string];
   if (preferredTime) parts.push(preferredTime);
+  const headline = parts.join(" · ");
   return {
-    headline: parts.join(" · "),
-    chips,
+    headline,
+    chips: buildNonRedundantSignalChips(headline, safety, paymentInsurance),
     preferredTime,
     requestCategory: category,
     source: "deterministic",
   };
+}
+
+function buildNonRedundantSignalChips(
+  headline: string,
+  safety: boolean,
+  paymentInsurance: string,
+): WorkspaceSummaryChip[] {
+  const normalized = headline.toLowerCase();
+  const chips: WorkspaceSummaryChip[] = [];
+
+  if (safety && !/\b(pain|urgent|emergency|safety)\b/.test(normalized)) {
+    chips.push({ id: "pain_urgent", label: "Pain/urgent" });
+  }
+  if (
+    paymentInsurance === "Insurance mentioned" &&
+    !/\binsurance\b/.test(normalized)
+  ) {
+    chips.push({ id: "insurance", label: "Insurance" });
+  }
+  if (
+    paymentInsurance === "Payment mentioned" &&
+    !/\b(payment|pay|cost|price|billing)\b/.test(normalized)
+  ) {
+    chips.push({ id: "payment", label: "Payment" });
+  }
+
+  return chips;
 }
 
 function joinNonEmpty(texts: string[]): string {

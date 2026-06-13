@@ -10,7 +10,7 @@ owner: product
 source_of_truth:
   - MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md
   - MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md
-last_verified: 2026-06-10
+last_verified: 2026-06-13
 related:
   - ../missed-calls-and-messages/how-front-desk-should-handle-patient-replies
   - ../missed-calls-and-messages/patient-opt-out-stop-start
@@ -38,11 +38,13 @@ reviewing those replies and tracking your follow-up.
 ### What you can see
 
 - The patient's phone number.
-- The latest patient reply, visible on the selected request without opening the
-  full conversation.
+- The request queue grouped into **Needs follow-up**, **Handled**,
+  **Archived**, and **Blocked** sections.
+- A short request summary and the latest message snippet on each request card.
 - The conversation history (patient and office messages with timestamps).
-- A status for each request (see below).
-- A short note when patient details have not been collected yet.
+- The selected request's patient name or **Not provided**, plus the phone number
+  once in the patient header.
+- Staff-only notes and follow-up actions.
 
 ### What you cannot see (and why)
 
@@ -53,20 +55,24 @@ belong to the owner account, not the front desk.
 
 ### Reading a request card
 
-- **Patient phone** — how to reach the patient.
+- **Section** — where the request stands: **Needs follow-up**, **Handled**,
+  **Archived**, or **Blocked**. The section header is the status, so cards do
+  not repeat the same status label.
+- **Patient name / phone** — if a safe name is available, it is the title and the
+  phone is secondary; otherwise the phone is the title.
+- **Request summary** — one short line such as `Cleaning appointment · Tomorrow`
+  or `Review conversation`. It is deterministic and not AI-generated.
 - **Latest message** — a quick snippet of the most recent activity.
-- **Status** — where the request stands. Statuses include: **New**, **Needs
-  reply**, **Waiting for patient**, **Ready to call**, **Booked**, and **Closed**.
-- **Patient details are not collected yet** — means the system simply does not
-  have details such as patient name or request type. It is not an error; confirm
-  with the patient if you need it. Do not guess.
+- **System chips** — only useful system state such as **Automation paused** or
+  **High volume**.
+- **Not provided** — means the system does not have a safe patient name. It is
+  not an error; confirm directly with the patient if you need it.
 
 ### Recording outcomes
 
-You can record the outcome of a follow-up on a real request — for example,
-**appointment booked**, **no appointment booked**, or **could not reach the
-patient** — plus an optional short note. This helps your team track which patients
-still need attention.
+You can mark a real request **Handled** and answer **Was appointment booked?**
+with **Yes** or **No**. You can also save an optional internal note. This helps
+your team track which patients still need attention.
 
 ### Samples are examples only
 
@@ -76,11 +82,15 @@ them.
 ## What you can do
 
 - Open the workspace to review patient replies and request cards.
+- Expand or collapse the four queue sections. **Needs follow-up** starts open;
+  the other sections start collapsed. Use **Load more** when a section has more
+  than six cards.
 - Use **Call patient** to open your device's normal phone dialer for the patient
   number. This does not place an automated call from Missed Calls Dental.
 - Follow up with patients through your clinic's normal process. See
   [How front desk should handle patient replies](../missed-calls-and-messages/how-front-desk-should-handle-patient-replies.md).
-- Record an outcome and note after you follow up.
+- Mark a request **Handled**, **Archive** it, **Reopen** it, or **Block number**
+  when appropriate.
 
 ## What to expect
 

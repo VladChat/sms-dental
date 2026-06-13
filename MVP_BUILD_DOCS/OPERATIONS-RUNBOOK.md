@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-12 (Workspace polish: Active queue + collapsed Handled/Archived/Blocked sections; Handled asks "Was appointment booked?"; inline name edit with Not provided placeholder and fail-closed sanitizing; one-line deterministic request summary with signal chips; exact action tooltips)
+Last updated: 2026-06-13 (Workspace queue declutter: four visible sections, Needs follow-up expanded by default, 6-card client-side Load more, no repeated status badges, request-summary signals not duplicated as chips)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1168,18 +1168,19 @@ mention a "Documents section" or the pre-2026-05-30 layout.
 
 ---
 
-## Front desk workspace `/workspace` — 2026-05-31, updated 2026-06-10
+## Front desk workspace `/workspace` — 2026-05-31, updated 2026-06-13
 
 Operational view for clinic staff to review missed-call SMS replies and patient
 requests. Separate from the owner/admin `/account` area. Full spec:
 `FRONT-DESK-WORKSPACE.md`.
 
 - **Route:** `app/workspace/page.tsx` (server, `force-dynamic`, nodejs).
-  The page shows existing patient conversations, highlights the latest inbound
-  patient reply in the selected detail panel, exposes a normal `tel:` link
-  labeled `Call patient`, and lets staff save an explicit outcome through
-  `POST /api/workspace/outcome`. It still sends no SMS and places no Twilio
-  outbound calls.
+  The page shows existing patient conversations in four sections (Needs
+  follow-up, Handled, Archived, Blocked), exposes a normal `tel:` link labeled
+  `Call patient`, and lets staff save workspace actions through
+  `POST /api/workspace/conversation-action`. The legacy
+  `POST /api/workspace/outcome` route remains for compatibility. The workspace
+  sends no SMS and places no Twilio outbound calls.
 - **Access:** gated by the same `mcd_account` httpOnly cookie as `/account`
   (owner-accessible preview until staff auth exists). No valid context → safe
   "open your account link" message. Not public. Tokens never in URL / logs;
@@ -1195,9 +1196,10 @@ requests. Separate from the owner/admin `/account` area. Full spec:
   owner setup settings, Twilio details, or internal IDs (conversation UUIDs are
   used only as React keys). When patient detail fields have no source yet, the
   detail panel shows one short note instead of repeating empty fields.
-- **Status vocabulary (derived):** New / Needs reply / Waiting for patient /
-  Ready to call / Booked / Closed. Conservative derivation from conversation
-  lifecycle + latest message direction; `Ready to call` not auto-assigned yet.
+- **Visible queue sections:** Needs follow-up / Handled / Archived / Blocked.
+  Needs follow-up is expanded by default, lower sections are collapsed by
+  default, and section headers are the staff-facing status. The older
+  outbound-waiting lifecycle name remains internal-only and is not displayed.
 - **Ordinary inbound replies:** stored in `messages`, update
   `patient_conversations.last_message_at`, appear in `/workspace`, and do not
   create an outbound auto-reply. STOP/START behavior remains the separate opt-out
@@ -3606,19 +3608,31 @@ unchanged. No AI runtime — everything is deterministic.
   default-like initial and voice rows, sets default-like follow-up `body_text`
   to NULL, preserves follow-up `enabled`, and leaves true custom text untouched.
 
-### Front-desk Workspace queue + patient-number blocks (2026-06-12)
+### Front-desk Workspace queue + patient-number blocks (2026-06-12; updated 2026-06-13)
 
-- `/workspace` is an operational front-desk queue: Active / Archived / Blocked
-  filter pills, patient header (name-or-Unknown, phone once, Call patient
-  `tel:` link, Mark handled / Archive / Block number / Reopen / Unblock),
-  always-rendered deterministic request details (Name, Phone, Request,
-  Preferred appointment time, Safety concern, Payment / insurance, First seen,
-  Last activity — `lib/workspace/request-summary.ts`, inbound text only, no
-  AI, fail-closed `Unknown` / `None detected`), a conversation preview showing
-  the last 2 messages with a full-timeline toggle, and a staff-only Internal
-  note saved independently (`save_note`). The old "Latest patient reply" block
-  and the big Outcome radio form are removed; `/api/workspace/outcome` remains
-  for compatibility only.
+- `/workspace` is an operational front-desk queue with four visible sections:
+  **Needs follow-up**, **Handled**, **Archived**, and **Blocked**. Needs
+  follow-up is expanded by default and can be collapsed manually; Handled,
+  Archived, and Blocked are collapsed by default. Each section header shows the
+  total count, and each section uses client-side `Load more` in batches of 6.
+  The section header is the primary staff-facing status: queue cards and the
+  selected detail header do not repeat status badges, and the older
+  outbound-waiting label is not shown to staff. Membership priority:
+  blocked > handled > archived > needs follow-up. Active, non-handled,
+  non-archived, non-blocked conversations stay in Needs follow-up whether the
+  latest message is inbound or outbound.
+- Patient header: sanitized name or `Not provided`, phone once, Call patient
+  `tel:` link, Mark handled / Archive / Block number / Reopen / Unblock.
+  Cards show title, optional phone, one-line deterministic request summary,
+  latest message snippet, last activity, and only non-redundant system chips
+  (`Automation paused`, `High volume`). The request summary comes from
+  `lib/workspace/request-summary.ts` (inbound text only, deterministic fallback,
+  no AI, fallback `Review conversation`). Pain/urgent, payment, and insurance
+  signals stay in the headline when present instead of duplicating as chips.
+  Conversation preview shows the last 2 messages with a full-timeline toggle.
+  Staff-only Internal note saves independently (`save_note`). The old "Latest
+  patient reply" block and the big Outcome radio form are removed;
+  `/api/workspace/outcome` remains for compatibility only.
 - **Block number = the PATIENT/CALLER number for one clinic.** Never the
   clinic's Twilio business number, never a Twilio mutation, never deletes
   history, never stored in `opt_outs`. Table
@@ -3631,10 +3645,9 @@ unchanged. No AI runtime — everything is deterministic.
   leaves it archived until reopened.
 - **Archive / Mark handled** are reversible queue states on
   `patient_conversations` (`workspace_archived_at`, `workspace_handled_at` +
-  actor columns) — nothing is deleted. Primary status precedence:
-  Blocked > Archived > Handled > saved outcome > Needs follow-up / Waiting.
-  Secondary flags: Safety concern (classification/state), Automation paused
-  (`automation_muted_until` in the future), High volume
+  actor columns) — nothing is deleted. Section precedence:
+  Blocked > Handled > Archived > Needs follow-up. Secondary system flags:
+  Automation paused (`automation_muted_until`) and High volume
   (`high_volume_flagged_at`).
 - Actions API: `POST /api/workspace/conversation-action`
   (`save_note|save_name|archive|reopen|mark_handled|block_number|unblock_number`),
@@ -3642,10 +3655,11 @@ unchanged. No AI runtime — everything is deterministic.
   rejected, UUIDs validated, 300-char note cap, cross-clinic conversations
   indistinguishable from missing. The UI requires an inline confirmation
   before blocking; all block/unblock copy describes only the phone number.
-- **Workspace polish (2026-06-12):** Active queue renders first; Handled
-  (success), Archived (info), and Blocked (danger) are collapsed sections with
-  counts and client-side Load more (25/10 page sizes). Section priority:
-  blocked > archived > handled > active; Handled never appears in Active.
+- **Workspace polish (2026-06-13):** Four sections use the same structure and
+  differ only by tone: Needs follow-up warning/yellow, Handled success/green,
+  Archived neutral/info blue-gray, Blocked danger/red. Needs follow-up starts
+  expanded; the other sections start collapsed. All sections page 6 cards at a
+  time with a visible `Load more` button, and header counts remain total counts.
   `mark_handled` now REQUIRES `appointmentBooked: boolean` (inline
   "Was appointment booked?" Yes/No panel) and records
   `front_desk_outcome(_at)` + lifecycle status with the handled stamp.
@@ -3657,9 +3671,9 @@ unchanged. No AI runtime — everything is deterministic.
   inline via `save_name` (empty clears; digits/URLs/emails/phones/keywords
   rejected). The request-details table was replaced by a one-line
   deterministic summary (`buildWorkspaceRequestSummary`:
-  "Cleaning appointment · Tomorrow", fallback "Review conversation") plus
-  signal-only chips — no "None detected" placeholders, future `aiSummary`
-  hook present but nothing produces AI. Exact tooltips on all actions; block
+  "Cleaning appointment · Tomorrow", fallback "Review conversation") with no
+  duplicate request-signal chips and no "None detected" placeholders; future
+  `aiSummary` hook present but nothing produces AI. Exact tooltips on all actions; block
   confirm copy: "Block this phone number? Automated texts to this number will
   stop, but messages stay saved."
 - Migration `20260625000100_workspace_queue_and_patient_blocks.sql`
