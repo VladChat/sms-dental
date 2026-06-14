@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-14 (AI Answering test caller reset tool; AI runtime still not live)
+Last updated: 2026-06-14 (delete clinic modal/blocker fix; AI runtime still not live)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8275,3 +8275,33 @@ Safety scope:
 - No Twilio, Stripe, Vercel, DNS, Supabase management API, SMS send path,
   provider release/cancel/refund flow, production data delete, or
   `webhook_events` deletion was performed during implementation.
+
+---
+
+## 2026-06-14 — Delete clinic modal scroll and grouped blockers fix
+
+Fixed the platform-admin **Delete clinic** confirmation flow after initial
+implementation.
+
+Code/doc changes:
+
+- Updated `DeleteClinicDialog` so the modal fits inside the viewport, scrolls
+  long preflight content internally, and keeps the Cancel / Delete clinic action
+  row reachable.
+- Added the active-clinic safety blocker:
+  `Clinic is active. Set clinic to inactive first.`
+- Grouped blocker output by operator action: active clinic, SMS recovery on,
+  phone attached, billing connected, SMS approval connected, unknown clinic data,
+  and schema inspection issue.
+- Updated `tests/clinic-delete.test.ts` for active-clinic blocking, grouped
+  phone/billing blockers, distinct grouped blockers together, and modal scroll
+  structure.
+- Updated the operations runbook and platform-admin knowledge note.
+
+Safety scope:
+
+- No delete API response shape change.
+- No migration.
+- No production delete.
+- No Twilio, Stripe, Vercel env, DNS, A2P, billing provider, SMS runtime, phone
+  provider, or SMS send mutation.

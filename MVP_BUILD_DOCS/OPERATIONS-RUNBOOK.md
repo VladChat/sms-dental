@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-14 (safe admin clinic deletion; AI runtime still not live)
+Last updated: 2026-06-14 (delete clinic modal/blocker fix; AI runtime still not live)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1812,17 +1812,16 @@ What it never does:
 - It does not release phone numbers, cancel subscriptions, refund charges, or
   mutate carrier/A2P state.
 
-The delete is blocked when preflight finds any unsafe state, including:
+The delete is blocked when preflight finds any unsafe state. Operator-facing
+blockers are grouped by the next action to take:
 
-- missing clinic row or schema-inspection failure
-- `sms_recovery_enabled=true`
-- an active assigned phone number
-- provider-linked phone-number state
-- Stripe customer/subscription/payment-method/subscription-item state
-- billing status other than `not_started`
-- in-progress/provider-linked number-purchase attempts
-- submitted/pending/approved or provider-linked SMS approval rows
-- unknown rows in clinic-linked tables not covered by the explicit delete list
+- active clinic -> set clinic to inactive first
+- SMS recovery on -> pause SMS recovery first
+- phone attached -> detach the assigned phone number first
+- billing connected -> remove billing connection first
+- SMS approval connected -> clear SMS approval state first
+- unknown clinic data or schema inspection issue -> update/verify the delete
+  helper before deleting
 
 Operator checklist:
 

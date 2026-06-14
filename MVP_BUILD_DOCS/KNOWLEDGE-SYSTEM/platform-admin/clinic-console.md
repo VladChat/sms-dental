@@ -120,10 +120,11 @@ Deletion is app-database-only. It does **not** call Twilio, Stripe, Vercel, DNS,
 Supabase management APIs, SMS send paths, provider release/cancel/refund flows,
 or `webhook_events`.
 
-The preflight blocks unsafe clinics, including active SMS recovery, active or
-provider-linked phone numbers, Stripe/billing state, provider-linked number
-purchase or SMS approval state, schema inspection failures, and unknown
-clinic-linked rows outside the explicit delete list.
+The preflight blocks unsafe clinics with short operator-action blockers:
+clinic active, SMS recovery on, phone attached, billing connected, SMS approval
+connected, schema inspection failed, and unknown clinic data outside the explicit
+delete list. The modal content scrolls internally so the typed confirmation and
+action buttons remain reachable on smaller viewports.
 
 For the operator checklist and full blocker categories, see
 `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` ("Admin clinic deletion danger zone").

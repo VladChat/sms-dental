@@ -100,7 +100,9 @@ const TABLE_LABELS = new Map(CLINIC_DELETE_KNOWN_TABLES.map((t) => [t.table, t.l
 
 type ClinicDeleteSafetyInput = {
   clinicFound: boolean;
+  isActive: boolean;
   smsRecoveryEnabled: boolean;
+  assignedPhoneCount: number;
   assignedActivePhoneCount: number;
   providerLinkedPhoneCount: number;
   billingStatus: string | null;
@@ -126,11 +128,11 @@ export function evaluateClinicDeleteSafety(input: ClinicDeleteSafetyInput): Clin
     return blockers;
   }
 
-  if (input.schemaInspectionFailed) {
+  if (input.isActive) {
     blockers.push({
-      code: "schema_inspection_failed",
-      message: "The delete preflight could not verify every clinic data table.",
-      resolution: "Retry after the database schema can be inspected.",
+      code: "clinic_active",
+      message: "Clinic is active.",
+      resolution: "Set clinic to inactive first.",
     });
   }
 
@@ -142,78 +144,54 @@ export function evaluateClinicDeleteSafety(input: ClinicDeleteSafetyInput): Clin
     });
   }
 
-  if (input.assignedActivePhoneCount > 0) {
+  if (
+    input.assignedPhoneCount > 0 ||
+    input.assignedActivePhoneCount > 0 ||
+    input.providerLinkedPhoneCount > 0 ||
+    input.providerLinkedPurchaseAttemptCount > 0
+  ) {
     blockers.push({
-      code: "assigned_phone_active",
-      message: "An assigned phone number is still active.",
+      code: "phone_attached",
+      message: "Phone number is still attached.",
       resolution: "Detach the assigned phone number first.",
     });
-  } else if (input.providerLinkedPhoneCount > 0) {
-    blockers.push({
-      code: "provider_linked_phone_number",
-      message: "A phone number is still linked to provider-owned inventory.",
-      resolution: "Remove provider-linked phone state first.",
-    });
   }
 
-  if (input.stripeCustomerPresent) {
+  if (
+    input.stripeCustomerPresent ||
+    input.stripeSubscriptionPresent ||
+    input.stripePaymentMethodPresent ||
+    input.stripeSubscriptionItemPresent ||
+    input.billingStatus !== "not_started"
+  ) {
     blockers.push({
-      code: "stripe_customer_present",
-      message: "A billing customer is connected.",
-      resolution: "Remove billing/provider-linked state first.",
-    });
-  }
-  if (input.stripeSubscriptionPresent) {
-    blockers.push({
-      code: "stripe_subscription_present",
-      message: "A billing subscription is connected.",
-      resolution: "Remove billing/provider-linked state first.",
-    });
-  }
-  if (input.stripePaymentMethodPresent) {
-    blockers.push({
-      code: "stripe_payment_method_present",
-      message: "A saved payment method is connected.",
-      resolution: "Remove billing/provider-linked state first.",
-    });
-  }
-  if (input.stripeSubscriptionItemPresent) {
-    blockers.push({
-      code: "stripe_subscription_item_present",
-      message: "Billing item state is connected.",
-      resolution: "Remove billing/provider-linked state first.",
-    });
-  }
-
-  if (input.billingStatus !== "not_started") {
-    blockers.push({
-      code: "billing_status_not_safe",
-      message: "Billing status is not safe for deletion.",
-      resolution: "Return billing to not started before deleting.",
-    });
-  }
-
-  if (input.providerLinkedPurchaseAttemptCount > 0) {
-    blockers.push({
-      code: "number_purchase_provider_state",
-      message: "A number purchase is still linked to phone or billing provider state.",
-      resolution: "Resolve the number purchase attempt first.",
+      code: "billing_connected",
+      message: "Billing is connected.",
+      resolution: "Remove billing connection first.",
     });
   }
 
   if (input.providerLinkedA2pSubmissionCount > 0) {
     blockers.push({
-      code: "sms_approval_provider_state",
-      message: "SMS approval state is still linked to provider records.",
-      resolution: "Remove provider-linked approval state first.",
+      code: "sms_approval_connected",
+      message: "SMS approval is still connected.",
+      resolution: "Clear SMS approval state first.",
     });
   }
 
   if (input.unknownLinkedRows.length > 0) {
     blockers.push({
       code: "unknown_clinic_data",
-      message: "There is clinic data this delete flow does not know how to remove.",
-      resolution: "Update the delete helper for the newly discovered clinic data first.",
+      message: "Some clinic data is not covered by delete.",
+      resolution: "Update the delete helper before deleting.",
+    });
+  }
+
+  if (input.schemaInspectionFailed) {
+    blockers.push({
+      code: "schema_inspection_failed",
+      message: "Delete preflight could not verify every clinic data table.",
+      resolution: "Retry after the database schema can be inspected.",
     });
   }
 
@@ -289,7 +267,9 @@ async function buildClinicDeletePreflight(
       canDelete: false,
       blockers: evaluateClinicDeleteSafety({
         clinicFound: false,
+        isActive: false,
         smsRecoveryEnabled: false,
+        assignedPhoneCount: 0,
         assignedActivePhoneCount: 0,
         providerLinkedPhoneCount: 0,
         billingStatus: null,
@@ -331,7 +311,9 @@ async function buildClinicDeletePreflight(
 
   const blockers = evaluateClinicDeleteSafety({
     clinicFound: true,
+    isActive: clinic.is_active,
     smsRecoveryEnabled: clinic.sms_recovery_enabled,
+    assignedPhoneCount: phoneSafety.assigned_count,
     assignedActivePhoneCount: phoneSafety.active_count,
     providerLinkedPhoneCount: phoneSafety.provider_linked_count,
     billingStatus: clinic.billing_status,

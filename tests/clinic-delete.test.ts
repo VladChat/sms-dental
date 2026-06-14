@@ -16,7 +16,9 @@ type SafetyInput = Parameters<typeof evaluateClinicDeleteSafety>[0];
 
 const SAFE_INPUT: SafetyInput = {
   clinicFound: true,
+  isActive: false,
   smsRecoveryEnabled: false,
+  assignedPhoneCount: 0,
   assignedActivePhoneCount: 0,
   providerLinkedPhoneCount: 0,
   billingStatus: "not_started",
@@ -34,12 +36,20 @@ function codes(input: Partial<SafetyInput>): string[] {
   return evaluateClinicDeleteSafety({ ...SAFE_INPUT, ...input }).map((b) => b.code);
 }
 
-test("clinic delete safety blocks unknown clinic and unsafe live-service state", () => {
+function blocker(input: Partial<SafetyInput>, code: string) {
+  return evaluateClinicDeleteSafety({ ...SAFE_INPUT, ...input }).find((b) => b.code === code);
+}
+
+test("clinic delete safety blocks unknown clinic and active clinics", () => {
   assert.deepEqual(codes({ clinicFound: false }), ["clinic_not_found"]);
 
+  const activeBlocker = blocker({ isActive: true }, "clinic_active");
+  assert.ok(activeBlocker, "active clinic blocks deletion");
+  assert.equal(activeBlocker.resolution, "Set clinic to inactive first.");
+});
+
+test("clinic delete safety groups billing blockers into one operator action", () => {
   const blocked = codes({
-    smsRecoveryEnabled: true,
-    assignedActivePhoneCount: 1,
     billingStatus: "active",
     stripeCustomerPresent: true,
     stripeSubscriptionPresent: true,
@@ -47,22 +57,42 @@ test("clinic delete safety blocks unknown clinic and unsafe live-service state",
     stripeSubscriptionItemPresent: true,
   });
 
-  for (const code of [
-    "sms_recovery_enabled",
-    "assigned_phone_active",
-    "stripe_customer_present",
-    "stripe_subscription_present",
-    "stripe_payment_method_present",
-    "stripe_subscription_item_present",
-    "billing_status_not_safe",
-  ]) {
-    assert.ok(blocked.includes(code), `blocks ${code}`);
-  }
+  assert.deepEqual(blocked, ["billing_connected"]);
+  assert.ok(!blocked.includes("stripe_customer_present"));
+  assert.ok(!blocked.includes("stripe_subscription_present"));
+  assert.ok(!blocked.includes("stripe_payment_method_present"));
+  assert.ok(!blocked.includes("stripe_subscription_item_present"));
+  assert.ok(!blocked.includes("billing_status_not_safe"));
 });
 
-test("clinic delete safety allows active test clinic only when provider and billing state are safe", () => {
-  // There is intentionally no active-clinic input here: clinics.is_active alone
-  // is not a blocker for deleting test/development clinics.
+test("clinic delete safety groups phone blockers into one operator action", () => {
+  const blocked = codes({
+    assignedPhoneCount: 2,
+    assignedActivePhoneCount: 1,
+    providerLinkedPhoneCount: 1,
+    providerLinkedPurchaseAttemptCount: 1,
+  });
+
+  assert.deepEqual(blocked, ["phone_attached"]);
+  assert.ok(!blocked.includes("assigned_phone_active"));
+  assert.ok(!blocked.includes("provider_linked_phone_number"));
+  assert.ok(!blocked.includes("number_purchase_provider_state"));
+});
+
+test("clinic delete safety returns distinct grouped blockers together", () => {
+  assert.deepEqual(
+    codes({
+      isActive: true,
+      smsRecoveryEnabled: true,
+      assignedPhoneCount: 1,
+      billingStatus: "active",
+      stripeCustomerPresent: true,
+    }),
+    ["clinic_active", "sms_recovery_enabled", "phone_attached", "billing_connected"],
+  );
+});
+
+test("clinic delete safety allows inactive clinics only when provider and billing state are safe", () => {
   assert.deepEqual(evaluateClinicDeleteSafety(SAFE_INPUT), []);
 });
 
@@ -75,9 +105,8 @@ test("clinic delete safety blocks provider-linked phone, number purchase, A2P, a
     schemaInspectionFailed: true,
   });
 
-  assert.ok(blocked.includes("provider_linked_phone_number"));
-  assert.ok(blocked.includes("number_purchase_provider_state"));
-  assert.ok(blocked.includes("sms_approval_provider_state"));
+  assert.ok(blocked.includes("phone_attached"));
+  assert.ok(blocked.includes("sms_approval_connected"));
   assert.ok(blocked.includes("unknown_clinic_data"));
   assert.ok(blocked.includes("schema_inspection_failed"));
 });
@@ -184,6 +213,12 @@ test("clinic delete UI lives in detail Admin tools, not the clinics list table",
     "!confirmReady",
     "Resolve these first.",
     "Data that will be deleted",
+    "adm-delete-modal",
+    "adm-delete-modal-body",
+    "adm-delete-modal-footer",
+    "maxHeight: \"calc(100dvh - 32px)\"",
+    "overflowY: \"auto\"",
+    "position: \"sticky\"",
     "aria-live=\"polite\"",
     "role=\"dialog\"",
   ]) {

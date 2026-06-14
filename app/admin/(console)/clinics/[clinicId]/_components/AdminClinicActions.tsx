@@ -469,101 +469,141 @@ function DeleteClinicDialog({
       }}
     >
       <div
-        className="adm-modal"
+        className="adm-modal adm-delete-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
-        style={{ maxWidth: 640 }}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          maxHeight: "calc(100dvh - 32px)",
+          maxWidth: 640,
+          minHeight: 0,
+          overflow: "hidden",
+          padding: 0,
+          width: "min(640px, calc(100vw - 32px))",
+        }}
       >
-        <h2 id={titleId} className="t-h4" style={{ margin: 0 }}>Delete clinic</h2>
-        <p id={bodyId} className="t-small" style={{ margin: "var(--space-3) 0 0", color: "var(--text-secondary)" }}>
-          Permanently removes this clinic and its test data from the app database. This does not touch Twilio or Stripe.
-        </p>
-
-        {summary ? (
-          <>
-            <dl className="adm-rows" style={{ marginTop: "var(--space-4)" }}>
-              <ModalRow label="Clinic">{summary.clinicName}</ModalRow>
-              <ModalRow label="Owner email">{summary.ownerEmail ?? "-"}</ModalRow>
-              <ModalRow label="Assigned phones">{summary.assignedPhoneCount}</ModalRow>
-              <ModalRow label="SMS recovery">{summary.smsRecoveryEnabled ? "On" : "Off"}</ModalRow>
-              <ModalRow label="Billing status">{summary.billingStatus ?? "-"}</ModalRow>
-            </dl>
-
-            <section style={{ marginTop: "var(--space-4)" }}>
-              <h3 className="adm-subhead">Data that will be deleted</h3>
-              {visibleCounts.length === 0 ? (
-                <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-2) 0 0" }}>
-                  No related app data was found.
-                </p>
-              ) : (
-                <div style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
-                  {visibleCounts.map((row) => (
-                    <div
-                      key={`${row.table}:${row.label}`}
-                      className="adm-row"
-                      style={{ padding: "var(--space-2) 0" }}
-                    >
-                      <span className="adm-row-label">{row.label}</span>
-                      <span className="adm-row-value">{row.count}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </>
-        ) : (
-          <p className="t-small" style={{ marginTop: "var(--space-4)", color: "var(--text-muted)" }}>
-            Could not load this clinic.
+        <div
+          className="adm-delete-modal-header"
+          style={{
+            borderBottom: "1px solid var(--border)",
+            flex: "0 0 auto",
+            padding: "var(--space-5) var(--space-6) var(--space-4)",
+          }}
+        >
+          <h2 id={titleId} className="t-h4" style={{ margin: 0 }}>Delete clinic</h2>
+          <p id={bodyId} className="t-small" style={{ margin: "var(--space-3) 0 0", color: "var(--text-secondary)" }}>
+            Permanently removes this clinic and its test data from the app database. This does not touch Twilio or Stripe.
           </p>
-        )}
+        </div>
 
-        {blockers.length > 0 && (
-          <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-4)" }}>
-            <div>
-              <strong>Resolve these first.</strong>
-              <ul style={{ margin: "var(--space-2) 0 0", paddingLeft: "var(--space-5)" }}>
-                {blockers.map((blocker) => (
-                  <li key={blocker.code}>
-                    {blocker.message} {blocker.resolution}
-                  </li>
-                ))}
-              </ul>
+        <div
+          className="adm-delete-modal-body"
+          style={{
+            flex: "1 1 auto",
+            minHeight: 0,
+            overflowY: "auto",
+            overscrollBehavior: "contain",
+            padding: "var(--space-5) var(--space-6)",
+          }}
+        >
+          {summary ? (
+            <>
+              <dl className="adm-rows">
+                <ModalRow label="Clinic">{summary.clinicName}</ModalRow>
+                <ModalRow label="Owner email">{summary.ownerEmail ?? "-"}</ModalRow>
+                <ModalRow label="Assigned phones">{summary.assignedPhoneCount}</ModalRow>
+                <ModalRow label="SMS recovery">{summary.smsRecoveryEnabled ? "On" : "Off"}</ModalRow>
+                <ModalRow label="Billing status">{summary.billingStatus ?? "-"}</ModalRow>
+              </dl>
+
+              <section style={{ marginTop: "var(--space-4)" }}>
+                <h3 className="adm-subhead">Data that will be deleted</h3>
+                {visibleCounts.length === 0 ? (
+                  <p className="t-small" style={{ color: "var(--text-muted)", margin: "var(--space-2) 0 0" }}>
+                    No related app data was found.
+                  </p>
+                ) : (
+                  <div style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
+                    {visibleCounts.map((row) => (
+                      <div
+                        key={`${row.table}:${row.label}`}
+                        className="adm-row"
+                        style={{ padding: "var(--space-2) 0" }}
+                      >
+                        <span className="adm-row-label">{row.label}</span>
+                        <span className="adm-row-value">{row.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          ) : (
+            <p className="t-small" style={{ color: "var(--text-muted)", margin: 0 }}>
+              Could not load this clinic.
+            </p>
+          )}
+
+          {blockers.length > 0 && (
+            <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-4)" }}>
+              <div>
+                <strong>Resolve these first.</strong>
+                <ul style={{ margin: "var(--space-2) 0 0", paddingLeft: "var(--space-5)" }}>
+                  {blockers.map((blocker) => (
+                    <li key={blocker.code}>
+                      {blocker.message} {blocker.resolution}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {canDelete && !success && (
-          <div className="field" style={{ marginTop: "var(--space-4)" }}>
-            <label htmlFor={inputId}>Type DELETE to confirm.</label>
-            <input
-              ref={inputRef}
-              id={inputId}
-              className="input"
-              value={confirmValue}
-              onChange={(e) => onConfirmValueChange(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              aria-invalid={confirmValue.length > 0 && confirmValue !== DELETE_CONFIRM ? "true" : undefined}
-              disabled={busy}
-            />
-          </div>
-        )}
+          {canDelete && !success && (
+            <div className="field" style={{ marginTop: "var(--space-4)" }}>
+              <label htmlFor={inputId}>Type DELETE to confirm.</label>
+              <input
+                ref={inputRef}
+                id={inputId}
+                className="input"
+                value={confirmValue}
+                onChange={(e) => onConfirmValueChange(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={confirmValue.length > 0 && confirmValue !== DELETE_CONFIRM ? "true" : undefined}
+                disabled={busy}
+              />
+            </div>
+          )}
 
-        {error && (
-          <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-4)" }}>
-            <span>{error}</span>
-          </div>
-        )}
+          {error && (
+            <div className="alert alert-error" role="alert" aria-live="polite" style={{ marginTop: "var(--space-4)" }}>
+              <span>{error}</span>
+            </div>
+          )}
 
-        {success && (
-          <div className="alert alert-success" role="status" aria-live="polite" style={{ marginTop: "var(--space-4)" }}>
-            <span>{success}</span>
-          </div>
-        )}
+          {success && (
+            <div className="alert alert-success" role="status" aria-live="polite" style={{ marginTop: "var(--space-4)" }}>
+              <span>{success}</span>
+            </div>
+          )}
+        </div>
 
-        <div className="adm-modal-actions">
+        <div
+          className="adm-modal-actions adm-delete-modal-footer"
+          style={{
+            background: "var(--surface)",
+            borderTop: "1px solid var(--border)",
+            flex: "0 0 auto",
+            marginTop: 0,
+            padding: "var(--space-4) var(--space-6)",
+            position: "sticky",
+            bottom: 0,
+          }}
+        >
           <button
             ref={cancelRef}
             type="button"
