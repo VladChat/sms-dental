@@ -1,6 +1,14 @@
 // Shared types for the customer-facing account setup dashboard. No runtime code,
 // so both the server page and the client components can import these freely.
 
+// Type-only import: erased at compile time, so importing it here does not pull
+// the notifications config runtime into the server page or client bundles.
+import type { NotificationType } from "../../../../config/notifications.config";
+
+// Account notification preferences: every known notification type → enabled.
+// Always complete (config defaults fill any type the clinic has not saved).
+export type NotificationSettingsData = Record<NotificationType, boolean>;
+
 export type BusinessProfileFields = {
   name: string;
   mainPhone: string;
@@ -192,4 +200,7 @@ export type BusinessProfileData = {
       status: "active";
     }[];
   };
+  // Account notification preferences (config defaults merged with saved rows).
+  // Degradation-safe: defaults to all enabled if the table is not applied yet.
+  notificationSettings: NotificationSettingsData;
 };

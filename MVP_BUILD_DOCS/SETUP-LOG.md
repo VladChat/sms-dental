@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-12 (SMS Conversation Builder auto-reply reset and UI simplification)
+Last updated: 2026-06-13 (Notification Settings foundation + AI Answering MVP scope alignment)
 
 This log records what was done, in order, without storing secrets.
 
@@ -7852,3 +7852,49 @@ behavior; no schema change).
 No SMS sent, no calls placed, no Twilio resource mutation, no A2P mutation, no
 Stripe change, no phone-number lifecycle change, no production env change, no
 secret printing, no patient data printed, and `.qwen/` remained untouched.
+
+---
+
+## 2026-06-13 — Notification Settings foundation + MVP scope alignment (AI Answering)
+
+Added a minimal, extensible Notification Settings foundation to `/account` and
+aligned the source-of-truth docs so the MVP direction is **AI Answering + SMS
+Recovery + Workspace**. AI Answering is documented as a planned MVP channel that
+is **not live** (narrow call capture, not a full AI receptionist; owner-approval +
+safety gates required). No AI voice runtime, no usage metering, no overage billing,
+and no email/SMS delivery were built. Trial-start behavior was not changed (still
+first included business number assignment).
+
+What changed:
+
+- New config `config/notifications.config.ts` (notification types/labels;
+  included-minutes copy derives from `config/billing.config.ts`).
+- New additive migration
+  `supabase/migrations/20260626000100_clinic_notification_preferences.sql`
+  (`clinic_notification_preferences` + future `clinic_notifications`; RLS enabled,
+  no public policies; service-role/server access; `set_updated_at` trigger).
+- New DB helpers `lib/db/notifications.ts` (degradation-safe read returns
+  default-enabled preferences if the table is missing; save throws a typed
+  unavailable error the API maps to a clear message).
+- New API route `app/api/account/notification-settings/route.ts` (owner/admin
+  only via `requireOwnerAdminAccess`; front-desk rejected; validates known types +
+  boolean enabled).
+- New UI `NotificationSettingsCard` wired into the Account group nav
+  ("Notification Settings"); v1 alerts = AI answered call minutes 90% / 100%, both
+  default on, either can be turned off (no mandatory/critical concept).
+- Docs: `PROJECT-CONTEXT.md`, `START-HERE.md`, `BILLING-AND-USAGE-POLICY.md`,
+  `OWNER-SETTINGS.md`, `Skills/missed-calls-dental-product-context.md`,
+  `Skills/twilio-dental-sms.md`.
+
+Production migration:
+`20260626000100_clinic_notification_preferences.sql` is **created but NOT applied**
+to production. The account page degrades safely (default-enabled preferences) until
+it is applied; saving returns a clear message if the table is missing. Apply via
+the approved migration path when ready.
+
+Validation: `npm run typecheck` pass; `npm run test:ai-knowledge` and
+`npm run test:sms-recovery` pass; `npm run build` pass; `git diff --check` clean.
+
+No SMS sent, no calls placed, no Twilio/A2P/Stripe/Vercel/Supabase production
+mutation, no provider env change, no trial-start change, no secret printing, no
+patient data printed, and `.qwen/` remained untouched.

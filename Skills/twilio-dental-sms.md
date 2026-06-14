@@ -1,14 +1,16 @@
 ---
 name: twilio-dental-sms
-description: Use this skill when working on Twilio, SMS, missed calls, phone numbers, messaging webhooks, A2P compliance, opt-out handling, or SMS wording for the Dental SMS project. Also covers the planned future AI voice answering work (AI Call Assistant) — Twilio Voice, ConversationRelay, voice webhooks/WebSocket handlers — which is future-only and must not be enabled without explicit owner approval.
+description: Use this skill when working on Twilio, SMS, missed calls, phone numbers, messaging webhooks, A2P compliance, opt-out handling, or SMS wording for the Dental SMS project. Also covers AI Answering (the planned MVP voice channel, historically the AI Call Assistant) — Twilio Voice, ConversationRelay, voice webhooks/WebSocket handlers — which is planned but NOT live yet and must not be enabled without explicit owner approval and safety gates.
 ---
 
 # Twilio Dental SMS Skill
 
 Use this skill for all Twilio-related work in the Dental SMS project — both the
-current SMS recovery MVP and the planned future AI voice answering feature
-(AI Call Assistant). The SMS compliance rules below always apply; the voice
-guidance is future-only.
+current SMS recovery MVP and the planned AI Answering voice channel (historically
+the AI Call Assistant). The MVP direction is AI Answering + SMS Recovery +
+Workspace. The SMS compliance rules below always apply; the voice guidance covers
+a planned channel that is **not live yet** and must not be enabled without
+explicit owner approval and safety gates.
 
 Project:
 Dental SMS
@@ -86,11 +88,24 @@ Compliance guidance:
 - Keep clinic identity clear in messages.
 - Avoid misleading sender identity.
 
-## Future: AI voice answering (AI Call Assistant) — planned, not live
+## AI Answering (planned MVP voice channel) — NOT live yet
 
-Status: planned / future only. Do not enable live AI voice behavior without
-explicit owner approval and gating (same discipline as live patient SMS). All SMS
-compliance rules above remain unchanged.
+Status: planned MVP channel — not built/enabled. The MVP direction is AI Answering
++ SMS Recovery + Workspace, but the AI voice runtime does not exist yet. Do not
+enable live AI voice behavior without explicit owner approval and safety gates
+(same discipline as live patient SMS). All SMS compliance rules above remain
+unchanged, and AI Answering does **not** remove the separate SMS carrier-approval
+requirement.
+
+Scope: AI Answering is a **narrow call-capture assistant, not a full AI
+receptionist**. It collects name, callback intent/reason, and preferred time,
+creates a **Workspace request**, and uses only approved AI Front Desk Knowledge
+facts. It must never diagnose, give treatment advice/medical triage, promise
+availability, book into a PMS, collect payment, or pretend to be human. It can be
+useful right after the first assigned number + forwarding (before SMS approval);
+SMS Recovery activates later after approval. AI sessions and SMS replies should
+converge into one Workspace patient request card, and SMS must not duplicate a
+successful AI conversation.
 
 Planned architecture:
 - For AI voice answering, Twilio handles the phone call and the voice connection.
@@ -98,7 +113,7 @@ Planned architecture:
   + a backend AI orchestration / OpenAI reasoning layer**.
 - `ConversationRelay` (and `STT`, `TTS`, model names, token usage, latency) are
   technical/internal terms. **Never surface them to clinic customers** — customers
-  see only "AI Call Assistant", "AI answered calls", and "AI answered call time".
+  see only "AI answered calls" and "AI answered call time".
 
 Security and reliability (apply when this is built):
 - Voice webhooks and WebSocket handlers must validate requests/signatures where
@@ -115,6 +130,10 @@ Cost note:
   inbound call is not the same as placing an outbound call.
 - AI answered call usage is a future billable category; limits/rates must come from
   `config/billing.config.ts` (see `BILLING-AND-USAGE-POLICY.md`), never hard-coded.
+- Trial start is unchanged (first included business number assignment). The plan
+  includes 100 AI answered call minutes; during the trial AI Answering should
+  pause/fail closed when those are exhausted. Usage metering and overage billing
+  are not implemented.
 
 For this project, Twilio work must prioritize:
 1. Reliability

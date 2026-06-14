@@ -341,28 +341,62 @@ Billing behavior:
 The client never supplies lifecycle state, Stripe quantity, number type, slot
 class, or price. All lifecycle and billing decisions are server-side.
 
-## AI Call Assistant billing note (NOT live)
+## AI Answering billing note (planned MVP channel, NOT live)
 
-> **Status: future runtime / not implemented.** Plan copy may show the AI
-> answered call allowance and overage rate from `config/billing.config.ts`, but
-> no AI usage is metered or billed today. Do not add AI numbers anywhere else as
-> a second source of truth.
+> **Status: planned MVP channel — runtime not implemented.** AI Answering is part
+> of the intended MVP direction (**AI Answering + SMS Recovery + Workspace**), but
+> the AI voice runtime, usage metering, and overage billing are **not built**.
+> Plan copy may show the AI answered call allowance and overage rate from
+> `config/billing.config.ts`, but **no AI usage is metered or billed today**. Do
+> not add AI numbers anywhere else as a second source of truth.
 
-The planned **AI Call Assistant** voice feature (see `PROJECT-CONTEXT.md`) will
-introduce a new future billable usage category: **AI answered call usage**.
+**AI Answering** (historically the **AI Call Assistant**; see `PROJECT-CONTEXT.md`)
+is a narrow call-capture assistant, not a full AI receptionist. It introduces a
+future billable usage category: **AI answered call usage**.
 
+- **Trial start is unchanged.** The 21-day trial still starts when the **first
+  included business number is assigned** (`clinics.trial_started_at` /
+  `trial_ends_at`, set in `lib/phone-numbers/provisioning.ts`). Trial start is
+  **not** the signup date, **not** SMS approval, and **not** AI activation. SMS
+  approval remains a separate step that may happen later.
 - **AI included minutes and AI overage rates are defined in
   `config/billing.config.ts`**, following the same single-source-of-truth rule as
-  the rest of this policy.
+  the rest of this policy. The plan includes **100 AI answered call minutes**
+  (`basePlan.includedAiAnsweredCallMinutes`) and an AI overage rate
+  (`overage.aiAnsweredCallMinuteUnitAmountCents`).
 - Do **not** hard-code AI minute limits or AI rates in page components, API
   routes, Stripe logic, or billing calculations. This file describes policy; the
   numbers live in `config/billing.config.ts`.
+- **During the trial, if the included AI minutes are exhausted, AI Answering
+  should pause / fail closed** until a paid plan (or an approved future policy
+  says otherwise). This matches the project's fail-closed discipline for billing,
+  readiness, and compliance.
+- **On a paid plan**, AI may continue past the included minutes as **overage**
+  once usage metering and overage billing are implemented **and explicitly
+  approved**. Usage metering and overage billing for AI answered calls are **not
+  live** today (the same discipline as the deferred call-minute / SMS-segment
+  usage-metering milestone above).
 - Customer-facing wording must use **"AI answered calls"** / **"AI answered call
   time"** — never "Conversation Relay minutes" or "call-tracking minutes".
-- Usage metering and billing for AI answered calls is **not live** until it is
-  explicitly implemented and approved (the same discipline as the deferred
-  call-minute / SMS-segment usage-metering milestone above).
 - Outbound voice cost (e.g. transferring a caller to the clinic) is a separate
   consideration handled per the Twilio implementation guidance in
   `Skills/twilio-dental-sms.md`; it does not change the rule that AI usage
   amounts come from `config/billing.config.ts`.
+
+### Notification Settings (v1 — settings only)
+
+The account **Notification Settings** section (in `/account`) lets an owner/admin
+choose which account notifications they want. v1 covers **AI answered call minute
+alerts** at **90%** and **100%** of the included minutes. Both default ON and
+either can be turned off; there is no "mandatory" / "cannot disable" concept.
+
+- This is **settings + storage only**: no delivery channel exists yet (no email,
+  no SMS, no jobs), no AI minute counter, and no usage evaluation. Copy must not
+  promise delivery.
+- Notification types and labels live in `config/notifications.config.ts`. If copy
+  shows the included-minutes number it must derive from
+  `billingConfig.basePlan.includedAiAnsweredCallMinutes` — never a second source.
+- Preferences are stored in `clinic_notification_preferences` (additive migration
+  `20260626000100_clinic_notification_preferences.sql`). The read path is
+  degradation-safe: if the table is not applied yet, the account page shows
+  default-enabled preferences and does not crash.

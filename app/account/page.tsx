@@ -15,6 +15,7 @@ import { normalizeBusinessTypeForStorage } from "../../lib/a2p/validation";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
 import { listActiveMembershipsForClinic } from "../../lib/db/clinic-memberships";
 import { listProfilesByIds } from "../../lib/db/profiles";
+import { listClinicNotificationPreferences } from "../../lib/db/notifications";
 import { SetupInvalid } from "../setup/[token]/_components/SetupInvalid";
 import { ClinicForm } from "../setup/[token]/_components/ClinicForm";
 import { BusinessProfile, type BusinessProfileData } from "../setup/[token]/_components/BusinessProfile";
@@ -205,6 +206,8 @@ export default async function AccountPage({
     const assignedNumbers = assignedRows.map((row) => toAssignedSummary(row, clinic.sms_status));
     const entitlement = await loadOwnerEntitlement(clinic.id, assignedNumbers);
 
+    const notificationSettings = await listClinicNotificationPreferences(clinic.id);
+
     const memberships = await listActiveMembershipsForClinic(clinic.id).catch(() => []);
     const profiles = await listProfilesByIds(memberships.map((m) => m.profile_id)).catch(() => []);
     const profileById = new Map(profiles.map((p) => [p.id, p]));
@@ -237,6 +240,7 @@ export default async function AccountPage({
       assignedRows,
       entitlement,
       teamMembers,
+      notificationSettings,
       initialSection,
       paymentMethodSetup,
       paidPlanResult,
@@ -277,6 +281,7 @@ export default async function AccountPage({
   const assignedRows = await listClinicPhoneNumbersForClinic(clinic.id).catch(() => []);
   const assignedNumbers = assignedRows.map((row) => toAssignedSummary(row, clinic.sms_status));
   const entitlement = await loadOwnerEntitlement(clinic.id, assignedNumbers);
+  const notificationSettings = await listClinicNotificationPreferences(clinic.id);
 
   const data = buildData({
     clinic,
@@ -289,6 +294,7 @@ export default async function AccountPage({
     teamMembers: [
       { email: setupRequest.owner_email.trim().toLowerCase(), role: "owner", status: "active" as const },
     ],
+    notificationSettings,
     initialSection,
     paymentMethodSetup,
     paidPlanResult,
@@ -305,6 +311,7 @@ function buildData(args: {
   assignedRows: ClinicPhoneNumberRow[];
   entitlement: OwnerNumberEntitlement;
   teamMembers: BusinessProfileData["teamAccess"]["members"];
+  notificationSettings: BusinessProfileData["notificationSettings"];
   initialSection: string | null;
   paymentMethodSetup: PaymentMethodSetupResult;
   paidPlanResult: "success" | "cancelled" | null;
@@ -353,6 +360,7 @@ function buildData(args: {
     billing: buildBilling(clinic, entitlement, trialDaysRemaining, args.assignedRows),
     security: { passwordEnabled: true },
     teamAccess: { members: args.teamMembers },
+    notificationSettings: args.notificationSettings,
   };
 }
 

@@ -121,11 +121,17 @@ The MVP should include:
 - usage metering/billing later
 - Vercel-hosted Next.js app/backend
 
+The MVP direction now has three channels: **AI Answering + SMS Recovery +
+Workspace** (see "Next MVP Direction — AI Answering" below). AI Answering is a
+**narrow call-capture assistant**, planned as part of the MVP direction but **not
+live yet** and never enabled without explicit owner approval and safety gates.
+
 The MVP should not include:
 
-- AI receptionist / AI voice answering behavior (the planned **AI Call Assistant**
-  voice feature is **future-only** and is not implemented in the current MVP — see
-  "Planned Future Feature — AI Call Assistant" below)
+- a **full AI receptionist** (AI Answering is narrow call capture only — it
+  collects name, callback intent/reason, and preferred time and creates a
+  Workspace request; it is not a full receptionist, and it is **not live yet** —
+  see "Next MVP Direction — AI Answering" below)
 - medical diagnosis
 - dental advice
 - call recording
@@ -140,16 +146,67 @@ The MVP should not include:
 
 ---
 
-## Planned Future Feature — AI Call Assistant (NOT in current MVP)
+## Next MVP Direction — AI Answering (planned, not live)
 
-> **Status: planned / future only.** This is not current MVP behavior and must not
-> be implemented, billed, or enabled in this scope. The current product remains
-> Missed Calls Dental: missed-call **SMS recovery**. This section exists so future
-> agents understand the intended direction without building it prematurely.
+> **Status: planned MVP channel — NOT live yet.** AI Answering is now part of the
+> intended MVP direction (**AI Answering + SMS Recovery + Workspace**), but it is
+> **not implemented, not billed, and not enabled** in the current product. It must
+> never be turned on without **explicit owner approval and safety gates** (the same
+> discipline as live patient SMS). The shipping product today remains missed-call
+> **SMS recovery**. This section exists so agents build toward the right direction
+> without enabling it prematurely.
 
-**AI Call Assistant** is a planned future **voice** feature that lets a clinic
-have calls answered by an AI assistant when those calls are forwarded to a
+**AI Answering** (historically referred to as the **AI Call Assistant**) is a
+**narrow call-capture assistant**, **not** a full AI receptionist. It lets a
+clinic have calls answered by an AI assistant when those calls are forwarded to a
 dedicated **AI assistant number**.
+
+**Channel relationship (how the three MVP channels fit together):**
+
+- **Voice-first.** AI Answering can be useful immediately after the first assigned
+  business number and forwarding setup — it does **not** depend on SMS carrier
+  approval.
+- **SMS-second.** SMS Recovery still activates **later**, only after carrier
+  approval / readiness (A2P/10DLC, Messaging Service coverage, owner approval, and
+  `clinics.sms_recovery_enabled`). AI Answering does not remove or replace the SMS
+  approval requirement.
+- **Workspace is the shared queue.** AI voice sessions and SMS replies should
+  eventually become **one patient request card** in the Workspace.
+- **No duplicate outreach.** SMS must not duplicate a successful AI conversation.
+  If AI successfully captured the request, a later SMS becomes
+  confirmation/continuation. If AI failed or was incomplete and SMS is approved,
+  SMS can act as fallback.
+
+**What AI Answering collects (narrow capture):** the caller's name, callback
+intent/reason, and preferred time — then it creates a **Workspace request**. It
+may use only **approved AI Front Desk Knowledge** facts: hours, services,
+insurance, languages, payment, and policies.
+
+**Hard boundaries — AI must not:** diagnose, give treatment advice, provide
+medical triage, promise availability, book into a PMS, collect payment, or pretend
+to be human. It is **not** a phone-system replacement, dental CRM, or PMS
+integration.
+
+**Billing & trial (unchanged trial behavior):**
+
+- **Trial start is unchanged:** the 21-day trial starts when the **first included
+  business number is assigned** (`clinics.trial_started_at` / `trial_ends_at`).
+  Trial start is **not** the signup date, **not** SMS approval, and **not** AI
+  activation.
+- **100 AI answered call minutes are included** in the plan/trial period (from
+  `config/billing.config.ts` — `basePlan.includedAiAnsweredCallMinutes`).
+- **During the trial, if the included AI minutes are exhausted, AI Answering
+  should pause / fail closed** until a paid plan (or an approved future policy
+  says otherwise).
+- **On a paid plan**, AI may continue past the included minutes as **overage**
+  once usage metering and overage billing are implemented **and explicitly
+  approved**. Usage metering and overage billing are **not implemented** today.
+- **Notification Settings** start with AI answered call **minute alerts at 90% and
+  100%** (settings only — no delivery channel yet; see
+  `BILLING-AND-USAGE-POLICY.md` and the account `Notification Settings` section).
+
+The remainder of this section describes the same planned feature in customer
+terms.
 
 - **Phone forwarding decides when calls reach the AI assistant.** As with the
   current SMS recovery paths, the clinic (or its phone provider) controls

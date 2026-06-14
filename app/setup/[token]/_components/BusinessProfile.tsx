@@ -10,6 +10,7 @@ import { BillingCard } from "./BillingCard";
 import { AccountAccessCard } from "./AccountAccessCard";
 import { TeamAccessCard } from "./TeamAccessCard";
 import { AiKnowledgeCard } from "./AiKnowledgeCard";
+import { NotificationSettingsCard } from "./NotificationSettingsCard";
 import type {
   BusinessProfileData,
   BusinessProfileFields,
@@ -20,7 +21,7 @@ import type {
 export type { BusinessProfileData } from "./account-types";
 
 type SetupSectionId = "phone" | "business" | "sms" | "billing";
-type AccountSectionId = "account_access" | "team_access" | "ai_knowledge";
+type AccountSectionId = "account_access" | "team_access" | "ai_knowledge" | "notification_settings";
 type SectionId = SetupSectionId | AccountSectionId;
 const ONE_TIME_RETURN_PARAMS = ["payment_method_setup", "paid_plan"] as const;
 
@@ -158,6 +159,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
     { id: "account_access", label: "Account access" },
     { id: "team_access", label: "Team access" },
     { id: "ai_knowledge", label: "AI knowledge" },
+    { id: "notification_settings", label: "Notification Settings" },
   ];
 
   return (
@@ -342,6 +344,15 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
               />
             </Section>
           )}
+
+          {active === "notification_settings" && (
+            <Section
+              id="notification-settings"
+              title="Notification Settings"
+            >
+              <NotificationSettingsCard initialPreferences={data.notificationSettings} />
+            </Section>
+          )}
         </div>
       </div>
     </main>
@@ -350,6 +361,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
 
 const VALID_SECTIONS: SectionId[] = [
   "phone", "business", "sms", "billing", "account_access", "team_access", "ai_knowledge",
+  "notification_settings",
 ];
 
 // Map an optional ?section=… value to a known section. Defaults to "phone"
