@@ -3980,3 +3980,33 @@ Fallback DB procedure when no authenticated admin session/tool is available:
 The reset intentionally does **not** delete or mutate `webhook_events`,
 `clinics`, `clinic_phone_numbers`, billing/Stripe state, Twilio/A2P/provider
 state, SMS recovery gates, trial state, or any other clinic/caller.
+
+## AI Answering runtime skeleton — deployed but disabled (2026-06-14)
+
+The **AI Answering runtime skeleton** is deployed but **disabled**. It does
+**not** answer live calls. It does **not** call Twilio ConversationRelay or
+OpenAI. The existing **SMS Recovery** voice flow
+(`twilio/voice/incoming` + `twilio/voice/status`) is **unchanged** — no AI
+branch runs in any webhook and no ConversationRelay TwiML is emitted.
+
+- **Mode:** `AI_ANSWERING_RUNTIME_MODE` (server-only). Default and production
+  value: **`disabled`**. The only other value is `test_only`, which still
+  requires BOTH the clinic id and caller number on the allowlists
+  (`AI_ANSWERING_TEST_CLINIC_IDS`, `AI_ANSWERING_TEST_CALLER_NUMBERS`). There is
+  **no `live` mode** and **no customer enable toggle** in this layer. Leaving all
+  three env vars unset is the safe default and is what production uses.
+- **Components (all off-path):** `lib/ai-answering/runtime-config.ts` (mode),
+  `lib/ai-answering/runtime-gate.ts` (pure fail-closed decision),
+  `lib/db/ai-voice-runtime-sessions.ts` (start/complete/fail using the existing
+  `ai_voice_sessions` table, `source = 'future_twilio'`, **no migration**),
+  `lib/ai-answering/front-desk-context.ts` (approved-facts context builder; no
+  provider, no patient data, no prompt storage).
+- **No new resources:** no migration, no Twilio/Stripe/DNS/Vercel/OpenAI changes,
+  no SMS sent, no production data written by this change.
+- **Verify safely (no production writes):** `npm run typecheck`,
+  `npm run test:sms-recovery` (includes `ai-answering-runtime`),
+  `npm run test:ai-knowledge`, `npm run build`. Production `/api/health` after
+  auto-deploy.
+- **Before building the real runtime:** read `MVP_BUILD_DOCS/AI-ANSWERING-RUNTIME.md`
+  and the current official Twilio/OpenAI docs; do not guess provider
+  XML/event/API contracts.

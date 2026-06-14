@@ -8353,3 +8353,49 @@ Safety scope:
   send-gate / billing changes, no `clinics.sms_status` writes.
 - Validation: `npm run typecheck`, `npm run test:sms-recovery`,
   `npm run test:ai-knowledge`, `npm run build`, `git diff --check`.
+
+---
+
+## 2026-06-14 — AI Answering runtime skeleton (off by default; no live AI)
+
+Added the provider-agnostic AI Answering **runtime skeleton** so a future real
+AI answered-call runtime has a foundation. It is **disabled by default** and
+changes **nothing** in production: no live AI answering, no Twilio
+ConversationRelay, no WebSocket route, no OpenAI call, no streaming audio, no
+transcript/raw-payload/prompt storage. The existing SMS Recovery voice flow
+(`twilio/voice/incoming` + `twilio/voice/status`) is unchanged.
+
+Code changes (commit `feat: add disabled AI answering runtime skeleton`):
+
+- `lib/ai-answering/runtime-config.ts` — server-only lazy mode reader.
+  `AI_ANSWERING_RUNTIME_MODE` ∈ { `disabled`, `test_only` }, **default
+  `disabled`**; optional `AI_ANSWERING_TEST_CLINIC_IDS` /
+  `AI_ANSWERING_TEST_CALLER_NUMBERS` allowlists. No `live` mode, no new env
+  required for build, never throws/logs secrets.
+- `lib/ai-answering/runtime-gate.ts` — pure `evaluateAiAnsweringRuntimeGate()`.
+  Fails closed: `disabled` always blocks; `test_only` needs BOTH clinic id and
+  caller allowlisted; blocks missing/inactive clinic, invalid caller phone, and
+  scheduled/removed numbers. No DB, no provider, no SMS decision. **Not wired
+  into the live webhook.**
+- `lib/db/ai-voice-runtime-sessions.ts` — `start`/`complete`/`fail` lifecycle on
+  the existing `ai_voice_sessions` table (`source = 'future_twilio'`). Reuses the
+  mock route's `trimToLimit` sanitizer (now exported from `ai-voice-sessions.ts`)
+  so captured-field validation cannot drift. Captured sessions link + touch the
+  Workspace conversation; incomplete/failed do not create one. **No migration.**
+- `lib/ai-answering/front-desk-context.ts` — approved-facts context builder from
+  `getClinicAiFacts`. Includes only selected+approved facts (excludes
+  `needs_review` suggestions), omits unknowns (never invents), carries the fixed
+  safety + fallback policy. No OpenAI, no patient data, no prompt storage.
+- `MVP_BUILD_DOCS/AI-ANSWERING-RUNTIME.md` (new) — skeleton overview + provider
+  guardrail (read current Twilio/OpenAI docs before any provider-specific code).
+- Tests: `tests/ai-answering-runtime.test.ts`, wired into
+  `tsconfig.unit-tests.json` + `npm run test:sms-recovery`.
+
+Safety scope:
+
+- No migration. No production data written. No Twilio / Stripe / DNS / Vercel /
+  OpenAI env or provider mutation. No SMS sent, no SMS-recovery gate change, no
+  billing/metering change, no customer enable toggle.
+- Existing voice webhook behavior unchanged (no route edits).
+- Validation: `npm run typecheck`, `npm run test:sms-recovery` (294 pass),
+  `npm run test:ai-knowledge` (76 pass), `npm run build`, `git diff --check`.

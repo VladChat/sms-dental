@@ -346,6 +346,31 @@ AI minutes are **not** metered and overage is **not** billed.
   "Not active yet" (no enable toggle, no activation button). See
   `OWNER-SETTINGS.md`.
 
+### Built foundation — AI Answering runtime skeleton (2026-06-14, disabled)
+
+A third non-live layer adds a **provider-agnostic runtime skeleton** so a future
+real AI answered-call runtime has a foundation. **Live AI answering remains
+disabled / not implemented.** There is still no AI voice runtime wired into any
+webhook, no Twilio ConversationRelay, no WebSocket route, no OpenAI call, no
+streaming audio, and no transcript/raw-payload/prompt storage. The SMS Recovery
+voice flow is unchanged.
+
+- **Runtime mode (off by default):** `lib/ai-answering/runtime-config.ts` reads
+  `AI_ANSWERING_RUNTIME_MODE` (default `disabled`; only other value `test_only`,
+  which still requires clinic + caller allowlists). No `live` mode, no customer
+  enable toggle.
+- **Pure gate:** `lib/ai-answering/runtime-gate.ts` fails closed and is **not**
+  wired into the live Twilio webhook.
+- **Session lifecycle:** `lib/db/ai-voice-runtime-sessions.ts`
+  (`start`/`complete`/`fail` on the existing `ai_voice_sessions` table,
+  `source = 'future_twilio'`; **no migration**).
+- **Approved-facts context:** `lib/ai-answering/front-desk-context.ts` builds a
+  typed context from selected+approved AI Knowledge facts (excludes unsaved
+  suggestions, omits unknowns, carries the fixed safety policy). No provider, no
+  patient data, no prompt storage.
+- See `AI-ANSWERING-RUNTIME.md` for the full skeleton + the provider guardrail
+  (read current Twilio/OpenAI docs before any provider-specific code).
+
 ---
 
 ## 6. Current Repository Structure

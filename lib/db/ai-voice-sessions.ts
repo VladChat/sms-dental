@@ -28,7 +28,9 @@ import {
 
 // postgres.js sets `.code` to the Postgres SQLSTATE. 42P01 = undefined_table:
 // the AI answering migration has not been applied to this database yet.
-function isUndefinedTableError(err: unknown): boolean {
+// Exported so the provider-agnostic runtime helper
+// (lib/db/ai-voice-runtime-sessions.ts) treats a missing table identically.
+export function isUndefinedTableError(err: unknown): boolean {
   return (
     typeof err === "object" &&
     err !== null &&
@@ -179,7 +181,11 @@ const LABEL_LIKE_PLACEHOLDERS = new Set(
   ].map(normalizeLabelLikeValue),
 );
 
-function trimToLimit(value: string | null | undefined, limit: number): string | null {
+// Shared trim + placeholder cleanup. Exported so the runtime session helper
+// (lib/db/ai-voice-runtime-sessions.ts) sanitizes captured fields with the EXACT
+// same length limits and label-like placeholder dropping as the mock route, so
+// the two paths never drift.
+export function trimToLimit(value: string | null | undefined, limit: number): string | null {
   const trimmed = (value ?? "").trim();
   if (trimmed.length === 0) return null;
   if (LABEL_LIKE_PLACEHOLDERS.has(normalizeLabelLikeValue(trimmed))) return null;
