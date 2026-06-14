@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-27 (Platform-admin AI Answering mock tester UI added; AI runtime still not live)
+Last updated: 2026-06-14 (Admin patient request preview for AI Answering test verification; AI runtime still not live)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8123,3 +8123,76 @@ secrets, DB URLs, or real patient data. Pre-existing working-tree changes
 untouched.
 
 Commit: `feat: add admin AI answering mock tester` (pushed to `origin/main`).
+
+---
+
+## 2026-06-14 — AI Answering test request admin preview + visibility fix
+
+Fixed the platform-admin verification path for non-live AI Answering test
+requests. This is **not** a live AI rollout: no Twilio ConversationRelay, no
+WebSocket runtime, no OpenAI, no SMS/email, no metering/billing, and no
+Twilio/Stripe/Vercel env/DNS/trial/SMS gate/SMS_RECOVERY_MODE/clinic SMS
+enablement changes.
+
+Read-only production investigation:
+
+- Count-only sanity check found exactly 1 `ai_voice_sessions` row across exactly
+  1 clinic, so the detailed read stayed within the single test clinic.
+- Single test clinic used: `Test Dental Clinic`
+  (`f37f24a1-070f-436b-b803-956f55466093`, slug
+  `fairstone-dental-smile`).
+- Latest test request exists: yes. It is linked to conversation
+  `8a075f82-629d-43f0-a0dc-9c884a19e430` for caller `***-***-9236`.
+- The linked conversation belongs to the same clinic: yes.
+- The linked conversation already had SMS history and was marked handled/booked
+  before the test request (`workspace_handled_at` present; 71 SMS messages).
+- The logged-in `/workspace` clinic id was not safely available from a DB-only
+  read without the user's authenticated browser/session context.
+
+Diagnosis:
+
+- Generic `/workspace` is account/clinic-context scoped and is not reliable for a
+  platform admin verifying a selected clinic from `/admin/clinics/[clinicId]`.
+- The existing production test request also reused an already-handled
+  conversation for the test caller number, so it would not naturally appear as a
+  fresh Needs follow-up card even if the same clinic workspace were open.
+
+Changed/added (code):
+
+- Added a platform-admin **Patient requests** tab inside
+  `/admin/clinics/[clinicId]`, immediately after **AI Answering**.
+- Added `GET /api/admin/clinics/[clinicId]/patient-requests`, guarded by
+  `requirePlatformAdminClinic`, using the URL clinic id. It returns display-safe
+  fields only, masks caller phones to last 4, and does not return provider IDs,
+  raw payloads, internal diagnostics, billing/legal details, secrets, or SMS
+  message bodies.
+- Extracted shared patient-request card mapping to
+  `lib/workspace/patient-request-card.ts` so `/workspace` and the admin preview
+  derive source labels, summaries, names, and AI/SMS mixed requests consistently.
+- `createMockAiVoiceSession` now touches the linked conversation after inserting
+  the mock AI session, preserving the inserted session if that secondary touch
+  fails and logging only safe metadata.
+- Cleaned platform-admin AI Answering copy: "Create test request", "Latest test
+  requests", "Caller phone", "Internal note", and "View patient request" now
+  replaces the generic `/workspace` link.
+- Calmed owner `/account` AI Answering copy while keeping it clearly not active.
+
+Validation:
+
+- `npm run typecheck` pass.
+- `npm run test:sms-recovery` pass (248 tests).
+- `npm run test:ai-knowledge` pass (76 tests).
+- `npm run build` pass.
+- `git diff --check` pass.
+
+Mock/data changes:
+
+- Production data modified: no.
+- Production mock request created: no.
+- Existing production mock request deleted or changed: no.
+
+Not done / out of scope:
+
+- No real AI voice runtime, ConversationRelay, WebSocket, OpenAI, SMS/email,
+  billing/metering, provider mutation, migration, deploy, or manual production
+  mock request.

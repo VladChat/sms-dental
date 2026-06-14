@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { Badge } from "../../../_components/AdminUI";
 import {
   AI_VOICE_SESSION_STATUSES,
-  aiVoiceSourceLabel,
   aiVoiceStatusLabel,
   type AiVoiceSessionStatus,
 } from "../../../../../../config/ai-answering.config";
@@ -21,7 +19,6 @@ type SessionView = {
   id: string;
   patientPhoneMasked: string;
   status: AiVoiceSessionStatus;
-  source: string;
   capturedPatientName: string | null;
   capturedReason: string | null;
   capturedPreferredTime: string | null;
@@ -52,7 +49,13 @@ function fmtDateTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "—";
 }
 
-export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
+export function AdminAiAnsweringMockTester({
+  clinicId,
+  onViewPatientRequests,
+}: {
+  clinicId: string;
+  onViewPatientRequests: () => void;
+}) {
   const [load, setLoad] = useState<LoadState>("loading");
   const [foundationApplied, setFoundationApplied] = useState(true);
   const [voiceLabel, setVoiceLabel] = useState<string>("");
@@ -101,7 +104,7 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
 
   async function createMockSession() {
     if (patientPhone.trim().length === 0) {
-      setSubmitError("Enter a test caller phone number in E.164 format (e.g. +12245551234).");
+      setSubmitError("Enter a test caller number in E.164 format (e.g. +12245551234).");
       return;
     }
     setSubmitting(true);
@@ -126,10 +129,10 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
         | { ok?: boolean; message?: string; error?: { message?: string } }
         | null;
       if (!res.ok || !json?.ok) {
-        setSubmitError(json?.error?.message ?? "Could not create the mock session.");
+        setSubmitError(json?.error?.message ?? "Could not create the test request.");
         return;
       }
-      setSuccessMessage(json.message ?? "Mock AI answered call request created.");
+      setSuccessMessage("Test request created.");
       // Reset the request-specific fields; keep the phone for repeat testing.
       setReason("");
       setPreferredTime("");
@@ -137,7 +140,7 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
       setSafetyConcern(false);
       await refresh();
     } catch {
-      setSubmitError("Could not create the mock session.");
+      setSubmitError("Could not create the test request.");
     } finally {
       setSubmitting(false);
     }
@@ -145,20 +148,8 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
 
   return (
     <div style={{ display: "grid", gap: "var(--space-5)" }}>
-      {/* Non-live callout + safety copy */}
-      <div className="adm-banner tone-info" role="note">
-        <div className="adm-banner-main">
-          <span className="adm-banner-title">Not live yet — internal test tool</span>
-          <span className="adm-banner-body">
-            This creates a mock AI answered call request for Workspace testing. It does
-            not place a call, run AI, send SMS, or contact Twilio.
-          </span>
-        </div>
-      </div>
-
-      <p className="t-small" style={{ color: "var(--warning)", fontWeight: 600, margin: 0 }}>
-        Use only test clinics and documented safe test caller numbers. Never enter real
-        patient data.
+      <p className="t-small" style={{ color: "var(--text-muted)", fontWeight: 600, margin: 0 }}>
+        For testing only. Use a test caller number.
       </p>
 
       {load === "loading" && <p className="t-small" style={{ color: "var(--text-muted)" }}>Loading…</p>}
@@ -186,7 +177,7 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
               <span className="adm-row-value">{voiceLabel || "—"}</span>
             </div>
             <div className="adm-row">
-              <span className="adm-row-label">Mock sessions for this clinic</span>
+              <span className="adm-row-label">Test requests for this clinic</span>
               <span className="adm-row-value">{totalCount}</span>
             </div>
           </dl>
@@ -202,10 +193,10 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
               gap: "var(--space-3)",
             }}
           >
-            <h3 className="adm-subhead">Create mock Workspace request</h3>
+            <h3 className="adm-subhead">Create test request</h3>
 
             <div className="field">
-              <label htmlFor="aia-phone">Patient phone (test number, E.164)</label>
+              <label htmlFor="aia-phone">Caller phone</label>
               <input
                 id="aia-phone"
                 className="input"
@@ -219,7 +210,7 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
             </div>
 
             <div className="field">
-              <label htmlFor="aia-name">Patient name (optional)</label>
+              <label htmlFor="aia-name">Name</label>
               <input
                 id="aia-name"
                 className="input"
@@ -232,7 +223,7 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
             </div>
 
             <div className="field">
-              <label htmlFor="aia-reason">Reason for call (optional)</label>
+              <label htmlFor="aia-reason">Reason for call</label>
               <input
                 id="aia-reason"
                 className="input"
@@ -245,7 +236,7 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
             </div>
 
             <div className="field">
-              <label htmlFor="aia-time">Preferred time (optional)</label>
+              <label htmlFor="aia-time">Preferred time</label>
               <input
                 id="aia-time"
                 className="input"
@@ -277,24 +268,20 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
                 checked={safetyConcern}
                 onChange={(e) => setSafetyConcern(e.target.checked)}
               />
-              <span>Safety concern (flags the request for urgent front-desk attention)</span>
+              <span>Urgent concern</span>
             </label>
 
             <div className="field">
-              <label htmlFor="aia-handoff">Handoff note (optional)</label>
+              <label htmlFor="aia-handoff">Internal note</label>
               <textarea
                 id="aia-handoff"
                 className="textarea"
-                placeholder="Mock AI Answering foundation test. No real call was placed."
+                placeholder="Anything the front desk should know"
                 maxLength={500}
                 value={handoffNote}
                 onChange={(e) => setHandoffNote(e.target.value)}
               />
             </div>
-
-            <p className="t-helper" style={{ margin: 0, color: "var(--text-muted)" }}>
-              No call is placed. No AI runs. No SMS is sent.
-            </p>
 
             {submitError && (
               <div className="alert alert-error" role="alert" aria-live="polite">
@@ -314,21 +301,25 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
                 disabled={submitting || !foundationApplied}
                 onClick={createMockSession}
               >
-                {submitting ? "Creating…" : "Create mock Workspace request"}
+                {submitting ? "Creating..." : "Create test request"}
               </button>
-              <Link className="btn btn-secondary btn-sm" href="/workspace">
-                Open Workspace if your account has clinic access
-              </Link>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={!successMessage && sessions.length === 0}
+                onClick={onViewPatientRequests}
+              >
+                View patient request
+              </button>
             </div>
           </div>
 
-          {/* Latest mock sessions — lets the admin verify creation even without
-              Workspace access. */}
+          {/* Latest test requests let the admin verify creation for this clinic. */}
           <div>
-            <h3 className="adm-subhead">Latest mock sessions</h3>
+            <h3 className="adm-subhead">Latest test requests</h3>
             {sessions.length === 0 ? (
               <p className="t-small" style={{ color: "var(--text-muted)", marginTop: "var(--space-2)" }}>
-                No mock AI answered call sessions for this clinic yet.
+                No test requests for this clinic yet.
               </p>
             ) : (
               <div style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
@@ -338,8 +329,7 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
                       <span className="t-mono" style={{ fontWeight: 700 }}>{s.patientPhoneMasked}</span>
                       <span style={{ display: "inline-flex", gap: "var(--space-2)" }}>
                         <Badge tone={statusTone(s.status)}>{aiVoiceStatusLabel(s.status)}</Badge>
-                        <Badge tone="neutral">{aiVoiceSourceLabel(s.source)}</Badge>
-                        {s.safetySignal && <Badge tone="warning">Safety concern</Badge>}
+                        {s.safetySignal && <Badge tone="warning">Urgent concern</Badge>}
                       </span>
                     </div>
                     <dl className="adm-rows">
@@ -369,7 +359,7 @@ export function AdminAiAnsweringMockTester({ clinicId }: { clinicId: string }) {
                       )}
                       {s.handoffNote && (
                         <div className="adm-row">
-                          <span className="adm-row-label">Handoff note</span>
+                          <span className="adm-row-label">Internal note</span>
                           <span className="adm-row-value">{s.handoffNote}</span>
                         </div>
                       )}

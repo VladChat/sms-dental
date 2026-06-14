@@ -202,7 +202,9 @@ test("ai-voice-sessions DB helpers are degradation-safe and provider-free", () =
   // Reuses the existing conversation thread + safe display-name helper.
   assert.ok(src.includes("getOrCreateConversation"));
   assert.ok(src.includes("setPatientDisplayNameIfEmpty"));
+  assert.ok(src.includes("touchConversation"));
   assert.ok(src.includes("normalizeWorkspaceDisplayName"));
+  assert.ok(src.includes("LABEL_LIKE_PLACEHOLDERS"));
   // No live AI / SMS / provider calls (code usage, not the doc comment that
   // documents the exclusion). No transcript/payload columns are written.
   assert.ok(!/from ["'][^"']*openai[^"']*["']/i.test(src), "db helper imports no openai sdk");
@@ -211,6 +213,32 @@ test("ai-voice-sessions DB helpers are degradation-safe and provider-free", () =
   assert.ok(!src.includes("sendRecoverySms"), "db helper sends no recovery SMS");
   assert.ok(!src.includes("transcript "), "db helper writes no transcript column");
   assert.ok(!src.includes("raw_payload"), "db helper writes no raw payload column");
+});
+
+test("createMockAiVoiceSession touches linked conversation activity after insert", () => {
+  const src = read(path.join("lib", "db", "ai-voice-sessions.ts"));
+  const insertIdx = src.indexOf("insert into public.ai_voice_sessions");
+  const touchIdx = src.indexOf("await touchConversation(conversation.id)");
+  const nameIdx = src.indexOf("setPatientDisplayNameIfEmpty(conversation.id");
+  assert.ok(insertIdx >= 0, "session insert is present");
+  assert.ok(touchIdx > insertIdx, "conversation activity is touched after session insert");
+  assert.ok(nameIdx > touchIdx, "safe display-name write remains secondary");
+  assert.ok(src.includes('logger.warn("ai_answering.mock_session.touch_conversation_failed"'));
+  assert.ok(!src.includes("patientPhone, err"), "touch failure logging avoids patient phone");
+});
+
+test("mock text normalization drops label-like placeholder values", () => {
+  const src = read(path.join("lib", "db", "ai-voice-sessions.ts"));
+  for (const text of [
+    "Handoff note (optional)",
+    "Internal note",
+    "Reason for call (optional)",
+    "Preferred time (optional)",
+    "Anything the front desk should know",
+  ]) {
+    assert.ok(src.includes(text), `normalizer knows ${text}`);
+  }
+  assert.ok(src.includes("LABEL_LIKE_PLACEHOLDERS.has(normalizeLabelLikeValue(trimmed))"));
 });
 
 test("front-desk read path integrates AI voice sessions degradation-safely", () => {
@@ -241,9 +269,9 @@ test("mock-session route is platform-admin-only, URL-scoped, and provider-free",
   assert.ok(!src.includes("getTwilioClient"), "route makes no Twilio client");
   assert.ok(!src.includes("messages.create"), "route sends no SMS");
   assert.ok(!src.includes("sendRecoverySms"), "route sends no recovery SMS");
-  // Enhanced response includes a Workspace link + confirmation message.
-  assert.ok(src.includes('workspaceUrl: "/workspace"'));
-  assert.ok(src.includes('message: "Mock AI answered call request created."'));
+  // Response no longer points platform admins at generic /workspace.
+  assert.ok(!src.includes("workspaceUrl"));
+  assert.ok(src.includes('message: "Test request created."'));
 });
 
 // ----------------------------------------------------- admin label helpers
@@ -323,6 +351,61 @@ test("admin AI Answering GET is platform-admin-only, URL-scoped, masks phone, sa
   assert.ok(!src.includes("messages.create"), "GET sends no SMS");
 });
 
+test("admin patient requests GET is platform-admin-only, URL-scoped, masks phone, safe fields", () => {
+  const src = read(
+    path.join("app", "api", "admin", "clinics", "[clinicId]", "patient-requests", "route.ts"),
+  );
+  assert.ok(src.includes("export async function GET"));
+  assert.ok(src.includes("requirePlatformAdminClinic(req, clinicId)"));
+  assert.ok(src.includes("const { clinicId } = await ctx.params"));
+  assert.ok(src.includes("listClinicConversations(guard.clinic.id"));
+  assert.ok(src.includes("toPatientRequestCard"));
+  assert.ok(src.includes("callerPhoneMasked"));
+  assert.ok(src.includes("maskPhone(card.callerPhone)"));
+
+  const respStart = src.indexOf("return jsonOk(");
+  const respBlock = src.slice(respStart);
+  assert.ok(respBlock.includes("requestKey"));
+  assert.ok(!respBlock.includes("id: card.id"), "response does not expose raw conversation ids");
+  assert.ok(!respBlock.includes("callerPhone: card.callerPhone"), "response does not expose full phone");
+  assert.ok(!respBlock.includes("latestMessage"), "response does not expose message bodies");
+  for (const banned of [
+    "raw_payload",
+    "external_session_id",
+    "call_event_id",
+    "twilioSid",
+    "openai",
+    "billing",
+    "ein",
+    "legal",
+    "stripe",
+  ]) {
+    assert.ok(!respBlock.includes(banned), `patient request response avoids ${banned}`);
+  }
+});
+
+test("admin patient requests preview is read-only with no mutation actions", () => {
+  const src = read(
+    path.join(
+      "app", "admin", "(console)", "clinics", "[clinicId]", "_components",
+      "AdminPatientRequestsPreview.tsx",
+    ),
+  );
+  assert.ok(src.includes("No patient requests yet."));
+  assert.ok(src.includes("callerPhoneMasked"));
+  assert.ok(src.includes("AI call summary"));
+  assert.ok(src.includes("Urgent concern"));
+  for (const forbidden of [
+    "Handled</button>",
+    "Block number</button>",
+    "Reopen</button>",
+    "Unblock number</button>",
+    "conversation-action",
+  ]) {
+    assert.ok(!src.includes(forbidden), `preview has no ${forbidden}`);
+  }
+});
+
 // --------------------------------------------------------- admin console tab
 
 test("admin clinic console exposes an AI Answering tab (admin-only)", () => {
@@ -332,6 +415,44 @@ test("admin clinic console exposes an AI Answering tab (admin-only)", () => {
     ),
   );
   assert.ok(src.includes('{ id: "ai_answering", label: "AI Answering" }'));
+  assert.ok(src.includes('{ id: "patient_requests", label: "Patient requests" }'));
   assert.ok(src.includes("AdminAiAnsweringMockTester"));
+  assert.ok(src.includes("AdminPatientRequestsPreview"));
+  assert.ok(src.includes('onViewPatientRequests={() => goTo("patient_requests")}'));
   assert.ok(src.includes("Not live yet"));
+});
+
+test("admin AI Answering UI uses operator copy and links to admin patient requests", () => {
+  const src = read(
+    path.join(
+      "app", "admin", "(console)", "clinics", "[clinicId]", "_components",
+      "AdminAiAnsweringMockTester.tsx",
+    ),
+  );
+  for (const required of [
+    "For testing only. Use a test caller number.",
+    "Create test request",
+    "Caller phone",
+    "Reason for call",
+    "Preferred time",
+    "Urgent concern",
+    "Internal note",
+    "Latest test requests",
+    "View patient request",
+    "onViewPatientRequests",
+    "Test request created.",
+  ]) {
+    assert.ok(src.includes(required), `AI Answering UI includes ${required}`);
+  }
+  for (const banned of [
+    "Open Workspace if your account has clinic access",
+    "No call is placed. No AI runs. No SMS is sent.",
+    "Not live yet — internal test tool",
+    "Latest mock sessions",
+    "Create mock Workspace request",
+    "Patient phone (test number, E.164)",
+    "Handoff note (optional)",
+  ]) {
+    assert.ok(!src.includes(banned), `AI Answering UI avoids ${banned}`);
+  }
 });

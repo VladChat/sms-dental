@@ -31,6 +31,7 @@ import { AdminAssignExistingNumber } from "./AdminAssignExistingNumber";
 import { AdminNumberControls } from "./AdminNumberControls";
 import { AdminSmsConversationBuilder } from "./AdminSmsConversationBuilder";
 import { AdminAiAnsweringMockTester } from "./AdminAiAnsweringMockTester";
+import { AdminPatientRequestsPreview } from "./AdminPatientRequestsPreview";
 import { AiKnowledgeCard } from "../../../../../setup/[token]/_components/AiKnowledgeCard";
 import { formatUsdFromCents } from "../../../../../../config/billing.config";
 
@@ -66,6 +67,7 @@ type SectionId =
   | "a2p"
   | "ai_knowledge"
   | "ai_answering"
+  | "patient_requests"
   | "sms_voice"
   | "sms_texts"
   | "sms_limits"
@@ -82,6 +84,7 @@ const SECTIONS: { id: SectionId; label: string; group?: string }[] = [
   { id: "a2p", label: "A2P review" },
   { id: "ai_knowledge", label: "AI knowledge" },
   { id: "ai_answering", label: "AI Answering" },
+  { id: "patient_requests", label: "Patient requests" },
   { id: "sms_voice", label: "Voice greeting", group: "SMS settings" },
   { id: "sms_texts", label: "SMS texts", group: "SMS settings" },
   { id: "sms_limits", label: "Limits & anti-spam", group: "SMS settings" },
@@ -599,7 +602,20 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
               <h2 className="t-h3">AI Answering</h2>
               <Badge tone="neutral">Not live yet</Badge>
             </div>
-            <AdminAiAnsweringMockTester clinicId={d.id} />
+            <AdminAiAnsweringMockTester
+              clinicId={d.id}
+              onViewPatientRequests={() => goTo("patient_requests")}
+            />
+          </Panel>
+
+          {/* Patient requests — platform-admin read-only preview for this exact
+              clinic. This avoids the generic /workspace account-clinic context
+              mismatch during AI Answering test verification. */}
+          <Panel id="patient_requests" active={active}>
+            <div className="adm-section-head">
+              <h2 className="t-h3">Patient requests</h2>
+            </div>
+            <AdminPatientRequestsPreview clinicId={d.id} />
           </Panel>
 
           {/* SMS settings — deterministic conversation builder (admin only),
@@ -805,6 +821,7 @@ function sectionStatuses(
     a2p: a2pNavStatus(review),
     ai_knowledge: { text: "Manage", tone: "neutral" },
     ai_answering: { text: "Not live", tone: "neutral" },
+    patient_requests: { text: "Preview", tone: "neutral" },
     billing: d.stripeCustomerPresent ? { text: "Connected", tone: "success" } : { text: "Not connected", tone: "neutral" },
   };
 }

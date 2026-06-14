@@ -102,8 +102,7 @@ export async function POST(
       ok: true,
       sessionId,
       conversationId,
-      workspaceUrl: "/workspace",
-      message: "Mock AI answered call request created.",
+      message: "Test request created.",
     });
   } catch (err) {
     if (err instanceof AiAnsweringUnavailableError) {
@@ -116,6 +115,6 @@ export async function POST(
     if (err instanceof AiVoiceSessionValidationError) {
       return jsonBadRequest(err.message);
     }
-    return jsonError(500, "mock_session_failed", "Could not create the mock AI session.");
+    return jsonError(500, "mock_session_failed", "Could not create the test request.");
   }
 }

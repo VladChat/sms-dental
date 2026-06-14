@@ -1,8 +1,13 @@
 import { getDb } from "./client";
-import { getOrCreateConversation, setPatientDisplayNameIfEmpty } from "./conversations";
+import {
+  getOrCreateConversation,
+  setPatientDisplayNameIfEmpty,
+  touchConversation,
+} from "./conversations";
 import { normalizeWorkspaceDisplayName } from "../workspace/display-name";
 import { normalizePhone, isValidE164 } from "../phone/normalize";
 import { buildAiVoiceCallSummary } from "../workspace/ai-voice-summary";
+import { logger } from "../logging/logger";
 import {
   AI_VOICE_FIELD_LIMITS,
   DEFAULT_AI_VOICE_ID,
@@ -150,9 +155,34 @@ export type CreateMockAiVoiceSessionInput = {
   smsFollowupRecommended?: boolean | null;
 };
 
+function normalizeLabelLikeValue(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const LABEL_LIKE_PLACEHOLDERS = new Set(
+  [
+    "Patient name (optional)",
+    "Name",
+    "Reason for call (optional)",
+    "Reason for call",
+    "Preferred time (optional)",
+    "Preferred time",
+    "Handoff note (optional)",
+    "Handoff note",
+    "Internal note",
+    "Anything the front desk should know",
+  ].map(normalizeLabelLikeValue),
+);
+
 function trimToLimit(value: string | null | undefined, limit: number): string | null {
   const trimmed = (value ?? "").trim();
   if (trimmed.length === 0) return null;
+  if (LABEL_LIKE_PLACEHOLDERS.has(normalizeLabelLikeValue(trimmed))) return null;
   return trimmed.slice(0, limit);
 }
 
@@ -239,6 +269,17 @@ export async function createMockAiVoiceSession(
   } catch (err) {
     if (isUndefinedTableError(err)) throw new AiAnsweringUnavailableError();
     throw err;
+  }
+
+  // Keep the linked request active in the queue ordering. If this secondary
+  // update fails, preserve the inserted AI session and log only safe metadata.
+  try {
+    await touchConversation(conversation.id);
+  } catch {
+    logger.warn("ai_answering.mock_session.touch_conversation_failed", {
+      clinicId: input.clinicId,
+      conversationId: conversation.id,
+    });
   }
 
   // Only store a safe display name, and only when one is not already set. The

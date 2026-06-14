@@ -392,11 +392,10 @@ test("request summary card shows one headline + signal chips, no empty rows", ()
   assert.ok(!src.includes("Payment / insurance"));
 });
 
-test("workspace page passes only non-redundant system chips to cards", () => {
-  const src = read(path.join("app", "workspace", "page.tsx"));
+test("shared patient request mapper passes only non-redundant system chips to cards", () => {
+  const src = read(path.join("lib", "workspace", "patient-request-card.ts"));
   assert.ok(src.includes('id: "automation_paused"'));
   assert.ok(src.includes('id: "high_volume"'));
-  assert.ok(src.includes("Request signals"));
   assert.ok(!src.includes("...summary.chips.map"));
 });
 
