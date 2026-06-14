@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { AdminSmsReadinessStatus } from "../../../../lib/db/admin/types";
 
 // Server-safe presentational helpers for the admin console (no client runtime).
 
@@ -61,6 +62,30 @@ export function smsStatusTone(status: string): Tone {
 }
 export function billingTone(status: string): Tone {
   return BILLING_TONE[status] ?? "neutral";
+}
+
+// SMS readiness for the admin Clinics list. Reflects the DB-backed readiness of
+// the assigned phone/readiness state (resolveAdminSmsReadiness +
+// evaluateTextingStatusForLaunch), NOT the raw clinics.sms_status value and NOT
+// the per-clinic SMS recovery on/off gate. Operator-friendly labels only.
+const SMS_READINESS_LIST_LABELS: Record<AdminSmsReadinessStatus, string> = {
+  verified: "Verified",
+  needs_review: "Needs review",
+  no_phone: "No phone",
+  unknown: "Unknown",
+};
+const SMS_READINESS_LIST_TONE: Record<AdminSmsReadinessStatus, Tone> = {
+  verified: "success",
+  needs_review: "warning",
+  no_phone: "neutral",
+  unknown: "warning",
+};
+
+export function smsReadinessListLabel(status: AdminSmsReadinessStatus): string {
+  return SMS_READINESS_LIST_LABELS[status] ?? "Unknown";
+}
+export function smsReadinessListTone(status: AdminSmsReadinessStatus): Tone {
+  return SMS_READINESS_LIST_TONE[status] ?? "neutral";
 }
 
 // Launch-readiness checklist row: a human title, an optional hint, and a status

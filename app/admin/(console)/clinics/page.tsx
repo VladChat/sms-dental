@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { listAdminClinics } from "../../../../lib/db/admin/clinics";
-import { Badge, BoolBadge, billingTone, smsStatusTone } from "../_components/AdminUI";
+import {
+  Badge,
+  BoolBadge,
+  billingTone,
+  smsReadinessListLabel,
+  smsReadinessListTone,
+} from "../_components/AdminUI";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -76,7 +82,7 @@ export default async function AdminClinicsPage({
                 <th>SMS recovery</th>
                 <th>Phone</th>
                 <th>Billing</th>
-                <th>Setup</th>
+                <th>SMS readiness</th>
                 <th>Created</th>
               </tr>
             </thead>
@@ -89,7 +95,11 @@ export default async function AdminClinicsPage({
                   <td><BoolBadge value={c.smsRecoveryEnabled} yes="On" no="Off" /></td>
                   <td>{c.hasAssignedNumber ? <span className="t-mono">{c.assignedPhoneMasked}</span> : <Badge tone="neutral">None</Badge>}</td>
                   <td><Badge tone={billingTone(c.billingStatus)}>{c.billingStatus}</Badge></td>
-                  <td><Badge tone={smsStatusTone(c.smsStatus)}>{c.smsStatus}</Badge></td>
+                  <td>
+                    <Badge tone={smsReadinessListTone(c.smsReadinessStatus)}>
+                      {smsReadinessListLabel(c.smsReadinessStatus)}
+                    </Badge>
+                  </td>
                   <td className="t-helper">{new Date(c.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))}

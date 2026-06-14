@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-14 (delete clinic modal/blocker fix; AI runtime still not live)
+Last updated: 2026-06-14 (admin Clinics list SMS readiness column; delete clinic modal/blocker fix; AI runtime still not live)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8305,3 +8305,51 @@ Safety scope:
 - No production delete.
 - No Twilio, Stripe, Vercel env, DNS, A2P, billing provider, SMS runtime, phone
   provider, or SMS send mutation.
+
+---
+
+## 2026-06-14 — Admin Clinics list shows real SMS readiness (not raw sms_status)
+
+The `/admin/clinics` table previously had a column titled **Setup** that rendered
+the raw `clinics.sms_status` enum (e.g. `waiting_for_approval`) — misleading,
+snake_case, and not the same source of truth as real send readiness.
+
+Code changes (commit `fix: show real SMS readiness in admin clinic list`):
+
+- `lib/db/admin/types.ts` — added `AdminSmsReadinessStatus`
+  (`verified | needs_review | no_phone | unknown`), added
+  `smsReadinessStatus` / `smsReadinessReason` to `AdminClinicListItem` (kept the
+  legacy `smsStatus` field for diagnostics), and added a pure, unit-tested
+  `resolveAdminSmsReadiness()` mapper (fails closed).
+- `lib/db/admin/clinics.ts` — `listAdminClinics()` now computes readiness per
+  clinic from `evaluateTextingStatusForLaunch()` (DB-only; no Twilio/Stripe/
+  provider calls, no mutation). No active phone → `no_phone`; ok → `verified`;
+  blocked → `needs_review`; thrown → `unknown`. Sequential loop (DB client is
+  `max: 1`, so queries serialize anyway).
+- `app/admin/(console)/_components/AdminUI.tsx` — added server-safe
+  `smsReadinessListLabel()` / `smsReadinessListTone()` (Verified/Needs review/
+  No phone/Unknown; success/warning/neutral). No raw enums in the table.
+- `app/admin/(console)/clinics/page.tsx` — column renamed `Setup` →
+  `SMS readiness`; cell now uses the readiness helpers. The separate
+  **SMS recovery** On/Off gate column is unchanged.
+- Tests: `tests/admin-clinics-sms-readiness.test.ts` (mapping + UI/column
+  guards), wired into `tsconfig.unit-tests.json` and `npm run test:sms-recovery`.
+
+Read-only production check (no data modified): clinic `Test Dental Clinic`
+(`f37f24a1…`) has one active number, toll-free `+1•••4944`
+(`removal_status=active`, `texting_status=active`). Its number readiness snapshot
+is `messaging_service_sender_status=covered`, `production_safe=true`, but
+`last_synced_at` was ~33h old (> 24h `SMS_READINESS_MAX_AGE_MS`), so
+`evaluateTextingStatusForLaunch()` fails closed with
+`number_sms_readiness_stale`. Truthful list status today: **Needs review** (not
+Verified). A fresh readiness sync (within 24h) flips it to **Verified**
+automatically — not hardcoded, and never resolved by editing `clinics.sms_status`.
+The second production clinic has no active number → **No phone**.
+
+Safety scope:
+
+- No migration. No production data modified (read-only SELECTs only).
+- No Twilio / Stripe / provider calls, no SMS sent, no `SMS_RECOVERY_MODE` /
+  send-gate / billing changes, no `clinics.sms_status` writes.
+- Validation: `npm run typecheck`, `npm run test:sms-recovery`,
+  `npm run test:ai-knowledge`, `npm run build`, `git diff --check`.

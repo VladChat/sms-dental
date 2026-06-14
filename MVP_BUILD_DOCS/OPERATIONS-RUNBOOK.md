@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-14 (delete clinic modal/blocker fix; AI runtime still not live)
+Last updated: 2026-06-14 (admin Clinics list SMS readiness column; delete clinic modal/blocker fix; AI runtime still not live)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1642,6 +1642,37 @@ front-desk `/workspace`. Full spec: `PLATFORM-ADMIN-CONSOLE-PLAN.md`.
   blocked until those integrations are built.
 - **Migration:** `20260601000200_admin_console.sql` (applied). Audit rows store
   redacted snapshots only — no secrets/tokens/raw payloads.
+
+---
+
+## Admin Clinics list — SMS readiness vs SMS recovery columns — 2026-06-14
+
+The `/admin/clinics` table has two distinct SMS columns. Do not confuse them:
+
+- **SMS recovery** — the per-clinic on/off gate (`clinics.sms_recovery_enabled`),
+  shown as On/Off. It is whether the operator/owner has turned recovery sending on
+  for the clinic. It does **not** mean the assigned number can actually send.
+- **SMS readiness** — the DB-backed readiness of the clinic's assigned
+  phone/readiness state, computed read-only by
+  `evaluateTextingStatusForLaunch()` in `lib/db/sms-readiness.ts` (no Twilio /
+  Stripe / provider calls, no mutation). It is the same evaluation the launch path
+  uses. Values: **Verified** (success), **Needs review** (a phone exists but the
+  readiness check is blocked/not verified), **No phone** (no assigned active
+  number), **Unknown** (the check threw — fails closed). The machine reason is
+  kept on the row (`smsReadinessReason`) for diagnostics.
+
+`clinics.sms_status` (e.g. `waiting_for_approval`) is **not** used as the list's
+readiness source. It can be stale or out of sync with real send readiness; it was
+previously shown (misleadingly) in a "Setup" column. The readiness column is
+computed from the assigned number's lifecycle + texting status + Messaging Service
+sender coverage (toll-free) / A2P readiness (local).
+
+Operational gotcha (fail-closed freshness): a number whose readiness snapshot is
+older than 24h (`SMS_READINESS_MAX_AGE_MS`) reads as **Needs review**
+(`number_sms_readiness_stale`) even when coverage is otherwise `covered` and
+`production_safe`. A fresh readiness sync flips it to **Verified** automatically —
+this is correct strict behavior, not a bug, and is never resolved by editing
+`clinics.sms_status`.
 
 ---
 

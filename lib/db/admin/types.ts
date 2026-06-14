@@ -16,6 +16,20 @@ export type AdminOverview = {
   clinicsNeedingAction: number;
 };
 
+// List-safe SMS readiness for the Clinics table. This is the DB-backed readiness
+// of the assigned phone/readiness state (computed from
+// evaluateTextingStatusForLaunch), NOT the raw clinics.sms_status column and NOT
+// the per-clinic SMS recovery on/off gate. Fails closed.
+//   verified     — readiness checks pass for launch/texting
+//   needs_review — a phone exists but readiness is blocked or not verified
+//   no_phone     — no assigned active phone number
+//   unknown      — the readiness check could not run / threw unexpectedly
+export type AdminSmsReadinessStatus =
+  | "verified"
+  | "needs_review"
+  | "no_phone"
+  | "unknown";
+
 export type AdminClinicListItem = {
   id: string;
   name: string;
@@ -26,11 +40,48 @@ export type AdminClinicListItem = {
   assignedPhoneMasked: string | null;
   billingStatus: string;
   setupStatus: string;
+  // Raw clinics.sms_status. Kept for compatibility/diagnostics; the Clinics list
+  // no longer renders it as the readiness column (use smsReadinessStatus).
   smsStatus: string;
+  // DB-backed SMS readiness for the assigned number + a stable machine reason.
+  smsReadinessStatus: AdminSmsReadinessStatus;
+  smsReadinessReason: string | null;
   localNumberStatus: string;
   createdAt: string;
   updatedAt: string;
 };
+
+// Outcome of the per-clinic readiness probe, before it is mapped to a list
+// status. Pure input so the mapping can be unit-tested without a database:
+// listAdminClinics() runs evaluateTextingStatusForLaunch() (DB-backed, no
+// provider calls) and passes its result here, or signals no phone / a thrown
+// check.
+export type AdminSmsReadinessOutcome =
+  | { kind: "no_phone" }
+  | { kind: "evaluated"; ok: boolean; reason: string }
+  | { kind: "error" };
+
+// Pure mapping from a readiness probe outcome to the list status + reason.
+// Fails closed: a blocked check is "needs_review"; a thrown/unrunnable check is
+// "unknown". Never throws.
+export function resolveAdminSmsReadiness(outcome: AdminSmsReadinessOutcome): {
+  smsReadinessStatus: AdminSmsReadinessStatus;
+  smsReadinessReason: string | null;
+} {
+  switch (outcome.kind) {
+    case "no_phone":
+      return { smsReadinessStatus: "no_phone", smsReadinessReason: null };
+    case "evaluated":
+      return outcome.ok
+        ? { smsReadinessStatus: "verified", smsReadinessReason: outcome.reason }
+        : { smsReadinessStatus: "needs_review", smsReadinessReason: outcome.reason };
+    case "error":
+      return {
+        smsReadinessStatus: "unknown",
+        smsReadinessReason: "sms_readiness_check_failed",
+      };
+  }
+}
 
 export type AdminClinicFilters = {
   search?: string | null;

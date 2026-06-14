@@ -33,6 +33,7 @@
     "tests/sms-automation-volume.test.ts",
     "tests/admin-ai-knowledge-routing.test.ts",
     "tests/admin-sms-builder-ui.test.ts",
+    "tests/admin-clinics-sms-readiness.test.ts",
     "tests/clinic-delete.test.ts",
     "app/workspace/_components/workspace-types.ts",
     "lib/phone-numbers/twilio-release-deadline.ts",
@@ -64,6 +65,7 @@
     "lib/workspace/request-summary.ts",
     "lib/db/test-caller-reset.ts",
     "lib/db/admin/clinic-delete.ts",
+    "lib/db/admin/types.ts",
     "lib/ai-knowledge/facts.ts",
     "lib/ai-knowledge/scan-url-safety.ts",
     "lib/ai-knowledge/website-extract.ts"

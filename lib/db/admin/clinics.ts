@@ -4,6 +4,7 @@ import {
 } from "../clinic-memberships";
 import {
   auditSmsSendReadiness,
+  evaluateTextingStatusForLaunch,
   getSmsReadinessSummary,
   type SmsSendReadinessAuditRow,
 } from "../sms-readiness";
@@ -11,6 +12,7 @@ import { getSmsRecoveryConfig } from "../../env";
 import { listProfilesByIds } from "../profiles";
 import {
   maskPhone,
+  resolveAdminSmsReadiness,
   tailSid,
   type AdminClinicDetail,
   type AdminClinicFilters,
@@ -68,21 +70,58 @@ export async function listAdminClinics(
     limit ${limit}
   `;
 
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    ownerEmail: r.owner_contact_email,
-    isActive: r.is_active,
-    smsRecoveryEnabled: r.sms_recovery_enabled,
-    hasAssignedNumber: Boolean(r.assigned_phone),
-    assignedPhoneMasked: maskPhone(r.assigned_phone),
-    billingStatus: r.billing_status,
-    setupStatus: r.setup_status,
-    smsStatus: r.sms_status,
-    localNumberStatus: r.local_number_status,
-    createdAt: r.created_at.toISOString(),
-    updatedAt: r.updated_at.toISOString(),
-  }));
+  // Per-clinic SMS readiness for the list. The DB client uses a single
+  // connection (max: 1), so queries serialize regardless; a sequential loop is
+  // the clearest, safest shape and keeps memory bounded at the 200-row limit.
+  const items: AdminClinicListItem[] = [];
+  for (const r of rows) {
+    const hasAssignedNumber = Boolean(r.assigned_phone);
+    const readiness = await resolveListReadiness(r.id, hasAssignedNumber);
+    items.push({
+      id: r.id,
+      name: r.name,
+      ownerEmail: r.owner_contact_email,
+      isActive: r.is_active,
+      smsRecoveryEnabled: r.sms_recovery_enabled,
+      hasAssignedNumber,
+      assignedPhoneMasked: maskPhone(r.assigned_phone),
+      billingStatus: r.billing_status,
+      setupStatus: r.setup_status,
+      smsStatus: r.sms_status,
+      smsReadinessStatus: readiness.smsReadinessStatus,
+      smsReadinessReason: readiness.smsReadinessReason,
+      localNumberStatus: r.local_number_status,
+      createdAt: r.created_at.toISOString(),
+      updatedAt: r.updated_at.toISOString(),
+    });
+  }
+  return items;
+}
+
+// DB-backed SMS readiness for one clinic in the admin list. Uses the same
+// readiness evaluation as launch (evaluateTextingStatusForLaunch): DB-only, no
+// Twilio/Stripe/provider calls, no mutation. Fails closed — a blocked check maps
+// to "needs_review", a thrown/unrunnable check maps to "unknown".
+async function resolveListReadiness(
+  clinicId: string,
+  hasAssignedNumber: boolean,
+): Promise<{
+  smsReadinessStatus: AdminClinicListItem["smsReadinessStatus"];
+  smsReadinessReason: string | null;
+}> {
+  if (!hasAssignedNumber) {
+    return resolveAdminSmsReadiness({ kind: "no_phone" });
+  }
+  try {
+    const evaluation = await evaluateTextingStatusForLaunch(clinicId);
+    return resolveAdminSmsReadiness({
+      kind: "evaluated",
+      ok: evaluation.ok,
+      reason: evaluation.reason,
+    });
+  } catch {
+    return resolveAdminSmsReadiness({ kind: "error" });
+  }
 }
 
 type ClinicDetailRow = {
