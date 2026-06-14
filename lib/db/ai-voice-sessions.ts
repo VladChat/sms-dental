@@ -6,8 +6,10 @@ import { buildAiVoiceCallSummary } from "../workspace/ai-voice-summary";
 import {
   AI_VOICE_FIELD_LIMITS,
   DEFAULT_AI_VOICE_ID,
+  isAiVoiceSessionSource,
   isAiVoiceSessionStatus,
   isValidAiVoiceId,
+  type AiVoiceSessionSource,
   type AiVoiceSessionStatus,
 } from "../../config/ai-answering.config";
 
@@ -309,4 +311,99 @@ export async function listLatestAiVoiceSessionsForConversations(
     // Missing table (pre-migration) or any read error → no AI voice data.
   }
   return result;
+}
+
+// Admin-safe summary of a clinic's AI voice sessions. Captured fields + source +
+// phone only — never provider IDs, raw payloads, transcripts/audio, Twilio SIDs,
+// OpenAI fields, or DB internals. Used by the platform-admin AI Answering tab.
+export type AiVoiceSessionAdminSummary = {
+  id: string;
+  conversationId: string | null;
+  patientPhone: string;
+  status: AiVoiceSessionStatus;
+  source: AiVoiceSessionSource;
+  capturedPatientName: string | null;
+  capturedReason: string | null;
+  capturedPreferredTime: string | null;
+  summaryHeadline: string | null;
+  handoffNote: string | null;
+  safetySignal: boolean;
+  smsFollowupRecommended: boolean;
+  createdAt: Date;
+  completedAt: Date | null;
+};
+
+// Latest AI voice sessions for a clinic (newest first), platform-admin read.
+// Degradation-safe: returns [] when the table is missing (pre-migration) or on
+// any read error. Selects only the admin-safe columns above.
+export async function listLatestAiVoiceSessionsForClinic(
+  clinicId: string,
+  limit = 20,
+): Promise<AiVoiceSessionAdminSummary[]> {
+  const safeLimit = Math.min(Math.max(1, Math.trunc(limit) || 1), 50);
+  try {
+    const sql = getDb();
+    const rows = await sql<
+      {
+        id: string;
+        conversation_id: string | null;
+        patient_phone: string;
+        status: string;
+        source: string;
+        captured_patient_name: string | null;
+        captured_reason: string | null;
+        captured_preferred_time: string | null;
+        summary_headline: string | null;
+        handoff_note: string | null;
+        safety_signal: boolean;
+        sms_followup_recommended: boolean;
+        created_at: Date;
+        completed_at: Date | null;
+      }[]
+    >`
+      select id, conversation_id, patient_phone, status, source,
+             captured_patient_name, captured_reason, captured_preferred_time,
+             summary_headline, handoff_note, safety_signal, sms_followup_recommended,
+             created_at, completed_at
+      from public.ai_voice_sessions
+      where clinic_id = ${clinicId}
+      order by created_at desc
+      limit ${safeLimit}
+    `;
+    return rows.map((row) => ({
+      id: row.id,
+      conversationId: row.conversation_id,
+      patientPhone: row.patient_phone,
+      status: isAiVoiceSessionStatus(row.status) ? row.status : "incomplete",
+      source: isAiVoiceSessionSource(row.source) ? row.source : "mock",
+      capturedPatientName: row.captured_patient_name,
+      capturedReason: row.captured_reason,
+      capturedPreferredTime: row.captured_preferred_time,
+      summaryHeadline: row.summary_headline,
+      handoffNote: row.handoff_note,
+      safetySignal: row.safety_signal === true,
+      smsFollowupRecommended: row.sms_followup_recommended === true,
+      createdAt: row.created_at,
+      completedAt: row.completed_at,
+    }));
+  } catch {
+    // Missing table (pre-migration) or any read error → no sessions.
+    return [];
+  }
+}
+
+// Count of AI voice sessions for a clinic. Returns null when the table does not
+// exist yet (pre-migration), so the admin UI can show a "foundation not applied"
+// state instead of crashing. Returns a number (>= 0) when the table exists.
+export async function countAiVoiceSessionsForClinic(clinicId: string): Promise<number | null> {
+  try {
+    const sql = getDb();
+    const rows = await sql<{ count: string }[]>`
+      select count(*)::text as count from public.ai_voice_sessions where clinic_id = ${clinicId}
+    `;
+    return Number(rows[0]?.count ?? 0);
+  } catch (err) {
+    if (isUndefinedTableError(err)) return null;
+    return null;
+  }
 }

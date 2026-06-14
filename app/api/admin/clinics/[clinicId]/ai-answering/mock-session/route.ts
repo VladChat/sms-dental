@@ -98,7 +98,13 @@ export async function POST(
       // idempotency index is exercised and repeat calls never collide.
       externalSessionId: `mock-${randomUUID()}`,
     });
-    return jsonOk({ ok: true, sessionId, conversationId });
+    return jsonOk({
+      ok: true,
+      sessionId,
+      conversationId,
+      workspaceUrl: "/workspace",
+      message: "Mock AI answered call request created.",
+    });
   } catch (err) {
     if (err instanceof AiAnsweringUnavailableError) {
       return jsonError(

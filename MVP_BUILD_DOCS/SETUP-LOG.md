@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-27 (AI Answering foundation migration applied to production + verified; AI runtime still not live)
+Last updated: 2026-06-27 (Platform-admin AI Answering mock tester UI added; AI runtime still not live)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8065,3 +8065,61 @@ service-role keys printed. Pre-existing working-tree changes (`.qwen/`,
 
 Commit: `docs: log AI Answering foundation migration applied` (pushed to
 `origin/main`).
+
+---
+
+## 2026-06-27 — Platform-admin AI Answering mock tester UI (NON-LIVE)
+
+Added a platform-admin-only UI to create and inspect **mock** AI answered call
+sessions for a clinic, on top of the already-applied AI Answering foundation.
+This is **not** a live AI rollout: no AI voice runtime, no Twilio
+ConversationRelay, no WebSocket, no OpenAI, no SMS/email, and no change to
+Twilio/Stripe/Vercel env/DNS/billing/trial/SMS gates/SMS_RECOVERY_MODE/clinic SMS
+enablement. No production mock session was created in this task.
+
+Added/changed (code):
+
+- `app/admin/(console)/clinics/[clinicId]/_components/AdminAiAnsweringMockTester.tsx`
+  — new client component: non-live callout + safety copy, future voice label,
+  latest mock sessions list, and a "Create mock Workspace request" form
+  (phone/name/reason/preferred time/status/safety flag/handoff note). No enable
+  toggle, no activation, no provider/billing controls. Shows "No call is placed.
+  No AI runs. No SMS is sent." and an "Open Workspace if your account has clinic
+  access" link.
+- `AdminClinicConsole.tsx` — new **AI Answering** tab (between "AI knowledge" and
+  the "SMS settings" group; nav status "Not live"). Admin-only; not in owner
+  `/account`, not for front desk.
+- `app/api/admin/clinics/[clinicId]/ai-answering/route.ts` — new platform-admin
+  GET (guard `requirePlatformAdminClinic`, clinic id from URL). Returns future
+  voice preference + latest mock sessions (phone masked to last 4) + count;
+  degradation-safe `foundationApplied:false` when the table is missing. No
+  provider IDs / raw payloads / transcripts / SIDs returned.
+- `app/api/admin/clinics/[clinicId]/ai-answering/mock-session/route.ts` — response
+  now also returns `workspaceUrl` + `message` (validation/guard unchanged).
+- `lib/db/ai-voice-sessions.ts` — added `listLatestAiVoiceSessionsForClinic`
+  (admin-safe fields only) + `countAiVoiceSessionsForClinic` (null when table
+  missing). Both degradation-safe.
+- `config/ai-answering.config.ts` — admin label maps `aiVoiceStatusLabel` /
+  `aiVoiceSourceLabel` (pure, tested).
+- Tests: extended `tests/ai-answering.test.ts` (label maps, clinic-level helper
+  safe fields, GET route guard/mask/safe-fields, console tab presence).
+
+Validation: `npm run typecheck` ✓, `npm run test:sms-recovery` ✓ (243 tests),
+`npm run test:ai-knowledge` ✓ (76 tests), `npm run build` ✓ (both AI Answering
+routes present), `git diff --check` ✓.
+
+Manual QA: authenticated platform-admin click-through **not performed** (no admin
+browser/session available; not explicitly approved). No production mock session
+created; no rows inserted directly. Unauthenticated gate verified in production:
+`POST .../ai-answering/mock-session` → 401; the new `GET .../ai-answering` was 404
+pre-deploy and is expected to return 401 unauthenticated after this push
+auto-deploys (same `requirePlatformAdminClinic` guard).
+
+Not done / out of scope: no AI voice runtime / ConversationRelay / OpenAI /
+WebSocket; no SMS/email; no metering/billing; no Twilio/Stripe/Vercel env/DNS/
+trial/SMS-mode changes; no migration; no manual deploy; no provider mutated. No
+secrets, DB URLs, or real patient data. Pre-existing working-tree changes
+(`.qwen/`, `design/recall/IMPLEMENTATION-STATUS.md`, KNOWLEDGE-SYSTEM edits) left
+untouched.
+
+Commit: `feat: add admin AI answering mock tester` (pushed to `origin/main`).

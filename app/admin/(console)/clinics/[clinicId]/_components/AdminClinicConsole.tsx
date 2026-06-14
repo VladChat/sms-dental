@@ -30,6 +30,7 @@ import { AdminPhoneNumberList } from "./AdminPhoneNumberList";
 import { AdminAssignExistingNumber } from "./AdminAssignExistingNumber";
 import { AdminNumberControls } from "./AdminNumberControls";
 import { AdminSmsConversationBuilder } from "./AdminSmsConversationBuilder";
+import { AdminAiAnsweringMockTester } from "./AdminAiAnsweringMockTester";
 import { AiKnowledgeCard } from "../../../../../setup/[token]/_components/AiKnowledgeCard";
 import { formatUsdFromCents } from "../../../../../../config/billing.config";
 
@@ -64,6 +65,7 @@ type SectionId =
   | "sms"
   | "a2p"
   | "ai_knowledge"
+  | "ai_answering"
   | "sms_voice"
   | "sms_texts"
   | "sms_limits"
@@ -79,6 +81,7 @@ const SECTIONS: { id: SectionId; label: string; group?: string }[] = [
   { id: "sms", label: "SMS approval" },
   { id: "a2p", label: "A2P review" },
   { id: "ai_knowledge", label: "AI knowledge" },
+  { id: "ai_answering", label: "AI Answering" },
   { id: "sms_voice", label: "Voice greeting", group: "SMS settings" },
   { id: "sms_texts", label: "SMS texts", group: "SMS settings" },
   { id: "sms_limits", label: "Limits & anti-spam", group: "SMS settings" },
@@ -588,6 +591,17 @@ export function AdminClinicConsole({ data }: { data: AdminConsoleData }) {
             />
           </Panel>
 
+          {/* AI Answering — platform-admin mock tester for the NON-LIVE AI
+              answered call foundation. Creates mock Workspace requests only; no
+              call/AI/SMS/Twilio. Not exposed to owners or front desk. */}
+          <Panel id="ai_answering" active={active}>
+            <div className="adm-section-head">
+              <h2 className="t-h3">AI Answering</h2>
+              <Badge tone="neutral">Not live yet</Badge>
+            </div>
+            <AdminAiAnsweringMockTester clinicId={d.id} />
+          </Panel>
+
           {/* SMS settings — deterministic conversation builder (admin only),
               split into three focused panels: Voice greeting, SMS texts, and
               Limits & anti-spam. Each saves only its own section. */}
@@ -790,6 +804,7 @@ function sectionStatuses(
     sms,
     a2p: a2pNavStatus(review),
     ai_knowledge: { text: "Manage", tone: "neutral" },
+    ai_answering: { text: "Not live", tone: "neutral" },
     billing: d.stripeCustomerPresent ? { text: "Connected", tone: "success" } : { text: "Not connected", tone: "neutral" },
   };
 }

@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-27 (AI Answering foundation migration applied to production + verified; AI runtime still not live)
+Last updated: 2026-06-27 (Platform-admin AI Answering mock tester UI added; AI runtime still not live)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3806,3 +3806,39 @@ here enables AI Answering for real callers.
 - After the migration is applied in a non-production environment, a mock session
   appears as one Workspace request under **Needs follow-up** with the AI call
   summary card; the safety flag shows only when `safetySignal: true`.
+
+### Platform-admin AI Answering mock tester (UI) — 2026-06-27
+
+A platform-admin-only UI for creating and inspecting **mock** AI answered call
+sessions, so an operator can verify how an AI answered call will appear in
+Workspace. It is **NON-LIVE**: it does not place a call, run AI, send SMS, or
+contact Twilio/OpenAI, and it has no enable/activation control.
+
+- **Where it lives:** `/admin/clinics/[clinicId]` → **AI Answering** tab (between
+  "AI knowledge" and the "SMS settings" group). Component
+  `AdminAiAnsweringMockTester.tsx`. It is NOT in the owner `/account` nav and is
+  NOT visible to front-desk users.
+- **APIs (both platform-admin-only, clinic id from the URL):**
+  - `GET /api/admin/clinics/[clinicId]/ai-answering` — returns the future voice
+    preference + the latest mock sessions (phone masked to last 4) + a count.
+    Degradation-safe: `foundationApplied:false` when the table is missing (local
+    dev). No provider IDs / raw payloads / transcripts / SIDs are returned.
+  - `POST /api/admin/clinics/[clinicId]/ai-answering/mock-session` — creates one
+    mock session (existing route; response now includes `workspaceUrl` +
+    `message`).
+- **How to use safely:** open the tab on a **test clinic**, enter a **documented
+  safe test caller number** (E.164, e.g. the OWNER-SETTINGS test clinic phone),
+  optionally a test name/reason/preferred time/status/safety flag/handoff note,
+  then "Create mock Workspace request". Verify it in the tab's "Latest mock
+  sessions" list, and (if your account has clinic access) in `/workspace`.
+- **What it does NOT do:** no real call, no AI, no SMS/email, no Twilio/OpenAI,
+  no billing/metering, no "enable AI". It only writes an `ai_voice_sessions` row
+  (+ reuses/creates the patient conversation) for the target clinic.
+- **When NOT to run it:** never with real patient data or a real patient number;
+  never on a non-test/live clinic without explicit owner approval. Platform admin
+  may not have Workspace access for a clinic — use the in-tab session list to
+  verify creation in that case.
+- **Auth gate check (no session):** `GET` and `POST` under
+  `/api/admin/clinics/{clinicId}/ai-answering[...]` return 401 (no session) or
+  403 (signed in, not platform admin). Verified unauthenticated in production:
+  `POST .../mock-session` → 401.

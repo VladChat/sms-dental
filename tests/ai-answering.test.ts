@@ -6,9 +6,13 @@ import path from "node:path";
 import {
   AI_VOICE_SESSION_SOURCES,
   AI_VOICE_SESSION_STATUSES,
+  AI_VOICE_SOURCE_LABEL,
+  AI_VOICE_STATUS_LABEL,
   WORKSPACE_SOURCE_CHANNELS,
   WORKSPACE_SOURCE_CHANNEL_LABEL,
   DEFAULT_AI_VOICE_ID,
+  aiVoiceSourceLabel,
+  aiVoiceStatusLabel,
   isAiVoiceSessionSource,
   isAiVoiceSessionStatus,
   isValidAiVoiceId,
@@ -237,4 +241,97 @@ test("mock-session route is platform-admin-only, URL-scoped, and provider-free",
   assert.ok(!src.includes("getTwilioClient"), "route makes no Twilio client");
   assert.ok(!src.includes("messages.create"), "route sends no SMS");
   assert.ok(!src.includes("sendRecoverySms"), "route sends no recovery SMS");
+  // Enhanced response includes a Workspace link + confirmation message.
+  assert.ok(src.includes('workspaceUrl: "/workspace"'));
+  assert.ok(src.includes('message: "Mock AI answered call request created."'));
+});
+
+// ----------------------------------------------------- admin label helpers
+
+test("admin AI voice label maps cover every status and source", () => {
+  assert.equal(aiVoiceStatusLabel("captured"), "Captured");
+  assert.equal(aiVoiceStatusLabel("incomplete"), "Incomplete");
+  assert.equal(aiVoiceStatusLabel("failed"), "Failed");
+  assert.equal(aiVoiceSourceLabel("mock"), "Mock (test)");
+  assert.equal(aiVoiceSourceLabel("future_twilio"), "Future (Twilio)");
+  // Unknown values pass through unchanged (never throw).
+  assert.equal(aiVoiceStatusLabel("weird"), "weird");
+  assert.equal(aiVoiceSourceLabel("weird"), "weird");
+  // Every enum member has a label.
+  for (const s of AI_VOICE_SESSION_STATUSES) assert.ok(AI_VOICE_STATUS_LABEL[s]);
+  for (const s of AI_VOICE_SESSION_SOURCES) assert.ok(AI_VOICE_SOURCE_LABEL[s]);
+});
+
+// ------------------------------------------------ clinic-level admin helper
+
+test("clinic-level admin session helper selects only safe fields", () => {
+  const src = read(path.join("lib", "db", "ai-voice-sessions.ts"));
+  assert.ok(src.includes("export async function listLatestAiVoiceSessionsForClinic"));
+  assert.ok(src.includes("export async function countAiVoiceSessionsForClinic"));
+  const start = src.indexOf("export async function listLatestAiVoiceSessionsForClinic");
+  const end = src.indexOf("export async function countAiVoiceSessionsForClinic", start);
+  const helper = src.slice(start, end);
+  // Selects the documented safe columns.
+  for (const col of [
+    "patient_phone",
+    "status",
+    "source",
+    "captured_patient_name",
+    "captured_reason",
+    "captured_preferred_time",
+    "summary_headline",
+    "handoff_note",
+    "safety_signal",
+    "sms_followup_recommended",
+    "created_at",
+    "completed_at",
+  ]) {
+    assert.ok(helper.includes(col), `clinic helper selects ${col}`);
+  }
+  // Never selects provider/internal raw fields.
+  for (const banned of ["external_session_id", "call_event_id", "raw_payload", "transcript"]) {
+    assert.ok(!helper.includes(banned), `clinic helper does not expose ${banned}`);
+  }
+  // Degradation-safe (empty list on missing table / read error).
+  assert.ok(helper.includes("return [];"));
+});
+
+// ----------------------------------------------------------- admin GET route
+
+test("admin AI Answering GET is platform-admin-only, URL-scoped, masks phone, safe fields", () => {
+  const src = read(
+    path.join("app", "api", "admin", "clinics", "[clinicId]", "ai-answering", "route.ts"),
+  );
+  assert.ok(src.includes("export async function GET"));
+  assert.ok(src.includes("requirePlatformAdminClinic(req, clinicId)"));
+  assert.ok(src.includes("const { clinicId } = await ctx.params"));
+  // Graceful pre-migration state, not a crash.
+  assert.ok(src.includes("foundationApplied"));
+  // Phone is masked; full patient phone is never returned.
+  assert.ok(src.includes("patientPhoneMasked"));
+  assert.ok(!src.includes("patientPhone:"), "GET never returns the full patient phone");
+  // No provider/internal/raw fields leaked in the JSON response builder (scope to
+  // the response block so the doc comment that documents the exclusion is ignored).
+  const respStart = src.indexOf("return jsonOk(");
+  const respBlock = src.slice(respStart);
+  for (const banned of ["external_session_id", "call_event_id", "raw_payload", "transcript", "twilioSid", "Sid"]) {
+    assert.ok(!respBlock.includes(banned), `GET response does not expose ${banned}`);
+  }
+  // No SMS / Twilio / OpenAI runtime in the route.
+  assert.ok(!/from ["'][^"']*openai[^"']*["']/i.test(src), "GET imports no openai sdk");
+  assert.ok(!src.includes("getTwilioClient"), "GET makes no Twilio client");
+  assert.ok(!src.includes("messages.create"), "GET sends no SMS");
+});
+
+// --------------------------------------------------------- admin console tab
+
+test("admin clinic console exposes an AI Answering tab (admin-only)", () => {
+  const src = read(
+    path.join(
+      "app", "admin", "(console)", "clinics", "[clinicId]", "_components", "AdminClinicConsole.tsx",
+    ),
+  );
+  assert.ok(src.includes('{ id: "ai_answering", label: "AI Answering" }'));
+  assert.ok(src.includes("AdminAiAnsweringMockTester"));
+  assert.ok(src.includes("Not live yet"));
 });

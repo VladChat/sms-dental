@@ -57,6 +57,27 @@ export const WORKSPACE_SOURCE_CHANNEL_LABEL: Record<WorkspaceSourceChannel, stri
   mixed: "AI answered call + SMS",
 };
 
+// Admin-facing labels (platform-admin AI Answering tab). Customer-facing copy
+// elsewhere uses "AI answered call" wording; these are internal admin labels.
+export const AI_VOICE_STATUS_LABEL: Record<AiVoiceSessionStatus, string> = {
+  captured: "Captured",
+  incomplete: "Incomplete",
+  failed: "Failed",
+};
+
+export const AI_VOICE_SOURCE_LABEL: Record<AiVoiceSessionSource, string> = {
+  mock: "Mock (test)",
+  future_twilio: "Future (Twilio)",
+};
+
+export function aiVoiceStatusLabel(status: string): string {
+  return isAiVoiceSessionStatus(status) ? AI_VOICE_STATUS_LABEL[status] : status;
+}
+
+export function aiVoiceSourceLabel(source: string): string {
+  return isAiVoiceSessionSource(source) ? AI_VOICE_SOURCE_LABEL[source] : source;
+}
+
 export function isAiVoiceSessionSource(value: unknown): value is AiVoiceSessionSource {
   return typeof value === "string" && (AI_VOICE_SESSION_SOURCES as readonly string[]).includes(value);
 }
