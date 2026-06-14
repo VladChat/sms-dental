@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-14 (AI Answering test caller reset tool; AI runtime still not live)
+Last updated: 2026-06-14 (safe admin clinic deletion; AI runtime still not live)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1783,6 +1783,60 @@ gone; one internal note; no duplicate status/SMS controls; Pause/Reactivate, Lau
 service, and Save note all succeed and write `admin_audit_events`; the three disabled
 placeholders show their reasons; no SMS/email sent, no Stripe call, no Twilio number
 purchase, no A2P submission. `npm run typecheck` and `npm run build` pass.
+
+---
+
+## Admin clinic deletion danger zone — 2026-06-14
+
+The platform-admin clinic detail page includes a **Delete clinic** action under
+Admin tools -> Danger zone for app-database cleanup only.
+
+Use this only for test/development cleanup or an explicitly authorized app-data
+removal. It is intentionally not a provider cleanup tool.
+
+What it does:
+
+- Runs a preflight before the destructive confirmation opens.
+- Requires a platform-admin session through `resolvePlatformAdmin()`.
+- Takes the clinic id only from `/admin/clinics/[clinicId]`.
+- Requires typing `DELETE` exactly.
+- Deletes clinic-scoped app database rows in an explicit transaction and deletes
+  the `clinics` row last.
+- Writes an `admin_audit_events` row after success with counts only.
+
+What it never does:
+
+- It does not call Twilio, Stripe, Vercel, DNS, Supabase management APIs, or SMS
+  send paths.
+- It does not delete `webhook_events`.
+- It does not release phone numbers, cancel subscriptions, refund charges, or
+  mutate carrier/A2P state.
+
+The delete is blocked when preflight finds any unsafe state, including:
+
+- missing clinic row or schema-inspection failure
+- `sms_recovery_enabled=true`
+- an active assigned phone number
+- provider-linked phone-number state
+- Stripe customer/subscription/payment-method/subscription-item state
+- billing status other than `not_started`
+- in-progress/provider-linked number-purchase attempts
+- submitted/pending/approved or provider-linked SMS approval rows
+- unknown rows in clinic-linked tables not covered by the explicit delete list
+
+Operator checklist:
+
+1. Open `/admin/clinics/[clinicId]` for the intended clinic.
+2. Open Admin tools -> Danger zone -> Delete clinic.
+3. Read the preflight summary and blockers.
+4. If any blocker appears, resolve it through the correct product/provider
+   workflow instead of bypassing the delete gate.
+5. If the preflight is clear and deletion is authorized, type `DELETE` and
+   confirm.
+6. Verify the app returns to `/admin/clinics` and the deleted clinic is absent
+   from the list.
+7. Confirm the delete audit row exists in `/admin/audit` if audit verification is
+   needed.
 
 ---
 

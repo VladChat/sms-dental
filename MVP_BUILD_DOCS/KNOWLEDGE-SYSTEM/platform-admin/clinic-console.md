@@ -10,7 +10,7 @@ owner: ops
 source_of_truth:
   - MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md
   - MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md
-last_verified: 2026-06-09
+last_verified: 2026-06-14
 related:
   - phone-number-lifecycle
   - a2p-review-and-submission
@@ -65,15 +65,17 @@ number). Sections:
   [billing-operations.md](billing-operations.md).
 - **SMS behavior** — read-only. Status: not implemented yet (no settings backend).
 - **Admin tools / diagnostics** — Pause/Reactivate clinic, Launch service / Pause
-  SMS sending, Internal note; plus collapsible Recent admin activity, Diagnostics
-  (masked), and Technical details (collapsed). See
+  SMS sending, Internal note, and the Danger zone **Delete clinic** action; plus
+  collapsible Recent admin activity, Diagnostics (masked), and Technical details
+  (collapsed). See
   [diagnostics-and-audit.md](diagnostics-and-audit.md).
 
 ## What is implemented vs blocked/future
 
 **Editable now (audited):** Business profile fields, A2P/representative data,
 internal note, clinic active/paused, SMS recovery enable/disable (gated), Twilio
-number purchase/assign (behind `TWILIO_NUMBER_PURCHASE_ENABLED`), detach.
+number purchase/assign (behind `TWILIO_NUMBER_PURCHASE_ENABLED`), detach, safe
+app-database-only clinic delete from Admin tools -> Danger zone.
 
 **Blocked-with-reason (never simulated):**
 
@@ -103,6 +105,28 @@ Each blocked action is shown disabled with its exact reason; it is never faked.
 - Every write mirrors the owner-side validation, is scoped to the one `clinicId`,
   and writes an `admin_audit_events` row (changed field names + flags only — never
   raw EIN/phone/email).
+
+## Delete clinic danger zone
+
+`Delete clinic` lives only on `/admin/clinics/[clinicId]` under Admin tools ->
+Danger zone. It is for explicitly authorized app-database cleanup, usually test
+or development clinic cleanup. It is not available from the clinic list table.
+
+The delete flow runs preflight first, then opens an accessible confirmation
+dialog. The operator must type `DELETE` exactly. Server-side routes use
+`resolvePlatformAdmin()` and the URL clinic id only.
+
+Deletion is app-database-only. It does **not** call Twilio, Stripe, Vercel, DNS,
+Supabase management APIs, SMS send paths, provider release/cancel/refund flows,
+or `webhook_events`.
+
+The preflight blocks unsafe clinics, including active SMS recovery, active or
+provider-linked phone numbers, Stripe/billing state, provider-linked number
+purchase or SMS approval state, schema inspection failures, and unknown
+clinic-linked rows outside the explicit delete list.
+
+For the operator checklist and full blocker categories, see
+`MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` ("Admin clinic deletion danger zone").
 
 ## Before changing admin behavior (source files to check)
 

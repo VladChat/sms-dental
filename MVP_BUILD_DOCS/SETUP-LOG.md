@@ -8237,3 +8237,41 @@ Production reset result:
 
 - Pending at code-change time; perform only after validation and code push per
   the authorized task scope.
+
+---
+
+## 2026-06-14 — Safe platform-admin clinic deletion
+
+Added a platform-admin-only **Delete clinic** action under
+`/admin/clinics/[clinicId]` -> Admin tools -> Danger zone. The action is for
+explicitly authorized app-database cleanup only; it is not a provider cleanup
+tool and is not shown in the clinic list table.
+
+Code/doc changes:
+
+- Added `lib/db/admin/clinic-delete.ts` for preflight checks, explicit
+  clinic-scoped table counts, blocker evaluation, and transaction-scoped app
+  database deletion.
+- Added `GET /api/admin/clinics/[clinicId]/delete-preflight` and
+  `POST /api/admin/clinics/[clinicId]/delete`, both platform-admin guarded and
+  URL-scoped.
+- Added the Admin tools Danger zone UI with preflight summary, blockers,
+  accessible confirmation dialog, exact `DELETE` confirmation, and redirect to
+  `/admin/clinics` after success.
+- Added unit/source tests in `tests/clinic-delete.test.ts` and wired them into
+  `npm run test:sms-recovery`.
+- Updated the operations runbook and platform-admin knowledge article with the
+  delete behavior and safety boundaries.
+
+Safety scope:
+
+- The delete is blocked by unknown clinic/schema state, active SMS recovery,
+  active assigned phone numbers, provider-linked phone-number state,
+  Stripe/billing state, provider-linked number-purchase attempts, provider-linked
+  SMS approval state, and unknown clinic-linked rows outside the explicit delete
+  list.
+- Successful delete removes app database rows only, deletes the `clinics` row
+  last, and records an audit row with counts only.
+- No Twilio, Stripe, Vercel, DNS, Supabase management API, SMS send path,
+  provider release/cancel/refund flow, production data delete, or
+  `webhook_events` deletion was performed during implementation.
