@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-13 (Notification Settings foundation + AI Answering MVP scope alignment)
+Last updated: 2026-06-14 (Notification Settings production migration applied + verified)
 
 This log records what was done, in order, without storing secrets.
 
@@ -7898,3 +7898,39 @@ Validation: `npm run typecheck` pass; `npm run test:ai-knowledge` and
 No SMS sent, no calls placed, no Twilio/A2P/Stripe/Vercel/Supabase production
 mutation, no provider env change, no trial-start change, no secret printing, no
 patient data printed, and `.qwen/` remained untouched.
+
+---
+
+## 2026-06-14 — Notification Settings migration applied to production
+
+Applied the pending additive migration
+`20260626000100_clinic_notification_preferences.sql` to the production Supabase
+project `sms_dental` (ref `qfjpvbvfvhbtebwivcdc`) via Supabase MCP
+`apply_migration`. The MCP recorded it under a generated timestamp version
+(`20260614152045`); per the project convention, the
+`supabase_migrations.schema_migrations` version was then aligned to the repo
+filename **`20260626000100`** (name `clinic_notification_preferences`) so future
+CLI diff/push stays consistent.
+
+Verification (all passed):
+
+- Tables `public.clinic_notification_preferences` and
+  `public.clinic_notifications` exist.
+- RLS **enabled** on both; **zero** policies (service-role/server access only).
+- Constraints confirmed: preferences PK `(clinic_id, notification_type)` + FK to
+  `clinics(id)` ON DELETE CASCADE; notifications PK `(id)`, FK cascade, UNIQUE
+  `(clinic_id, notification_type, dedupe_key)`; `set_updated_at` trigger present
+  on preferences.
+- Production `/api/health` → HTTP 200 `{"ok":true}`.
+- `/api/account/notification-settings` is deployed; unauthenticated GET and POST
+  both return HTTP 401 (owner/admin gate working).
+- Persistence proven with a reversible DB round-trip on one real clinic:
+  upsert (90%=off, 100%=on) → read back across a separate query (persisted) →
+  update (trigger bumped `updated_at`) → delete. Test rows removed; **0** residual
+  rows, so all clinics return to default-enabled behavior.
+
+Not done / out of scope: authenticated production **UI** click-through (no owner
+credentials / browser available — verified the equivalent API + DB behavior
+instead). No Twilio/Stripe/Vercel env/DNS/SMS-settings/AI-runtime/billing/trial
+changes; no SMS/email sent; no secrets or database URLs printed; `.qwen/` and
+other pre-existing working-tree changes left untouched.
