@@ -2,6 +2,21 @@
 // effects, so both the server page and the client component import these.
 
 import type { FrontDeskOutcome } from "../../../lib/workspace/outcome";
+import type { WorkspaceSourceChannel } from "../../../config/ai-answering.config";
+
+// Front-desk-safe AI answered call summary shown in the detail panel. Captured
+// fields only — never provider names, models, SIDs, session ids, or transcripts.
+export type WorkspaceAiVoiceSummary = {
+  // One short safe line (may be null when nothing usable was captured).
+  summaryHeadline: string | null;
+  reason: string | null;
+  preferredTime: string | null;
+  // Front-desk attention flag only — no diagnosis, triage, or medical advice.
+  safetyConcern: boolean;
+  handoffNote: string | null;
+  // ISO timestamp the call was captured (completed/created), or null.
+  capturedAt: string | null;
+};
 
 export type WorkspaceStatus =
   | "new"
@@ -68,6 +83,11 @@ export type PatientRequestCard = {
   // recompute `status` after queue actions without re-deriving from the DB.
   baseStatus: WorkspaceStatus;
   flags: WorkspaceCardFlags;
+  // Which channel(s) this request reached the office through. SMS-only cards stay
+  // "sms" (unchanged behavior); AI voice alone is "ai_voice"; both is "mixed".
+  sourceChannel: WorkspaceSourceChannel;
+  // Present only when an AI answered call session exists for this request.
+  aiVoice?: WorkspaceAiVoiceSummary | null;
   createdAt: string; // ISO
   lastActivityAt: string; // ISO
   workspaceArchivedAt?: string | null; // ISO

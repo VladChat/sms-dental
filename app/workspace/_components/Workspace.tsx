@@ -12,6 +12,7 @@ import {
   type WorkspaceSectionId,
 } from "./workspace-types";
 import { FRONT_DESK_NOTE_MAX } from "../../../lib/workspace/outcome";
+import { workspaceSourceChannelLabel } from "../../../lib/workspace/ai-voice-summary";
 
 // Front-desk operational queue. Answers: who is this patient, what do they
 // want, what did they say, and what should staff do next. Deterministic only —
@@ -79,9 +80,9 @@ export function Workspace({ cards }: { cards: PatientRequestCard[] }) {
   return (
     <main className="ws-page">
       <header className="ws-header">
-        <h1 className="t-h2">Front desk workspace</h1>
+        <h1 className="t-h2">Patient requests</h1>
         <p className="t-small" style={{ marginTop: "var(--space-2)" }}>
-          Review missed-call replies and patient requests.
+          Office-ready requests built from missed-call replies. Handle each as a quick task.
         </p>
       </header>
 
@@ -89,7 +90,8 @@ export function Workspace({ cards }: { cards: PatientRequestCard[] }) {
         <RequestQueue cards={cards} kind="real" />
       ) : (
         <p className="ws-empty-real t-body">
-          No patient replies yet. Replies to recovery texts will appear here.
+          No patient requests yet. When a missed caller replies to your follow-up text,
+          we'll turn it into a ready-to-action request here.
         </p>
       )}
 
@@ -546,28 +548,63 @@ function RequestDetail({
         <h3 id={`ws-summary-${card.id}`} className="t-h4">Request summary</h3>
         <p className="ws-summary-headline">{card.summaryHeadline}</p>
         <SummaryChips chips={card.summaryChips} />
+        <p className="t-helper ws-meta">Source: {workspaceSourceChannelLabel(card.sourceChannel)}</p>
         <p className="t-helper ws-meta">
           First seen {formatDateTime(card.createdAt)} · Last activity {formatDateTime(card.lastActivityAt)}
         </p>
       </div>
 
-      {/* 3. Conversation preview: last 2 messages immediately, full on demand. */}
+      {/* 2b. AI answered call summary: safe captured fields only, when present. */}
+      {card.aiVoice && (
+        <div className="card card-pad ws-summary-card" aria-labelledby={`ws-aivoice-${card.id}`}>
+          <h3 id={`ws-aivoice-${card.id}`} className="t-h4">AI call summary</h3>
+          {card.aiVoice.summaryHeadline && (
+            <p className="ws-summary-headline">{card.aiVoice.summaryHeadline}</p>
+          )}
+          <div className="ws-aivoice-rows" style={{ marginTop: "var(--space-2)" }}>
+            {card.aiVoice.reason && (
+              <p className="t-small"><strong>Reason:</strong> {card.aiVoice.reason}</p>
+            )}
+            {card.aiVoice.preferredTime && (
+              <p className="t-small"><strong>Preferred time:</strong> {card.aiVoice.preferredTime}</p>
+            )}
+            {card.aiVoice.handoffNote && (
+              <p className="t-small"><strong>For the front desk:</strong> {card.aiVoice.handoffNote}</p>
+            )}
+          </div>
+          {card.aiVoice.safetyConcern && (
+            <p style={{ marginTop: "var(--space-2)" }}>
+              <span className="badge badge-warning">Urgent — front desk attention</span>
+            </p>
+          )}
+          {card.aiVoice.capturedAt && (
+            <p className="t-helper ws-meta" style={{ marginTop: "var(--space-2)" }}>
+              Call captured {formatDateTime(card.aiVoice.capturedAt)}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 3. Activity & SMS audit trail: last 2 messages immediately, full on demand. */}
       <div className="card card-pad" aria-labelledby={`ws-conversation-${card.id}`}>
         <div className="acct-section-head">
-          <h3 id={`ws-conversation-${card.id}`} className="t-h4">Conversation</h3>
+          <h3 id={`ws-conversation-${card.id}`} className="t-h4">Activity & SMS audit trail</h3>
           {card.timeline.length > 2 && (
             <button
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => setShowFullConversation((prev) => !prev)}
             >
-              {showFullConversation ? "Hide full conversation" : "Show full conversation"}
+              {showFullConversation ? "Hide full audit trail" : "Show full audit trail"}
             </button>
           )}
         </div>
+        <p className="t-helper ws-meta" style={{ marginTop: "var(--space-2)" }}>
+          Raw SMS is kept here only as secondary history.
+        </p>
         {card.timeline.length === 0 ? (
           <p className="t-small ws-empty-note" style={{ marginTop: "var(--space-3)" }}>
-            No messages yet.
+            {card.aiVoice ? "No SMS messages yet." : "No messages yet."}
           </p>
         ) : (
           <div className="ws-timeline" style={{ marginTop: "var(--space-3)" }}>
@@ -584,7 +621,7 @@ function RequestDetail({
             ))}
             {!showFullConversation && card.timeline.length > 2 && (
               <p className="t-helper ws-meta" style={{ margin: 0 }}>
-                Showing the last 2 of {card.timeline.length} messages.
+                Showing the last 2 of {card.timeline.length} audit entries.
               </p>
             )}
           </div>
@@ -794,6 +831,7 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     status: "needs_follow_up",
     baseStatus: "needs_follow_up",
     flags: { ...SAMPLE_FLAGS },
+    sourceChannel: "sms",
     createdAt: "2026-05-24T14:30:00.000Z",
     lastActivityAt: "2026-05-24T14:36:00.000Z",
     timeline: [
@@ -824,6 +862,7 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     status: "handled",
     baseStatus: "booked",
     flags: { ...SAMPLE_FLAGS, handled: true },
+    sourceChannel: "sms",
     createdAt: "2026-05-23T15:00:00.000Z",
     lastActivityAt: "2026-05-23T15:16:00.000Z",
     timeline: [
@@ -855,6 +894,7 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     status: "blocked",
     baseStatus: "needs_follow_up",
     flags: { ...SAMPLE_FLAGS, blocked: true, archived: true, highVolume: true },
+    sourceChannel: "sms",
     createdAt: "2026-05-22T16:20:00.000Z",
     lastActivityAt: "2026-05-22T16:44:00.000Z",
     timeline: [
@@ -867,5 +907,31 @@ const SAMPLE_REQUESTS: PatientRequestCard[] = [
     ],
     isSample: true,
     sampleNote: "Number blocked after repeated bot-like messages.",
+  },
+  {
+    id: "sample-ai-answered-call",
+    callerPhone: "+1 (555) 010-1005",
+    patientName: "Jordan Lee",
+    summaryHeadline: "New patient cleaning · Friday morning",
+    summaryChips: [],
+    latestMessage: null,
+    latestMessageDirection: null,
+    status: "needs_follow_up",
+    baseStatus: "needs_follow_up",
+    flags: { ...SAMPLE_FLAGS },
+    sourceChannel: "ai_voice",
+    aiVoice: {
+      summaryHeadline: "New patient cleaning · Friday morning",
+      reason: "New patient, wants a cleaning",
+      preferredTime: "Friday morning",
+      safetyConcern: false,
+      handoffNote: "Call back to confirm a Friday morning slot.",
+      capturedAt: "2026-05-25T13:05:00.000Z",
+    },
+    createdAt: "2026-05-25T13:00:00.000Z",
+    lastActivityAt: "2026-05-25T13:05:00.000Z",
+    timeline: [],
+    isSample: true,
+    sampleNote: "Captured by an AI answered call (sample) — no SMS yet.",
   },
 ];

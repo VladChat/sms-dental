@@ -23,6 +23,7 @@
     "tests/workspace-patient-replies.test.ts",
     "tests/workspace-request-summary.test.ts",
     "tests/workspace-queue.test.ts",
+    "tests/ai-answering.test.ts",
     "tests/ai-knowledge-facts.test.ts",
     "tests/ai-knowledge-website-scan.test.ts",
     "tests/sms-conversation-templates.test.ts",
@@ -54,7 +55,10 @@
     "config/texting-status-sync.config.ts",
     "config/sms-recovery.config.ts",
     "config/voice-greeting.config.ts",
+    "config/ai-answering.config.ts",
     "config/ai-front-desk-facts.config.ts",
+    "lib/workspace/ai-voice-summary.ts",
+    "lib/workspace/request-summary.ts",
     "lib/ai-knowledge/facts.ts",
     "lib/ai-knowledge/scan-url-safety.ts",
     "lib/ai-knowledge/website-extract.ts"

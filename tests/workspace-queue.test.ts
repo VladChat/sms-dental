@@ -36,6 +36,7 @@ function card(input: Partial<PatientRequestCard> & Pick<PatientRequestCard, "id"
     status: "needs_follow_up",
     baseStatus: "needs_follow_up",
     flags: BASE_FLAGS,
+    sourceChannel: "sms",
     createdAt: "2026-06-01T00:00:00.000Z",
     timeline: [],
     ...input,
@@ -468,11 +469,13 @@ test("action tooltips use the exact agreed strings", () => {
   assert.ok(src.includes("btn-danger"));
 });
 
-test("conversation preview shows the last 2 messages with a full toggle", () => {
+test("SMS audit trail shows the last 2 messages with a full toggle", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
   assert.ok(src.includes("card.timeline.slice(-2)"));
-  assert.ok(src.includes("Show full conversation"));
-  assert.ok(src.includes("Hide full conversation"));
+  assert.ok(src.includes("Activity & SMS audit trail"));
+  assert.ok(src.includes("Raw SMS is kept here only as secondary history."));
+  assert.ok(src.includes("Show full audit trail"));
+  assert.ok(src.includes("Hide full audit trail"));
   assert.ok(src.includes('"Patient"'));
   assert.ok(src.includes('"Your office"'));
   // The old prominent block and the big outcome radio form are gone.

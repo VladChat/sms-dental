@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-14 (Notification Settings production migration applied + verified)
+Last updated: 2026-06-27 (AI Answering foundation added — data model + Workspace mock flow; migration NOT applied to production)
 
 This log records what was done, in order, without storing secrets.
 
@@ -7934,3 +7934,62 @@ credentials / browser available — verified the equivalent API + DB behavior
 instead). No Twilio/Stripe/Vercel env/DNS/SMS-settings/AI-runtime/billing/trial
 changes; no SMS/email sent; no secrets or database URLs printed; `.qwen/` and
 other pre-existing working-tree changes left untouched.
+
+---
+
+## 2026-06-27 — AI Answering foundation (data model + Workspace mock flow; NOT live)
+
+Added the next non-live foundation so the product can later support **AI
+Answering + SMS Recovery + Workspace**. This task only lets the system
+**represent** AI answered calls in the database and Workspace. It does **not**
+build an AI voice runtime: no Twilio ConversationRelay, no WebSocket
+infrastructure, no OpenAI dependency, no SMS/email send, no metering/billing, and
+no change to Twilio/Stripe/Vercel env/DNS/trial/SMS-mode behavior.
+
+Changed/added (code):
+
+- `config/ai-answering.config.ts` — vocabulary (session sources, statuses,
+  workspace source channels), field-length limits, source-channel labels, default
+  future AI voice id + `isValidAiVoiceId` (no billing literals duplicated).
+- `lib/workspace/ai-voice-summary.ts` — pure `deriveWorkspaceSourceChannel` +
+  fail-closed `buildAiVoiceCallSummary` (safety = front-desk flag only).
+- `lib/db/ai-voice-sessions.ts` — `getClinicAiAnsweringSettings` (degradation-safe
+  defaults), `upsertClinicAiAnsweringSettings` (voice validated; typed unavailable
+  error), `createMockAiVoiceSession` (reuses `getOrCreateConversation`, safe
+  display-name only-if-empty, no SMS/provider/transcript),
+  `listLatestAiVoiceSessionsForConversations` (degradation-safe).
+- `app/api/admin/clinics/[clinicId]/ai-answering/mock-session/route.ts` —
+  platform-admin-only mock session creator (`requirePlatformAdminClinic`, clinic
+  id from URL).
+- Workspace display wiring: `lib/db/front-desk.ts`, `app/workspace/page.tsx`,
+  `app/workspace/_components/workspace-types.ts`,
+  `app/workspace/_components/Workspace.tsx` (Source line, AI call summary card,
+  "No SMS messages yet." copy, one AI sample card).
+- `/account` read-only **AI Answering** section: `AiAnsweringCard.tsx` wired into
+  `BusinessProfile.tsx` ("Not active yet"; no enable toggle/activation/charts).
+- Tests: `tests/ai-answering.test.ts` (wired into `test:sms-recovery` +
+  `tsconfig.unit-tests.json`); `tests/workspace-queue.test.ts` factory updated for
+  the new required `sourceChannel`.
+
+Migration ADDED but **NOT applied to production**:
+
+- `supabase/migrations/20260627000100_ai_answering_foundation.sql` —
+  `clinic_ai_answering_settings` + `ai_voice_sessions`. Additive, idempotent,
+  clinic-scoped, RLS enabled, **no public policies** (service-role/server access
+  only), `set_updated_at` triggers, length CHECK constraints, partial unique index
+  on `(clinic_id, source, external_session_id)`. Stores no transcript/audio/raw
+  AI prompts/responses/raw Twilio payloads/secrets/payment/diagnosis text. Reads
+  are degradation-safe until it is applied.
+
+Validation: `npm run typecheck` ✓, `npm run test:sms-recovery` ✓ (239 tests),
+`npm run test:ai-knowledge` ✓ (76 tests), `npm run build` (see commit), `git diff
+--check` (see commit).
+
+Not done / out of scope: production migration apply (HOLD for explicit approval);
+running the mock route against production; any AI voice runtime / ConversationRelay
+/ OpenAI / WebSocket; SMS/email; metering/overage billing; Twilio/Stripe/Vercel/
+DNS/trial changes. No secrets or database URLs printed. Pre-existing working-tree
+changes (`.qwen/`, `design/recall/IMPLEMENTATION-STATUS.md`, KNOWLEDGE-SYSTEM
+edits) left untouched and unstaged.
+
+Commit: `feat: add AI answering workspace foundation` (pushed to `origin/main`).

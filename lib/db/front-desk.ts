@@ -3,6 +3,8 @@ import {
   FRONT_DESK_OUTCOME_TO_STATUS,
   type FrontDeskOutcome,
 } from "../workspace/outcome";
+import { listLatestAiVoiceSessionsForConversations } from "./ai-voice-sessions";
+import type { AiVoiceSessionStatus } from "../../config/ai-answering.config";
 
 // Data access for the front-desk workspace (/workspace).
 //
@@ -46,6 +48,20 @@ export type FrontDeskConversation = {
   isBlocked: boolean;
   blockedAt: Date | null;
   messages: FrontDeskMessage[];
+  // Latest AI answered call session for this conversation, when present. Safe
+  // captured fields only (never providers, SIDs, transcripts, or audio). Null
+  // for ordinary SMS-only conversations and whenever the ai_voice_sessions table
+  // is not applied yet (degradation-safe).
+  aiVoiceSessionId: string | null;
+  aiVoiceStatus: AiVoiceSessionStatus | null;
+  aiVoiceCompletedAt: Date | null;
+  aiVoiceCreatedAt: Date | null;
+  aiVoiceSummaryHeadline: string | null;
+  aiVoiceCapturedName: string | null;
+  aiVoiceCapturedReason: string | null;
+  aiVoiceCapturedPreferredTime: string | null;
+  aiVoiceSafetySignal: boolean;
+  aiVoiceHandoffNote: string | null;
 };
 
 // List a clinic's patient conversations (most recently active first) with their
@@ -128,7 +144,14 @@ export async function listClinicConversations(
     byConvo.set(m.conversation_id, list);
   }
 
-  return convos.map((c) => ({
+  // Latest AI answered call session per conversation. Degradation-safe: returns
+  // an empty map when the ai_voice_sessions table is missing, so SMS-only
+  // workspaces render exactly as before.
+  const aiByConvo = await listLatestAiVoiceSessionsForConversations(clinicId, ids);
+
+  return convos.map((c) => {
+    const ai = aiByConvo.get(c.id) ?? null;
+    return {
     id: c.id,
     patientPhone: c.patient_phone,
     patientDisplayName: c.patient_display_name,
@@ -147,7 +170,18 @@ export async function listClinicConversations(
     isBlocked: c.blocked_at !== null,
     blockedAt: c.blocked_at,
     messages: byConvo.get(c.id) ?? [],
-  }));
+    aiVoiceSessionId: ai?.id ?? null,
+    aiVoiceStatus: ai?.status ?? null,
+    aiVoiceCompletedAt: ai?.completedAt ?? null,
+    aiVoiceCreatedAt: ai?.createdAt ?? null,
+    aiVoiceSummaryHeadline: ai?.summaryHeadline ?? null,
+    aiVoiceCapturedName: ai?.capturedPatientName ?? null,
+    aiVoiceCapturedReason: ai?.capturedReason ?? null,
+    aiVoiceCapturedPreferredTime: ai?.capturedPreferredTime ?? null,
+    aiVoiceSafetySignal: ai?.safetySignal ?? false,
+    aiVoiceHandoffNote: ai?.handoffNote ?? null,
+    };
+  });
 }
 
 export type WorkspaceActor = {

@@ -31,7 +31,8 @@ future AI Call Assistant / AI answered calls. Old basic voices such as `alice`,
 ## Account sections (/account)
 
 Setup group: Phone number, Business profile, SMS approval, Billing.
-Account group: Account access, Team access, AI knowledge, **Notification Settings**.
+Account group: Account access, Team access, AI knowledge, **AI Answering**,
+**Notification Settings**.
 
 Notification Settings (v1) is settings only: owners/admins choose which account
 notifications they want. v1 covers **AI answered call minute alerts at 90% and
@@ -47,6 +48,24 @@ a narrow call-capture assistant (not a full AI receptionist), planned but **not
 live** — never enabled without explicit owner approval and safety gates. It can be
 useful before SMS approval; SMS Recovery still activates later after carrier
 approval. See `PROJECT-CONTEXT.md` ("Next MVP Direction — AI Answering").
+
+### `/account` AI Answering section (foundation, read-only)
+
+The Account group has a read-only **AI Answering** section
+(`/account?section=ai_answering`, `AiAnsweringCard`). It honestly states the
+channel is **"Not active yet"**, that it is being prepared, that **SMS approval
+remains separate**, that it will use **approved AI Front Desk Knowledge only**,
+and shows the **included AI answered call minutes** (from
+`config/billing.config.ts` via `includedAiAnsweredMinutesLabel()`) plus the
+**default future AI voice preference** (from `config/voice-greeting.config.ts`).
+
+It is deliberately **display-only**: there is **no** enable toggle, **no**
+activation button, **no** usage/delivery charts, and it does not store a voice
+preference yet. It must not imply AI Answering is working. The future settings
+storage exists in `clinic_ai_answering_settings`
+(`getClinicAiAnsweringSettings` / `upsertClinicAiAnsweringSettings`,
+`selected_voice_id` validated against `voiceGreetingConfig`) but is not wired to
+this section yet.
 
 ## Domain
 

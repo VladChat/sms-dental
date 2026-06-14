@@ -10,6 +10,7 @@ import { BillingCard } from "./BillingCard";
 import { AccountAccessCard } from "./AccountAccessCard";
 import { TeamAccessCard } from "./TeamAccessCard";
 import { AiKnowledgeCard } from "./AiKnowledgeCard";
+import { AiAnsweringCard } from "./AiAnsweringCard";
 import { NotificationSettingsCard } from "./NotificationSettingsCard";
 import type {
   BusinessProfileData,
@@ -21,7 +22,12 @@ import type {
 export type { BusinessProfileData } from "./account-types";
 
 type SetupSectionId = "phone" | "business" | "sms" | "billing";
-type AccountSectionId = "account_access" | "team_access" | "ai_knowledge" | "notification_settings";
+type AccountSectionId =
+  | "account_access"
+  | "team_access"
+  | "ai_knowledge"
+  | "ai_answering"
+  | "notification_settings";
 type SectionId = SetupSectionId | AccountSectionId;
 const ONE_TIME_RETURN_PARAMS = ["payment_method_setup", "paid_plan"] as const;
 
@@ -159,6 +165,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
     { id: "account_access", label: "Account access" },
     { id: "team_access", label: "Team access" },
     { id: "ai_knowledge", label: "AI knowledge" },
+    { id: "ai_answering", label: "AI Answering" },
     { id: "notification_settings", label: "Notification Settings" },
   ];
 
@@ -345,6 +352,17 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
             </Section>
           )}
 
+          {active === "ai_answering" && (
+            <Section
+              id="ai-answering"
+              title="AI Answering"
+              description="Planned voice channel — being prepared, not active yet."
+              status={{ kind: "not_active", label: "Not active yet" }}
+            >
+              <AiAnsweringCard />
+            </Section>
+          )}
+
           {active === "notification_settings" && (
             <Section
               id="notification-settings"
@@ -361,7 +379,7 @@ export function BusinessProfile({ data }: { data: BusinessProfileData }) {
 
 const VALID_SECTIONS: SectionId[] = [
   "phone", "business", "sms", "billing", "account_access", "team_access", "ai_knowledge",
-  "notification_settings",
+  "ai_answering", "notification_settings",
 ];
 
 // Map an optional ?section=… value to a known section. Defaults to "phone"

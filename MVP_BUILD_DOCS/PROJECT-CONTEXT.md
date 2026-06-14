@@ -307,6 +307,45 @@ the workspace without sending; (3) controlled AI SMS replies limited to
 approved structured facts with office handoff for everything else; (4) AI voice
 on the same facts/policy layer.
 
+### Built foundation — AI Answering sessions + Workspace mock flow (2026-06-27)
+
+A second non-live foundation lets the system **represent** AI answered calls in
+the database and Workspace **without** making live AI calls possible. There is
+**no** AI voice runtime, **no** Twilio ConversationRelay, **no** WebSocket
+infrastructure, **no** OpenAI dependency, and **no** SMS/email send tied to it.
+AI minutes are **not** metered and overage is **not** billed.
+
+- **Vocabulary/config:** `config/ai-answering.config.ts` — session sources
+  (`mock` | `future_twilio`), session statuses (`captured` | `incomplete` |
+  `failed`), workspace source channels (`sms` | `ai_voice` | `mixed`), field
+  length limits, and the default future AI voice id (reused from
+  `config/voice-greeting.config.ts`). No billing numbers are duplicated here.
+- **Data (additive migration, NOT yet applied to production):**
+  `supabase/migrations/20260627000100_ai_answering_foundation.sql` adds
+  `clinic_ai_answering_settings` (future settings; no "enable AI" switch) and
+  `ai_voice_sessions` (narrow captured request: name, reason, preferred time, a
+  short summary/handoff note, a safety flag). Both clinic-scoped, RLS enabled,
+  no public policies (service-role/server access only). It stores **no**
+  transcript, audio, raw AI prompts/responses, raw Twilio payloads, secrets,
+  payment data, or diagnosis/treatment text.
+- **Helpers:** `lib/db/ai-voice-sessions.ts` (`getClinicAiAnsweringSettings`,
+  `upsertClinicAiAnsweringSettings`, `createMockAiVoiceSession`,
+  `listLatestAiVoiceSessionsForConversations`) and the pure
+  `lib/workspace/ai-voice-summary.ts`. All reads are degradation-safe: if the
+  migration is not applied, `/account` and `/workspace` behave exactly as before.
+- **Platform-admin mock flow:** `POST /api/admin/clinics/[clinicId]/ai-answering/mock-session`
+  (guarded by `requirePlatformAdminClinic`, clinic id from the URL) creates a
+  Workspace-visible AI answered call **without** any provider. Not exposed in the
+  customer `/account` UI. Do **not** run it against production without explicit
+  approval.
+- **Workspace display:** a request can show a `Source:` line and a compact
+  **AI call summary** card when an AI voice session exists; the safety signal
+  surfaces only as a front-desk attention flag (never medical advice). See
+  `FRONT-DESK-WORKSPACE.md`.
+- **`/account`:** a read-only **AI Answering** section that states the channel is
+  "Not active yet" (no enable toggle, no activation button). See
+  `OWNER-SETTINGS.md`.
+
 ---
 
 ## 6. Current Repository Structure

@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-13 (Workspace simplified to three visible states; Archive removed from staff UI)
+Last updated: 2026-06-27 (AI Answering foundation — represent AI answered calls in DB/Workspace; AI runtime still not live)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -1170,8 +1170,9 @@ mention a "Documents section" or the pre-2026-05-30 layout.
 
 ## Front desk workspace `/workspace` — 2026-05-31, updated 2026-06-13
 
-Operational view for clinic staff to review missed-call SMS replies and patient
-requests. Separate from the owner/admin `/account` area. Full spec:
+Operational view, titled **Patient requests**, for clinic staff to review
+missed-call SMS replies as office-ready request cards. Separate from the
+owner/admin `/account` area. Full spec:
 `FRONT-DESK-WORKSPACE.md`.
 
 - **Route:** `app/workspace/page.tsx` (server, `force-dynamic`, nodejs).
@@ -3636,11 +3637,12 @@ unchanged. No AI runtime — everything is deterministic.
   `Review conversation`, latest message snippets, Patient/Office prefixes,
   chips, or status badges. The right detail panel keeps the
   deterministic request summary from `lib/workspace/request-summary.ts`
-  (inbound text only, no AI, fallback `Review conversation`), conversation
-  preview (last 2 messages with full-timeline toggle), inline name edit,
-  actions, and staff-only Internal note (`save_note`). The old "Latest patient
-  reply" block and the big Outcome radio form are removed; `/api/workspace/outcome`
-  remains for compatibility only.
+  (inbound text only, no AI, fallback `Review conversation`), the
+  **Activity & SMS audit trail** (last 2 messages with full-timeline toggle;
+  raw SMS as secondary history only), inline name edit, actions, and staff-only
+  Internal note (`save_note`). The old "Latest patient reply" block and the big
+  Outcome radio form are removed; `/api/workspace/outcome` remains for
+  compatibility only.
 - **Block number = the PATIENT/CALLER number for one clinic.** Never the
   clinic's Twilio business number, never a Twilio mutation, never deletes
   history, never stored in `opt_outs`. Table
@@ -3741,3 +3743,59 @@ unchanged. No AI runtime — everything is deterministic.
 Tests: `npm run test:sms-recovery` (template render incl. default-equals-prod,
 safety, patient-name, reply classification, auto-reply decision,
 single-send-path, voice greeting TwiML/admin routing).
+
+## AI Answering foundation — operate & verify (2026-06-27)
+
+Non-live foundation that lets the system **represent** AI answered calls in the
+DB and Workspace. There is **no** AI voice runtime, **no** Twilio
+ConversationRelay, **no** WebSocket runtime, **no** OpenAI, and **no** SMS/email
+send tied to it. AI minutes are not metered and overage is not billed. Nothing
+here enables AI Answering for real callers.
+
+### What shipped
+
+- Additive migration `20260627000100_ai_answering_foundation.sql`:
+  `clinic_ai_answering_settings` (future settings; `selected_voice_id`, no
+  "enable AI" switch) and `ai_voice_sessions` (narrow captured request only).
+  Both clinic-scoped, RLS enabled, **no public policies** (service-role/server
+  access only), `set_updated_at` triggers. Stores **no** transcript, audio, raw
+  AI prompts/responses, raw Twilio payloads, secrets, payment data, or
+  diagnosis/treatment text.
+- Helpers `lib/db/ai-voice-sessions.ts` + pure `lib/workspace/ai-voice-summary.ts`
+  + vocabulary `config/ai-answering.config.ts`.
+- Platform-admin mock route:
+  `POST /api/admin/clinics/[clinicId]/ai-answering/mock-session`
+  (`requirePlatformAdminClinic`, clinic id from the URL). Body: `patientPhone`
+  (E.164, required), optional `clinicPhone`, `capturedPatientName`,
+  `capturedReason` (≤240), `capturedPreferredTime` (≤120),
+  `status` (`captured` | `incomplete` | `failed`, default `captured`),
+  `safetySignal` (bool), `handoffNote` (≤500). Returns
+  `{ ok, sessionId, conversationId }`.
+- Workspace display: `Source:` line + compact **AI call summary** card; `/account`
+  read-only **AI Answering** section ("Not active yet").
+
+### Safety — do NOT run the mock route against production
+
+- **Do not run `mock-session` against production unless explicitly approved.** It
+  writes a real `patient_conversations` thread + `ai_voice_sessions` row for the
+  target clinic (and may set a safe `patient_display_name` when empty). It is for
+  internal foundation/testing only and is never exposed in the customer UI.
+- Only a **platform admin** can call it; clinic owner/front_desk get 401/403.
+- The migration is **not applied to production** in this task. Do not apply it
+  without explicit owner approval (Supabase MCP `apply_migration`, then update
+  `schema_migrations`). Until applied, reads are degradation-safe.
+
+### Verify safely (no production writes)
+
+- Code/tests: `npm run typecheck`, `npm run test:sms-recovery` (includes the new
+  `ai-answering` suite: source-channel derivation, fail-closed AI summary, safety
+  flag is a flag-not-advice, voice validation, migration/route/helper guards),
+  `npm run build`.
+- Degradation-safe check: with the migration **not** applied, `/workspace` and
+  `/account` load and SMS-only cards render exactly as before; the mock route
+  returns `503 ai_answering_unavailable`.
+- Guard check (no admin/session): `POST .../ai-answering/mock-session` returns
+  401 (no session) or 403 (signed in, not platform admin).
+- After the migration is applied in a non-production environment, a mock session
+  appears as one Workspace request under **Needs follow-up** with the AI call
+  summary card; the safety flag shows only when `safetySignal: true`.

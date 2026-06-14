@@ -1,7 +1,39 @@
 # Front Desk Workspace
 
 Status: Active (operational patient-request queue)
-Last updated: 2026-06-13 (three visible workspace states; Archive removed from customer-facing UI)
+Last updated: 2026-06-27 (AI answered call summaries can display when present; real AI runtime still not live)
+
+## 0.0 2026-06-27 — AI answered call summaries (foundation, AI not live)
+
+The Workspace can now **display** an AI answered call summary on a patient
+request when one exists — but **no real AI voice runtime is live**. There is no
+Twilio ConversationRelay, no OpenAI, no WebSocket runtime, and AI Answering does
+not answer real calls. Today the only producer of an AI voice session is the
+platform-admin mock route (`POST /api/admin/clinics/[clinicId]/ai-answering/mock-session`),
+used for internal foundation/testing.
+
+- **Source line.** The right detail panel shows a small `Source:` line —
+  `AI answered call`, `AI answered call + SMS`, or `SMS conversation`
+  (`sourceChannel` = `ai_voice` / `mixed` / `sms`). It never shows providers,
+  models, Twilio SIDs, session ids, or internal IDs.
+- **AI call summary card.** When an AI voice session exists, a compact
+  **AI call summary** card appears above the Activity & SMS audit trail with the
+  safe captured fields only: a one-line summary, reason, preferred time, an
+  **Urgent — front desk attention** flag *only when the safety signal is set*
+  (a flag, never diagnosis/triage/medical advice), and the call-captured time.
+- **One request.** AI voice and SMS converge on the same `(clinic, patient)`
+  conversation, so they show as **one** request card. Last activity uses the
+  newer of the latest SMS and the AI call time, so an AI-only request still
+  surfaces under **Needs follow-up** instead of being buried.
+- **Names.** A safely-extracted AI-captured name is used only when no display
+  name is set, and only if it passes the conservative name rules.
+- **Empty conversation copy.** When there are no SMS messages but an AI voice
+  session exists, the audit trail reads **"No SMS messages yet."**
+- **Degradation-safe.** All AI voice reads tolerate the
+  `20260627000100_ai_answering_foundation.sql` migration not being applied yet:
+  `/workspace` loads and SMS-only cards render exactly as before. Data model and
+  helpers: `ai_voice_sessions`, `lib/db/ai-voice-sessions.ts`,
+  `lib/workspace/ai-voice-summary.ts`, `config/ai-answering.config.ts`.
 
 ## 0.1 2026-06-13 — Three visible workspace states
 
@@ -58,7 +90,7 @@ Last updated: 2026-06-13 (three visible workspace states; Archive removed from c
   `Mentions pain/urgent concern · Wants appointment`, `Payment question`,
   fallback `Review conversation`). Request signals such as pain/urgent,
   payment, and insurance are not repeated as chips when the headline already
-  says them. The request summary and conversation preview live in the right
+  says them. The request summary and Activity & SMS audit trail live in the right
   detail panel, not the left queue cards. Visible chips in the detail panel are
   reserved for useful non-redundant system state: `Automation paused` and
   `High volume`. No empty chip rows and no `None detected` rows render.
@@ -105,9 +137,10 @@ what do they want, what did they say, and what should staff do next.
   `lib/workspace/request-summary.ts`, based on INBOUND text plus conversation
   state. No AI, no invented facts, no large field table, no duplicated phone,
   and no empty chip rows.
-- **Conversation preview.** The last 2 messages render immediately with
-  Patient / Your office labels and timestamps; **Show full conversation**
-  toggles the full timeline. The old "Latest patient reply" block is gone.
+- **Activity & SMS audit trail.** The last 2 messages render immediately with
+  Patient / Your office labels and timestamps; **Show full audit trail**
+  toggles the full timeline. The raw SMS is secondary history, not the main
+  queue concept. The old "Latest patient reply" block is gone.
 - **Internal note.** Staff-only note saved independently via
   `/api/workspace/conversation-action` (`save_note`) — no outcome required.
   The big Outcome radio form was removed from the layout; the legacy
@@ -148,9 +181,9 @@ what do they want, what did they say, and what should staff do next.
   conversations exist; with real conversations they collapse behind a
   "Show samples" strip.
 
-The front-desk workspace (`/workspace`) is the operational view where clinic
-staff review the results of missed-call SMS recovery — patient replies and
-requests. It is deliberately separate from the owner/admin account area.
+The front-desk workspace route (`/workspace`) is the **Patient requests**
+operational view where clinic staff review missed-call SMS recovery as request
+cards. It is deliberately separate from the owner/admin account area.
 
 ## 1. Product boundary
 
@@ -172,7 +205,7 @@ approval documents, owner setup settings, Twilio technical details, internal IDs
 request cards. It now supports the minimal human follow-up workflow:
 
 - no outbound replies;
-- selected-card conversation preview with a full-timeline toggle;
+- selected-card Activity & SMS audit trail with a full-timeline toggle;
 - a normal browser/phone `tel:` link labeled `Call patient` (not a Twilio
   outbound call and not automation);
 - explicit queue actions: Handled, Reopen, Block number, Unblock number,
@@ -436,5 +469,6 @@ outcome and an optional note per real patient conversation.
 - **Samples:** a clearly labeled, non-persistent training layer below real cards,
   with a `Hide` / `Show samples` toggle (local state) that never affects real
   cards. Sample outcome UI is disabled (`Sample preview · not saved`); the previous
-  "contact support" modal is gone. Empty state: `No patient replies yet. Replies
-  to recovery texts will appear here.`
+  "contact support" modal is gone. Empty state:
+  `No patient requests yet. When a missed caller replies to your follow-up text,
+  we'll turn it into a ready-to-action request here.`
