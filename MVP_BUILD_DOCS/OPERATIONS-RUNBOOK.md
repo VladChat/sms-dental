@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-14 (admin Clinics list SMS readiness column; delete clinic modal/blocker fix; AI runtime still not live)
+Last updated: 2026-06-14 (AI Answering test-live ConversationRelay path + standalone relay service added; still disabled by default in production)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -4010,3 +4010,50 @@ branch runs in any webhook and no ConversationRelay TwiML is emitted.
 - **Before building the real runtime:** read `MVP_BUILD_DOCS/AI-ANSWERING-RUNTIME.md`
   and the current official Twilio/OpenAI docs; do not guess provider
   XML/event/API contracts.
+
+## AI Answering test-live ConversationRelay path + relay service (2026-06-14)
+
+A real **test-live** AI Answering path now exists (Twilio ConversationRelay +
+OpenAI Responses API), runnable **only** for the single allowlisted test clinic +
+caller in `test_only` mode with relay config present. The production default (all
+AI env unset → `disabled`) is **unchanged**: the incoming webhook returns the
+existing missed-call greeting and voice/status sends SMS recovery as before.
+
+- **Standalone relay service:** `services/ai-voice-relay/` is a separate Node
+  WebSocket deployable. **Do not** run the ConversationRelay WebSocket inside a
+  Next/Vercel route handler. It runs on any Node host that supports long-lived
+  WebSockets (container/VM), not a Vercel serverless function.
+- **What changed in the Next app:** `app/api/webhooks/twilio/voice/incoming`
+  returns ConversationRelay TwiML (and starts a `future_twilio` session keyed on
+  the call sid) only on an exact allowlisted `test_only` match with relay config;
+  it fails closed to the existing greeting otherwise. `voice/status` skips SMS
+  recovery when an AI voice session exists for the call (reason
+  `ai_answering_session_present`). The incoming route sends no SMS and calls no
+  provider API.
+- **Operate the relay service:**
+  - Deploy `services/ai-voice-relay/` and verify `GET /health` returns
+    `{ "ok": true }` (503 + a safe reason means required config is missing).
+  - Build/test: `npm run ai-relay:build`, `npm run ai-relay:test` (mocked
+    OpenAI/WebSocket, no live calls). Dev: `npm run ai-relay:dev`.
+  - It reuses the repo's existing session lifecycle + runtime gate + token scheme
+    (compiled into its own `dist/`), so safety rules can't drift from the app.
+- **Env (names only — never print values):**
+  - Next app: `AI_ANSWERING_RUNTIME_MODE=test_only`,
+    `AI_ANSWERING_TEST_CLINIC_IDS`, `AI_ANSWERING_TEST_CALLER_NUMBERS`,
+    `AI_ANSWERING_RELAY_WS_URL` (must be `wss://`),
+    `AI_ANSWERING_RELAY_SIGNING_SECRET`.
+  - Relay service: `PORT`, `SUPABASE_DB_URL`, `OPENAI_API_KEY`,
+    `AI_ANSWERING_OPENAI_MODEL`, `AI_ANSWERING_RUNTIME_MODE=test_only`,
+    `AI_ANSWERING_TEST_CLINIC_IDS`, `AI_ANSWERING_TEST_CALLER_NUMBERS`,
+    `AI_ANSWERING_RELAY_SIGNING_SECRET` (**same** secret as the Next app),
+    `TWILIO_AUTH_TOKEN` (only if validating `X-Twilio-Signature`).
+  - `AI_ANSWERING_RELAY_WS_URL` must equal the relay's public
+    `wss://<host>/twilio/conversation-relay`. The signing secret must match on
+    both sides or the relay rejects every session.
+- **Provider onboarding caveat:** the Twilio phone number webhook is unchanged.
+  **ConversationRelay requires Twilio onboarding / the AI addendum** before real
+  calls work; if incomplete, Twilio may reject the TwiML or fall back. First real
+  test must use only the allowlisted clinic + caller.
+- **Data/safety:** stores only the narrow captured request in `ai_voice_sessions`
+  (`source = future_twilio`) — never transcripts/audio/raw payloads/prompts/OpenAI
+  responses. No migration. No SMS from the AI path.

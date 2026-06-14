@@ -184,6 +184,46 @@ export function parsePhoneNumberList(raw: string | null | undefined): string[] {
     .filter((n) => n.length > 0);
 }
 
+// AI Answering ConversationRelay — SERVER-ONLY. Lazy: validated only when used,
+// never at import time, so `next build` succeeds without these set. Never logs
+// the values. The WebSocket URL must be wss:// (TLS). When the runtime gate
+// passes but this config is missing/invalid, callers fail closed to the existing
+// missed-call voice greeting (see lib/ai-answering/incoming-plan.ts).
+const AiAnsweringRelaySchema = z.object({
+  AI_ANSWERING_RELAY_WS_URL: z.string().url().startsWith("wss://"),
+  AI_ANSWERING_RELAY_SIGNING_SECRET: requiredString,
+});
+
+export type AiAnsweringRelayConfig = {
+  wsUrl: string;
+  signingSecret: string;
+};
+
+// Throws (ZodError) when unset/invalid. Prefer getAiAnsweringRelayConfigSafe()
+// on the request path so a missing config degrades instead of 500-ing.
+export function getAiAnsweringRelayConfig(): AiAnsweringRelayConfig {
+  const parsed = AiAnsweringRelaySchema.parse(process.env);
+  return {
+    wsUrl: parsed.AI_ANSWERING_RELAY_WS_URL,
+    signingSecret: parsed.AI_ANSWERING_RELAY_SIGNING_SECRET,
+  };
+}
+
+// Non-throwing variant: returns null when the relay env is unset or invalid.
+export function getAiAnsweringRelayConfigSafe(): AiAnsweringRelayConfig | null {
+  const parsed = AiAnsweringRelaySchema.safeParse(process.env);
+  if (!parsed.success) return null;
+  return {
+    wsUrl: parsed.data.AI_ANSWERING_RELAY_WS_URL,
+    signingSecret: parsed.data.AI_ANSWERING_RELAY_SIGNING_SECRET,
+  };
+}
+
+// Safe presence check (boolean only) for health/ops reporting.
+export function hasAiAnsweringRelayConfigured(): boolean {
+  return getAiAnsweringRelayConfigSafe() !== null;
+}
+
 export function getPublicWebhookBaseUrl(): string | undefined {
   const raw = process.env.PUBLIC_WEBHOOK_BASE_URL;
   if (!raw) return undefined;

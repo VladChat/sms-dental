@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-14 (admin Clinics list SMS readiness column; delete clinic modal/blocker fix; AI runtime still not live)
+Last updated: 2026-06-14 (AI Answering test-live ConversationRelay path + standalone relay service; disabled by default in production)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8399,3 +8399,59 @@ Safety scope:
 - Existing voice webhook behavior unchanged (no route edits).
 - Validation: `npm run typecheck`, `npm run test:sms-recovery` (294 pass),
   `npm run test:ai-knowledge` (76 pass), `npm run build`, `git diff --check`.
+
+## 2026-06-14 — AI Answering test-live ConversationRelay path + standalone relay service
+
+First real test-live AI Answering path: Twilio ConversationRelay (phone/STT/TTS/
+WebSocket) + OpenAI Responses API (text brain). Runnable **only** for the single
+allowlisted test clinic + caller in `test_only` mode with relay config present.
+Production default (AI env unset → `disabled`) is unchanged.
+
+Next app changes:
+
+- `lib/ai-answering/relay-token.ts` (new) — shared HMAC-SHA256 token sign/verify
+  (clinicId/callSid/from/to/ts) used by the TwiML builder and the relay service.
+- `lib/ai-answering/conversation-relay-twiml.ts` (new) — `<Connect>
+  <ConversationRelay>` builder: wss URL required, XML-escaped, signed
+  `<Parameter>` token, clinic-branded `welcomeGreeting`; secret never emitted.
+- `lib/ai-answering/incoming-plan.ts` (new) — pure `decideAiAnsweringIncoming`
+  (gate + relay-config presence).
+- `lib/env.ts` — lazy `getAiAnsweringRelayConfig` / `getAiAnsweringRelayConfigSafe`
+  / `hasAiAnsweringRelayConfigured` (`AI_ANSWERING_RELAY_WS_URL` must be wss://,
+  `AI_ANSWERING_RELAY_SIGNING_SECRET`). Build passes without them.
+- `lib/db/ai-voice-runtime-sessions.ts` — added `hasAiVoiceRuntimeSessionForCall`
+  (DB-only, degradation-safe `future_twilio` existence check).
+- `app/api/webhooks/twilio/voice/incoming/route.ts` — after clinic routing +
+  `call_events` upsert (now captures the returned id), starts a `future_twilio`
+  session keyed on the call sid and returns ConversationRelay TwiML on an exact
+  allowlisted match with relay config; fails closed to the existing greeting
+  otherwise. No SMS, no OpenAI, no Twilio API call here.
+- `app/api/webhooks/twilio/voice/status/route.ts` — skips SMS recovery when an AI
+  voice session exists (`ai_answering_session_present`); normal missed calls
+  unchanged.
+
+Relay service (`services/ai-voice-relay/`, new — separate deployable):
+
+- `src/server.ts` (`GET /health`, `WS /twilio/conversation-relay`),
+  `twilio-messages.ts` (message schemas + setup token validation + outbound
+  frames), `openai-brain.ts` (zod-validated strict JSON, grounded on approved
+  facts, safety-bounded; deterministic offline fallback), `session-state.ts`,
+  `conversation-handler.ts` (testable core), `lifecycle.ts` (reuses shared DB
+  lifecycle), `relay-config.ts`, `twilio-signature.ts`, `shared-lib.ts`,
+  `README.md`, own `package.json`/`tsconfig`.
+- Reuses the repo's Next-free lib (gate/session lifecycle/front-desk context/
+  token) so safety rules never drift. Builds independently to its own `dist/`.
+- Root scripts: `ai-relay:dev`, `ai-relay:build`, `ai-relay:test`.
+
+Safety scope:
+
+- **No migration** (uses the existing `ai_voice_sessions` table). No production
+  data written by this change. No Twilio/Stripe/DNS/Vercel/OpenAI env or provider
+  mutation performed. No SMS sent by the AI path; SMS-recovery gates unchanged
+  when the AI gate does not match. Stores only the narrow captured request —
+  never transcripts/audio/raw payloads/prompts/OpenAI responses.
+- ConversationRelay requires Twilio onboarding / AI addendum before real calls
+  work (not performed here). No live call performed.
+- Validation: `npm run typecheck`, `npm run test:sms-recovery` (310 pass),
+  `npm run test:ai-knowledge`, `npm run build`, `npm run ai-relay:build`,
+  `npm run ai-relay:test` (27 pass), `git diff --check`.

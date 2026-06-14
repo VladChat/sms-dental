@@ -24,7 +24,11 @@ import {
   type VoiceGreetingPrediction,
 } from "@/lib/sms-recovery/voice-twiml";
 import type { VoiceGreetingTemplateConfig } from "@/lib/sms-recovery/voice-greeting-templates";
-import { getSmsRecoveryConfig } from "@/lib/env";
+import { getSmsRecoveryConfig, getAiAnsweringRelayConfigSafe } from "@/lib/env";
+import { getAiAnsweringRuntimeConfig } from "@/lib/ai-answering/runtime-config";
+import { decideAiAnsweringIncoming } from "@/lib/ai-answering/incoming-plan";
+import { buildConversationRelayTwiml } from "@/lib/ai-answering/conversation-relay-twiml";
+import { startAiVoiceRuntimeSession } from "@/lib/db/ai-voice-runtime-sessions";
 import { logger } from "@/lib/logging/logger";
 
 export const runtime = "nodejs";
@@ -146,7 +150,7 @@ export async function POST(request: NextRequest) {
       // so a scheduled (removal-pending) number can be detected before routing.
       const routing = await lookupClinicByPhoneIncludingScheduled(to);
 
-      await upsertCallEvent({
+      const callEvent = await upsertCallEvent({
         clinicId: routing?.clinic.id ?? null,
         callSid,
         fromNumber: from,
@@ -156,6 +160,7 @@ export async function POST(request: NextRequest) {
         isMissed: true,
         rawPayload: params,
       });
+      const callEventId = callEvent.id;
 
       // Scheduled number: do not route to the clinic and do not predict/send
       // recovery SMS. Return the inactive-line greeting and hang up.
@@ -167,6 +172,76 @@ export async function POST(request: NextRequest) {
       const clinic = routing && routing.removalStatus === "active" ? routing.clinic : null;
       if (clinic && from) {
         clinicNameForTwiml = clinic.name;
+
+        // AI Answering (test_only, allowlisted clinic + caller only). Evaluated
+        // AFTER clinic routing + call_event upsert. Only an exact allowlisted
+        // match WITH relay config present hands the call to ConversationRelay;
+        // everything else (disabled mode, non-allowlisted caller, missing relay
+        // config, or any error) falls through to the existing greeting. No SMS,
+        // no OpenAI, and no Twilio API call happen here.
+        const aiConfig = getAiAnsweringRuntimeConfig();
+        const relayConfig = getAiAnsweringRelayConfigSafe();
+        const aiDecision = decideAiAnsweringIncoming({
+          gate: {
+            mode: aiConfig.mode,
+            clinicId: clinic.id,
+            clinicActive: clinic.is_active,
+            clinicSmsRecoveryEnabled: clinic.sms_recovery_enabled,
+            callerPhone: from,
+            clinicPhone: to,
+            numberRoutingStatus: "active",
+            testClinicIds: aiConfig.testClinicIds,
+            testCallerNumbers: aiConfig.testCallerNumbers,
+            callStatus,
+            callDirection: direction,
+          },
+          relayConfigured: relayConfig !== null,
+        });
+
+        if (aiDecision.useConversationRelay && relayConfig) {
+          try {
+            // Start the future_twilio AI voice session keyed on the call sid so
+            // the relay can confirm it and voice/status can suppress SMS.
+            await startAiVoiceRuntimeSession({
+              clinicId: clinic.id,
+              externalSessionId: callSid,
+              patientPhone: from,
+              clinicPhone: to,
+              callEventId,
+            });
+            logger.info("twilio.voice.ai_answering_connect", {
+              callSid,
+              clinicId: clinic.id,
+              reason: aiDecision.reason,
+            });
+            return twimlResponse(
+              buildConversationRelayTwiml({
+                wsUrl: relayConfig.wsUrl,
+                signingSecret: relayConfig.signingSecret,
+                clinicId: clinic.id,
+                callSid,
+                from,
+                to,
+                clinicName: clinic.name,
+              }),
+            );
+          } catch (err) {
+            // Fail closed to the existing missed-call greeting below.
+            logger.error("twilio.voice.ai_answering_start_failed", {
+              callSid,
+              clinicId: clinic.id,
+              message: err instanceof Error ? err.message : "unknown",
+            });
+          }
+        } else if (aiConfig.mode !== "disabled") {
+          // Only log when the runtime is actually enabled, to avoid noise in the
+          // production default (disabled) where the gate always blocks.
+          logger.info("twilio.voice.ai_answering_skipped", {
+            callSid,
+            reason: aiDecision.reason,
+          });
+        }
+
         try {
           voiceGreetings = (await getClinicConversationConfig(clinic.id)).voiceGreetings;
         } catch (err) {

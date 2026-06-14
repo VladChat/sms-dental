@@ -10,6 +10,7 @@ import { isDatabaseConfigured } from "@/lib/db/client";
 import { normalizePhone } from "@/lib/phone/normalize";
 import { lookupClinicByPhoneIncludingScheduled } from "@/lib/db/clinics";
 import { getOrCreateConversation } from "@/lib/db/conversations";
+import { hasAiVoiceRuntimeSessionForCall } from "@/lib/db/ai-voice-runtime-sessions";
 import { sendRecoverySms } from "@/lib/twilio/outbound-sms";
 import { logger } from "@/lib/logging/logger";
 
@@ -97,6 +98,19 @@ export async function POST(request: NextRequest) {
 
     if (!from) {
       logger.info("twilio.voice.status.no_from_number", { callSid });
+      return twimlResponse();
+    }
+
+    // AI-answered calls capture the request through the relay; they must NOT
+    // also receive a missed-call recovery SMS. DB-only check (no provider call,
+    // no SMS). Existing behavior is unchanged for normal missed calls (no
+    // future_twilio session exists, so this is false).
+    const hasAiSession = await hasAiVoiceRuntimeSessionForCall({
+      clinicId: clinic.id,
+      callSid,
+    });
+    if (hasAiSession) {
+      logger.info("twilio.voice.status.ai_answering_session_present", { callSid });
       return twimlResponse();
     }
 

@@ -386,3 +386,32 @@ export async function failAiVoiceRuntimeSession(
     status: "failed",
   });
 }
+
+// ------------------------------------------------------- existence check (DB-only)
+
+// Does an AI voice runtime session (source `future_twilio`) exist for this
+// clinic + call sid? Used by the voice status callback to suppress missed-call
+// SMS recovery after an AI-answered call. DB-only: no provider calls, no SMS.
+// Degradation-safe: returns false when the table is missing (pre-migration) so
+// the normal SMS recovery path is never blocked by a missing foundation.
+export async function hasAiVoiceRuntimeSessionForCall(input: {
+  clinicId: string;
+  callSid: string;
+}): Promise<boolean> {
+  if (!input.clinicId || !input.callSid) return false;
+  const sql = getDb();
+  try {
+    const rows = await sql<{ found: number }[]>`
+      select 1 as found
+      from public.ai_voice_sessions
+      where clinic_id = ${input.clinicId}
+        and source = 'future_twilio'
+        and external_session_id = ${input.callSid}
+      limit 1
+    `;
+    return rows.length > 0;
+  } catch (err) {
+    if (isUndefinedTableError(err)) return false;
+    throw err;
+  }
+}
