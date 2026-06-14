@@ -56,10 +56,12 @@
     "config/sms-recovery.config.ts",
     "config/voice-greeting.config.ts",
     "config/ai-answering.config.ts",
+    "config/test-callers.config.ts",
     "config/ai-front-desk-facts.config.ts",
     "lib/workspace/ai-voice-summary.ts",
     "lib/workspace/patient-request-card.ts",
     "lib/workspace/request-summary.ts",
+    "lib/db/test-caller-reset.ts",
     "lib/ai-knowledge/facts.ts",
     "lib/ai-knowledge/scan-url-safety.ts",
     "lib/ai-knowledge/website-extract.ts"

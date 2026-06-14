@@ -7,6 +7,7 @@ import {
   aiVoiceStatusLabel,
   type AiVoiceSessionStatus,
 } from "../../../../../../config/ai-answering.config";
+import { AI_ANSWERING_TEST_CALLER } from "../../../../../../config/test-callers.config";
 
 // Platform-admin-only AI Answering mock tester. Creates and inspects MOCK AI
 // answered call sessions for ONE clinic so an admin can verify how an AI answered
@@ -36,6 +37,22 @@ type OverviewPayload = {
   settings?: { selectedVoiceId?: string; voiceLabel?: string };
   totalCount?: number;
   sessions?: SessionView[];
+  error?: { message?: string };
+};
+
+type ResetCounts = {
+  aiVoiceSessions: number;
+  messages: number;
+  patientConversations: number;
+  callEvents: number;
+  optOuts: number;
+  clinicBlockedPatientNumbers: number;
+};
+
+type ResetPayload = {
+  ok?: boolean;
+  maskedPhone?: string;
+  counts?: ResetCounts;
   error?: { message?: string };
 };
 
@@ -75,6 +92,10 @@ export function AdminAiAnsweringMockTester({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<ResetPayload | null>(null);
 
   const apiBase = `/api/admin/clinics/${clinicId}/ai-answering`;
 
@@ -146,9 +167,39 @@ export function AdminAiAnsweringMockTester({
     }
   }
 
+  async function resetTestCaller() {
+    setResetSubmitting(true);
+    setResetError(null);
+    setResetResult(null);
+    try {
+      const res = await fetch(`${apiBase}/reset-test-caller`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          patientPhone: AI_ANSWERING_TEST_CALLER.patientPhone,
+          confirm: resetConfirm.trim(),
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as ResetPayload | null;
+      if (!res.ok || !json?.ok) {
+        setResetError(json?.error?.message ?? "Could not reset the test caller.");
+        return;
+      }
+      setResetResult(json);
+      setResetConfirm("");
+      await refresh();
+    } catch {
+      setResetError("Could not reset the test caller.");
+    } finally {
+      setResetSubmitting(false);
+    }
+  }
+
   return (
     <div style={{ display: "grid", gap: "var(--space-5)" }}>
       <p className="t-small" style={{ color: "var(--text-muted)", fontWeight: 600, margin: 0 }}>
+        <Badge tone="neutral">AI Answering test</Badge>{" "}
         For testing only. Use a test caller number.
       </p>
 
@@ -373,6 +424,58 @@ export function AdminAiAnsweringMockTester({
               </div>
             )}
           </div>
+
+          <details className="adm-fold">
+            <summary>Reset test caller</summary>
+            <div style={{ display: "grid", gap: "var(--space-3)", marginTop: "var(--space-3)" }}>
+              <p className="t-small" style={{ color: "var(--text-muted)", margin: 0 }}>
+                Clear this test caller&apos;s previous requests before running a fresh test.
+              </p>
+              <p className="t-small" style={{ margin: 0 }}>
+                Test caller: <span className="t-mono">{AI_ANSWERING_TEST_CALLER.patientPhoneMasked}</span>
+              </p>
+              <div className="field">
+                <label htmlFor="aia-reset-confirm">Type {AI_ANSWERING_TEST_CALLER.resetConfirm} to confirm</label>
+                <input
+                  id="aia-reset-confirm"
+                  className="input t-mono"
+                  value={resetConfirm}
+                  onChange={(e) => {
+                    setResetConfirm(e.target.value);
+                    setResetError(null);
+                    setResetResult(null);
+                  }}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                disabled={
+                  resetSubmitting ||
+                  resetConfirm.trim() !== AI_ANSWERING_TEST_CALLER.resetConfirm
+                }
+                onClick={resetTestCaller}
+              >
+                {resetSubmitting ? "Resetting..." : "Reset test caller"}
+              </button>
+              {resetError && (
+                <div className="alert alert-error" role="alert" aria-live="polite">
+                  <span>{resetError}</span>
+                </div>
+              )}
+              {resetResult?.counts && !resetError && (
+                <div className="alert alert-success" role="status" aria-live="polite">
+                  <span>
+                    Test caller reset. Deleted {resetResult.counts.patientConversations} patient request
+                    {resetResult.counts.patientConversations === 1 ? "" : "s"} and{" "}
+                    {resetResult.counts.messages} message{resetResult.counts.messages === 1 ? "" : "s"}.
+                  </span>
+                </div>
+              )}
+            </div>
+          </details>
         </>
       )}
     </div>

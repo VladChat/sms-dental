@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-14 (Admin patient request preview for AI Answering test verification; AI runtime still not live)
+Last updated: 2026-06-14 (AI Answering test caller reset tool; AI runtime still not live)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8196,3 +8196,44 @@ Not done / out of scope:
 - No real AI voice runtime, ConversationRelay, WebSocket, OpenAI, SMS/email,
   billing/metering, provider mutation, migration, deploy, or manual production
   mock request.
+
+---
+
+## 2026-06-14 — AI Answering test caller reset tool + UI copy cleanup
+
+Added a narrow, platform-admin-only reset path for the configured AI Answering
+test caller so future tests can start from a clean patient request. This is not a
+live AI rollout and does not enable or mutate Twilio, OpenAI, Stripe, A2P,
+billing, trial, SMS recovery, Vercel env, or provider state.
+
+Code/doc changes:
+
+- Added `config/test-callers.config.ts` for the single allowed reset target:
+  `Test Dental Clinic` (`f37f24a1-070f-436b-b803-956f55466093`,
+  `fairstone-dental-smile`) and masked caller `***-***-9236`.
+- Added `lib/db/test-caller-reset.ts`, which validates the exact clinic, caller,
+  and `RESET_TEST_CALLER` confirmation before opening a DB transaction.
+- Added `POST /api/admin/clinics/[clinicId]/ai-answering/reset-test-caller`,
+  guarded by `requirePlatformAdminClinic`, using only the URL clinic id.
+- Added a collapsed **Reset test caller** action in the platform-admin
+  **AI Answering** tab. It shows only the masked caller, requires typed
+  confirmation, returns deletion counts, and refreshes latest test requests.
+- Cleaned customer-facing Workspace copy from "Activity & SMS audit trail" /
+  "raw SMS" wording to **Message history**.
+- Added a concise `AGENTS.md` rule: normal UI must use product/user language,
+  with deep technical wording limited to explicitly labeled diagnostics,
+  docs, runbooks, or code comments.
+
+Safety scope:
+
+- The reset deletes only exact clinic+caller rows from `ai_voice_sessions`,
+  `messages`, `patient_conversations`, `call_events`, `opt_outs`, and
+  `clinic_blocked_patient_numbers`.
+- The reset intentionally does not delete or mutate `webhook_events`, `clinics`,
+  `clinic_phone_numbers`, billing/Stripe state, Twilio/A2P/provider state, SMS
+  recovery gates, trial state, or any other clinic/caller.
+
+Production reset result:
+
+- Pending at code-change time; perform only after validation and code push per
+  the authorized task scope.

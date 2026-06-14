@@ -18,12 +18,17 @@ import {
   isValidAiVoiceId,
 } from "../config/ai-answering.config";
 import {
+  AI_ANSWERING_TEST_CALLER,
+  AI_ANSWERING_TEST_CALLER_RESET_CONFIRM,
+} from "../config/test-callers.config";
+import {
   AI_VOICE_REVIEW_FALLBACK,
   buildAiVoiceCallSummary,
   deriveWorkspaceSourceChannel,
   workspaceSourceChannelLabel,
 } from "../lib/workspace/ai-voice-summary";
 import { buildWorkspaceRequestSummary } from "../lib/workspace/request-summary";
+import { validateAiAnsweringTestCallerResetInput } from "../lib/db/test-caller-reset";
 
 const REPO_ROOT = process.cwd();
 const read = (rel: string) => fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
@@ -431,6 +436,7 @@ test("admin AI Answering UI uses operator copy and links to admin patient reques
   );
   for (const required of [
     "For testing only. Use a test caller number.",
+    "AI Answering test",
     "Create test request",
     "Caller phone",
     "Reason for call",
@@ -441,9 +447,15 @@ test("admin AI Answering UI uses operator copy and links to admin patient reques
     "View patient request",
     "onViewPatientRequests",
     "Test request created.",
+    "Reset test caller",
+    "Clear this test caller&apos;s previous requests before running a fresh test.",
+    "AI_ANSWERING_TEST_CALLER.resetConfirm",
+    "patientPhone: AI_ANSWERING_TEST_CALLER.patientPhone",
   ]) {
     assert.ok(src.includes(required), `AI Answering UI includes ${required}`);
   }
+  assert.ok(src.includes("AI_ANSWERING_TEST_CALLER.patientPhoneMasked"));
+  assert.ok(!src.includes(AI_ANSWERING_TEST_CALLER.patientPhone), "UI source does not render full phone literal");
   for (const banned of [
     "Open Workspace if your account has clinic access",
     "No call is placed. No AI runs. No SMS is sent.",
@@ -452,7 +464,120 @@ test("admin AI Answering UI uses operator copy and links to admin patient reques
     "Create mock Workspace request",
     "Patient phone (test number, E.164)",
     "Handoff note (optional)",
+    "Activity & SMS audit trail",
+    "Raw SMS",
+    "audit entries",
   ]) {
     assert.ok(!src.includes(banned), `AI Answering UI avoids ${banned}`);
   }
+});
+
+test("AI Answering test caller reset config is exact and masked for UI", () => {
+  assert.equal(AI_ANSWERING_TEST_CALLER_RESET_CONFIRM, "RESET_TEST_CALLER");
+  assert.equal(AI_ANSWERING_TEST_CALLER.clinicId, "f37f24a1-070f-436b-b803-956f55466093");
+  assert.equal(AI_ANSWERING_TEST_CALLER.clinicName, "Test Dental Clinic");
+  assert.equal(AI_ANSWERING_TEST_CALLER.clinicSlug, "fairstone-dental-smile");
+  assert.equal(AI_ANSWERING_TEST_CALLER.patientPhone, "+12245329236");
+  assert.equal(AI_ANSWERING_TEST_CALLER.patientPhoneMasked, "***-***-9236");
+});
+
+test("AI Answering test caller reset validation rejects broad resets", () => {
+  const ok = validateAiAnsweringTestCallerResetInput({
+    clinicId: AI_ANSWERING_TEST_CALLER.clinicId,
+    patientPhone: AI_ANSWERING_TEST_CALLER.patientPhone,
+    confirm: AI_ANSWERING_TEST_CALLER.resetConfirm,
+  });
+  assert.deepEqual(ok, { ok: true });
+
+  const wrongConfirm = validateAiAnsweringTestCallerResetInput({
+    clinicId: AI_ANSWERING_TEST_CALLER.clinicId,
+    patientPhone: AI_ANSWERING_TEST_CALLER.patientPhone,
+    confirm: "RESET",
+  });
+  assert.deepEqual(wrongConfirm, {
+    ok: false,
+    status: 400,
+    code: "confirmation_required",
+    message: "Type RESET_TEST_CALLER to confirm this reset.",
+  });
+
+  const wrongClinic = validateAiAnsweringTestCallerResetInput({
+    clinicId: "00000000-0000-0000-0000-000000000000",
+    patientPhone: AI_ANSWERING_TEST_CALLER.patientPhone,
+    confirm: AI_ANSWERING_TEST_CALLER.resetConfirm,
+  });
+  assert.equal(wrongClinic.ok, false);
+  if (!wrongClinic.ok) {
+    assert.equal(wrongClinic.status, 403);
+    assert.equal(wrongClinic.code, "clinic_not_allowed");
+  }
+
+  const wrongPhone = validateAiAnsweringTestCallerResetInput({
+    clinicId: AI_ANSWERING_TEST_CALLER.clinicId,
+    patientPhone: "+12245550199",
+    confirm: AI_ANSWERING_TEST_CALLER.resetConfirm,
+  });
+  assert.equal(wrongPhone.ok, false);
+  if (!wrongPhone.ok) {
+    assert.equal(wrongPhone.status, 400);
+    assert.equal(wrongPhone.code, "caller_not_allowed");
+  }
+});
+
+test("AI Answering test caller reset helper deletes only exact clinic and caller rows", () => {
+  const src = read(path.join("lib", "db", "test-caller-reset.ts"));
+  assert.ok(src.includes("sql.begin(async (tx)"));
+  for (const table of [
+    "public.ai_voice_sessions",
+    "public.messages",
+    "public.patient_conversations",
+    "public.call_events",
+    "public.opt_outs",
+    "public.clinic_blocked_patient_numbers",
+  ]) {
+    assert.ok(src.includes(`delete from ${table}`), `helper deletes from ${table}`);
+  }
+  for (const forbidden of [
+    "public.webhook_events",
+    "public.clinics",
+    "public.clinic_phone_numbers",
+    "public.clinic_sms_number_readiness",
+    "public.clinic_a2p_submissions",
+    "public.clinic_phone_number_purchase_attempts",
+  ]) {
+    assert.ok(!src.includes(`delete from ${forbidden}`), `helper never deletes ${forbidden}`);
+  }
+  assert.ok(src.includes("const clinicId = AI_ANSWERING_TEST_CALLER.clinicId"));
+  assert.ok(src.includes("const phone = AI_ANSWERING_TEST_CALLER.patientPhone"));
+  assert.ok(src.includes("s.clinic_id = ${clinicId}"));
+  assert.ok(src.includes("m.clinic_id = ${clinicId}"));
+  assert.ok(src.includes("clinic_id = ${clinicId}"));
+  assert.ok(src.includes("patient_phone = ${phone}"));
+  assert.ok(src.includes("from_number = ${phone} or to_number = ${phone}"));
+  assert.ok(src.includes("phone_number = ${phone}"));
+  assert.ok(src.includes("returning id"));
+  assert.ok(src.includes("aiVoiceSessions: aiVoiceSessions.length"));
+  assert.ok(src.includes("clinicBlockedPatientNumbers: clinicBlockedPatientNumbers.length"));
+});
+
+test("AI Answering test caller reset route is platform-admin-only and URL-scoped", () => {
+  const src = read(
+    path.join(
+      "app", "api", "admin", "clinics", "[clinicId]", "ai-answering",
+      "reset-test-caller", "route.ts",
+    ),
+  );
+  assert.ok(src.includes("export async function POST"));
+  assert.ok(src.includes("const { clinicId } = await ctx.params"));
+  assert.ok(src.includes("requirePlatformAdminClinic(req, clinicId)"));
+  assert.ok(src.includes("clinicId: guard.clinic.id"));
+  assert.ok(src.includes("patientPhone: parsed.data.patientPhone"));
+  assert.ok(src.includes("confirm: parsed.data.confirm"));
+  assert.ok(!src.includes("parsed.data.clinicId"), "route never reads clinic id from the body");
+  assert.ok(src.includes(".strict()"));
+  assert.ok(src.includes("TestCallerResetValidationError"));
+  assert.ok(src.includes("maskedPhone: result.maskedPhone"));
+  assert.ok(src.includes("counts: result.counts"));
+  assert.ok(!src.includes("getTwilioClient"));
+  assert.ok(!/from ["'][^"']*openai[^"']*["']/i.test(src), "reset route imports no openai sdk");
 });

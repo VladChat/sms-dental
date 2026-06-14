@@ -585,23 +585,20 @@ function RequestDetail({
         </div>
       )}
 
-      {/* 3. Activity & SMS audit trail: last 2 messages immediately, full on demand. */}
+      {/* 3. Message history: last 2 messages immediately, full on demand. */}
       <div className="card card-pad" aria-labelledby={`ws-conversation-${card.id}`}>
         <div className="acct-section-head">
-          <h3 id={`ws-conversation-${card.id}`} className="t-h4">Activity & SMS audit trail</h3>
+          <h3 id={`ws-conversation-${card.id}`} className="t-h4">Message history</h3>
           {card.timeline.length > 2 && (
             <button
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => setShowFullConversation((prev) => !prev)}
             >
-              {showFullConversation ? "Hide full audit trail" : "Show full audit trail"}
+              {showFullConversation ? "Hide message history" : "Show full message history"}
             </button>
           )}
         </div>
-        <p className="t-helper ws-meta" style={{ marginTop: "var(--space-2)" }}>
-          Raw SMS is kept here only as secondary history.
-        </p>
         {card.timeline.length === 0 ? (
           <p className="t-small ws-empty-note" style={{ marginTop: "var(--space-3)" }}>
             {card.aiVoice ? "No SMS messages yet." : "No messages yet."}
@@ -621,7 +618,7 @@ function RequestDetail({
             ))}
             {!showFullConversation && card.timeline.length > 2 && (
               <p className="t-helper ws-meta" style={{ margin: 0 }}>
-                Showing the last 2 of {card.timeline.length} audit entries.
+                Showing the last 2 of {card.timeline.length} messages.
               </p>
             )}
           </div>

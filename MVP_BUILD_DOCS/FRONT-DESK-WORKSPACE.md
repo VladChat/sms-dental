@@ -17,7 +17,7 @@ used for internal foundation/testing.
   (`sourceChannel` = `ai_voice` / `mixed` / `sms`). It never shows providers,
   models, Twilio SIDs, session ids, or internal IDs.
 - **AI call summary card.** When an AI voice session exists, a compact
-  **AI call summary** card appears above the Activity & SMS audit trail with the
+  **AI call summary** card appears above Message history with the
   safe captured fields only: a one-line summary, reason, preferred time, an
   **Urgent — front desk attention** flag *only when the safety signal is set*
   (a flag, never diagnosis/triage/medical advice), and the call-captured time.
@@ -28,7 +28,7 @@ used for internal foundation/testing.
 - **Names.** A safely-extracted AI-captured name is used only when no display
   name is set, and only if it passes the conservative name rules.
 - **Empty conversation copy.** When there are no SMS messages but an AI voice
-  session exists, the audit trail reads **"No SMS messages yet."**
+  session exists, Message history reads **"No SMS messages yet."**
 - **Degradation-safe.** All AI voice reads tolerate the
   `20260627000100_ai_answering_foundation.sql` migration not being applied yet:
   `/workspace` loads and SMS-only cards render exactly as before. Data model and
@@ -90,7 +90,7 @@ used for internal foundation/testing.
   `Mentions pain/urgent concern · Wants appointment`, `Payment question`,
   fallback `Review conversation`). Request signals such as pain/urgent,
   payment, and insurance are not repeated as chips when the headline already
-  says them. The request summary and Activity & SMS audit trail live in the right
+  says them. The request summary and Message history live in the right
   detail panel, not the left queue cards. Visible chips in the detail panel are
   reserved for useful non-redundant system state: `Automation paused` and
   `High volume`. No empty chip rows and no `None detected` rows render.
@@ -137,10 +137,9 @@ what do they want, what did they say, and what should staff do next.
   `lib/workspace/request-summary.ts`, based on INBOUND text plus conversation
   state. No AI, no invented facts, no large field table, no duplicated phone,
   and no empty chip rows.
-- **Activity & SMS audit trail.** The last 2 messages render immediately with
-  Patient / Your office labels and timestamps; **Show full audit trail**
-  toggles the full timeline. The raw SMS is secondary history, not the main
-  queue concept. The old "Latest patient reply" block is gone.
+- **Message history.** The last 2 messages render immediately with Patient /
+  Your office labels and timestamps; **Show full message history** toggles the
+  full timeline. The old "Latest patient reply" block is gone.
 - **Internal note.** Staff-only note saved independently via
   `/api/workspace/conversation-action` (`save_note`) — no outcome required.
   The big Outcome radio form was removed from the layout; the legacy
@@ -205,7 +204,7 @@ approval documents, owner setup settings, Twilio technical details, internal IDs
 request cards. It now supports the minimal human follow-up workflow:
 
 - no outbound replies;
-- selected-card Activity & SMS audit trail with a full-timeline toggle;
+- selected-card Message history with a full-timeline toggle;
 - a normal browser/phone `tel:` link labeled `Call patient` (not a Twilio
   outbound call and not automation);
 - explicit queue actions: Handled, Reopen, Block number, Unblock number,

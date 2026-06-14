@@ -95,6 +95,14 @@ MVP.
 - Include clear loading, error, and empty states for user-facing workflows.
 - Keep forms minimal: ask only for information needed for the next immediate
   step and explain why required fields are needed.
+- UI copy must use product/user language, not engineering/debug language. Avoid
+  terms like audit trail, raw SMS, mock session, internal test tool, runtime,
+  provider, route, Twilio, OpenAI, clinic access, raw payload, webhook, SID, and
+  test-only implementation detail in normal UI. Prefer Message history,
+  Messages, Patient requests, Test request, AI answered call, Call summary,
+  Source, Internal note, and Urgent concern. Keep long safety/technical
+  guardrails in docs, runbooks, or code comments; explicitly labeled deep
+  technical/admin diagnostics may show technical details.
 
 ## Final Report Format
 

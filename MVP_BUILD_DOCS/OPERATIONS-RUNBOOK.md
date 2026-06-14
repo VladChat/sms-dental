@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-14 (Admin patient request preview for AI Answering test verification; AI runtime still not live)
+Last updated: 2026-06-14 (AI Answering test caller reset tool; AI runtime still not live)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3638,8 +3638,8 @@ unchanged. No AI runtime — everything is deterministic.
   chips, or status badges. The right detail panel keeps the
   deterministic request summary from `lib/workspace/request-summary.ts`
   (inbound text only, no AI, fallback `Review conversation`), the
-  **Activity & SMS audit trail** (last 2 messages with full-timeline toggle;
-  raw SMS as secondary history only), inline name edit, actions, and staff-only
+  **Message history** (last 2 messages with full-timeline toggle), inline name
+  edit, actions, and staff-only
   Internal note (`save_note`). The old "Latest patient reply" block and the big
   Outcome radio form are removed; `/api/workspace/outcome` remains for
   compatibility only.
@@ -3830,6 +3830,11 @@ contact Twilio/OpenAI, and it has no enable/activation control.
     fields only, masks caller phones to last 4, and does not return provider
     IDs, raw payloads, internal diagnostics, billing/legal details, secrets, or
     SMS message bodies.
+  - `POST /api/admin/clinics/[clinicId]/ai-answering/reset-test-caller` —
+    platform-admin-only reset for the single configured AI Answering test caller.
+    It requires the URL clinic id, the configured caller phone, and typed
+    confirmation `RESET_TEST_CALLER`. It returns masked phone + deleted row
+    counts and refuses any other clinic or caller.
 - **How to use safely:** open the tab on a **test clinic**, enter a **documented
   safe test caller number** (E.164, e.g. the OWNER-SETTINGS test clinic phone),
   optionally a test name/reason/preferred time/status/urgent concern/internal
@@ -3848,3 +3853,46 @@ contact Twilio/OpenAI, and it has no enable/activation control.
   `/api/admin/clinics/{clinicId}/ai-answering[...]` return 401 (no session) or
   403 (signed in, not platform admin). Verified unauthenticated in production:
   `POST .../mock-session` → 401.
+
+### AI Answering test caller reset (single allowlisted caller only)
+
+Use this only when Vlad explicitly authorizes clearing the configured AI
+Answering test caller before a fresh test.
+
+Allowlist source: `config/test-callers.config.ts`.
+
+Allowed target:
+
+- Clinic: `Test Dental Clinic`
+- Clinic id: `f37f24a1-070f-436b-b803-956f55466093`
+- Clinic slug: `fairstone-dental-smile`
+- Caller shown in UI/reports as: `***-***-9236`
+- Confirmation phrase: `RESET_TEST_CALLER`
+
+Route procedure:
+
+1. Open `/admin/clinics/f37f24a1-070f-436b-b803-956f55466093` as a platform
+   admin and go to **AI Answering**.
+2. Expand **Reset test caller**. Confirm the displayed masked caller is
+   `***-***-9236`.
+3. Type `RESET_TEST_CALLER`, then choose **Reset test caller**.
+4. Verify the success counts, then refresh **Latest test requests** and the
+   adjacent **Patient requests** tab.
+5. Do not create a new test request unless the current task explicitly asks for
+   one.
+
+Fallback DB procedure when no authenticated admin session/tool is available:
+
+1. Use `SUPABASE_DB_URL` without printing it.
+2. Before deleting, query only the configured clinic and caller from
+   `config/test-callers.config.ts`.
+3. Stop if any row belongs to a different clinic or appears to be a real
+   patient/caller.
+4. Run one transaction matching `lib/db/test-caller-reset.ts`.
+5. Verify post-reset zero counts for: `ai_voice_sessions`, `messages`,
+   `patient_conversations`, `call_events`, `opt_outs`, and
+   `clinic_blocked_patient_numbers`.
+
+The reset intentionally does **not** delete or mutate `webhook_events`,
+`clinics`, `clinic_phone_numbers`, billing/Stripe state, Twilio/A2P/provider
+state, SMS recovery gates, trial state, or any other clinic/caller.

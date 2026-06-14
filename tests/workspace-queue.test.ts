@@ -468,13 +468,16 @@ test("action tooltips use the exact agreed strings", () => {
   assert.ok(src.includes("btn-danger"));
 });
 
-test("SMS audit trail shows the last 2 messages with a full toggle", () => {
+test("message history shows the last 2 messages with a full toggle", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
   assert.ok(src.includes("card.timeline.slice(-2)"));
-  assert.ok(src.includes("Activity & SMS audit trail"));
-  assert.ok(src.includes("Raw SMS is kept here only as secondary history."));
-  assert.ok(src.includes("Show full audit trail"));
-  assert.ok(src.includes("Hide full audit trail"));
+  assert.ok(src.includes("Message history"));
+  assert.ok(src.includes("Show full message history"));
+  assert.ok(src.includes("Hide message history"));
+  assert.ok(src.includes("Showing the last 2 of {card.timeline.length} messages."));
+  assert.ok(!src.includes("Activity & SMS audit trail"));
+  assert.ok(!src.includes("Raw SMS is kept here only as secondary history."));
+  assert.ok(!src.includes("audit entries"));
   assert.ok(src.includes('"Patient"'));
   assert.ok(src.includes('"Your office"'));
   // The old prominent block and the big outcome radio form are gone.
