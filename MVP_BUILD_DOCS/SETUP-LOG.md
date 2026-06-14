@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-27 (AI Answering foundation added — data model + Workspace mock flow; migration NOT applied to production)
+Last updated: 2026-06-27 (AI Answering foundation migration applied to production + verified; AI runtime still not live)
 
 This log records what was done, in order, without storing secrets.
 
@@ -7971,7 +7971,8 @@ Changed/added (code):
   `tsconfig.unit-tests.json`); `tests/workspace-queue.test.ts` factory updated for
   the new required `sourceChannel`.
 
-Migration ADDED but **NOT applied to production**:
+Migration ADDED in this commit, applied to production in the follow-up entry
+below (**"AI Answering foundation migration applied + verified"**):
 
 - `supabase/migrations/20260627000100_ai_answering_foundation.sql` —
   `clinic_ai_answering_settings` + `ai_voice_sessions`. Additive, idempotent,
@@ -7993,3 +7994,74 @@ changes (`.qwen/`, `design/recall/IMPLEMENTATION-STATUS.md`, KNOWLEDGE-SYSTEM
 edits) left untouched and unstaged.
 
 Commit: `feat: add AI answering workspace foundation` (pushed to `origin/main`).
+
+---
+
+## 2026-06-27 — AI Answering foundation migration applied + verified (production)
+
+Applied the pending AI Answering foundation migration to **production** and
+verified the deployed non-live foundation. This is **not** a live AI rollout: no
+AI voice runtime, no Twilio ConversationRelay, no WebSocket, no OpenAI, no SMS/
+email, and no change to Twilio/Stripe/Vercel env/DNS/billing/trial/SMS gates/
+SMS_RECOVERY_MODE/clinic SMS enablement.
+
+Migration applied:
+
+- Applied **only** `supabase/migrations/20260627000100_ai_answering_foundation.sql`
+  to production Supabase project `sms_dental` (ref `qfjpvbvfvhbtebwivcdc`) via
+  Supabase MCP `apply_migration` (result `{"success":true}`). The MCP recorded a
+  generated version (`20260614162150`); per the project convention the
+  `supabase_migrations.schema_migrations` version was then aligned to the repo
+  filename **`20260627000100`** (name `ai_answering_foundation`).
+
+Database verification (all passed):
+
+- Tables `public.clinic_ai_answering_settings` and `public.ai_voice_sessions`
+  exist; both **empty** (0 rows). Additive create-if-not-exists — no existing data
+  deleted or rewritten.
+- RLS **enabled** on both; **zero** policies on both (service-role/server access
+  only, matching every other internal clinic-scoped table).
+- `set_updated_at` triggers present on both tables.
+- Indexes present: `ai_voice_sessions_external_id_key` (partial, `where
+  external_session_id is not null`), `ai_voice_sessions_clinic_created_idx`,
+  `ai_voice_sessions_conversation_created_idx`, `ai_voice_sessions_patient_idx`,
+  plus both primary keys.
+- Constraints present on `ai_voice_sessions`: `source` check (`mock`,
+  `future_twilio`), `status` check (`captured`, `incomplete`, `failed`), and all
+  length checks (name ≤80, reason ≤240, preferred_time ≤120, summary ≤240,
+  handoff ≤500, patient_phone ≤32, clinic_phone ≤32, external_id ≤200).
+- Security advisor: the only finding on the two new tables is
+  `rls_enabled_no_policy` at **INFO** level — the intended service-role-only
+  pattern shared by all internal tables. The two **WARN** items
+  (`set_updated_at` mutable search_path; auth leaked-password protection) are
+  **pre-existing** and were not introduced by this migration.
+
+Deployed-app verification:
+
+- Production deploy for commit `d92ac6b` is live (the `mock-session` route
+  responds, so it is deployed — not 404).
+- `GET https://app.missedcallsdental.com/api/health` → HTTP 200
+  `{"ok":true,...}`.
+- Unauthenticated `POST /api/admin/clinics/{clinicId}/ai-answering/mock-session`
+  → HTTP **401** `unauthorized` ("Please sign in to continue."). Platform-admin
+  gate working; clinic id from the URL.
+
+Mock route test: **skipped.** No platform-admin authenticated session/tooling was
+available to call the route as an admin, so the authenticated mock session was
+not created. No mock row was inserted by any other path; production has **zero**
+`ai_voice_sessions` rows. DB gate (RLS, no policies) + API auth gate (401) were
+verified instead.
+
+Validation: `npm run typecheck` ✓, `npm run test:sms-recovery` ✓ (239 tests),
+`npm run test:ai-knowledge` ✓ (76 tests), `npm run build` ✓ (compiled
+successfully), `git diff --check` ✓ (no whitespace errors).
+
+Not done / out of scope: no AI voice runtime / ConversationRelay / OpenAI /
+WebSocket; no SMS/email; no metering/overage billing; no Twilio/Stripe/Vercel
+env/DNS/trial/SMS-mode/SMS-enablement changes; no manual deploy; no provider
+mutated other than the approved Supabase migration. No secrets, database URLs, or
+service-role keys printed. Pre-existing working-tree changes (`.qwen/`,
+`design/recall/IMPLEMENTATION-STATUS.md`, KNOWLEDGE-SYSTEM edits) left untouched.
+
+Commit: `docs: log AI Answering foundation migration applied` (pushed to
+`origin/main`).

@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-27 (AI Answering foundation — represent AI answered calls in DB/Workspace; AI runtime still not live)
+Last updated: 2026-06-27 (AI Answering foundation migration applied to production + verified; AI runtime still not live)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -3751,6 +3751,13 @@ DB and Workspace. There is **no** AI voice runtime, **no** Twilio
 ConversationRelay, **no** WebSocket runtime, **no** OpenAI, and **no** SMS/email
 send tied to it. AI minutes are not metered and overage is not billed. Nothing
 here enables AI Answering for real callers.
+
+> **Status (2026-06-27): migration applied to production** (`sms_dental`,
+> ref `qfjpvbvfvhbtebwivcdc`; `schema_migrations` version `20260627000100`). Both
+> tables exist with RLS on / 0 policies and are currently empty. Because the
+> migration is now applied, the prod `mock-session` route no longer returns
+> `503 ai_answering_unavailable`; the unauthenticated auth gate still returns
+> 401/403. See SETUP-LOG.md (2026-06-27 apply + verify entry).
 
 ### What shipped
 
