@@ -1,8 +1,8 @@
 # Support Runbooks
 
-Status: active (runbooks verified; internal-only)
+Status: active (runbooks verified; internal-only — two AI answered call runbooks draft/planned)
 Audience: Internal support / operator · Visibility: `internal_ops`
-Last updated: 2026-06-09
+Last updated: 2026-06-27
 
 Internal triage scripts for recurring support scenarios. They translate the
 [platform-admin docs](../platform-admin/README.md) into ticket-handling steps. They
@@ -47,6 +47,11 @@ Each runbook follows this structure:
 - [a2p-approval-question.md](a2p-approval-question.md) — SMS approval status.
 - [clinic-cannot-access-account.md](clinic-cannot-access-account.md) — sign-in /
   reset / access issues.
+- [ai-answered-calls-question.md](ai-answered-calls-question.md) — **draft** AI
+  answered calls (planned, not broadly live); customer-safe wording + escalation.
+- [ai-call-billing-question.md](ai-call-billing-question.md) — **draft** AI
+  answered call time billing (not metered/billed yet); cite config, no invented
+  prices.
 
 ## Source of truth
 

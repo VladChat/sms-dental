@@ -2,7 +2,7 @@
 
 Status: active (articles ready; not yet published)
 Audience: Front-desk staff · Visibility: `clinic_staff`
-Last updated: 2026-06-13
+Last updated: 2026-06-27
 
 Help for front-desk staff using `/workspace` (**Patient requests**) to handle
 patient replies and requests after a missed-call follow-up.
@@ -44,6 +44,12 @@ visible to staff):
   [../missed-calls-and-messages/README.md](../missed-calls-and-messages/README.md).
 - The Sample requests section is clearly separated from real requests — note this
   so staff don't act on examples.
+- Workspace articles may mention a request **Source** label, including **Source:
+  AI answered call** (with a short call summary), as the way a request arrived.
+  Describe it as a source label only: AI answered calls are not available for
+  every clinic yet, front-desk staff do **not** configure or turn on AI answered
+  calls, and a request is handled the same regardless of source. Keep it
+  staff-safe — no runtime/provider/test terms.
 - Do not describe owner-only features (billing, SMS approval, setup) here, even to
   say staff "can't" use them — keep the workspace scope clean.
 

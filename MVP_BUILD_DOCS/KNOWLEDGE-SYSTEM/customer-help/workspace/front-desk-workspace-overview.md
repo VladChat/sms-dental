@@ -45,6 +45,8 @@ reviewing those replies and tracking your follow-up.
   or **No appointment booked**.
 - The selected request's summary and **Activity & SMS audit trail** (patient and
   office messages with timestamps) in the detail panel.
+- The **source** of a request when shown — for example **Source: AI answered
+  call** — with a short **call summary** for an AI answered call.
 - The selected request's patient name or **Not provided**, plus the phone number
   once in the patient header.
 - Staff-only notes and follow-up actions.
@@ -64,6 +66,11 @@ belong to the owner account, not the front desk.
 - **Patient name / phone** — if a safe name is available, it is the title and the
   phone is secondary; otherwise the phone is the title.
 - **Last activity** — the most recent saved activity time.
+- **Source** — where a request came from when shown, such as a missed-call text
+  reply or an **AI answered call**. AI answered calls are a newer source and are
+  not available for every clinic yet; when one appears, you handle it the same as
+  any other patient request through your clinic's normal scheduling and follow-up.
+  Front desk does not set up or turn on AI answered calls.
 - **Not provided** — means the system does not have a safe patient name. It is
   not an error; confirm directly with the patient if you need it.
 

@@ -90,6 +90,12 @@ See [Patient opt-out — STOP and START](patient-opt-out-stop-start.md).
 ## What to expect
 
 - New replies appear as request cards for the front desk to handle.
+- A request may show its **Source** — usually a missed-call text reply, and in
+  some cases an **AI answered call** (with a short **call summary**). AI answered
+  calls are a newer source and are not available for every clinic yet. However a
+  request arrives, follow up the same way through your clinic's normal scheduling
+  process; anything urgent or medical follows your clinic's normal phone and
+  emergency process. Front desk does not set up AI answered calls.
 - Cards are grouped into **Needs follow-up**, **Handled**, and **Blocked**. Use
   **Load more** when a section has more cards.
 - Missed Calls Dental is not a public texting inbox. If a phone number sends an

@@ -43,6 +43,8 @@ rules in [../01-AUDIENCE-AND-ACCESS-MODEL.md](../01-AUDIENCE-AND-ACCESS-MODEL.md
 - [workspace/](workspace/README.md) — front-desk staff handling of replies.
 - [ai-front-desk-knowledge/](ai-front-desk-knowledge/README.md) — preparing
   structured clinic facts for future AI/front-desk use (owner).
+- [ai-call-assistant/](ai-call-assistant/README.md) — **draft/planned, owner-only**:
+  how AI answered calls will work (not broadly live; not published).
 - [notifications/](notifications/README.md) — account notification settings
   (AI answered call minute alerts; settings-only, owner).
 - [troubleshooting/](troubleshooting/README.md) — common issues and contacting

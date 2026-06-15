@@ -48,6 +48,16 @@ status label. Left-side cards show only the name when available, the phone
 number, and last activity. Open the card to read the request summary and
 Activity & SMS audit trail in the detail panel before you act.
 
+### Where a request came from
+
+A request may show its **Source** — for example a missed-call text reply or an
+**AI answered call** (which includes a short **call summary**). The source is
+informational: it tells you how the request arrived, not its status. AI answered
+calls are a newer source and are not available for every clinic yet. Whatever the
+source, follow up the same way through your clinic's normal scheduling process,
+and use the same sections (Needs follow-up / Handled / Blocked). Front desk does
+not configure AI answered calls.
+
 ### What "Not provided" means
 
 The patient name may show **Not provided**. That means the patient has not given a
