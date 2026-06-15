@@ -22,9 +22,9 @@ related:
 ## Summary
 
 When a patient replies to a missed-call follow-up text, the front desk reviews the
-reply in the **workspace** and follows up to help the patient schedule. Replies are
-about helping the patient get an appointment — not about giving medical advice over
-text.
+request in the **Patient requests** workspace and follows up to help the patient
+schedule. Replies are about helping the patient get an appointment — not about
+giving medical advice over text.
 
 ## Applies to
 
@@ -33,7 +33,7 @@ Front-desk staff who review and act on patient replies.
 ## What this means
 
 After a missed-call follow-up text goes out, a patient may reply asking for help.
-Those replies show up in the **workspace** as patient request cards so your team can
+Those replies show up in **Patient requests** as request cards so your team can
 see who needs follow-up.
 
 Your job at the front desk is to:
@@ -69,13 +69,13 @@ See [Patient opt-out — STOP and START](patient-opt-out-stop-start.md).
 
 ## What you can do
 
-- Open the **workspace** to see patient replies and request cards.
+- Open **Patient requests** to see patient replies and request cards.
 - Start in the **Needs follow-up** section. It is expanded by default; Handled
   and Blocked start collapsed. Needs follow-up is oldest first; the other
   sections show newest first.
 - Use the left queue card to identify the patient name or phone number and last
   activity, then open the selected request to read the request summary and
-  conversation.
+  Activity & SMS audit trail.
 - Review each reply and follow up using your clinic's normal process (for example,
   using **Call patient** to open your device's normal phone dialer and call the
   patient back to schedule).
@@ -85,7 +85,7 @@ See [Patient opt-out — STOP and START](patient-opt-out-stop-start.md).
 > Sending text replies directly from the workspace is not available today. Use the
 > workspace to review replies and track outcomes, and follow up with the patient
 > through your normal phone process. The **Call patient** action is a normal phone
-> link; it does not send a text or place an automated Twilio call.
+> link; it does not send a text or place an automated call.
 
 ## What to expect
 

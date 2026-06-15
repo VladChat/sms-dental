@@ -10,7 +10,7 @@ owner: engineering
 source_of_truth:
   - ../05-ADMIN-SUPPORT-INTEGRATION-PLAN.md
   - ../06-AI-SUPPORT-BOUNDARIES.md
-last_verified: 2026-06-09
+last_verified: 2026-06-27
 related:
   - source-of-truth-map
   - update-knowledge-system-checklist
@@ -25,9 +25,42 @@ consistent with the architecture and access model.
 
 ## Not built yet
 
-- No help widget, no search index, no AI assistant, no support inbox, no database
-  table, no admin support screen.
-- This scaffold is content + governance only. Articles are mostly stubs/planned.
+- No help widget, no search index, no AI-support retrieval, no support inbox, no
+  Knowledge System database table, and no admin support screen.
+- This layer is content + governance only. Article **bodies** are now written:
+  customer-help is `ready`, platform-admin and support runbooks are `internal`;
+  only the patient-facing AI Answering / AI Call Assistant rows stay `draft`
+  because that channel is not broadly live.
+
+## Five distinct future tracks (do not conflate)
+
+These are separate future efforts. The first four are help-system surfaces that
+would *consume* this Knowledge System; the fifth is a product channel that is
+*documented by* this Knowledge System, not part of it.
+
+1. **Docs-only Knowledge System work (this layer).** Writing/reconciling
+   articles, inventory, source-of-truth map, governance. Markdown only; no
+   `app/` / `lib/` / `config/` / `supabase/` changes. This reconciliation pass is
+   this track.
+2. **Future contextual help UI.** Surfacing `status: published`,
+   audience-appropriate articles inside `/account`, `/workspace`, `/admin` per
+   [../05-ADMIN-SUPPORT-INTEGRATION-PLAN.md](../05-ADMIN-SUPPORT-INTEGRATION-PLAN.md).
+   Server-side role→visibility filtering before render.
+3. **Future role-filtered search.** A role-partitioned index over article
+   frontmatter + body; a customer query must never reach internal content.
+4. **Future AI-support retrieval.** Role-filtered, source-cited grounding that
+   strictly follows [../06-AI-SUPPORT-BOUNDARIES.md](../06-AI-SUPPORT-BOUNDARIES.md):
+   retrieval filtered server-side before the model, no secrets/raw payloads, no
+   invented behavior, escalate on uncertainty.
+5. **Future AI Answering runtime (a product channel, NOT a help surface).** The
+   live patient-facing AI voice answering runtime. A non-live foundation exists
+   today (data model, Workspace representation, platform-admin mock sessions, a
+   fail-closed runtime gate, and a gated test-only ConversationRelay path) — see
+   `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` and
+   [../platform-admin/ai-answering-foundation.md](../platform-admin/ai-answering-foundation.md).
+   Building the broad runtime is product/app work (provider/runtime, billing
+   metering, owner enablement) under the normal app rules — it is out of scope
+   for this Knowledge System layer, which only documents it.
 
 ## Frontmatter is the contract
 

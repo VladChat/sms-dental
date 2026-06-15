@@ -1,7 +1,7 @@
 # Customer Help
 
 Status: active (all category articles promoted to ready; not yet published)
-Last updated: 2026-06-09
+Last updated: 2026-06-27
 
 Customer-safe help for clinic **owners** and **front-desk staff**. Everything in
 this tree must follow the customer-safety rules below and the visibility hard
@@ -41,6 +41,10 @@ rules in [../01-AUDIENCE-AND-ACCESS-MODEL.md](../01-AUDIENCE-AND-ACCESS-MODEL.md
   replies and opt-out.
 - [account-access/](account-access/README.md) — password and sign-in.
 - [workspace/](workspace/README.md) — front-desk staff handling of replies.
+- [ai-front-desk-knowledge/](ai-front-desk-knowledge/README.md) — preparing
+  structured clinic facts for future AI/front-desk use (owner).
+- [notifications/](notifications/README.md) — account notification settings
+  (AI answered call minute alerts; settings-only, owner).
 - [troubleshooting/](troubleshooting/README.md) — common issues and contacting
   support.
 

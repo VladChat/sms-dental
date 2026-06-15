@@ -10,10 +10,12 @@ owner: ops
 source_of_truth:
   - MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md
   - MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md
-last_verified: 2026-06-14
+last_verified: 2026-06-27
 related:
   - phone-number-lifecycle
   - a2p-review-and-submission
+  - sms-conversation-builder
+  - ai-answering-foundation
   - billing-operations
   - diagnostics-and-audit
   - support-boundaries
@@ -63,7 +65,15 @@ number). Sections:
   [a2p-review-and-submission.md](a2p-review-and-submission.md).
 - **Billing** — billing state/presence only. See
   [billing-operations.md](billing-operations.md).
-- **SMS behavior** — read-only. Status: not implemented yet (no settings backend).
+- **AI knowledge** — manage the clinic's structured front-desk facts (the same
+  facts the owner edits in `/account`), via the shared AI Knowledge card. See the
+  AI Front Desk Knowledge customer docs and `OPERATIONS-RUNBOOK.md`.
+- **SMS settings** — admin-only deterministic SMS + voice greeting configuration,
+  split into three panels (Voice greeting / SMS texts / Limits & anti-spam).
+  Owners cannot edit SMS copy. See
+  [sms-conversation-builder.md](sms-conversation-builder.md).
+- **AI Answering** — operator foundation for AI answered calls (mock sessions;
+  not broadly live). See [ai-answering-foundation.md](ai-answering-foundation.md).
 - **Admin tools / diagnostics** — Pause/Reactivate clinic, Launch service / Pause
   SMS sending, Internal note, and the Danger zone **Delete clinic** action; plus
   collapsible Recent admin activity, Diagnostics (masked), and Technical details
@@ -75,7 +85,14 @@ number). Sections:
 **Editable now (audited):** Business profile fields, A2P/representative data,
 internal note, clinic active/paused, SMS recovery enable/disable (gated), Twilio
 number purchase/assign (behind `TWILIO_NUMBER_PURCHASE_ENABLED`), detach, safe
-app-database-only clinic delete from Admin tools -> Danger zone.
+app-database-only clinic delete from Admin tools -> Danger zone, AI knowledge
+(structured clinic facts), and SMS settings (voice greeting / SMS texts /
+limits & anti-spam — deterministic, admin-only, owners cannot edit).
+
+**Foundation only (operator/testing, not broadly live):**
+
+- AI Answering — mock sessions and a gated `test_only` runtime path; not enabled
+  for real callers. See [ai-answering-foundation.md](ai-answering-foundation.md).
 
 **Blocked-with-reason (never simulated):**
 
@@ -84,7 +101,6 @@ app-database-only clinic delete from Admin tools -> Danger zone.
 - A2P carrier submission from the panel — gated/allowlisted; **this remains a
   future milestone** for general clinics (see
   [a2p-review-and-submission.md](a2p-review-and-submission.md)).
-- Per-clinic SMS behavior settings — **Status: not implemented yet**.
 
 Each blocked action is shown disabled with its exact reason; it is never faked.
 

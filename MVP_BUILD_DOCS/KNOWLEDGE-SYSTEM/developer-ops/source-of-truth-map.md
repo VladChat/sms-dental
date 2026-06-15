@@ -9,7 +9,7 @@ category: reference
 owner: engineering
 source_of_truth:
   - AGENTS.md
-last_verified: 2026-06-09
+last_verified: 2026-06-27
 related:
   - update-knowledge-system-checklist
 ---
@@ -27,13 +27,20 @@ for Project Facts").
 |---|---|
 | Product identity and architecture | `MVP_BUILD_DOCS/PROJECT-CONTEXT.md` |
 | Agent rules | `AGENTS.md`, `MVP_BUILD_DOCS/AGENT-RULES.md` |
-| Billing / pricing / number policy | `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md`, `config/billing.config.ts` |
+| Missed-call SMS Recovery | `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`, `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`, `config/sms-recovery.config.ts`, `lib/sms-recovery/templates.ts` |
+| Phone number lifecycle | `AGENTS.md` ("Phone Number Removal Lifecycle", "Toll-free vs Local Number Model"), `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`, `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` |
+| Billing / pricing / usage / number policy / AI answered call minutes | `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md`, `config/billing.config.ts` |
 | Runtime settings | `config/runtime.config.ts` |
 | Auth / access | `MVP_BUILD_DOCS/AUTH-AND-ACCESS-CONTROL.md` |
+| Front desk workspace | `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md` |
 | Platform admin | `MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md` |
-| Front desk | `MVP_BUILD_DOCS/FRONT-DESK-WORKSPACE.md` |
 | A2P / SMS approval | `MVP_BUILD_DOCS/A2P-10DLC-COMPLIANCE-READINESS.md`, `MVP_BUILD_DOCS/SMS-APPROVAL-FIELD-MAPPING.md` |
-| AI Call Assistant / future voice assistant (planned) | product/architecture `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`; curated voice defaults/options `config/voice-greeting.config.ts`; billing/usage `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` + `config/billing.config.ts`; Twilio/voice implementation guidance `Skills/twilio-dental-sms.md`; customer/product language `Skills/missed-calls-dental-product-context.md` |
+| SMS Conversation Builder (admin SMS settings: voice greeting / SMS texts / limits & anti-spam) | `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`; `config/sms-recovery.config.ts`; `lib/sms-recovery/conversation-templates.ts`, `lib/sms-recovery/special-reply-templates.ts`, `lib/sms-recovery/automation-volume-limits.ts`, `lib/sms-recovery/reply-classification.ts`, `lib/sms-recovery/voice-greeting-templates.ts`; `Skills/twilio-dental-sms.md` |
+| AI Front Desk Knowledge / structured clinic facts | `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`, `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`, `config/ai-front-desk-facts.config.ts`, `lib/ai-knowledge/facts.ts` |
+| AI Answering / AI Call Assistant (planned channel; non-live foundation + gated test-only runtime) | product/architecture `MVP_BUILD_DOCS/PROJECT-CONTEXT.md`; operate/verify + runtime status `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md`; non-live vocabulary `config/ai-answering.config.ts`; curated voice defaults `config/voice-greeting.config.ts`; billing/included minutes `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md` + `config/billing.config.ts`; Twilio/voice implementation guidance `Skills/twilio-dental-sms.md`; customer/product language `Skills/missed-calls-dental-product-context.md` |
+| Notification settings / AI answered call minute alerts | `MVP_BUILD_DOCS/OWNER-SETTINGS.md`, `MVP_BUILD_DOCS/BILLING-AND-USAGE-POLICY.md`, `config/notifications.config.ts`, `config/billing.config.ts` |
+| Delete clinic / danger zone | `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` ("Admin clinic deletion danger zone"), `MVP_BUILD_DOCS/PLATFORM-ADMIN-CONSOLE-PLAN.md`, `AGENTS.md` |
+| Twilio / SMS / voice implementation guidance | `Skills/twilio-dental-sms.md` |
 | Operations | `MVP_BUILD_DOCS/OPERATIONS-RUNBOOK.md` |
 | Chronological setup/deployment facts | `MVP_BUILD_DOCS/SETUP-LOG.md` |
 | Repeatable setup lessons | `MVP_BUILD_DOCS/REPEATABLE-SETUP-CHECKLIST.md` |

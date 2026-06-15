@@ -2,7 +2,7 @@
 
 Status: active (internal docs verified; internal-only)
 Audience: Platform owner/operator · Visibility: `platform_admin`
-Last updated: 2026-06-09
+Last updated: 2026-06-27
 
 Internal knowledge for the platform owner/operator who runs the cross-tenant
 `/admin` console. This folder is **internal-only**. It is **never** public and
@@ -51,6 +51,12 @@ Key rules:
   number, customer-safe vs internal explanation.
 - [a2p-review-and-submission.md](a2p-review-and-submission.md) — SMS approval (A2P)
   review, field split, the live-submission safety gates.
+- [sms-conversation-builder.md](sms-conversation-builder.md) — admin-only
+  deterministic SMS + voice greeting settings (voice greeting / SMS texts /
+  limits & anti-spam); owners cannot edit SMS copy.
+- [ai-answering-foundation.md](ai-answering-foundation.md) — AI Answering (planned
+  channel) non-live foundation, mock sessions, runtime gating, and app-DB vs
+  provider/runtime boundaries; not broadly live.
 - [billing-operations.md](billing-operations.md) — billing state and quantity-sync
   concepts (no secrets, no price IDs); what support can explain vs operator review.
 - [diagnostics-and-audit.md](diagnostics-and-audit.md) — diagnostics scope,

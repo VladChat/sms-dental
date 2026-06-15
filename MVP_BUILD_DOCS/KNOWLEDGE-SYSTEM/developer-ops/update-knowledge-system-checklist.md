@@ -10,7 +10,7 @@ owner: engineering
 source_of_truth:
   - AGENTS.md
   - ../02-CONTENT-GOVERNANCE.md
-last_verified: 2026-06-09
+last_verified: 2026-06-27
 related:
   - source-of-truth-map
   - future-implementation-notes
@@ -30,11 +30,16 @@ If a task changes durable:
 - **Customer-facing behavior** (UI/flows the customer sees),
 - **Support workflows**,
 - **Admin actions**,
-- **Billing explanations**,
+- **Billing explanations** (including AI answered call minutes),
 - **SMS / A2P behavior**,
 - **Phone-number lifecycle**,
-- **Workspace behavior**, or
+- **Workspace behavior**,
 - **Account access**,
+- **SMS Conversation Builder** (admin SMS settings: voice greeting / SMS texts / limits & anti-spam),
+- **AI Front Desk Knowledge** (structured clinic facts),
+- **AI Answering / AI Call Assistant** (planned channel; non-live foundation + gated test-only runtime),
+- **Notification settings / AI answered call minute alerts**, or
+- **Delete clinic / danger zone**,
 
 then decide whether `MVP_BUILD_DOCS/KNOWLEDGE-SYSTEM/` needs an update.
 
@@ -55,6 +60,19 @@ Otherwise update the relevant content and say `yes`.
 | Recurring support issue | a `support-runbooks/` entry + inventory |
 | New canonical source file | `developer-ops/source-of-truth-map.md` + `MANIFEST.md` |
 | Pricing / compliance / auth facts | cite the canonical file; do not restate it |
+| SMS Conversation Builder (admin SMS settings) | `platform-admin/sms-conversation-builder.md` (admin-only; owners cannot edit) + inventory |
+| AI Front Desk Knowledge (structured facts) | `customer-help/ai-front-desk-knowledge/` (owner) + `platform-admin/clinic-console.md` (admin) + inventory |
+| AI Answering / AI Call Assistant | `platform-admin/ai-answering-foundation.md`; keep customer rows `draft` until the patient-facing feature is broadly live; never describe it as live |
+| Notification settings / minute alerts | `customer-help/notifications/` (owner) + inventory; cite minute thresholds from policy, included-minutes from `config/billing.config.ts` |
+| Delete clinic / danger zone | `platform-admin/clinic-console.md` + `support-boundaries.md`; app-database-only; never customer-help |
+
+When a change touches **planned/future** behavior, keep `status: draft` and say
+"planned / not live" in the body. When it touches a **live/current** feature,
+use `ready` (customer) or `internal` (admin/ops) only if the matching UI/process
+actually exists. A **non-live foundation** (data model / mock / gated-off
+runtime that the customer cannot use) stays `draft` for customer rows and may be
+`internal` for the admin operator procedures that already exist (e.g. AI
+Answering foundation + mock session route).
 
 This is **in addition to** the existing Operational Documentation Update Rule
 (`SETUP-LOG.md` / `OPERATIONS-RUNBOOK.md` / `REPEATABLE-SETUP-CHECKLIST.md`),

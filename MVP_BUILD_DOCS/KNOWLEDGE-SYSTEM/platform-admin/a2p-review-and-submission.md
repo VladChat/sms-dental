@@ -32,7 +32,7 @@ not a blind action.**
 
 Internally this is **A2P / 10DLC**. Customer-facing, it is **"SMS approval"** —
 keep that distinction (see
-[../customer-help/sms-approval/README.md](../../customer-help/sms-approval/README.md)).
+[../customer-help/sms-approval/README.md](../customer-help/sms-approval/README.md)).
 Do not use "A2P / 10DLC / brand / campaign / TCR" jargon in customer replies.
 
 ## Applies to

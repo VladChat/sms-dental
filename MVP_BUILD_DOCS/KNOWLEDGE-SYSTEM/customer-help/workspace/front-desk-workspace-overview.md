@@ -20,10 +20,10 @@ related:
 
 ## Summary
 
-The **workspace** is where front-desk staff review missed-call text conversations
-and patient requests, and record the outcome of a follow-up. It is a focused,
-front-desk-only area — separate from the owner account — and it intentionally shows
-only what you need to help patients.
+The **workspace** opens to **Patient requests**, where front-desk staff review
+missed-call replies as request cards and record the outcome of a follow-up. It is
+a focused, front-desk-only area — separate from the owner account — and it
+intentionally shows only what you need to help patients.
 
 ## Applies to
 
@@ -43,8 +43,8 @@ reviewing those replies and tracking your follow-up.
 - Minimal left-side request cards with the patient name when available, phone
   number, and last activity. Handled cards may also show **Appointment booked**
   or **No appointment booked**.
-- The selected request's summary and conversation history (patient and office
-  messages with timestamps) in the detail panel.
+- The selected request's summary and **Activity & SMS audit trail** (patient and
+  office messages with timestamps) in the detail panel.
 - The selected request's patient name or **Not provided**, plus the phone number
   once in the patient header.
 - Staff-only notes and follow-up actions.
@@ -67,9 +67,10 @@ belong to the owner account, not the front desk.
 - **Not provided** — means the system does not have a safe patient name. It is
   not an error; confirm directly with the patient if you need it.
 
-Open a card to see the request summary, conversation preview, name edit, actions,
-and internal note on the right. The summary is deterministic and not
-AI-generated.
+Open a card to see the request summary, Activity & SMS audit trail, name edit,
+actions, and internal note on the right. The summary is deterministic and not
+AI-generated. The raw SMS history is secondary audit history, not the main work
+queue.
 
 ### Recording outcomes
 

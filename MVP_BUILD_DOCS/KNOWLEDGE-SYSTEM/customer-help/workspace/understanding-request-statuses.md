@@ -46,7 +46,7 @@ The workspace uses three visible sections:
 The section header is the status. Cards inside a section do not repeat the same
 status label. Left-side cards show only the name when available, the phone
 number, and last activity. Open the card to read the request summary and
-conversation in the detail panel before you act.
+Activity & SMS audit trail in the detail panel before you act.
 
 ### What "Not provided" means
 

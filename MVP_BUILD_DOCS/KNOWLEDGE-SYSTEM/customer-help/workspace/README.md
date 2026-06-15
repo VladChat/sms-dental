@@ -4,8 +4,8 @@ Status: active (articles ready; not yet published)
 Audience: Front-desk staff · Visibility: `clinic_staff`
 Last updated: 2026-06-13
 
-Help for front-desk staff using `/workspace` to handle patient replies and
-requests after a missed-call follow-up.
+Help for front-desk staff using `/workspace` (**Patient requests**) to handle
+patient replies and requests after a missed-call follow-up.
 
 ## Strict staff-safety boundary
 
@@ -33,8 +33,8 @@ visible to staff):
 
 ## Staff-safe notes
 
-- Describe the workspace as the place to review missed-call SMS replies and
-  patient requests, and to record the outcome of a follow-up.
+- Describe the workspace as **Patient requests**: the place to review missed-call
+  SMS replies as request cards, and to record the outcome of a follow-up.
 - **Queue sections** (from `FRONT-DESK-WORKSPACE.md`): Needs follow-up, Handled,
   Blocked. Explain them simply. Do not describe Archive as a staff-facing action
   or visible section.
