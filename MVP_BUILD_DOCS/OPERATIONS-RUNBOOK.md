@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-15 (Railway relay service repo-root build context fixed; AI Answering still gated/test-only)
+Last updated: 2026-06-15 (Railway relay runtime variables and public domain configured; AI Answering still gated/test-only)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -4035,6 +4035,10 @@ existing missed-call greeting and voice/status sends SMS recovery as before.
   when `PORT` is unset. Deployment
   `c23cc168-8f90-4140-8b18-df0142d4ca93` succeeded with this configuration on
   2026-06-15.
+- **Railway public relay URL:** `https://sms-dental-production.up.railway.app`.
+  Verify with `GET /health`; expected configured response is `{ "ok": true }`.
+  Railway deployment `a75ef09d-e23c-42ba-afa5-57a36aa686f1` returned HTTP 200
+  with `{ "ok": true }` on 2026-06-15.
 - **What changed in the Next app:** `app/api/webhooks/twilio/voice/incoming`
   returns ConversationRelay TwiML (and starts a `future_twilio` session keyed on
   the call sid) only on an exact allowlisted `test_only` match with relay config;
@@ -4055,10 +4059,13 @@ existing missed-call greeting and voice/status sends SMS recovery as before.
     `AI_ANSWERING_RELAY_WS_URL` (must be `wss://`),
     `AI_ANSWERING_RELAY_SIGNING_SECRET`.
   - Relay service: `PORT`, `SUPABASE_DB_URL`, `OPENAI_API_KEY`,
-    `AI_ANSWERING_OPENAI_MODEL`, `AI_ANSWERING_RUNTIME_MODE=test_only`,
-    `AI_ANSWERING_TEST_CLINIC_IDS`, `AI_ANSWERING_TEST_CALLER_NUMBERS`,
     `AI_ANSWERING_RELAY_SIGNING_SECRET` (**same** secret as the Next app),
-    `TWILIO_AUTH_TOKEN` (only if validating `X-Twilio-Signature`).
+    `AI_ANSWERING_RUNTIME_MODE=test_only`, `AI_ANSWERING_TEST_CLINIC_IDS`,
+    `AI_ANSWERING_TEST_CALLER_NUMBERS`, `AI_ANSWERING_OPENAI_MODEL`,
+    `AI_ANSWERING_RELAY_WS_PATH`. `TWILIO_AUTH_TOKEN` is optional and may be set
+    only when already available safely; leave
+    `AI_ANSWERING_RELAY_ENFORCE_TWILIO_SIGNATURE` unset until the full request
+    path is verified for enforced signature checks.
   - `AI_ANSWERING_RELAY_WS_URL` must equal the relay's public
     `wss://<host>/twilio/conversation-relay`. The signing secret must match on
     both sides or the relay rejects every session.

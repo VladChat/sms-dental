@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-15 (Railway relay service repo-root build context fixed; AI Answering still gated/test-only)
+Last updated: 2026-06-15 (Railway relay runtime variables and public domain configured; AI Answering still gated/test-only)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8577,3 +8577,59 @@ Validation:
   commands present
 - Railway deployment log check: no `TS2307`/missing `../../../lib` or
   `../../../config` import errors in the successful deployment logs
+
+---
+
+## 2026-06-15 — Railway relay runtime variables and public domain configured
+
+Configured the existing Railway standalone AI voice relay service with the
+runtime variable names required for the test-only relay path, generated a
+Railway-provided public service domain, redeployed, and verified health.
+
+Railway target:
+
+- Project: `missed-calls-dental-relay`
+- Environment: `production`
+- Service: `sms-dental`
+- Root directory: unset/empty (repo root build context)
+- Build command:
+  `npm --prefix services/ai-voice-relay ci && npm --prefix services/ai-voice-relay run build`
+- Start command: `npm --prefix services/ai-voice-relay run start`
+
+Variables set on Railway service `sms-dental` (names only; values not recorded):
+
+- `OPENAI_API_KEY`
+- `SUPABASE_DB_URL`
+- `AI_ANSWERING_RELAY_SIGNING_SECRET`
+- `AI_ANSWERING_RUNTIME_MODE`
+- `AI_ANSWERING_TEST_CLINIC_IDS`
+- `AI_ANSWERING_TEST_CALLER_NUMBERS`
+- `AI_ANSWERING_OPENAI_MODEL`
+- `AI_ANSWERING_RELAY_WS_PATH`
+- `TWILIO_AUTH_TOKEN` (optional, set because it was already available locally)
+
+Public networking:
+
+- Railway service domain generated:
+  `https://sms-dental-production.up.railway.app`
+- Domain readback: service domain `syncStatus=ACTIVE`
+- Domain target port: `null` (Railway-managed; relay reads `process.env.PORT`)
+
+Redeploy / verify:
+
+- Deployment triggered after variables and domain were configured: yes
+- Deployment id: `a75ef09d-e23c-42ba-afa5-57a36aa686f1`
+- Deployment status: `SUCCESS`
+- Build logs showed the relay-prefixed build/start commands and no TypeScript
+  missing-import errors.
+- Health check: `GET https://sms-dental-production.up.railway.app/health` ->
+  HTTP 200, `{ "ok": true }`
+
+Safety:
+
+- Secret values printed or recorded: no
+- Vercel env changed: no
+- Twilio webhooks changed: no
+- SMS sent: no
+- Test call made: no
+- Stripe, DNS, billing, A2P, and SMS runtime changed: no
