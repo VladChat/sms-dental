@@ -13,6 +13,7 @@ out/
 !.env.example
 !.env.local.example
 !.env.*.example
+.railway-token.local
 .claude/settings.local.json
 .claude/settings*.local.json
 

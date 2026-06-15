@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-14 (AI Answering test-live ConversationRelay path + standalone relay service; disabled by default in production)
+Last updated: 2026-06-15 (Railway relay service build/start configured; AI Answering still gated/test-only)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8455,3 +8455,72 @@ Safety scope:
 - Validation: `npm run typecheck`, `npm run test:sms-recovery` (310 pass),
   `npm run test:ai-knowledge`, `npm run build`, `npm run ai-relay:build`,
   `npm run ai-relay:test` (27 pass), `git diff --check`.
+
+---
+
+## 2026-06-15 — Railway relay service root directory configured
+
+Verified authenticated Railway access as `vladislav.doroshenko@gmail.com` and
+made one authorized service-instance settings change for the standalone relay
+service.
+
+Railway target:
+
+- Project: `missed-calls-dental-relay`
+- Project id: `fd1cb29e-0134-4ef6-9839-db44f82e019c`
+- Environment: `production`
+- Environment id: `e6186680-fbae-47f1-9131-4105e812e1e3`
+- Service: `sms-dental`
+- Service id: `05ec28d4-a8db-420c-ba9a-6d66d3a2ba44`
+- Source repo: `VladChat/sms-dental`
+
+Result:
+
+- Root directory before: unset (`null`)
+- Root directory after: `services/ai-voice-relay`
+- Build command changed: no
+- Start command changed: no
+- Variables changed: no
+- Domain generated/changed: no
+- Deployment triggered automatically: no; latest deployment remained
+  `a2c8851e-bdf6-43d9-9eb6-9e408aec08f0` with status `SUCCESS`
+- Twilio, Vercel, GitHub, OpenAI, Stripe, DNS, billing, and A2P changed: no
+- Secrets printed: no
+
+---
+
+## 2026-06-15 — Railway relay service build/start configured
+
+Configured only the Railway build/start settings for the existing standalone AI
+voice relay service. This did not configure secrets and did not intentionally
+deploy or redeploy.
+
+Confirmed from `services/ai-voice-relay/package.json`,
+`services/ai-voice-relay/src/relay-config.ts`, and
+`services/ai-voice-relay/src/server.ts`:
+
+- Relay package build script: `tsc -p tsconfig.json`
+- Relay package start script: `node dist/services/ai-voice-relay/src/server.js`
+- Port behavior: reads `process.env.PORT`; local fallback is `8080` when unset
+
+Railway result:
+
+- Project: `missed-calls-dental-relay`
+- Environment: `production`
+- Service: `sms-dental`
+- Root directory: `services/ai-voice-relay`
+- Build command before: unset (`null`)
+- Build command after: `npm ci && npm run build`
+- Start command before: unset (`null`)
+- Start command after: `npm run start`
+- Deployment triggered automatically: no; latest deployment remained
+  `a2c8851e-bdf6-43d9-9eb6-9e408aec08f0` with status `SUCCESS`
+- Variables/secrets changed: no
+- Domain generated/changed: no
+- Twilio, Vercel, GitHub, OpenAI, Stripe, DNS, billing, A2P, SMS runtime changed:
+  no
+
+Validation:
+
+- `npm --prefix services/ai-voice-relay run build`: pass
+- `npm --prefix services/ai-voice-relay test`: pass (27 tests)

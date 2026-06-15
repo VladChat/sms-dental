@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-14 (AI Answering test-live ConversationRelay path + standalone relay service added; still disabled by default in production)
+Last updated: 2026-06-15 (Railway relay service build/start configured; AI Answering still gated/test-only)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -4023,6 +4023,14 @@ existing missed-call greeting and voice/status sends SMS recovery as before.
   WebSocket deployable. **Do not** run the ConversationRelay WebSocket inside a
   Next/Vercel route handler. It runs on any Node host that supports long-lived
   WebSockets (container/VM), not a Vercel serverless function.
+- **Railway relay target:** project `missed-calls-dental-relay`, environment
+  `production`, service `sms-dental` is connected to GitHub repo
+  `VladChat/sms-dental`; its service root directory is
+  `services/ai-voice-relay`. Build command is `npm ci && npm run build`; start
+  command is `npm run start`. The relay reads Railway's `PORT` from
+  `process.env.PORT` and falls back to `8080` only when `PORT` is unset. The
+  root-directory and build/start settings changes did not trigger a new
+  deployment when verified on 2026-06-15.
 - **What changed in the Next app:** `app/api/webhooks/twilio/voice/incoming`
   returns ConversationRelay TwiML (and starts a `future_twilio` session keyed on
   the call sid) only on an exact allowlisted `test_only` match with relay config;
