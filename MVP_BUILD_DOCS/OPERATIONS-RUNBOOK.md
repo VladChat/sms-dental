@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-15 (Railway relay runtime variables and public domain configured; AI Answering still gated/test-only)
+Last updated: 2026-06-15 (Vercel AI relay env configured; AI Answering still gated/test-only)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -227,6 +227,15 @@ Required Vercel env names:
 - `VERCEL_TOKEN`
 - `RESEND_API_KEY`
 - `PUBLIC_WEBHOOK_BASE_URL`
+
+AI Answering test-live relay env names in Vercel Production (names only; do not
+print values):
+
+- `AI_ANSWERING_RUNTIME_MODE`
+- `AI_ANSWERING_TEST_CLINIC_IDS`
+- `AI_ANSWERING_TEST_CALLER_NUMBERS`
+- `AI_ANSWERING_RELAY_WS_URL`
+- `AI_ANSWERING_RELAY_SIGNING_SECRET`
 
 Non-secret runtime settings do not belong in `.env.local` and are owned by committed config:
 
@@ -4069,6 +4078,17 @@ existing missed-call greeting and voice/status sends SMS recovery as before.
   - `AI_ANSWERING_RELAY_WS_URL` must equal the relay's public
     `wss://<host>/twilio/conversation-relay`. The signing secret must match on
     both sides or the relay rejects every session.
+- **Vercel Production relay env (configured 2026-06-15):** project
+  `sms-dental`, team `vladchat-1500s-projects`. The Next app uses
+  `AI_ANSWERING_RUNTIME_MODE=test_only` and
+  `AI_ANSWERING_RELAY_WS_URL=wss://sms-dental-production.up.railway.app/twilio/conversation-relay`.
+  The Vercel `AI_ANSWERING_RELAY_SIGNING_SECRET` value must be the same secret
+  as Railway's relay service value; never print or record it. After any Vercel
+  env change, redeploy Production before testing.
+- **Latest Vercel readiness check:** production redeploy
+  `dpl_4yj4DVFdDUYBjrSPxZnfYVUq9e2V` reached `READY` on 2026-06-15 and
+  `https://app.missedcallsdental.com/api/health` returned HTTP 200 with
+  `{ "ok": true, "service": "missed-calls-dental", "version": "foundation-v1" }`.
 - **Provider onboarding caveat:** the Twilio phone number webhook is unchanged.
   **ConversationRelay requires Twilio onboarding / the AI addendum** before real
   calls work; if incomplete, Twilio may reject the TwiML or fall back. First real

@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-15 (Railway relay runtime variables and public domain configured; AI Answering still gated/test-only)
+Last updated: 2026-06-15 (Vercel AI relay env configured; AI Answering still gated/test-only)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8630,6 +8630,58 @@ Safety:
 - Secret values printed or recorded: no
 - Vercel env changed: no
 - Twilio webhooks changed: no
+- SMS sent: no
+- Test call made: no
+- Stripe, DNS, billing, A2P, and SMS runtime changed: no
+
+---
+
+## 2026-06-15 — Vercel AI relay environment configured
+
+Configured only the Vercel Production environment needed for the Next app to
+emit signed ConversationRelay TwiML to the live Railway relay while remaining
+`test_only` and allowlist-gated.
+
+Vercel target:
+
+- Project: `sms-dental`
+- Team: `vladchat-1500s-projects`
+- Production app URL: `https://app.missedcallsdental.com`
+
+Vercel Production env vars set (names only; values not recorded):
+
+- `AI_ANSWERING_RUNTIME_MODE`
+- `AI_ANSWERING_TEST_CLINIC_IDS`
+- `AI_ANSWERING_TEST_CALLER_NUMBERS`
+- `AI_ANSWERING_RELAY_WS_URL`
+- `AI_ANSWERING_RELAY_SIGNING_SECRET`
+
+Relay URL configured for the Next app:
+
+- `wss://sms-dental-production.up.railway.app/twilio/conversation-relay`
+
+Redeploy / verify:
+
+- Vercel redeploy triggered after env vars were configured: yes
+- Deployment id: `dpl_4yj4DVFdDUYBjrSPxZnfYVUq9e2V`
+- Deployment URL:
+  `https://sms-dental-j300jc79l-vladchat-1500s-projects.vercel.app`
+- Deployment status: `READY`
+- App health: `GET https://app.missedcallsdental.com/api/health` -> HTTP 200,
+  `{ "ok": true, "service": "missed-calls-dental", "version": "foundation-v1" }`
+- Relay health: `GET https://sms-dental-production.up.railway.app/health` ->
+  HTTP 200, `{ "ok": true }`
+- Voice webhook readiness: verified without a real Twilio call by Vercel env
+  readback, production health checks, `npm run typecheck`, and focused
+  voice/AI-answering tests (69 pass). The test coverage confirms the relay URL
+  must be `wss://`, the TwiML token is signed without exposing the secret, and
+  `test_only` mode allows only the exact configured clinic/caller allowlist.
+
+Safety:
+
+- Secret values printed or recorded: no
+- Twilio webhooks changed: no
+- Railway settings or variables changed: no
 - SMS sent: no
 - Test call made: no
 - Stripe, DNS, billing, A2P, and SMS runtime changed: no
