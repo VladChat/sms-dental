@@ -52,4 +52,9 @@ export {
   type AiVoiceSessionStatus,
 } from "../../../config/ai-answering.config";
 
+export {
+  normalizeAiVoiceTranscriptTurns,
+  type AiVoiceTranscriptTurn,
+} from "../../../lib/ai-answering/transcript";
+
 export { logger } from "../../../lib/logging/logger";

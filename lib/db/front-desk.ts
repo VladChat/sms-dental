@@ -5,6 +5,7 @@ import {
 } from "../workspace/outcome";
 import { listLatestAiVoiceSessionsForConversations } from "./ai-voice-sessions";
 import type { AiVoiceSessionStatus } from "../../config/ai-answering.config";
+import type { WorkspaceFreshnessSnapshot } from "../workspace/freshness";
 
 // Data access for the front-desk workspace (/workspace).
 //
@@ -182,6 +183,65 @@ export async function listClinicConversations(
     aiVoiceHandoffNote: ai?.handoffNote ?? null,
     };
   });
+}
+
+// Small polling read for /workspace. It intentionally returns counters and one
+// activity version only, not full cards or message/AI-call history. AI answered
+// calls touch `patient_conversations.last_message_at`, so the same activity
+// version covers SMS and AI answered call changes without polling every table.
+export async function getWorkspaceFreshnessSnapshot(params: {
+  clinicId: string;
+  since?: Date | null;
+}): Promise<WorkspaceFreshnessSnapshot> {
+  const sql = getDb();
+  const since = params.since ?? null;
+  const rows = await sql<
+    {
+      latest_activity_at: Date | null;
+      needs_follow_up_count: string;
+      handled_count: string;
+      blocked_count: string;
+      changed_count: string;
+    }[]
+  >`
+    with base as (
+      select
+        c.id,
+        greatest(
+          c.created_at,
+          coalesce(c.last_message_at, c.created_at),
+          coalesce(c.workspace_handled_at, c.created_at),
+          coalesce(c.workspace_archived_at, c.created_at),
+          coalesce(c.front_desk_outcome_at, c.created_at),
+          coalesce(b.blocked_at, c.created_at)
+        ) as activity_at,
+        (b.blocked_at is not null) as is_blocked,
+        (c.workspace_handled_at is not null) as is_handled
+      from public.patient_conversations c
+      left join public.clinic_blocked_patient_numbers b
+        on b.clinic_id = c.clinic_id
+       and b.phone_number = c.patient_phone
+      where c.clinic_id = ${params.clinicId}
+    )
+    select
+      max(activity_at) as latest_activity_at,
+      count(*) filter (where not is_blocked and not is_handled)::text as needs_follow_up_count,
+      count(*) filter (where is_handled and not is_blocked)::text as handled_count,
+      count(*) filter (where is_blocked)::text as blocked_count,
+      count(*) filter (
+        where ${since}::timestamptz is not null
+          and activity_at > ${since}::timestamptz
+      )::text as changed_count
+    from base
+  `;
+  const row = rows[0];
+  return {
+    latestActivityAt: row?.latest_activity_at?.toISOString() ?? null,
+    needsFollowUpCount: Number(row?.needs_follow_up_count ?? 0),
+    handledCount: Number(row?.handled_count ?? 0),
+    blockedCount: Number(row?.blocked_count ?? 0),
+    changedCount: Number(row?.changed_count ?? 0),
+  };
 }
 
 export type WorkspaceActor = {

@@ -143,6 +143,24 @@ export type AiVoiceSessionSummary = {
   createdAt: Date;
 };
 
+export const AI_VOICE_SESSION_HISTORY_LIMIT = 10;
+
+export type AiVoiceSessionHistorySummary = AiVoiceSessionSummary & {
+  transcriptTurns: unknown;
+  transcriptExpiresAt: Date | null;
+};
+
+export type PreviousCallerAiContext = {
+  patientPhone: string;
+  knownPatientName: string | null;
+  recentAiAnsweredCalls: {
+    callCapturedAt: Date;
+    summaryHeadline: string | null;
+    previousRequest: string | null;
+    previousPreferredTime: string | null;
+  }[];
+};
+
 export type CreateMockAiVoiceSessionInput = {
   clinicId: string;
   patientPhone: string;
@@ -358,6 +376,151 @@ export async function listLatestAiVoiceSessionsForConversations(
     // Missing table (pre-migration) or any read error → no AI voice data.
   }
   return result;
+}
+
+// Bounded, selected-card AI answered call history for one clinic-scoped
+// conversation. Front-desk-safe fields only: no provider IDs, raw payloads, audio,
+// secrets, model names, or call identifiers. Existing rows without transcripts
+// still return their captured summary fields; expired transcripts are omitted.
+export async function listAiVoiceSessionHistoryForConversation(params: {
+  clinicId: string;
+  conversationId: string;
+  limit?: number;
+}): Promise<AiVoiceSessionHistorySummary[]> {
+  const safeLimit = Math.min(
+    Math.max(1, Math.trunc(params.limit ?? AI_VOICE_SESSION_HISTORY_LIMIT) || 1),
+    AI_VOICE_SESSION_HISTORY_LIMIT,
+  );
+  try {
+    const sql = getDb();
+    const rows = await sql<
+      {
+        id: string;
+        conversation_id: string;
+        status: string;
+        summary_headline: string | null;
+        captured_patient_name: string | null;
+        captured_reason: string | null;
+        captured_preferred_time: string | null;
+        handoff_note: string | null;
+        safety_signal: boolean;
+        sms_followup_recommended: boolean;
+        started_at: Date | null;
+        completed_at: Date | null;
+        created_at: Date;
+        transcript_turns: unknown;
+        transcript_expires_at: Date | null;
+      }[]
+    >`
+      select id, conversation_id, status, summary_headline, captured_patient_name,
+             captured_reason, captured_preferred_time, handoff_note, safety_signal,
+             sms_followup_recommended, started_at, completed_at, created_at,
+             case
+               when transcript_expires_at is null or transcript_expires_at > now()
+                 then transcript_turns
+               else null
+             end as transcript_turns,
+             transcript_expires_at
+      from public.ai_voice_sessions
+      where clinic_id = ${params.clinicId}
+        and conversation_id = ${params.conversationId}
+      order by coalesce(completed_at, created_at) desc, created_at desc
+      limit ${safeLimit}
+    `;
+
+    return rows.map((row) => ({
+      id: row.id,
+      conversationId: row.conversation_id,
+      status: isAiVoiceSessionStatus(row.status) ? row.status : "incomplete",
+      summaryHeadline: row.summary_headline,
+      capturedPatientName: row.captured_patient_name,
+      capturedReason: row.captured_reason,
+      capturedPreferredTime: row.captured_preferred_time,
+      handoffNote: row.handoff_note,
+      safetySignal: row.safety_signal === true,
+      smsFollowupRecommended: row.sms_followup_recommended === true,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      createdAt: row.created_at,
+      transcriptTurns: row.transcript_turns,
+      transcriptExpiresAt: row.transcript_expires_at,
+    }));
+  } catch {
+    // Missing table/columns or any read error -> no history, never a workspace crash.
+    return [];
+  }
+}
+
+// Future-only helper boundary for safe previous caller context. This is NOT
+// wired into the live voice prompt. Any future AI use must label these as
+// previous facts and ask the caller to confirm current needs/preferences.
+export async function getPreviousCallerContextForAi(input: {
+  clinicId: string;
+  patientPhone: string;
+  limit?: number;
+}): Promise<PreviousCallerAiContext | null> {
+  const patientPhone = normalizePhone(input.patientPhone);
+  if (!isValidE164(patientPhone)) return null;
+  const safeLimit = Math.min(Math.max(1, Math.trunc(input.limit ?? 3) || 1), 5);
+
+  try {
+    const sql = getDb();
+    const conversationRows = await sql<
+      { id: string; patient_display_name: string | null }[]
+    >`
+      select id, patient_display_name
+      from public.patient_conversations
+      where clinic_id = ${input.clinicId}
+        and patient_phone = ${patientPhone}
+      limit 1
+    `;
+    const conversation = conversationRows[0] ?? null;
+
+    const sessionRows = await sql<
+      {
+        status: string;
+        summary_headline: string | null;
+        captured_reason: string | null;
+        captured_preferred_time: string | null;
+        safety_signal: boolean;
+        completed_at: Date | null;
+        created_at: Date;
+      }[]
+    >`
+      select status, summary_headline, captured_reason, captured_preferred_time,
+             safety_signal, completed_at, created_at
+      from public.ai_voice_sessions
+      where clinic_id = ${input.clinicId}
+        and patient_phone = ${patientPhone}
+        and status = 'captured'
+      order by coalesce(completed_at, created_at) desc, created_at desc
+      limit ${safeLimit}
+    `;
+
+    if (!conversation && sessionRows.length === 0) return null;
+
+    return {
+      patientPhone,
+      knownPatientName: normalizeWorkspaceDisplayName(conversation?.patient_display_name ?? null),
+      recentAiAnsweredCalls: sessionRows.map((row) => {
+        const summary = buildAiVoiceCallSummary({
+          status: isAiVoiceSessionStatus(row.status) ? row.status : "captured",
+          capturedReason: row.captured_reason,
+          capturedPreferredTime: row.captured_preferred_time,
+          summaryHeadline: row.summary_headline,
+          safetySignal: row.safety_signal,
+        });
+        return {
+          callCapturedAt: row.completed_at ?? row.created_at,
+          summaryHeadline: summary.source === "fallback" ? null : summary.headline,
+          previousRequest: row.captured_reason,
+          previousPreferredTime: row.captured_preferred_time,
+        };
+      }),
+    };
+  } catch {
+    return null;
+  }
 }
 
 // Admin-safe summary of a clinic's AI voice sessions. Captured fields + source +

@@ -11,7 +11,7 @@
 //   - close:  complete if enough was captured, otherwise mark incomplete.
 //   - error:  fail the session safely if it was started and not yet completed.
 
-import type { AiVoiceSessionStatus } from "./shared-lib";
+import type { AiVoiceSessionStatus, AiVoiceTranscriptTurn } from "./shared-lib";
 import type { FrontDeskBrain } from "./openai-brain";
 import {
   appendAssistantTurn,
@@ -45,6 +45,7 @@ export interface SessionLifecycle {
     capturedPreferredTime: string | null;
     handoffNote: string | null;
     safetySignal: boolean;
+    transcriptTurns?: AiVoiceTranscriptTurn[];
   }): Promise<void>;
 }
 
@@ -121,6 +122,7 @@ export async function handlePrompt(
       capturedPreferredTime: state.captured.preferredTime,
       handoffNote: state.captured.handoffNote,
       safetySignal: state.captured.safetySignal,
+      transcriptTurns: state.transcriptTurns,
     });
     send.sendText(FINAL_CAPTURE_REPLY, { last: true });
     send.sendEnd(HANDOFF_DATA_CAPTURED);
@@ -152,6 +154,7 @@ export async function handleClose(deps: HandlerDeps, state: RelaySessionState): 
     capturedPreferredTime: state.captured.preferredTime,
     handoffNote: state.captured.handoffNote,
     safetySignal: state.captured.safetySignal,
+    transcriptTurns: state.transcriptTurns,
   });
 }
 
@@ -170,5 +173,6 @@ export async function handleError(deps: HandlerDeps, state: RelaySessionState): 
     capturedPreferredTime: state.captured.preferredTime,
     handoffNote: state.captured.handoffNote,
     safetySignal: state.captured.safetySignal,
+    transcriptTurns: state.transcriptTurns,
   });
 }

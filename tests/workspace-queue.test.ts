@@ -12,6 +12,11 @@ import {
   WORKSPACE_FLAG_META,
   type PatientRequestCard,
 } from "../app/workspace/_components/workspace-types";
+import {
+  buildWorkspaceFreshnessFromCards,
+  hasWorkspaceFreshnessChanged,
+} from "../lib/workspace/freshness";
+import { toWorkspaceAiVoiceHistoryItem } from "../lib/workspace/ai-voice-history";
 
 const REPO_ROOT = process.cwd();
 const read = (rel: string) => fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
@@ -158,6 +163,84 @@ test("queue section sorting follows the product order rules", () => {
       }),
     ]).map((c) => c.id),
     ["fallback-newer", "older-block"],
+  );
+});
+
+test("workspace freshness helper counts sections without changing queue order", () => {
+  const older = card({ id: "older", lastActivityAt: "2026-06-10T09:00:00.000Z" });
+  const newer = card({ id: "newer", lastActivityAt: "2026-06-10T10:00:00.000Z" });
+  const handled = card({
+    id: "handled",
+    lastActivityAt: "2026-06-09T10:00:00.000Z",
+    flags: { ...BASE_FLAGS, handled: true },
+  });
+  const blocked = card({
+    id: "blocked",
+    lastActivityAt: "2026-06-08T10:00:00.000Z",
+    flags: { ...BASE_FLAGS, blocked: true },
+  });
+
+  assert.deepEqual(
+    sortWorkspaceSectionCards("needs_follow_up", [newer, older]).map((c) => c.id),
+    ["older", "newer"],
+  );
+  assert.deepEqual(buildWorkspaceFreshnessFromCards([older, newer, handled, blocked]), {
+    latestActivityAt: "2026-06-10T10:00:00.000Z",
+    needsFollowUpCount: 2,
+    handledCount: 1,
+    blockedCount: 1,
+    changedCount: 0,
+  });
+});
+
+test("workspace freshness detects activity timestamp, counts, and changed count", () => {
+  const baseline = {
+    latestActivityAt: "2026-06-10T09:00:00.000Z",
+    needsFollowUpCount: 1,
+    handledCount: 0,
+    blockedCount: 0,
+    changedCount: 0,
+  };
+  assert.equal(hasWorkspaceFreshnessChanged(baseline, { ...baseline }), false);
+  assert.equal(
+    hasWorkspaceFreshnessChanged(baseline, {
+      ...baseline,
+      latestActivityAt: "2026-06-10T10:00:00.000Z",
+    }),
+    true,
+  );
+  assert.equal(hasWorkspaceFreshnessChanged(baseline, { ...baseline, changedCount: 1 }), true);
+  assert.equal(hasWorkspaceFreshnessChanged(baseline, { ...baseline, handledCount: 1 }), true);
+});
+
+test("AI answered call history projection shows safe fields and normalized transcript", () => {
+  const item = toWorkspaceAiVoiceHistoryItem({
+    id: "session-1",
+    status: "captured",
+    summaryHeadline: null,
+    capturedReason: "Cleaning appointment",
+    capturedPreferredTime: "Saturday morning",
+    handoffNote: "Call back to schedule.",
+    safetySignal: false,
+    completedAt: new Date("2026-06-15T03:14:11.000Z"),
+    createdAt: new Date("2026-06-15T03:13:59.000Z"),
+    transcriptExpiresAt: new Date("2026-09-13T03:14:11.000Z"),
+    transcriptTurns: [
+      { speaker: "patient", text: "Hi, my name is Vlad.", at: "2026-06-15T03:14:01.000Z" },
+      { speaker: "ai", text: "How can the office help?", at: "2026-06-15T03:14:02.000Z" },
+    ],
+  });
+  assert.equal(item.callCapturedAt, "2026-06-15T03:14:11.000Z");
+  assert.equal(item.request, "Cleaning appointment");
+  assert.equal(item.preferredTime, "Saturday morning");
+  assert.equal(item.callSummary, "Cleaning appointment · Saturday morning");
+  assert.equal(item.handoffNote, "Call back to schedule.");
+  assert.deepEqual(
+    item.transcriptTurns.map((turn) => [turn.speaker, turn.text, turn.sequence]),
+    [
+      ["patient", "Hi, my name is Vlad.", 1],
+      ["ai", "How can the office help?", 2],
+    ],
   );
 });
 
@@ -544,6 +627,39 @@ test("three sectioned queue has default expansion, tones, counts, Load more, and
   assert.ok(!patchCard.includes("workspaceSectionForCard(nextFlags)"));
 });
 
+test("workspace update notification polls only while visible and refreshes on request", () => {
+  const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
+  const freshness = read(path.join("lib", "workspace", "freshness.ts"));
+  assert.ok(src.includes("WORKSPACE_FRESHNESS_POLL_MS"));
+  assert.ok(freshness.includes("60_000"), "poll helper uses a 60 second interval");
+  assert.ok(src.includes('/api/workspace/freshness'));
+  assert.ok(src.includes('document.visibilityState === "hidden"'));
+  assert.ok(src.includes('document.visibilityState === "visible"'));
+  assert.ok(src.includes('document.addEventListener("visibilitychange"'));
+  assert.ok(src.includes("router.refresh()"));
+  assert.ok(!src.includes("location.reload"));
+  assert.ok(src.includes("New patient activity"));
+  assert.ok(src.includes("View updates"));
+  assert.ok(src.includes("New activity"));
+});
+
+test("workspace AI answered call history UI is selected-card only and hides technical details", () => {
+  const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
+  assert.ok(src.includes('/api/workspace/ai-call-history?conversationId='));
+  assert.ok(src.includes("AI answered call history"));
+  assert.ok(src.includes("No AI answered calls yet."));
+  for (const label of ["Request", "Preferred time", "Call summary", "Call captured"]) {
+    assert.ok(src.includes(label), `history UI includes ${label}`);
+  }
+  assert.ok(src.includes("<summary>Call notes</summary>"));
+  const historyStart = src.indexOf("function AiAnsweredCallHistorySection");
+  const historyEnd = src.indexOf("function NameEditor", historyStart);
+  const history = src.slice(historyStart, historyEnd).toLowerCase();
+  for (const banned of ["twilio", "openai", "sid", "provider", "raw", "debug", "audio controls"]) {
+    assert.ok(!history.includes(banned), `history UI avoids ${banned}`);
+  }
+});
+
 test("samples demonstrate the three section layout and never dominate a live workspace", () => {
   const src = read(path.join("app", "workspace", "_components", "Workspace.tsx"));
   // Samples collapse by default when real conversations exist.
@@ -601,6 +717,43 @@ test("conversation-action route validates input and scopes by clinic", () => {
   const reopenAfterUnblockIdx = src.indexOf("reopenConversation({ clinicId, conversationId })", unblockIdx);
   assert.ok(unblockIdx >= 0 && reopenAfterUnblockIdx > unblockIdx, "unblock also reopens");
   assert.ok(!src.includes("messages.create"));
+});
+
+test("workspace freshness route is read-only, authenticated, and returns counters only", () => {
+  const src = read(path.join("app", "api", "workspace", "freshness", "route.ts"));
+  const helper = read(path.join("lib", "db", "front-desk.ts"));
+  assert.ok(src.includes("export async function GET"));
+  assert.ok(src.includes("resolveAuthClinicAccess(req)"));
+  assert.ok(src.includes("getWorkspaceFreshnessSnapshot"));
+  for (const key of [
+    "latestActivityAt",
+    "needsFollowUpCount",
+    "handledCount",
+    "blockedCount",
+    "changedCount",
+  ]) {
+    assert.ok(helper.includes(key), `freshness helper returns ${key}`);
+  }
+  assert.ok(!src.includes("POST"));
+  assert.ok(!src.includes("messages.create"));
+  assert.ok(!src.includes("sendRecoverySms"));
+  assert.ok(!src.includes("raw_payload"));
+});
+
+test("workspace AI call history route is selected-conversation scoped and safe", () => {
+  const src = read(path.join("app", "api", "workspace", "ai-call-history", "route.ts"));
+  assert.ok(src.includes("export async function GET"));
+  assert.ok(src.includes("resolveAuthClinicAccess(req)"));
+  assert.ok(src.includes("findClinicConversationPhone(access.clinic.id, conversationId)"));
+  assert.ok(src.includes("listAiVoiceSessionHistoryForConversation"));
+  assert.ok(src.includes("AI_VOICE_SESSION_HISTORY_LIMIT"));
+  assert.ok(src.includes("toWorkspaceAiVoiceHistoryItem"));
+  assert.ok(src.includes("conversationId.startsWith(\"sample-\")"));
+  assert.ok(!src.includes("POST"));
+  assert.ok(!src.includes("messages.create"));
+  assert.ok(!src.includes("sendRecoverySms"));
+  assert.ok(!src.includes("raw_payload"));
+  assert.ok(!src.includes("external_session_id"));
 });
 
 test("legacy outcome route remains for compatibility", () => {

@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Repeatable setup checklist for this project and future similar SaaS projects  
-Last updated: 2026-06-10
+Last updated: 2026-06-15
 
 Use this checklist when repeating the same pattern for another client/project.
 
@@ -620,6 +620,22 @@ OWNER_TEST_SETUP_LINK_FALLBACK  # local/owner test only, never in prod
       existing lifecycle status enum instead of inventing new statuses.
 - [ ] Separate real vs sample UI into distinct sections with a local Hide/Show that
       only affects the sample layer; never let hiding samples hide real data.
+- [ ] For workspace freshness polling, return only a small authenticated activity
+      version + section counts. Poll only while the tab is visible, check once on
+      visibility return, show a `View updates` affordance, and do not reorder or
+      refresh the full list until the user asks.
+- [ ] For per-record history, load a bounded set only for the selected detail pane
+      rather than attaching unbounded history to every list card.
+- [ ] If storing AI answered-call transcripts, store normalized text turns only
+      (`patient`/`ai`, text, sequence/timestamp), link them to the individual
+      session/call, set a retention timestamp, and never store audio, raw provider
+      payloads, raw prompts, or secrets.
+- [ ] Treat patient names as patient-level facts. AI extraction may fill a blank
+      name, but must not overwrite a non-empty or staff-edited name without a
+      separate confirmation design.
+- [ ] Keep previous-call context behind an explicit helper boundary and label it
+      as previous context; do not feed stale preferences into a live model as
+      current facts.
 
 ---
 

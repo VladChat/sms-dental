@@ -15,6 +15,11 @@ import {
 } from "../lib/db/ai-voice-runtime-sessions";
 import { AiVoiceSessionValidationError } from "../lib/db/ai-voice-sessions";
 import {
+  AI_VOICE_TRANSCRIPT_RETENTION_DAYS,
+  normalizeAiVoiceTranscriptTurns,
+  transcriptExpiresAtFrom,
+} from "../lib/ai-answering/transcript";
+import {
   AI_FRONT_DESK_SAFETY_POLICY,
   buildAiFrontDeskContextFromFacts,
   toRuntimeInstructionText,
@@ -227,9 +232,38 @@ test("normalizeRuntimeSessionPhones rejects an invalid caller phone", () => {
   assert.equal(ok.clinicPhone, null);
 });
 
+test("transcript helper stores normalized text turns only with bounded retention", () => {
+  const turns = normalizeAiVoiceTranscriptTurns([
+    { speaker: "user", text: "  Hi, my name is Alex.  ", at: "2026-06-15T03:14:00.000Z" },
+    { role: "assistant", text: "How can the office help?", timestamp: "2026-06-15T03:14:05.000Z" },
+    { speaker: "system", text: "drop this" },
+    { speaker: "patient", text: "   " },
+  ]);
+  assert.deepEqual(turns, [
+    {
+      speaker: "patient",
+      text: "Hi, my name is Alex.",
+      sequence: 1,
+      at: "2026-06-15T03:14:00.000Z",
+    },
+    {
+      speaker: "ai",
+      text: "How can the office help?",
+      sequence: 2,
+      at: "2026-06-15T03:14:05.000Z",
+    },
+  ]);
+
+  const base = new Date("2026-06-15T00:00:00.000Z");
+  assert.equal(
+    transcriptExpiresAtFrom(base).toISOString(),
+    new Date(base.getTime() + AI_VOICE_TRANSCRIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+  );
+});
+
 // ---------------------------------------- runtime session (source guards)
 
-test("runtime session helper is idempotent, provider-free, and SMS-free", () => {
+test("runtime session helper is idempotent, provider-free, SMS-free, and stores normalized transcript turns", () => {
   const src = read(path.join("lib", "db", "ai-voice-runtime-sessions.ts"));
   // Only ever writes the reserved future source — never `mock`.
   assert.ok(src.includes("'future_twilio'"));
@@ -241,20 +275,21 @@ test("runtime session helper is idempotent, provider-free, and SMS-free", () => 
   // Reuses the shared sanitizer limits, not a private copy.
   assert.ok(src.includes("trimToLimit"));
   assert.ok(src.includes("AI_VOICE_FIELD_LIMITS"));
-  // No live AI / SMS / provider calls. No transcript/raw payload columns.
+  // No live AI / SMS / provider calls. Transcripts are normalized text only.
   assert.ok(!/from ["'][^"']*openai[^"']*["']/i.test(src), "runtime helper imports no openai sdk");
   assert.ok(!src.includes("getTwilioClient"), "runtime helper makes no Twilio client");
   assert.ok(!src.includes("messages.create"), "runtime helper sends no SMS");
   assert.ok(!src.includes("sendRecoverySms"), "runtime helper sends no recovery SMS");
   assert.ok(!src.includes("raw_payload"), "runtime helper writes no raw payload column");
-  // No transcript/audio COLUMN write (the doc comment documents the exclusion;
-  // a real column write would read `transcript = ` / `transcript,`).
-  assert.ok(!/\btranscript\s*[=,]/.test(src), "runtime helper writes no transcript column");
+  assert.ok(src.includes("normalizeAiVoiceTranscriptTurns"));
+  assert.ok(src.includes("transcript_turns = ${transcriptJson}::jsonb"));
+  assert.ok(src.includes("transcript_expires_at = ${transcriptExpiresAt}"));
   assert.ok(!/\baudio\s*[=,]/.test(src), "runtime helper writes no audio column");
 });
 
 test("captured completion links + touches a conversation; incomplete/failed does not create one", () => {
   const src = read(path.join("lib", "db", "ai-voice-runtime-sessions.ts"));
+  const conversationSrc = read(path.join("lib", "db", "conversations.ts"));
   // The incomplete/failed branch returns BEFORE any conversation is created.
   const guardIdx = src.indexOf('if (input.status !== "captured")');
   const getOrCreateIdx = src.indexOf("getOrCreateConversation(input.clinicId, session.patient_phone)");
@@ -271,6 +306,9 @@ test("captured completion links + touches a conversation; incomplete/failed does
   // Secondary failures are logged with safe metadata only (no patient phone).
   assert.ok(src.includes('logger.warn("ai_answering.runtime_session.touch_conversation_failed"'));
   assert.ok(src.includes("failAiVoiceRuntimeSession"));
+  // Patient name is stored as a caller-level fact only when blank.
+  assert.ok(src.includes("setPatientDisplayNameIfEmpty(conversation.id, safeName)"));
+  assert.ok(conversationSrc.includes("and (patient_display_name is null or patient_display_name = '')"));
 });
 
 // -------------------------------------------------- AI front desk context

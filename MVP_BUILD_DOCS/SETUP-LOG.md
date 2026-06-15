@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-15 (Vercel AI relay env configured; AI Answering still gated/test-only)
+Last updated: 2026-06-15 (AI answered call history + transcript storage foundation)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8685,3 +8685,64 @@ Safety:
 - SMS sent: no
 - Test call made: no
 - Stripe, DNS, billing, A2P, and SMS runtime changed: no
+
+---
+
+## 2026-06-15 — AI answered call visibility and transcript storage foundation
+
+Implemented the minimal safe foundation for AI answered call visibility in
+`/workspace` and text transcript storage for future context, without changing
+provider configuration or live voice prompt behavior.
+
+Code behavior:
+
+- `/workspace` now receives an authenticated initial freshness snapshot and can
+  poll `GET /api/workspace/freshness` every ~60 seconds while the tab is visible.
+  When activity changes, it shows `New patient activity` with `View updates`.
+  It does not full-page reload, does not use `location.reload`, does not
+  automatically replace cards while the user is working, and keeps the existing
+  needs-follow-up queue order (older requests above newer requests).
+- Selected request details now load bounded AI answered call history with
+  `GET /api/workspace/ai-call-history?conversationId=...`. The route is
+  authenticated, clinic-scoped, and returns the latest 10 safe summaries only.
+  No provider IDs, raw payloads, secrets, or audio controls are exposed.
+- New AI answered call completions can persist normalized text transcript turns
+  (`speaker`, `text`, `sequence`, optional timestamp) on the individual
+  `ai_voice_sessions` row. No audio is stored.
+- Patient names remain caller-level facts: safe AI-extracted names only fill an
+  empty `patient_conversations.patient_display_name`; non-empty/staff-edited
+  names are not overwritten.
+- Added a future-only previous-caller context helper boundary. It is not wired
+  into the live AI prompt and does not enable active cross-call memory.
+
+Production database:
+
+- Migration applied:
+  `supabase/migrations/20260628000100_ai_answering_transcript_storage.sql`
+- Additive only: yes (`transcript_turns`, `transcript_expires_at`, JSON-array
+  check, selected-card history index)
+- Production identity verified before apply: project ref
+  `qfjpvbvfvhbtebwivcdc`, database `postgres`, user `postgres`
+- Existing `ai_voice_sessions` rows after apply: 2
+- Transcript rows after apply: 0
+- Backfill rows changed: 0
+
+Validation:
+
+- `npm run typecheck`: pass
+- `npm run test:sms-recovery`: pass (319 tests)
+- `npm run build`: pass
+- `npm run ai-relay:build`: pass
+- `npm run ai-relay:test`: pass (27 tests)
+- `npm run test:a2p`: pass (65 tests)
+- `git diff --check`: pass
+
+Safety:
+
+- Twilio changed: no
+- Railway config/env changed: no
+- Vercel env changed: no
+- Stripe/billing, DNS, A2P, and SMS runtime changed: no
+- SMS sent manually: no
+- Test call made by agent: no
+- Secrets exposed: no

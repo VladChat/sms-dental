@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { readAccountSessionToken } from "../../lib/onboarding/account-session";
 import { lookupSetupRequestByRawToken } from "../../lib/onboarding/verify";
 import { findClinicById } from "../../lib/db/clinics";
-import { listClinicConversations } from "../../lib/db/front-desk";
+import { getWorkspaceFreshnessSnapshot, listClinicConversations } from "../../lib/db/front-desk";
 import { resolveAuthClinicAccess } from "../../lib/auth/access";
 import { toPatientRequestCard } from "../../lib/workspace/patient-request-card";
 import { Workspace } from "./_components/Workspace";
@@ -24,8 +24,11 @@ export default async function WorkspacePage() {
   // Primary access path: authenticated owner/front-desk membership.
   const access = await resolveAuthClinicAccess();
   if (access.ok) {
-    const conversations = await listClinicConversations(access.clinic.id).catch(() => []);
-    return <Workspace cards={conversations.map(toPatientRequestCard)} />;
+    const [conversations, freshness] = await Promise.all([
+      listClinicConversations(access.clinic.id).catch(() => []),
+      getWorkspaceFreshnessSnapshot({ clinicId: access.clinic.id }).catch(() => null),
+    ]);
+    return <Workspace cards={conversations.map(toPatientRequestCard)} initialFreshness={freshness} />;
   }
 
   // Temporary legacy fallback: setup-token cookie for existing preview users.

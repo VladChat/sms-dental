@@ -30,6 +30,7 @@ export function createDbSessionLifecycle(): SessionLifecycle {
         capturedPreferredTime: input.capturedPreferredTime,
         handoffNote: input.handoffNote,
         safetySignal: input.safetySignal,
+        transcriptTurns: input.transcriptTurns,
       });
     },
   };

@@ -15,6 +15,11 @@ import { normalizePhone, isValidE164 } from "../phone/normalize";
 import { buildAiVoiceCallSummary } from "../workspace/ai-voice-summary";
 import { logger } from "../logging/logger";
 import {
+  normalizeAiVoiceTranscriptTurns,
+  transcriptExpiresAtFrom,
+  type AiVoiceTranscriptTurn,
+} from "../ai-answering/transcript";
+import {
   AI_VOICE_FIELD_LIMITS,
   isAiVoiceSessionStatus,
   type AiVoiceSessionStatus,
@@ -29,9 +34,9 @@ import {
 //
 //   - no provider calls (no Twilio client, no OpenAI),
 //   - no SMS sent and no SMS-recovery decision touched,
-//   - no transcripts, audio recordings, raw provider payloads, or raw AI
-//     prompt/response bodies stored — only the narrow captured request
-//     (name/reason/preferred time/handoff note/safety flag),
+//   - no audio recordings, raw provider payloads, or raw AI prompt/response
+//     bodies stored — only the narrow captured request plus normalized text
+//     transcript turns linked to the individual session when available,
 //   - the SAME length limits + label-like placeholder cleanup as mock sessions
 //     (shared via trimToLimit from ai-voice-sessions.ts so they never drift),
 //   - degradation-safe: a missing table surfaces AiAnsweringUnavailableError.
@@ -215,6 +220,7 @@ export type CompleteAiVoiceRuntimeSessionInput = {
   handoffNote?: string | null;
   safetySignal?: boolean | null;
   smsFollowupRecommended?: boolean | null;
+  transcriptTurns?: AiVoiceTranscriptTurn[] | unknown;
 };
 
 type ExistingSessionRow = {
@@ -286,6 +292,9 @@ export async function completeAiVoiceRuntimeSession(
   }
 
   const fields = sanitizeCapturedRuntimeFields(input);
+  const transcriptTurns = normalizeAiVoiceTranscriptTurns(input.transcriptTurns);
+  const transcriptJson = transcriptTurns.length > 0 ? JSON.stringify(transcriptTurns) : null;
+  const transcriptExpiresAt = transcriptJson ? transcriptExpiresAtFrom() : null;
   const sql = getDb();
 
   // Incomplete / failed: record the outcome only. Never create a Workspace
@@ -297,6 +306,8 @@ export async function completeAiVoiceRuntimeSession(
           status = ${input.status},
           handoff_note = coalesce(${fields.handoffNote}, handoff_note),
           safety_signal = ${fields.safetySignal},
+          transcript_turns = ${transcriptJson}::jsonb,
+          transcript_expires_at = ${transcriptExpiresAt},
           completed_at = now()
         where id = ${session.id}
       `;
@@ -328,6 +339,8 @@ export async function completeAiVoiceRuntimeSession(
         handoff_note = ${fields.handoffNote},
         safety_signal = ${fields.safetySignal},
         sms_followup_recommended = ${fields.smsFollowupRecommended},
+        transcript_turns = ${transcriptJson}::jsonb,
+        transcript_expires_at = ${transcriptExpiresAt},
         completed_at = now()
       where id = ${session.id}
     `;

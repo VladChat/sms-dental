@@ -1,10 +1,11 @@
 // In-memory state for one ConversationRelay session. Holds ONLY what is needed
-// to run the capture flow for the duration of the call. The caller-text turns
-// live here transiently to give the model context; they are NEVER persisted —
-// only the narrow captured request (name/reason/preferred time/handoff/safety)
-// is ever written to the database, by the shared session lifecycle.
+// to run the capture flow for the duration of the call. The model-context turns
+// live here transiently; a normalized text transcript copy is persisted at
+// completion when available. No audio, raw provider payloads, or raw prompts are
+// stored.
 
 import type { AiVoiceSessionStatus } from "./shared-lib";
+import { normalizeAiVoiceTranscriptTurns, type AiVoiceTranscriptTurn } from "./shared-lib";
 import type { BrainResult, CapturedSoFar, Turn } from "./openai-brain";
 
 export type CapturedFields = {
@@ -25,6 +26,7 @@ export type RelaySessionState = {
   status: AiVoiceSessionStatus;
   captured: CapturedFields;
   turns: Turn[];
+  transcriptTurns: AiVoiceTranscriptTurn[];
   context: import("./shared-lib").AiFrontDeskRuntimeContext | null;
 };
 
@@ -50,16 +52,30 @@ export function createRelaySessionState(init: {
       safetySignal: false,
     },
     turns: [],
+    transcriptTurns: [],
     context: null,
   };
 }
 
+function appendTranscriptTurn(
+  state: RelaySessionState,
+  speaker: AiVoiceTranscriptTurn["speaker"],
+  text: string,
+): void {
+  state.transcriptTurns = normalizeAiVoiceTranscriptTurns([
+    ...state.transcriptTurns,
+    { speaker, text, sequence: state.transcriptTurns.length + 1, at: new Date().toISOString() },
+  ]);
+}
+
 export function appendUserTurn(state: RelaySessionState, text: string): void {
   state.turns.push({ role: "user", text });
+  appendTranscriptTurn(state, "patient", text);
 }
 
 export function appendAssistantTurn(state: RelaySessionState, text: string): void {
   state.turns.push({ role: "assistant", text });
+  appendTranscriptTurn(state, "ai", text);
 }
 
 export function capturedSoFar(state: RelaySessionState): CapturedSoFar {

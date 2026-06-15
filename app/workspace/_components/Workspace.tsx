@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   applyFlagsToStatus,
   deriveWorkspaceStatus,
@@ -13,6 +14,13 @@ import {
 } from "./workspace-types";
 import { FRONT_DESK_NOTE_MAX } from "../../../lib/workspace/outcome";
 import { workspaceSourceChannelLabel } from "../../../lib/workspace/ai-voice-summary";
+import {
+  buildWorkspaceFreshnessFromCards,
+  hasWorkspaceFreshnessChanged,
+  WORKSPACE_FRESHNESS_POLL_MS,
+  type WorkspaceFreshnessSnapshot,
+} from "../../../lib/workspace/freshness";
+import type { WorkspaceAiVoiceHistoryItem } from "../../../lib/workspace/ai-voice-history";
 
 // Front-desk operational queue. Answers: who is this patient, what do they
 // want, what did they say, and what should staff do next. Deterministic only —
@@ -71,7 +79,13 @@ function SummaryChips({ chips }: { chips: WorkspaceCardChip[] }) {
   );
 }
 
-export function Workspace({ cards }: { cards: PatientRequestCard[] }) {
+export function Workspace({
+  cards,
+  initialFreshness,
+}: {
+  cards: PatientRequestCard[];
+  initialFreshness?: WorkspaceFreshnessSnapshot | null;
+}) {
   const hasReal = cards.length > 0;
   // Samples never dominate: collapsed by default whenever real conversations
   // exist; fully shown only on an empty workspace.
@@ -87,7 +101,12 @@ export function Workspace({ cards }: { cards: PatientRequestCard[] }) {
       </header>
 
       {hasReal ? (
-        <RequestQueue cards={cards} kind="real" />
+        <RequestQueue
+          cards={cards}
+          kind="real"
+          initialFreshness={initialFreshness ?? buildWorkspaceFreshnessFromCards(cards)}
+          enableUpdatePolling={initialFreshness !== undefined}
+        />
       ) : (
         <p className="ws-empty-real t-body">
           No patient requests yet. When a missed caller replies to your follow-up text,
@@ -116,7 +135,7 @@ export function Workspace({ cards }: { cards: PatientRequestCard[] }) {
               Hide
             </button>
           </div>
-          <RequestQueue cards={SAMPLE_REQUESTS} kind="sample" />
+          <RequestQueue cards={SAMPLE_REQUESTS} kind="sample" enableUpdatePolling={false} />
         </section>
       )}
     </main>
@@ -126,12 +145,23 @@ export function Workspace({ cards }: { cards: PatientRequestCard[] }) {
 function RequestQueue({
   cards,
   kind,
+  initialFreshness,
+  enableUpdatePolling,
 }: {
   cards: PatientRequestCard[];
   kind: "real" | "sample";
+  initialFreshness?: WorkspaceFreshnessSnapshot | null;
+  enableUpdatePolling: boolean;
 }) {
+  const router = useRouter();
+  const [isRefreshing, startRefreshTransition] = useTransition();
   const [items, setItems] = useState(cards);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const initialFreshnessRef = useRef<WorkspaceFreshnessSnapshot>(
+    initialFreshness ?? buildWorkspaceFreshnessFromCards(cards),
+  );
+  const [hasPendingUpdates, setHasPendingUpdates] = useState(false);
+  const [pendingFreshness, setPendingFreshness] = useState<WorkspaceFreshnessSnapshot | null>(null);
   const [sectionLimits, setSectionLimits] = useState<Record<WorkspaceSectionId, number>>({
     needs_follow_up: SECTION_PAGE_SIZE,
     handled: SECTION_PAGE_SIZE,
@@ -142,6 +172,59 @@ function RequestQueue({
     handled: false,
     blocked: false,
   });
+
+  useEffect(() => {
+    setItems(cards);
+    setSelectedId((prev) => (prev && cards.some((card) => card.id === prev) ? prev : null));
+    initialFreshnessRef.current = initialFreshness ?? buildWorkspaceFreshnessFromCards(cards);
+    setHasPendingUpdates(false);
+    setPendingFreshness(null);
+  }, [cards, initialFreshness]);
+
+  const checkForWorkspaceUpdates = useCallback(async () => {
+    if (!enableUpdatePolling) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    const baseline = initialFreshnessRef.current;
+    const query = baseline.latestActivityAt
+      ? `?since=${encodeURIComponent(baseline.latestActivityAt)}`
+      : "";
+    try {
+      const res = await fetch(`/api/workspace/freshness${query}`, { cache: "no-store" });
+      const data = (await res.json().catch(() => null)) as
+        | ({ ok?: boolean } & WorkspaceFreshnessSnapshot)
+        | null;
+      if (!res.ok || !data?.ok) return;
+      const next: WorkspaceFreshnessSnapshot = {
+        latestActivityAt: data.latestActivityAt,
+        needsFollowUpCount: data.needsFollowUpCount,
+        handledCount: data.handledCount,
+        blockedCount: data.blockedCount,
+        changedCount: data.changedCount,
+      };
+      if (hasWorkspaceFreshnessChanged(baseline, next)) {
+        setPendingFreshness(next);
+        setHasPendingUpdates(true);
+      }
+    } catch {
+      // Silent by design: the queue remains usable if a freshness check fails.
+    }
+  }, [enableUpdatePolling]);
+
+  useEffect(() => {
+    if (!enableUpdatePolling) return;
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void checkForWorkspaceUpdates();
+    }, WORKSPACE_FRESHNESS_POLL_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void checkForWorkspaceUpdates();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [checkForWorkspaceUpdates, enableUpdatePolling]);
 
   const grouped = useMemo(() => {
     const g: Record<WorkspaceSectionId, PatientRequestCard[]> = {
@@ -174,9 +257,36 @@ function RequestQueue({
     );
   }
 
+  function viewUpdates() {
+    if (pendingFreshness) {
+      initialFreshnessRef.current = pendingFreshness;
+    }
+    setHasPendingUpdates(false);
+    setPendingFreshness(null);
+    startRefreshTransition(() => router.refresh());
+  }
+
   return (
     <div className="ws-layout">
       <div className="ws-queue-col">
+        {kind === "real" && hasPendingUpdates && (
+          <div className="ws-update-banner" role="status" aria-live="polite">
+            <div>
+              <strong>New patient activity</strong>
+              {(pendingFreshness?.changedCount ?? 0) > 0 && (
+                <p className="t-helper ws-meta">New activity {pendingFreshness?.changedCount}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={isRefreshing}
+              onClick={viewUpdates}
+            >
+              {isRefreshing ? "Updating..." : "View updates"}
+            </button>
+          </div>
+        )}
         {SECTIONS.map((section) => {
           const sectionCards = grouped[section.id];
           const limit = sectionLimits[section.id] ?? SECTION_PAGE_SIZE;
@@ -332,6 +442,30 @@ async function postConversationAction(
   }
 }
 
+async function fetchAiVoiceHistory(
+  conversationId: string,
+): Promise<{ ok: true; history: WorkspaceAiVoiceHistoryItem[] } | { ok: false; message: string }> {
+  try {
+    const res = await fetch(
+      `/api/workspace/ai-call-history?conversationId=${encodeURIComponent(conversationId)}`,
+      { cache: "no-store" },
+    );
+    const data = (await res.json().catch(() => null)) as
+      | {
+          ok?: boolean;
+          history?: WorkspaceAiVoiceHistoryItem[];
+          error?: { message?: string };
+        }
+      | null;
+    if (!res.ok || !data?.ok || !Array.isArray(data.history)) {
+      return { ok: false, message: data?.error?.message ?? "Could not load call history." };
+    }
+    return { ok: true, history: data.history };
+  } catch {
+    return { ok: false, message: "Could not load call history." };
+  }
+}
+
 function RequestDetail({
   card,
   kind,
@@ -346,10 +480,59 @@ function RequestDetail({
   const [askingHandled, setAskingHandled] = useState(false);
   const [busyAction, setBusyAction] = useState<WorkspaceAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-
   const isSample = kind === "sample";
+  const sampleAiHistory = useMemo<WorkspaceAiVoiceHistoryItem[]>(() => {
+    if (!card.aiVoice) return [];
+    return [
+      {
+        id: `${card.id}-ai-history`,
+        callCapturedAt: card.aiVoice.capturedAt ?? card.lastActivityAt,
+        request: card.aiVoice.reason,
+        preferredTime: card.aiVoice.preferredTime,
+        callSummary: card.aiVoice.summaryHeadline,
+        handoffNote: card.aiVoice.handoffNote,
+        safetyConcern: card.aiVoice.safetyConcern,
+        transcriptTurns: [],
+      },
+    ];
+  }, [card]);
+  const [aiHistory, setAiHistory] = useState<WorkspaceAiVoiceHistoryItem[] | null>(
+    isSample ? sampleAiHistory : null,
+  );
+  const [aiHistoryLoading, setAiHistoryLoading] = useState(!isSample);
+  const [aiHistoryError, setAiHistoryError] = useState<string | null>(null);
+
   const lastTwo = card.timeline.slice(-2);
   const section = workspaceSectionForCard(card.flags);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (isSample) {
+      setAiHistory(sampleAiHistory);
+      setAiHistoryLoading(false);
+      setAiHistoryError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAiHistory(null);
+    setAiHistoryLoading(true);
+    setAiHistoryError(null);
+    void fetchAiVoiceHistory(card.id).then((result) => {
+      if (cancelled) return;
+      setAiHistoryLoading(false);
+      if (result.ok) {
+        setAiHistory(result.history);
+      } else {
+        setAiHistory([]);
+        setAiHistoryError(result.message);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [card.id, isSample, sampleAiHistory]);
 
   async function runAction(action: WorkspaceAction, extra?: { appointmentBooked?: boolean }) {
     if (isSample) return;
@@ -585,6 +768,13 @@ function RequestDetail({
         </div>
       )}
 
+      <AiAnsweredCallHistorySection
+        cardId={card.id}
+        history={aiHistory}
+        loading={aiHistoryLoading}
+        error={aiHistoryError}
+      />
+
       {/* 3. Message history: last 2 messages immediately, full on demand. */}
       <div className="card card-pad" aria-labelledby={`ws-conversation-${card.id}`}>
         <div className="acct-section-head">
@@ -628,6 +818,96 @@ function RequestDetail({
       {/* 4. Internal note: staff-only, saved on its own. */}
       <InternalNote card={card} isSample={isSample} onPatched={onPatched} />
     </section>
+  );
+}
+
+function AiAnsweredCallHistorySection({
+  cardId,
+  history,
+  loading,
+  error,
+}: {
+  cardId: string;
+  history: WorkspaceAiVoiceHistoryItem[] | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  const items = history ?? [];
+
+  return (
+    <div className="card card-pad" aria-labelledby={`ws-ai-history-${cardId}`}>
+      <div className="acct-section-head">
+        <h3 id={`ws-ai-history-${cardId}`} className="t-h4">AI answered call history</h3>
+      </div>
+      {loading ? (
+        <p className="t-small ws-empty-note" style={{ marginTop: "var(--space-3)" }}>
+          Loading call history...
+        </p>
+      ) : error ? (
+        <p className="t-small ws-empty-note" style={{ marginTop: "var(--space-3)" }}>
+          {error}
+        </p>
+      ) : items.length === 0 ? (
+        <p className="t-small ws-empty-note" style={{ marginTop: "var(--space-3)" }}>
+          No AI answered calls yet.
+        </p>
+      ) : (
+        <div className="ws-ai-history-list" style={{ marginTop: "var(--space-3)" }}>
+          {items.map((item) => (
+            <article key={item.id} className="ws-ai-history-item">
+              <p className="t-small ws-ai-history-row">
+                <strong>Call captured</strong>
+                <span>{formatDateTime(item.callCapturedAt)}</span>
+              </p>
+              {item.request && (
+                <p className="t-small ws-ai-history-row">
+                  <strong>Request</strong>
+                  <span>{item.request}</span>
+                </p>
+              )}
+              {item.preferredTime && (
+                <p className="t-small ws-ai-history-row">
+                  <strong>Preferred time</strong>
+                  <span>{item.preferredTime}</span>
+                </p>
+              )}
+              {item.callSummary && (
+                <p className="t-small ws-ai-history-row">
+                  <strong>Call summary</strong>
+                  <span>{item.callSummary}</span>
+                </p>
+              )}
+              {item.handoffNote && (
+                <p className="t-small ws-ai-history-row">
+                  <strong>For the front desk</strong>
+                  <span>{item.handoffNote}</span>
+                </p>
+              )}
+              {item.safetyConcern && (
+                <p style={{ margin: 0 }}>
+                  <span className="badge badge-warning">Urgent — front desk attention</span>
+                </p>
+              )}
+              {item.transcriptTurns.length > 0 && (
+                <details className="ws-call-notes">
+                  <summary>Call notes</summary>
+                  <div className="ws-call-notes-body">
+                    {item.transcriptTurns.map((turn) => (
+                      <div key={`${item.id}-${turn.sequence}`} className="ws-call-note-turn">
+                        <span className="ws-bubble-author">
+                          {turn.speaker === "patient" ? "Patient" : "AI assistant"}
+                        </span>
+                        <p className="ws-bubble-body">{turn.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -125,16 +125,32 @@ test("a completing turn completes the session, speaks the fixed final line, and 
 
   const completeCall = calls.find((c) => c.method === "complete");
   assert.ok(completeCall, "lifecycle.complete was called");
-  assert.deepEqual(completeCall!.input, {
-    clinicId: "clinic-1",
-    externalSessionId: "CA123",
-    status: "captured",
-    capturedPatientName: "Jane Doe",
-    capturedReason: "Wants a cleaning",
-    capturedPreferredTime: "Friday morning",
-    handoffNote: null,
-    safetySignal: false,
-  });
+  const completeInput = completeCall!.input as {
+    clinicId: string;
+    externalSessionId: string;
+    status: string;
+    capturedPatientName: string | null;
+    capturedReason: string | null;
+    capturedPreferredTime: string | null;
+    handoffNote: string | null;
+    safetySignal: boolean;
+    transcriptTurns?: Array<{ speaker: string; text: string; sequence: number; at: string | null }>;
+  };
+  assert.equal(completeInput.clinicId, "clinic-1");
+  assert.equal(completeInput.externalSessionId, "CA123");
+  assert.equal(completeInput.status, "captured");
+  assert.equal(completeInput.capturedPatientName, "Jane Doe");
+  assert.equal(completeInput.capturedReason, "Wants a cleaning");
+  assert.equal(completeInput.capturedPreferredTime, "Friday morning");
+  assert.equal(completeInput.handoffNote, null);
+  assert.equal(completeInput.safetySignal, false);
+  assert.deepEqual(
+    completeInput.transcriptTurns?.map((turn) => [turn.speaker, turn.text, turn.sequence]),
+    [
+      ["patient", "Jane, cleaning, Friday morning", 1],
+      ["ai", "Great, I have everything.", 2],
+    ],
+  );
   // The final spoken line is the fixed hand-off line, not the brain's reply.
   assert.deepEqual(texts, [{ text: FINAL_CAPTURE_REPLY, last: true }]);
   assert.deepEqual(ends, [HANDOFF_DATA_CAPTURED]);

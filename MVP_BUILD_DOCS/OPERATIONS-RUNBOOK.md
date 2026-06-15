@@ -2,7 +2,7 @@
 
 Status: Active  
 Audience: AI coding agents, technical founder, future operators  
-Last updated: 2026-06-15 (Vercel AI relay env configured; AI Answering still gated/test-only)
+Last updated: 2026-06-15 (AI answered call history + transcript storage foundation)
 
 This runbook explains how to operate and verify the Missed Calls Dental backend/app infrastructure.
 
@@ -4093,6 +4093,48 @@ existing missed-call greeting and voice/status sends SMS recovery as before.
   **ConversationRelay requires Twilio onboarding / the AI addendum** before real
   calls work; if incomplete, Twilio may reject the TwiML or fall back. First real
   test must use only the allowlisted clinic + caller.
-- **Data/safety:** stores only the narrow captured request in `ai_voice_sessions`
-  (`source = future_twilio`) — never transcripts/audio/raw payloads/prompts/OpenAI
-  responses. No migration. No SMS from the AI path.
+- **Data/safety:** stores the narrow captured request in `ai_voice_sessions`
+  (`source = future_twilio`) plus normalized text transcript turns when
+  available. It never stores audio, raw provider payloads, raw prompts, secrets,
+  payment data, provider IDs in the UI, or OpenAI response bodies. No SMS from
+  the AI path.
+
+### AI answered call visibility + transcript storage (2026-06-15)
+
+- `/workspace` now has a lightweight authenticated freshness check:
+  `GET /api/workspace/freshness`. It returns only the latest activity timestamp,
+  Needs follow-up count, Handled count, Blocked count, and changed count for the
+  authenticated clinic. It does not return full cards, messages, transcripts,
+  provider IDs, raw payloads, or secrets. The browser polls about every 60
+  seconds only while visible, checks immediately when the tab becomes visible,
+  and shows `New patient activity` with `View updates`; it does not force new
+  cards to the top or reload the page.
+- The selected request detail can load bounded AI answered call history through
+  `GET /api/workspace/ai-call-history?conversationId=...`. The route is
+  authenticated, clinic-scoped, rejects sample IDs, verifies the conversation
+  belongs to the clinic, and returns the latest 10 AI answered call summaries.
+  Normal UI labels are only front-desk language (`Request`, `Preferred time`,
+  `Call summary`, `Call captured`). No provider IDs, raw payloads, or audio
+  controls are shown.
+- Production migration applied:
+  `supabase/migrations/20260628000100_ai_answering_transcript_storage.sql`.
+  It adds nullable `ai_voice_sessions.transcript_turns` (`jsonb`) and
+  `transcript_expires_at` (`timestamptz`), a JSON-array check constraint, and
+  `ai_voice_sessions_conversation_completed_idx` for the selected-card history
+  lookup. It is additive only; no deletes, drops, or backfill.
+- Production identity verified before apply: Supabase project ref
+  `qfjpvbvfvhbtebwivcdc`, database `postgres`, user `postgres`. Existing
+  `ai_voice_sessions` rows after apply: 2. Transcript rows after apply: 0.
+  Backfill rows changed: 0.
+- New relay sessions persist normalized text turns only when available:
+  `speaker` (`patient` or `ai`), `text`, `sequence`, and optional ISO timestamp.
+  `transcript_expires_at` is set to about 90 days after session completion.
+  Existing AI answered calls without transcripts still appear in history with
+  transcript details absent. Transcript cleanup is a future task.
+- Patient/caller names remain patient-level facts. Runtime completion continues
+  to use `setPatientDisplayNameIfEmpty`, so a safe AI-extracted name can fill an
+  empty conversation name but cannot overwrite a non-empty or staff-edited name.
+- `getPreviousCallerContextForAi` exists as a future-only helper boundary for
+  safe prior context (known name + a few previous AI answered call summaries).
+  It is **not wired into the live AI prompt**; future use must label facts as
+  previous and confirm current needs/preferences with the caller.

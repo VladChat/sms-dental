@@ -193,6 +193,27 @@ test("AI answering migration is additive, clinic-scoped, RLS-only, non-destructi
   }
 });
 
+test("AI answering transcript migration is additive text-only storage", () => {
+  const sql = read(
+    path.join("supabase", "migrations", "20260628000100_ai_answering_transcript_storage.sql"),
+  );
+  assert.match(sql, /alter table public\.ai_voice_sessions/);
+  assert.ok(sql.includes("add column if not exists transcript_turns jsonb"));
+  assert.ok(sql.includes("add column if not exists transcript_expires_at timestamptz"));
+  assert.ok(sql.includes("jsonb_typeof(transcript_turns) = 'array'"));
+  assert.ok(sql.includes("ai_voice_sessions_conversation_completed_idx"));
+  assert.ok(sql.includes("(clinic_id, conversation_id, completed_at desc, created_at desc)"));
+  assert.ok(sql.includes("where conversation_id is not null"));
+  assert.equal(/\bdrop\s+table\b/i.test(sql), false);
+  assert.equal(/\bdelete\s+from\b/i.test(sql), false);
+  for (const banned of ["audio", "raw_payload", "provider", "secret", "payment"]) {
+    assert.ok(
+      !new RegExp(`\\n\\s+${banned}\\w*\\s+\\w`, "i").test(sql),
+      `migration defines no ${banned} column`,
+    );
+  }
+});
+
 // --------------------------------------------------------------- db helpers
 
 test("ai-voice-sessions DB helpers are degradation-safe and provider-free", () => {
@@ -201,6 +222,8 @@ test("ai-voice-sessions DB helpers are degradation-safe and provider-free", () =
   assert.ok(src.includes("export async function upsertClinicAiAnsweringSettings"));
   assert.ok(src.includes("export async function createMockAiVoiceSession"));
   assert.ok(src.includes("export async function listLatestAiVoiceSessionsForConversations"));
+  assert.ok(src.includes("export async function listAiVoiceSessionHistoryForConversation"));
+  assert.ok(src.includes("export async function getPreviousCallerContextForAi"));
   // 42P01 (undefined_table) → defaults / typed unavailable error, not a crash.
   assert.ok(src.includes('=== "42P01"'));
   assert.ok(src.includes("AiAnsweringUnavailableError"));
@@ -216,7 +239,8 @@ test("ai-voice-sessions DB helpers are degradation-safe and provider-free", () =
   assert.ok(!src.includes("getTwilioClient"), "db helper makes no Twilio client");
   assert.ok(!src.includes("messages.create"), "db helper sends no SMS");
   assert.ok(!src.includes("sendRecoverySms"), "db helper sends no recovery SMS");
-  assert.ok(!src.includes("transcript "), "db helper writes no transcript column");
+  assert.ok(src.includes("transcript_expires_at is null or transcript_expires_at > now()"));
+  assert.ok(src.includes("AI_VOICE_SESSION_HISTORY_LIMIT"));
   assert.ok(!src.includes("raw_payload"), "db helper writes no raw payload column");
 });
 
