@@ -2,7 +2,7 @@
 
 Status: Active  
 Purpose: Chronological record of infrastructure and backend setup  
-Last updated: 2026-06-15 (Railway relay service build/start configured; AI Answering still gated/test-only)
+Last updated: 2026-06-15 (Railway relay service repo-root build context fixed; AI Answering still gated/test-only)
 
 This log records what was done, in order, without storing secrets.
 
@@ -8524,3 +8524,56 @@ Validation:
 
 - `npm --prefix services/ai-voice-relay run build`: pass
 - `npm --prefix services/ai-voice-relay test`: pass (27 tests)
+
+---
+
+## 2026-06-15 — Railway relay repo-root build context fixed
+
+Corrected the Railway build context for the standalone AI voice relay service
+after deployment `62a62e73-c65d-4b23-bb66-d324ec61358b` failed during build.
+
+Failure:
+
+- Failed command: `sh -c npm ci && npm run build`
+- Failed script: `tsc -p tsconfig.json`
+- Error family: `TS2307 Cannot find module`
+- Affected imports came from `services/ai-voice-relay/src/shared-lib.ts`,
+  including repo-root `../../../lib/...` and `../../../config/...` modules.
+- Root cause: Railway was building from service root
+  `services/ai-voice-relay`, so shared repo-root source files were outside the
+  narrowed build context. This was not a missing npm dependency.
+
+Corrected Railway settings:
+
+- Project: `missed-calls-dental-relay`
+- Environment: `production`
+- Service: `sms-dental`
+- Root directory before: `services/ai-voice-relay`
+- Root directory after: unset/empty (repo root build context)
+- Build command before: `npm ci && npm run build`
+- Build command after:
+  `npm --prefix services/ai-voice-relay ci && npm --prefix services/ai-voice-relay run build`
+- Start command before: `npm run start`
+- Start command after: `npm --prefix services/ai-voice-relay run start`
+
+Redeploy result:
+
+- Deployment triggered after settings correction: yes
+- Deployment id: `c23cc168-8f90-4140-8b18-df0142d4ca93`
+- Deployment status: `SUCCESS`
+- Missing shared import build errors fixed: yes
+- Public relay URL available: no (`url` reported as `null`; no domain generated)
+- Variables/secrets changed: no
+- Twilio, Vercel, GitHub settings, OpenAI, Stripe, DNS, billing, A2P, SMS runtime
+  changed: no
+- SMS sent: no
+- Test call made: no
+
+Validation:
+
+- `npm --prefix services/ai-voice-relay run build`: pass
+- `npm --prefix services/ai-voice-relay test`: pass (27 tests)
+- Railway service settings readback: root directory empty, corrected build/start
+  commands present
+- Railway deployment log check: no `TS2307`/missing `../../../lib` or
+  `../../../config` import errors in the successful deployment logs
